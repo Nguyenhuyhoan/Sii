@@ -625,31 +625,28 @@ struct SystemCheckDashboardView: SwiftUI.View {
     
     private var systemStatusSection: some SwiftUI.View {
         let allReady = vm.isPairingOK && vm.isVpnOK && vm.isCellularOK && vm.isAnisetteOK
+
+
         return VStack(alignment: .leading, spacing: 10) {
-            SectionHeaderView(
-                title: "Trạng Thái Hệ Thống",
-                icon: "cpu.fill",
-                color: .blue,
-                statusOK: allReady
-            )
-            
-            SwiftUI.Text("")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.horizontal, 6)
-                .padding(.bottom, 2)
-            
-            // 1. LocalDevVPN lên trước
-            CheckItemButton(
-                title: "LocalDevVPN",
-                subtitle: vm.isVpnOK ? "Ổn định" : "Chưa kết nối",
-                icon: "network.badge.shield.half.filled",
-                isStable: vm.isVpnOK
-            ) {
-                showVpnSheet = true
-            }
+    SectionHeaderView(
+        title: "Trạng Thái Hệ Thống",
+        icon: "cpu.fill",
+        color: .blue,
+        statusOK: allReady
+    )
+    
+    // 1. LocalDevVPN lên trước
+    CheckItemButton(
+        title: "LocalDevVPN",
+        subtitle: vm.isVpnOK ? "Ổn định" : "Chưa kết nối",
+        icon: "network.badge.shield.half.filled",
+        isStable: vm.isVpnOK
+    ) {
+        showVpnSheet = true
+    }
+
+
+
             
             // 2. Pairing File nằm dưới LocalDevVPN
             CheckItemButton(

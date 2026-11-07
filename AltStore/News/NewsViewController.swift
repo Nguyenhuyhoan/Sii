@@ -365,7 +365,6 @@ final class SystemCheckViewModel: ObservableObject {
     
     func deleteAllPairingFiles() {
         PairingFileManager.shared.resetAllPairingFiles()
-        minimuxer.core.unloadPairingFile()
         self.hasAnyStoredPairingFile = false
         self.lastVerifiedPairingSuccess = false
         self.didAttemptLiveVerify = false
@@ -415,7 +414,7 @@ final class SystemCheckViewModel: ObservableObject {
         let hasAnyFile = hasRp || hasLd || hasUnk
         self.hasAnyStoredPairingFile = hasAnyFile
         
-        let coreLoaded = minimuxer.core.isPairingFileLoaded
+        let coreLoaded = minimuxer.core.isPairingFileLoaded && hasAnyFile
         let activeType: PairingProtocol = {
             if coreLoaded && minimuxer.core.pairingFileType != .unknown {
                 return minimuxer.core.pairingFileType
@@ -440,7 +439,7 @@ final class SystemCheckViewModel: ObservableObject {
             }
         }()
         
-        if !hasAnyFile && !coreLoaded {
+        if !hasAnyFile {
             self.lastVerifiedPairingSuccess = false
             self.didAttemptLiveVerify = false
             self.isPairingOK = false
@@ -484,7 +483,7 @@ final class SystemCheckViewModel: ObservableObject {
         isChecking = true
         defer { isChecking = false }
         
-        guard hasAnyStoredPairingFile || minimuxer.core.isPairingFileLoaded else {
+        guard hasAnyStoredPairingFile else {
             self.lastVerifiedPairingSuccess = false
             self.didAttemptLiveVerify = false
             self.isPairingOK = false
@@ -501,7 +500,8 @@ final class SystemCheckViewModel: ObservableObject {
         if isVpnOK {
             if forceVerify || !didAttemptLiveVerify || !lastVerifiedPairingSuccess {
                 do {
-                    if let udid = try await fetchUDID(forceLive: true), !udid.isEmpty {
+                    let udid = try await fetchUDID(forceLive: true)
+                    if !udid.isEmpty {
                         self.didAttemptLiveVerify = true
                         self.lastVerifiedPairingSuccess = true
                         self.isPairingOK = true

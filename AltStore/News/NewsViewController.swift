@@ -232,7 +232,7 @@ final class SystemCheckViewModel: ObservableObject {
                 guard let self = self else { return }
                 self.updateInstantStatus()
                 Task { @MainActor [weak self] in
-                    await self?.checkAllStatuses(forceVerify: false)
+                    await self?.checkAllStatuses(forceVerify: true)
                 }
             }
             .store(in: &cancellables)
@@ -259,8 +259,7 @@ final class SystemCheckViewModel: ObservableObject {
         timerTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self = self else { break }
-                let needsForce = !self.lastVerifiedPairingSuccess
-                await self.checkAllStatuses(forceVerify: needsForce)
+                await self.checkAllStatuses(forceVerify: true)
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
             }
         }
@@ -505,7 +504,7 @@ final class SystemCheckViewModel: ObservableObject {
     }
     
     /// Tạm thời tắt hook CellularRefresh khi kiểm tra kết nối tới tunnel 10.7.0.1
-    /// để tránh gói tin bị ép định tuyến nhầm sang cổng 4G (pdp_ip0) hoặc Wi-Fi (en0)
+    /// và BẮT BUỘC dùng `forceLive: true` ở cả 2 lần thử để không bao giờ lấy UDID từ bộ nhớ đệm (cache)
     private func verifyPairingOverTunnel() async -> Bool {
         let wasCellularRefreshEnabled = UserDefaults.standard.isCellularRefreshEnabled
         if wasCellularRefreshEnabled {
@@ -521,8 +520,8 @@ final class SystemCheckViewModel: ObservableObject {
             let udid = try await fetchUDID(forceLive: true)
             if !udid.isEmpty { return true }
         } catch {
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            if let udid = try? await fetchUDID(forceLive: false), !udid.isEmpty {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            if let udid = try? await fetchUDID(forceLive: true), !udid.isEmpty {
                 return true
             }
         }
@@ -561,7 +560,7 @@ final class SystemCheckViewModel: ObservableObject {
                     self.isPairingOK = true
                 } else {
                     self.consecutiveVerifyFailures += 1
-                    if !self.lastVerifiedPairingSuccess || self.consecutiveVerifyFailures >= 2 {
+                    if forceVerify || !self.lastVerifiedPairingSuccess || self.consecutiveVerifyFailures >= 2 {
                         self.lastVerifiedPairingSuccess = false
                         self.isPairingOK = false
                     }
@@ -1779,7 +1778,7 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                                         VStack(alignment: .leading, spacing: 2) {
                                             SwiftUI.Text(server.name)
                                                 .font(.subheadline.bold())
-                                            .foregroundColor(.primary)
+                                                .foregroundColor(.primary)
                                             SwiftUI.Text(server.address)
                                                 .font(.caption2)
                                                 .foregroundColor(.secondary)

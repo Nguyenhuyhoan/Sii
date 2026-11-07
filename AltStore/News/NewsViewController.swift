@@ -1,4 +1,5 @@
 
+
 //
 //  NewsViewController.swift
 //  AltStore
@@ -17,6 +18,50 @@ import ObjectiveC.runtime
 enum CheckAppLanguage: String, CaseIterable {
     case vi = "vi"
     case en = "en"
+}
+
+private enum SkyTheme {
+    static let primary = SwiftUI.Color(red: 0.05, green: 0.58, blue: 0.96)
+    static let secondary = SwiftUI.Color(red: 0.22, green: 0.72, blue: 1.00)
+    static let darkAccent = SwiftUI.Color(red: 0.02, green: 0.44, blue: 0.82)
+
+    static let pageBackground = SwiftUI.Color(UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(red: 0.05, green: 0.08, blue: 0.13, alpha: 1.0)
+            : UIColor(red: 0.93, green: 0.97, blue: 1.00, alpha: 1.0)
+    })
+
+    static let cardBackground = SwiftUI.Color(UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(red: 0.10, green: 0.14, blue: 0.21, alpha: 1.0)
+            : UIColor.white
+    })
+
+    static let cardHeaderBackground = SwiftUI.Color(UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(red: 0.12, green: 0.20, blue: 0.30, alpha: 0.75)
+            : UIColor(red: 0.88, green: 0.95, blue: 1.00, alpha: 0.85)
+    })
+
+    static let innerRowBackground = SwiftUI.Color(UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(red: 0.14, green: 0.19, blue: 0.28, alpha: 1.0)
+            : UIColor(red: 0.96, green: 0.99, blue: 1.00, alpha: 1.0)
+    })
+
+    static let border = SwiftUI.Color(UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(red: 0.22, green: 0.55, blue: 0.90, alpha: 0.35)
+            : UIColor(red: 0.12, green: 0.60, blue: 0.96, alpha: 0.24)
+    })
+
+    static let innerBorder = SwiftUI.Color(UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(red: 0.25, green: 0.60, blue: 0.95, alpha: 0.22)
+            : UIColor(red: 0.12, green: 0.60, blue: 0.96, alpha: 0.14)
+    })
+
+    static let shadow = SwiftUI.Color(red: 0.04, green: 0.42, blue: 0.78).opacity(0.08)
 }
 
 private enum CellularRefreshDefaultBootstrapper {
@@ -71,7 +116,7 @@ private enum AnisetteDefaultsHelper {
         }
         return AppConstants.Anisette.Servers.defaultServerURL
     }
-    
+
     static func selectServerFromList(_ url: String) {
         let trimmed = url.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -80,7 +125,7 @@ private enum AnisetteDefaultsHelper {
         UserDefaults.standard.textInputAnisetteURL = trimmed
         UserDefaults.standard.customAnisetteURL = trimmed
     }
-    
+
     static func setCustomServerURL(_ url: String) {
         let trimmed = url.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -92,34 +137,34 @@ private enum AnisetteDefaultsHelper {
 
 class NewsViewController: UICollectionViewController {
     var source: Source?
-    
+
     init?(source: Source?, coder: NSCoder) {
         CellularRefreshDefaultBootstrapper.installHookIfNeeded()
         self.source = source
         super.init(coder: coder)
     }
-    
+
     required init?(coder: NSCoder) {
         CellularRefreshDefaultBootstrapper.installHookIfNeeded()
         super.init(coder: coder)
     }
-    
+
     override func viewDidLoad() {
         super.viewDidLoad()
         CellularRefreshDefaultBootstrapper.installHookIfNeeded()
         CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
-        
+
         self.title = "Check"
         self.navigationController?.setNavigationBarHidden(true, animated: false)
-        self.collectionView.backgroundColor = .systemGroupedBackground
+        self.collectionView.backgroundColor = UIColor(SkyTheme.pageBackground)
         self.collectionView.contentInsetAdjustmentBehavior = .never
-        
+
         let hostingController = UIHostingController(rootView: SystemCheckDashboardView())
         addChild(hostingController)
         hostingController.view.translatesAutoresizingMaskIntoConstraints = false
-        hostingController.view.backgroundColor = .systemGroupedBackground
+        hostingController.view.backgroundColor = UIColor(SkyTheme.pageBackground)
         view.addSubview(hostingController.view)
-        
+
         NSLayoutConstraint.activate([
             hostingController.view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             hostingController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -128,12 +173,12 @@ class NewsViewController: UICollectionViewController {
         ])
         hostingController.didMove(toParent: self)
     }
-    
+
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
     }
-    
+
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         self.navigationController?.setNavigationBarHidden(false, animated: animated)
@@ -143,7 +188,7 @@ class NewsViewController: UICollectionViewController {
 @MainActor
 final class SystemCheckViewModel: ObservableObject {
     private static let languageStorageKey = "com.sidestore.check.selectedLanguage"
-    
+
     @Published var language: CheckAppLanguage = {
         if let raw = UserDefaults.standard.string(forKey: languageStorageKey),
            let saved = CheckAppLanguage(rawValue: raw) {
@@ -151,53 +196,53 @@ final class SystemCheckViewModel: ObservableObject {
         }
         return .vi
     }()
-    
+
     @Published var isPairingOK: Bool = false
     @Published var pairingProtocol: String = ""
     @Published var hasAnyStoredPairingFile: Bool = false
-    
+
     @Published var isVpnOK: Bool = false
     @Published var tunnelIP: String = ""
     @Published var deviceIP: String = ""
-    
+
     @Published var isCellularOK: Bool = false
     @Published var cellularDetail: String = ""
-    
+
     @Published var isAnisetteOK: Bool = !UserDefaults.standard.useOnDeviceAnisette
     @Published var useOnDeviceAnisette: Bool = UserDefaults.standard.useOnDeviceAnisette
     @Published var selectedAnisetteServerURL: String = AnisetteDefaultsHelper.currentServerURL
     @Published var anisetteDetail: String = ""
-    
+
     @Published var isCellularRefreshEnabled: Bool = {
         CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
         return UserDefaults.standard.isCellularRefreshEnabled
     }()
-    
+
     private let pathMonitor = NWPathMonitor()
     private let cellularMonitor = NWPathMonitor(requiredInterfaceType: .cellular)
     private let monitorQueue = DispatchQueue(label: "com.sidestore.check.network")
-    
+
     private var usesCellularPath: Bool = false
     private var isCellularPathSatisfied: Bool = false
     private var cancellables = Set<AnyCancellable>()
     private var timerTask: Task<Void, Never>?
-    
+
     private var isChecking: Bool = false
     private var lastVerifiedPairingSuccess: Bool = false
     private var didAttemptLiveVerify: Bool = false
     private var consecutiveVerifyFailures: Int = 0
-    
+
     func tr(_ vi: String, _ en: String) -> String {
         language == .vi ? vi : en
     }
-    
+
     func setLanguage(_ newLang: CheckAppLanguage) {
         guard language != newLang else { return }
         language = newLang
         UserDefaults.standard.set(newLang.rawValue, forKey: Self.languageStorageKey)
         updateInstantStatus()
     }
-    
+
     init() {
         CellularRefreshDefaultBootstrapper.installHookIfNeeded()
         CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
@@ -208,13 +253,13 @@ final class SystemCheckViewModel: ObservableObject {
             await checkAllStatuses(forceVerify: true)
         }
     }
-    
+
     deinit {
         pathMonitor.cancel()
         cellularMonitor.cancel()
         timerTask?.cancel()
     }
-    
+
     private func setupRealtimeListeners() {
         pathMonitor.pathUpdateHandler = { [weak self] path in
             let usesCell = path.usesInterfaceType(.cellular)
@@ -226,7 +271,7 @@ final class SystemCheckViewModel: ObservableObject {
             }
         }
         pathMonitor.start(queue: monitorQueue)
-        
+
         cellularMonitor.pathUpdateHandler = { [weak self] path in
             let cellSatisfied = (path.status == .satisfied)
             Task { @MainActor [weak self] in
@@ -237,7 +282,7 @@ final class SystemCheckViewModel: ObservableObject {
             }
         }
         cellularMonitor.start(queue: monitorQueue)
-        
+
         minimuxer.network.pathPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -248,7 +293,7 @@ final class SystemCheckViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
-        
+
         minimuxerStatusPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -259,14 +304,14 @@ final class SystemCheckViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
-        
+
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.updateInstantStatus()
             }
             .store(in: &cancellables)
-        
+
         NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -278,7 +323,7 @@ final class SystemCheckViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
-        
+
         timerTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self = self else { break }
@@ -287,22 +332,22 @@ final class SystemCheckViewModel: ObservableObject {
             }
         }
     }
-    
+
     private struct SystemInterfaceSnapshot: Sendable {
         let hasCellularIPv4: Bool
         let hasActiveUtun: Bool
         let detectedUtunIPv4: String?
     }
-    
+
     private nonisolated static func scanSystemInterfaces() -> SystemInterfaceSnapshot {
         var hasPdpIPv4 = false
         var hasUtun = false
         var bestUtunIP: String? = nil
-        
+
         for iface in minimuxer.network.activeInterfaces {
             if iface.name.lowercased().hasPrefix("utun") { hasUtun = true }
         }
-        
+
         var ifaddr: UnsafeMutablePointer<ifaddrs>?
         if getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr {
             defer { freeifaddrs(ifaddr) }
@@ -313,7 +358,7 @@ final class SystemCheckViewModel: ObservableObject {
                 if isUp, let addr = current.pointee.ifa_addr {
                     let family = addr.pointee.sa_family
                     let name = String(cString: current.pointee.ifa_name).lowercased()
-                    
+
                     if family == UInt8(AF_INET), name == "pdp_ip0" {
                         var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
                         if getnameinfo(
@@ -331,7 +376,7 @@ final class SystemCheckViewModel: ObservableObject {
                             }
                         }
                     }
-                    
+
                     if family == UInt8(AF_INET), name.hasPrefix("utun") {
                         var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
                         if getnameinfo(
@@ -359,18 +404,18 @@ final class SystemCheckViewModel: ObservableObject {
                 ptr = current.pointee.ifa_next
             }
         }
-        
+
         return SystemInterfaceSnapshot(
             hasCellularIPv4: hasPdpIPv4,
             hasActiveUtun: hasUtun,
             detectedUtunIPv4: bestUtunIP
         )
     }
-    
+
     private func ensureTunnelRoutingPinned(snapshot: SystemInterfaceSnapshot) {
         let config = ConnectionConfig.shared
         guard let utunIP = snapshot.detectedUtunIPv4 ?? config.tunnelIfaceIp else { return }
-        
+
         if utunIP.hasPrefix("10.7.") {
             if config.tunnelPeerIp == nil || config.tunnelPeerIp?.isEmpty == true {
                 if config.overrideTunnelPeerIp.isEmpty {
@@ -380,19 +425,19 @@ final class SystemCheckViewModel: ObservableObject {
             }
         }
     }
-    
+
     func setUseOnDeviceAnisette(_ enabled: Bool) {
         UserDefaults.standard.useOnDeviceAnisette = enabled
         updateInstantStatus()
     }
-    
+
     func setCellularRefreshEnabled(_ enabled: Bool) {
         guard isCellularRefreshEnabled != enabled || UserDefaults.standard.isCellularRefreshEnabled != enabled else { return }
         isCellularRefreshEnabled = enabled
         CellularRefreshManager.shared.setEnabled(enabled)
         updateInstantStatus()
     }
-    
+
     func selectAnisetteServerURL(_ urlString: String, isCustom: Bool = false) {
         if isCustom {
             AnisetteDefaultsHelper.setCustomServerURL(urlString)
@@ -404,7 +449,7 @@ final class SystemCheckViewModel: ObservableObject {
         }
         updateInstantStatus()
     }
-    
+
     func deleteAllPairingFiles() {
         PairingFileManager.shared.resetAllPairingFiles()
         self.hasAnyStoredPairingFile = false
@@ -414,11 +459,11 @@ final class SystemCheckViewModel: ObservableObject {
         self.isPairingOK = false
         updateInstantStatus()
     }
-    
+
     func updateInstantStatus() {
         let snapshot = Self.scanSystemInterfaces()
         ensureTunnelRoutingPinned(snapshot: snapshot)
-        
+
         let cellularActive = usesCellularPath || (isCellularPathSatisfied && snapshot.hasCellularIPv4)
         self.isCellularOK = cellularActive
         if usesCellularPath {
@@ -437,7 +482,7 @@ final class SystemCheckViewModel: ObservableObject {
                 "Disabled • Please turn on Cellular Data (4G/5G)"
             )
         }
-        
+
         let disconnectedText = tr("Chưa kết nối", "Disconnected")
         let config = ConnectionConfig.shared
         let rawTunnelIP = config.tunnelIfaceIp ?? snapshot.detectedUtunIPv4
@@ -453,20 +498,20 @@ final class SystemCheckViewModel: ObservableObject {
             }
             return nil
         }()
-        
+
         self.tunnelIP = config.formattedTunnelIface ?? rawTunnelIP ?? disconnectedText
         self.deviceIP = config.formattedTunnelPeer ?? rawPeerIP ?? disconnectedText
-        
+
         self.isVpnOK = minimuxer.network.isUTunAvailable
             || (snapshot.hasActiveUtun && rawTunnelIP != nil)
             || (config.formattedTunnelIface != nil && config.formattedTunnelPeer != nil)
-        
+
         let hasRp = PairingFileManager.shared.hasPairingFile(for: .rppairing)
         let hasLd = PairingFileManager.shared.hasPairingFile(for: .lockdown)
         let hasUnk = PairingFileManager.shared.hasPairingFile(for: .unknown)
         let hasAnyFile = hasRp || hasLd || hasUnk
         self.hasAnyStoredPairingFile = hasAnyFile
-        
+
         let coreLoaded = minimuxer.core.isPairingFileLoaded && hasAnyFile
         let activeType: PairingProtocol = {
             if coreLoaded && minimuxer.core.pairingFileType != .unknown {
@@ -480,7 +525,7 @@ final class SystemCheckViewModel: ObservableObject {
             if hasLd { return .lockdown }
             return .unknown
         }()
-        
+
         let protocolName: String = {
             switch activeType {
             case .rppairing:
@@ -493,7 +538,7 @@ final class SystemCheckViewModel: ObservableObject {
                     : tr("Chưa có Pairing File", "No Pairing File")
             }
         }()
-        
+
         if !hasAnyFile {
             self.lastVerifiedPairingSuccess = false
             self.didAttemptLiveVerify = false
@@ -519,24 +564,24 @@ final class SystemCheckViewModel: ObservableObject {
             self.isPairingOK = false
             self.pairingProtocol = tr("Đang kiểm tra kết nối...", "Checking connection...")
         }
-        
+
         let onDevice = UserDefaults.standard.useOnDeviceAnisette
         self.useOnDeviceAnisette = onDevice
         self.isAnisetteOK = !onDevice
-        
+
         let selectedURL = AnisetteDefaultsHelper.currentServerURL
         self.selectedAnisetteServerURL = selectedURL
         let serverHost = URL(string: selectedURL)?.host ?? selectedURL
         self.anisetteDetail = onDevice
             ? tr("Không ổn định • Hãy tắt Use On-Device Anisette", "Unstable • Please disable Use On-Device Anisette")
             : tr("Ổn định • Máy chủ: \(serverHost)", "Stable • Server: \(serverHost)")
-        
+
         let currentCellularRefresh = UserDefaults.standard.isCellularRefreshEnabled
         if self.isCellularRefreshEnabled != currentCellularRefresh {
             self.isCellularRefreshEnabled = currentCellularRefresh
         }
     }
-    
+
     private func verifyPairingOverTunnel() async -> Bool {
         do {
             let udid = try await fetchUDID(forceLive: true)
@@ -549,14 +594,14 @@ final class SystemCheckViewModel: ObservableObject {
         }
         return false
     }
-    
+
     func checkAllStatuses(forceVerify: Bool = false) async {
         updateInstantStatus()
-        
+
         guard !isChecking else { return }
         isChecking = true
         defer { isChecking = false }
-        
+
         guard hasAnyStoredPairingFile else {
             self.lastVerifiedPairingSuccess = false
             self.didAttemptLiveVerify = false
@@ -565,13 +610,13 @@ final class SystemCheckViewModel: ObservableObject {
             updateInstantStatus()
             return
         }
-        
+
         if hasAnyStoredPairingFile && !minimuxer.core.isPairingFileLoaded {
             let proto: PairingProtocol = PairingFileManager.shared.persistedActiveProtocol
                 ?? (PairingFileManager.shared.hasPairingFile(for: .rppairing) ? .rppairing : .lockdown)
             try? await minimuxerSwitchPairingProtocol(to: proto)
         }
-        
+
         if isVpnOK {
             if forceVerify || !didAttemptLiveVerify || !lastVerifiedPairingSuccess {
                 let ok = await verifyPairingOverTunnel()
@@ -593,7 +638,7 @@ final class SystemCheckViewModel: ObservableObject {
             self.lastVerifiedPairingSuccess = false
             self.isPairingOK = false
         }
-        
+
         updateInstantStatus()
     }
 }
@@ -604,26 +649,20 @@ struct SystemCheckDashboardView: SwiftUI.View {
     @State private var showVpnSheet = false
     @State private var showCellularSheet = false
     @State private var showAnisetteSheet = false
-    
+
     var body: some SwiftUI.View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 16) {
+            VStack(spacing: 18) {
                 systemStatusSection
-                
                 serverSection
-                    .padding(.top, 6)
-                
                 shortcutsSection
-                    .padding(.top, 6)
-                
                 automationGuideSection
-                    .padding(.top, 6)
             }
             .padding(.horizontal, 16)
-            .padding(.top, 2)
-            .padding(.bottom, 28)
+            .padding(.top, 8)
+            .padding(.bottom, 32)
         }
-        .background(SwiftUI.Color(UIColor.systemGroupedBackground))
+        .background(SkyTheme.pageBackground.ignoresSafeArea())
         .onAppear {
             vm.updateInstantStatus()
             Task { await vm.checkAllStatuses(forceVerify: true) }
@@ -644,28 +683,22 @@ struct SystemCheckDashboardView: SwiftUI.View {
             AnisetteDetailSheetView(vm: vm)
         }
     }
-    
+
     private var systemStatusSection: some SwiftUI.View {
         let allReady = vm.isPairingOK && vm.isVpnOK && vm.isCellularOK && vm.isAnisetteOK
 
-        return VStack(alignment: .leading, spacing: 10) {
-            ZStack {
-                SectionHeaderView(
-                    title: vm.tr("Trạng Thái Hệ Thống", "System Status"),
-                    icon: "cpu.fill",
-                    color: .blue,
-                    statusOK: allReady
+        return SkySectionCard(
+            title: vm.tr("Trạng Thái Hệ Thống", "System Status"),
+            icon: "cpu.fill",
+            color: SkyTheme.primary,
+            statusOK: allReady,
+            trailingView: AnyView(
+                CompactLanguageSwitchButton(
+                    selectedLanguage: vm.language,
+                    onSelect: { vm.setLanguage($0) }
                 )
-                
-                HStack {
-                    Spacer()
-                    CompactLanguageSwitchButton(
-                        selectedLanguage: vm.language,
-                        onSelect: { vm.setLanguage($0) }
-                    )
-                }
-            }
-            
+            )
+        ) {
             CheckItemButton(
                 title: "LocalDevVPN",
                 subtitle: vm.isVpnOK
@@ -676,7 +709,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
             ) {
                 showVpnSheet = true
             }
-            
+
             CheckItemButton(
                 title: "Pairing File",
                 subtitle: vm.isPairingOK
@@ -689,7 +722,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
             ) {
                 showPairingSheet = true
             }
-            
+
             CheckItemButton(
                 title: vm.tr("Mạng 4G / Di động", "4G / Cellular Data"),
                 subtitle: vm.isCellularOK
@@ -702,15 +735,13 @@ struct SystemCheckDashboardView: SwiftUI.View {
             }
         }
     }
-    
+
     private var serverSection: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionHeaderView(
-                title: vm.tr("Máy chủ Anisette", "Anisette Server"),
-                icon: "server.rack",
-                color: .purple
-            )
-            
+        SkySectionCard(
+            title: vm.tr("Máy chủ Anisette", "Anisette Server"),
+            icon: "server.rack",
+            color: SkyTheme.primary
+        ) {
             CheckItemButton(
                 title: vm.tr("Máy chủ Anisette", "Anisette Server"),
                 subtitle: vm.isAnisetteOK
@@ -723,15 +754,13 @@ struct SystemCheckDashboardView: SwiftUI.View {
             }
         }
     }
-    
+
     private var shortcutsSection: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionHeaderView(
-                title: vm.tr("Phím Tắt", "Shortcuts"),
-                icon: "bolt.circle.fill",
-                color: .orange
-            )
-            
+        SkySectionCard(
+            title: vm.tr("Phím Tắt", "Shortcuts"),
+            icon: "bolt.circle.fill",
+            color: SkyTheme.primary
+        ) {
             CellularRefreshToggleRow(
                 title: vm.tr("Cellular Refresh (Refresh Qua 4G)", "Cellular Refresh (Refresh via 4G)"),
                 onText: vm.tr("Đang bật", "Enabled"),
@@ -741,121 +770,166 @@ struct SystemCheckDashboardView: SwiftUI.View {
                     set: { vm.setCellularRefreshEnabled($0) }
                 )
             )
-            
+
             ShortcutLinkRow(
                 title: vm.tr("Phím tắt Tắt 4G", "Turn Off 4G Shortcut"),
                 buttonTitle: vm.tr("Nhận", "Get"),
                 icon: "antenna.radiowaves.left.and.right.slash",
-                color: .red,
+                color: SkyTheme.darkAccent,
                 urlString: "https://www.icloud.com/shortcuts/ee47f3710b02435883faa746c7355236"
             )
-            
+
             ShortcutLinkRow(
                 title: vm.tr("Phím tắt Bật 4G", "Turn On 4G Shortcut"),
                 buttonTitle: vm.tr("Nhận", "Get"),
                 icon: "antenna.radiowaves.left.and.right",
-                color: .blue,
+                color: SkyTheme.primary,
                 urlString: "https://www.icloud.com/shortcuts/10bd8bb0aa1540c4b1221182b835fc43"
             )
-            
+
             ShortcutLinkRow(
                 title: vm.tr("Tự động làm mới App (6:00 sáng)", "Auto Refresh App (6:00 AM)"),
                 buttonTitle: vm.tr("Nhận", "Get"),
                 icon: "clock.arrow.2.circlepath",
-                color: .green,
+                color: .cyan,
                 urlString: "https://www.icloud.com/shortcuts/56b0ab8cb0984d0b9a98543ac879eeec"
             )
-            
+
             ShortcutLinkRow(
                 title: vm.tr("Tự động làm mới App (15:00 chiều)", "Auto Refresh App (3:00 PM)"),
                 buttonTitle: vm.tr("Nhận", "Get"),
                 icon: "sun.max.circle.fill",
-                color: .orange,
+                color: SkyTheme.primary,
                 urlString: "https://www.icloud.com/shortcuts/9f93051e8bf142258ffc93e08f3c0849"
             )
         }
     }
-    
+
     private var automationGuideSection: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionHeaderView(
-                title: vm.tr("Hướng Dẫn Tự Động Hóa", "Automation Guide"),
-                icon: "bell.badge.fill",
-                color: .green
-            )
-            
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(spacing: 14) {
-                    RemoteGuideImageView(
-                        urlString: "https://raw.githubusercontent.com/Nguyenhuyhoan/icons/main/IMG_2589.jpeg",
-                        caption: vm.tr(
-                            "Bước 1: Mở Phím Tắt mục Auto Refresh 4G (Auto Refresh 4G 2) và nhấn vào dấu xổ xuống:",
-                            "Step 1: Open Shortcuts ➔ Auto Refresh 4G (Auto Refresh 4G 2) and tap the dropdown arrow:"
-                        ),
-                        loadingText: vm.tr("Đang tải ảnh...", "Loading image..."),
-                        errorText: vm.tr("Không tải được ảnh. Vui lòng kiểm tra mạng.", "Failed to load image. Please check your connection.")
-                    )
-                    RemoteGuideImageView(
-                        urlString: "https://raw.githubusercontent.com/Nguyenhuyhoan/icons/main/IMG_2588.jpeg",
-                        caption: vm.tr(
-                            "Bước 2: Bật nút Tự động hóa:",
-                            "Step 2: Turn on Enable This Automation:"
-                        ),
-                        loadingText: vm.tr("Đang tải ảnh...", "Loading image..."),
-                        errorText: vm.tr("Không tải được ảnh. Vui lòng kiểm tra mạng.", "Failed to load image. Please check your connection.")
-                    )
-                }
+        SkySectionCard(
+            title: vm.tr("Hướng Dẫn Tự Động Hóa", "Automation Guide"),
+            icon: "bell.badge.fill",
+            color: SkyTheme.primary
+        ) {
+            VStack(spacing: 14) {
+                RemoteGuideImageView(
+                    urlString: "https://raw.githubusercontent.com/Nguyenhuyhoan/icons/main/IMG_2589.jpeg",
+                    caption: vm.tr(
+                        "Bước 1: Mở Phím Tắt mục Auto Refresh 4G (Auto Refresh 4G 2) và nhấn vào dấu xổ xuống:",
+                        "Step 1: Open Shortcuts ➔ Auto Refresh 4G (Auto Refresh 4G 2) and tap the dropdown arrow:"
+                    ),
+                    loadingText: vm.tr("Đang tải ảnh...", "Loading image..."),
+                    errorText: vm.tr("Không tải được ảnh. Vui lòng kiểm tra mạng.", "Failed to load image. Please check your connection.")
+                )
+                RemoteGuideImageView(
+                    urlString: "https://raw.githubusercontent.com/Nguyenhuyhoan/icons/main/IMG_2588.jpeg",
+                    caption: vm.tr(
+                        "Bước 2: Bật nút Tự động hóa:",
+                        "Step 2: Turn on Enable This Automation:"
+                    ),
+                    loadingText: vm.tr("Đang tải ảnh...", "Loading image..."),
+                    errorText: vm.tr("Không tải được ảnh. Vui lòng kiểm tra mạng.", "Failed to load image. Please check your connection.")
+                )
             }
-            .padding(14)
-            .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
+            .padding(12)
+            .background(SkyTheme.innerRowBackground)
             .cornerRadius(16)
             .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(SwiftUI.Color.primary.opacity(0.05), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(SkyTheme.innerBorder, lineWidth: 1)
             )
         }
+    }
+}
+
+struct SkySectionCard<Content: SwiftUI.View>: SwiftUI.View {
+    let title: String
+    let icon: String
+    let color: SwiftUI.Color
+    var statusOK: Bool? = nil
+    var trailingView: AnyView? = nil
+    @ViewBuilder let content: Content
+
+    var body: some SwiftUI.View {
+        VStack(alignment: .leading, spacing: 0) {
+            SectionHeaderView(
+                title: title,
+                icon: icon,
+                color: color,
+                statusOK: statusOK,
+                trailingView: trailingView
+            )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .background(SkyTheme.cardHeaderBackground)
+
+            Rectangle()
+                .fill(SkyTheme.border)
+                .frame(height: 1)
+
+            VStack(alignment: .leading, spacing: 11) {
+                content
+            }
+            .padding(14)
+        }
+        .background(SkyTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(SkyTheme.border, lineWidth: 1.2)
+        )
+        .shadow(color: SkyTheme.shadow, radius: 10, x: 0, y: 4)
     }
 }
 
 struct CompactLanguageSwitchButton: SwiftUI.View {
     let selectedLanguage: CheckAppLanguage
     let onSelect: (CheckAppLanguage) -> Void
-    
+
     var body: some SwiftUI.View {
-        HStack(spacing: 2) {
+        HStack(spacing: 4) {
             SwiftUI.Button {
                 onSelect(.vi)
             } label: {
                 SwiftUI.Text("VI")
-                    .font(.system(size: 11, weight: .bold))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(selectedLanguage == .vi ? SwiftUI.Color.accentColor : SwiftUI.Color.clear)
-                    .foregroundColor(selectedLanguage == .vi ? .white : .secondary)
+                    .font(.system(size: 13.5, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(
+                        selectedLanguage == .vi
+                        ? LinearGradient(colors: [SkyTheme.primary, SkyTheme.secondary], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        : LinearGradient(colors: [SwiftUI.Color.clear, SwiftUI.Color.clear], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+                    .foregroundColor(selectedLanguage == .vi ? .white : SkyTheme.darkAccent)
                     .clipShape(Capsule())
             }
             .buttonStyle(PlainButtonStyle())
-            
+
             SwiftUI.Button {
                 onSelect(.en)
             } label: {
                 SwiftUI.Text("EN")
-                    .font(.system(size: 11, weight: .bold))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(selectedLanguage == .en ? SwiftUI.Color.accentColor : SwiftUI.Color.clear)
-                    .foregroundColor(selectedLanguage == .en ? .white : .secondary)
+                    .font(.system(size: 13.5, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(
+                        selectedLanguage == .en
+                        ? LinearGradient(colors: [SkyTheme.primary, SkyTheme.secondary], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        : LinearGradient(colors: [SwiftUI.Color.clear, SwiftUI.Color.clear], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+                    .foregroundColor(selectedLanguage == .en ? .white : SkyTheme.darkAccent)
                     .clipShape(Capsule())
             }
             .buttonStyle(PlainButtonStyle())
         }
-        .padding(2)
-        .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
+        .padding(3)
+        .background(SkyTheme.cardBackground)
         .clipShape(Capsule())
         .overlay(
             Capsule()
-                .stroke(SwiftUI.Color.primary.opacity(0.08), lineWidth: 1)
+                .stroke(SkyTheme.border, lineWidth: 1.2)
         )
+        .shadow(color: SkyTheme.shadow, radius: 4, x: 0, y: 2)
     }
 }
 
@@ -864,33 +938,47 @@ struct SectionHeaderView: SwiftUI.View {
     let icon: String
     let color: SwiftUI.Color
     var statusOK: Bool? = nil
-    
+    var trailingView: AnyView? = nil
+
     var body: some SwiftUI.View {
-        HStack(spacing: 8) {
-            Spacer()
+        HStack(spacing: 10) {
             ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(color.opacity(0.14))
-                    .frame(width: 28, height: 28)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [color, SkyTheme.secondary],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 34, height: 34)
+                    .shadow(color: color.opacity(0.25), radius: 4, x: 0, y: 2)
+
                 SwiftUI.Image(systemName: icon)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(color)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
             }
-            
+
             SwiftUI.Text(title)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 18.5, weight: .bold, design: .rounded))
                 .foregroundColor(.primary)
-            
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+
             if let statusOK = statusOK {
                 SwiftUI.Image(systemName: statusOK ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(size: 20, weight: .bold))
                     .foregroundColor(statusOK ? .green : .red)
                     .animation(.spring(), value: statusOK)
             }
-            Spacer()
+
+            Spacer(minLength: 4)
+
+            if let trailingView = trailingView {
+                trailingView
+            }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 2)
     }
 }
 
@@ -900,46 +988,46 @@ struct CheckItemButton: SwiftUI.View {
     let icon: String
     let isStable: Bool
     let action: () -> Void
-    
+
     var body: some SwiftUI.View {
         SwiftUI.Button(action: action) {
             HStack(spacing: 13) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(isStable ? SwiftUI.Color.green.opacity(0.14) : SwiftUI.Color.red.opacity(0.14))
-                        .frame(width: 44, height: 44)
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(isStable ? SkyTheme.primary.opacity(0.14) : SwiftUI.Color.red.opacity(0.12))
+                        .frame(width: 46, height: 46)
                     SwiftUI.Image(systemName: icon)
-                        .font(.system(size: 19, weight: .semibold))
-                        .foregroundColor(isStable ? .green : .red)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(isStable ? SkyTheme.primary : .red)
                 }
-                
-                VStack(alignment: .leading, spacing: 3) {
+
+                VStack(alignment: .leading, spacing: 4) {
                     SwiftUI.Text(title)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 16.5, weight: .semibold, design: .rounded))
                         .foregroundColor(.primary)
                     SwiftUI.Text(subtitle)
-                        .font(.caption)
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
-                
+
                 Spacer()
-                
+
                 SwiftUI.Image(systemName: isStable ? "checkmark.circle.fill" : "xmark.circle.fill")
                     .font(.system(size: 22))
                     .foregroundColor(isStable ? .green : .red)
                     .animation(.spring(), value: isStable)
-                
+
                 SwiftUI.Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(SwiftUI.Color(UIColor.tertiaryLabel))
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(SkyTheme.primary.opacity(0.7))
             }
             .padding(13)
-            .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
+            .background(SkyTheme.innerRowBackground)
             .cornerRadius(16)
             .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(SwiftUI.Color.primary.opacity(0.05), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(SkyTheme.innerBorder, lineWidth: 1)
             )
         }
         .buttonStyle(PlainButtonStyle())
@@ -951,40 +1039,40 @@ struct CellularRefreshToggleRow: SwiftUI.View {
     let onText: String
     let offText: String
     @Binding var isOn: Bool
-    
+
     var body: some SwiftUI.View {
         HStack(spacing: 13) {
             ZStack {
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill((isOn ? SwiftUI.Color.green : SwiftUI.Color.secondary).opacity(0.14))
-                    .frame(width: 42, height: 42)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill((isOn ? SkyTheme.primary : SwiftUI.Color.secondary).opacity(0.14))
+                    .frame(width: 44, height: 44)
                 SwiftUI.Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundColor(isOn ? .green : .secondary)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(isOn ? SkyTheme.primary : .secondary)
             }
-            
+
             VStack(alignment: .leading, spacing: 3) {
                 SwiftUI.Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 15.5, weight: .semibold, design: .rounded))
                     .foregroundColor(.primary)
                 SwiftUI.Text(isOn ? onText : offText)
-                    .font(.caption)
-                    .foregroundColor(isOn ? .green : .secondary)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundColor(isOn ? SkyTheme.primary : .secondary)
                     .lineLimit(1)
             }
-            
+
             Spacer()
-            
+
             Toggle("", isOn: $isOn)
                 .labelsHidden()
-                .tint(.green)
+                .tint(SkyTheme.primary)
         }
-        .padding(12)
-        .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
-        .cornerRadius(15)
+        .padding(13)
+        .background(SkyTheme.innerRowBackground)
+        .cornerRadius(16)
         .overlay(
-            RoundedRectangle(cornerRadius: 15)
-                .stroke(SwiftUI.Color.primary.opacity(0.05), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(SkyTheme.innerBorder, lineWidth: 1)
         )
     }
 }
@@ -995,7 +1083,7 @@ struct ShortcutLinkRow: SwiftUI.View {
     let icon: String
     let color: SwiftUI.Color
     let urlString: String
-    
+
     var body: some SwiftUI.View {
         SwiftUI.Button(action: {
             if let url = URL(string: urlString) {
@@ -1004,34 +1092,41 @@ struct ShortcutLinkRow: SwiftUI.View {
         }) {
             HStack(spacing: 13) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(color.opacity(0.14))
-                        .frame(width: 42, height: 42)
+                        .frame(width: 44, height: 44)
                     SwiftUI.Image(systemName: icon)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 19, weight: .semibold))
                         .foregroundColor(color)
                 }
-                
+
                 SwiftUI.Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 15.5, weight: .semibold, design: .rounded))
                     .foregroundColor(.primary)
-                
+
                 Spacer()
-                
+
                 SwiftUI.Text(buttonTitle)
-                    .font(.caption.bold())
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(color.opacity(0.14))
-                    .foregroundColor(color)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(
+                        LinearGradient(
+                            colors: [SkyTheme.primary, SkyTheme.secondary],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .foregroundColor(.white)
                     .clipShape(Capsule())
+                    .shadow(color: SkyTheme.primary.opacity(0.25), radius: 3, x: 0, y: 2)
             }
-            .padding(12)
-            .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
-            .cornerRadius(15)
+            .padding(13)
+            .background(SkyTheme.innerRowBackground)
+            .cornerRadius(16)
             .overlay(
-                RoundedRectangle(cornerRadius: 15)
-                    .stroke(SwiftUI.Color.primary.opacity(0.05), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(SkyTheme.innerBorder, lineWidth: 1)
             )
         }
         .buttonStyle(PlainButtonStyle())
@@ -1043,48 +1138,50 @@ struct RemoteGuideImageView: SwiftUI.View {
     let caption: String
     let loadingText: String
     let errorText: String
-    
+
     var body: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             SwiftUI.Text(caption)
-                .font(.caption.bold())
+                .font(.system(size: 13.5, weight: .semibold, design: .rounded))
                 .foregroundColor(.primary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, alignment: .center)
-            
+
             if let url = URL(string: urlString) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
                         HStack(spacing: 8) {
                             ProgressView()
+                                .tint(SkyTheme.primary)
                             SwiftUI.Text(loadingText)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                         .frame(maxWidth: .infinity, minHeight: 150)
-                        .background(SwiftUI.Color(UIColor.tertiarySystemGroupedBackground))
-                        .cornerRadius(12)
+                        .background(SkyTheme.cardBackground)
+                        .cornerRadius(14)
                     case .success(let image):
                         image
                             .resizable()
                             .scaledToFit()
-                            .cornerRadius(12)
+                            .cornerRadius(14)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(SwiftUI.Color.secondary.opacity(0.18), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(SkyTheme.border, lineWidth: 1)
                             )
                     case .failure:
                         VStack(spacing: 6) {
                             SwiftUI.Image(systemName: "wifi.exclamationmark")
                                 .font(.title3)
+                                .foregroundColor(SkyTheme.primary)
                             SwiftUI.Text(errorText)
                                 .font(.caption)
                         }
                         .foregroundColor(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 110)
-                        .background(SwiftUI.Color(UIColor.tertiarySystemGroupedBackground))
-                        .cornerRadius(12)
+                        .background(SkyTheme.cardBackground)
+                        .cornerRadius(14)
                     @unknown default:
                         EmptyView()
                     }
@@ -1098,55 +1195,60 @@ struct PairingGuideSheetView: SwiftUI.View {
     @ObservedObject var vm: SystemCheckViewModel
     @StateObject private var wirelessVM = WirelessPairViewModel()
     @StateObject private var pairingMgmtVM = PairingFileManagementViewModel()
-    
+
     @State private var statusBannerMessage: String? = nil
     @State private var isExportSheetPresented = false
     @State private var exportFileURL: URL? = nil
     @State private var didPressInstallPairing = false
     @State private var showDeleteConfirmAlert = false
-    
+
     @Environment(\.dismiss) private var dismiss
-    
+
     private var installedPairingURLForExport: URL? {
         if let url = wirelessVM.shareSheetURL, FileManager.default.fileExists(atPath: url.path) {
             return url
         }
         return nil
     }
-    
+
     var body: some SwiftUI.View {
         NavigationView {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 16) {
                     statusHeaderCard
                     verificationAdviceCard
-                    
+
                     if let banner = statusBannerMessage {
                         HStack(spacing: 10) {
                             SwiftUI.Image(systemName: "checkmark.seal.fill")
-                                .foregroundColor(.blue)
+                                .foregroundColor(SkyTheme.primary)
                             SwiftUI.Text(banner)
                                 .font(.footnote.bold())
                                 .foregroundColor(.primary)
                             Spacer()
                         }
                         .padding(12)
-                        .background(SwiftUI.Color.blue.opacity(0.12))
-                        .cornerRadius(12)
+                        .background(SkyTheme.primary.opacity(0.12))
+                        .cornerRadius(14)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(SkyTheme.border, lineWidth: 1)
+                        )
                     }
-                    
+
                     ios27DirectPairingCard
                     pcPairingGuideCard
                 }
                 .padding(16)
             }
-            .background(SwiftUI.Color(UIColor.systemGroupedBackground))
+            .background(SkyTheme.pageBackground.ignoresSafeArea())
             .navigationTitle(vm.tr("Hướng Dẫn Cài Pairing", "Pairing Setup Guide"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     SwiftUI.Button(vm.tr("Xong", "Done")) { dismiss() }
                         .font(.headline)
+                        .foregroundColor(SkyTheme.primary)
                 }
             }
             .alert(vm.tr("Xoá tệp Pairing?", "Delete Pairing File?"), isPresented: $showDeleteConfirmAlert) {
@@ -1237,13 +1339,13 @@ struct PairingGuideSheetView: SwiftUI.View {
             }
         }
     }
-    
+
     private var statusHeaderCard: some SwiftUI.View {
         HStack(spacing: 12) {
             ZStack {
                 Circle()
                     .fill(vm.isPairingOK ? SwiftUI.Color.green.opacity(0.15) : SwiftUI.Color.red.opacity(0.15))
-                    .frame(width: 44, height: 44)
+                    .frame(width: 46, height: 46)
                 SwiftUI.Image(systemName: vm.isPairingOK ? "checkmark.circle.fill" : "xmark.circle.fill")
                     .font(.system(size: 24))
                     .foregroundColor(vm.isPairingOK ? .green : .red)
@@ -1264,15 +1366,19 @@ struct PairingGuideSheetView: SwiftUI.View {
             Spacer()
         }
         .padding(14)
-        .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
-        .cornerRadius(16)
+        .background(SkyTheme.cardBackground)
+        .cornerRadius(18)
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(SkyTheme.border, lineWidth: 1)
+        )
     }
-    
+
     private var verificationAdviceCard: some SwiftUI.View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 SwiftUI.Image(systemName: "lightbulb.fill")
-                    .foregroundColor(.orange)
+                    .foregroundColor(SkyTheme.primary)
                 SwiftUI.Text(vm.tr(
                     "Thứ tự chuẩn để kiểm tra Pairing File chính xác nhất",
                     "Correct Order to Accurately Verify Pairing File"
@@ -1280,14 +1386,14 @@ struct PairingGuideSheetView: SwiftUI.View {
                 .font(.subheadline.bold())
                 .foregroundColor(.primary)
             }
-            
+
             SwiftUI.Text(LocalizedStringKey(vm.tr(
                 "Bạn phải thực hiện **đúng theo thứ tự 2 bước** sau thì hệ thống mới kiểm tra được tệp Pairing:\n**1.** Mở ứng dụng **LocalDevVPN và BẬT VPN lên trước**.\n**2.** Sau đó **TẮT cả Wi-Fi và 4G (Dữ liệu di động)** rồi xem kết quả:",
                 "You must follow **these exact 2 steps in order** for the system to verify your Pairing file:\n**1.** Open **LocalDevVPN and turn ON the VPN first**.\n**2.** Then **turn OFF both Wi-Fi and 4G (Cellular Data)** and check the result:"
             )))
             .font(.caption)
             .foregroundColor(.secondary)
-            
+
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     SwiftUI.Image(systemName: "checkmark.circle.fill")
@@ -1313,30 +1419,24 @@ struct PairingGuideSheetView: SwiftUI.View {
             .padding(.top, 2)
         }
         .padding(14)
-        .background(SwiftUI.Color.orange.opacity(0.12))
-        .cornerRadius(16)
+        .background(SkyTheme.cardHeaderBackground)
+        .cornerRadius(18)
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(SwiftUI.Color.orange.opacity(0.28), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(SkyTheme.border, lineWidth: 1)
         )
     }
-    
+
     private var ios27DirectPairingCard: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    SwiftUI.Image(systemName: "iphone.radiowaves.left.and.right")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.blue)
-                    SwiftUI.Text(vm.tr("PHẦN 1: DÀNH CHO iOS 27", "PART 1: FOR iOS 27"))
-                        .font(.caption.bold())
-                        .foregroundColor(.blue)
-                }
-                SwiftUI.Text(vm.tr("Ghép nối trực tiếp trên iPhone", "Direct On-Device Pairing on iPhone"))
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.primary)
-            }
-            
+        SkySectionCard(
+            title: vm.tr("Phần 1: Dành Cho iOS 27", "Part 1: For iOS 27"),
+            icon: "iphone.radiowaves.left.and.right",
+            color: SkyTheme.primary
+        ) {
+            SwiftUI.Text(vm.tr("Ghép nối trực tiếp trên iPhone", "Direct On-Device Pairing on iPhone"))
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(SkyTheme.darkAccent)
+
             VStack(alignment: .leading, spacing: 12) {
                 GuideStepRow(
                     num: "1",
@@ -1346,7 +1446,7 @@ struct PairingGuideSheetView: SwiftUI.View {
                         "Tap the **“Install Pairing on iPhone”** button below to initialize the system pairing service."
                     ))
                 )
-                
+
                 GuideStepRow(
                     num: "2",
                     title: vm.tr("Mở Cài đặt Nhà phát triển", "Open Developer Mode Settings"),
@@ -1355,7 +1455,7 @@ struct PairingGuideSheetView: SwiftUI.View {
                         "Go to the Home Screen (do not close this app), open **Settings** ➔ **Privacy & Security** ➔ scroll down and select **Developer Mode**."
                     ))
                 )
-                
+
                 GuideStepRow(
                     num: "3",
                     title: vm.tr("Nhập mã PIN 6 chữ số", "Enter 6-Digit PIN Code"),
@@ -1364,7 +1464,7 @@ struct PairingGuideSheetView: SwiftUI.View {
                         "In Developer Mode, remove any previously paired devices if present, then tap **Pair with SideStore** and enter your iPhone passcode. Switch back to **LiveContainer+SideStore** to copy the 6-digit PIN, paste it into **Settings**, and tap **Pair**."
                     ))
                 )
-                
+
                 GuideStepRow(
                     num: "4",
                     title: vm.tr("Xuất tệp Pairing lưu vào máy", "Export Pairing File to Files"),
@@ -1373,7 +1473,7 @@ struct PairingGuideSheetView: SwiftUI.View {
                         "Return to this screen, tap **“Export Pairing File”** (green button) ➔ choose **Save to Files** to keep a backup copy in the iPhone Files app."
                     ))
                 )
-                
+
                 GuideStepRow(
                     num: "5",
                     title: vm.tr("Nhập tệp để kích hoạt hoàn tất", "Import File to Activate"),
@@ -1383,34 +1483,34 @@ struct PairingGuideSheetView: SwiftUI.View {
                     ))
                 )
             }
-            
+
             Divider().padding(.vertical, 2)
-            
+
             VStack(spacing: 10) {
                 if let pin = wirelessVM.pinCode {
                     VStack(spacing: 6) {
                         SwiftUI.Text(vm.tr("MÃ GHÉP NỐI 6 CHỮ SỐ", "6-DIGIT PAIRING PIN"))
                             .font(.caption2.bold())
-                            .foregroundColor(.blue)
+                            .foregroundColor(SkyTheme.primary)
                         SwiftUI.Text(pin)
                             .font(.system(size: 30, weight: .heavy, design: .monospaced))
                             .tracking(6)
                             .foregroundColor(.primary)
                             .padding(.vertical, 6)
                             .padding(.horizontal, 18)
-                            .background(RoundedRectangle(cornerRadius: 10).fill(SwiftUI.Color.blue.opacity(0.12)))
+                            .background(RoundedRectangle(cornerRadius: 10).fill(SkyTheme.primary.opacity(0.12)))
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.bottom, 4)
                 }
-                
+
                 if let errorMsg = wirelessVM.errorMessage {
                     SwiftUI.Text(errorMsg)
                         .font(.caption)
                         .foregroundColor(.red)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                
+
                 SwiftUI.Button {
                     didPressInstallPairing = true
                     wirelessVM.togglePairing()
@@ -1426,10 +1526,10 @@ struct PairingGuideSheetView: SwiftUI.View {
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 48)
-                    .background(wirelessVM.isAdvertising ? SwiftUI.Color.red : SwiftUI.Color.accentColor)
+                    .background(wirelessVM.isAdvertising ? SwiftUI.Color.red : SkyTheme.primary)
                     .cornerRadius(13)
                 }
-                
+
                 if didPressInstallPairing || installedPairingURLForExport != nil {
                     SwiftUI.Button {
                         if let pairedURL = installedPairingURLForExport {
@@ -1456,7 +1556,7 @@ struct PairingGuideSheetView: SwiftUI.View {
                     }
                     .transition(.scale.combined(with: .opacity))
                 }
-                
+
                 SwiftUI.Button {
                     pairingMgmtVM.promptImport(for: .rppairing)
                 } label: {
@@ -1469,10 +1569,10 @@ struct PairingGuideSheetView: SwiftUI.View {
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 48)
-                    .background(SwiftUI.Color.blue)
+                    .background(SkyTheme.darkAccent)
                     .cornerRadius(13)
                 }
-                
+
                 SwiftUI.Button {
                     showDeleteConfirmAlert = true
                 } label: {
@@ -1490,33 +1590,28 @@ struct PairingGuideSheetView: SwiftUI.View {
                 }
             }
             .padding(12)
-            .background(SwiftUI.Color(UIColor.tertiarySystemGroupedBackground))
+            .background(SkyTheme.innerRowBackground)
             .cornerRadius(14)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(SkyTheme.innerBorder, lineWidth: 1)
+            )
         }
-        .padding(16)
-        .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
-        .cornerRadius(16)
     }
-    
+
     private var pcPairingGuideCard: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    SwiftUI.Image(systemName: "laptopcomputer.and.iphone")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.purple)
-                    SwiftUI.Text(vm.tr("PHẦN 2: DƯỚI iOS 27 (iOS 16 / 17 / 18...)", "PART 2: BELOW iOS 27 (iOS 16 / 17 / 18...)"))
-                        .font(.caption.bold())
-                        .foregroundColor(.purple)
-                }
-                SwiftUI.Text(vm.tr("Tạo / Cài tệp Pairing qua Máy tính (Windows / Mac)", "Generate / Install Pairing via Computer (Windows / Mac)"))
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.primary)
-            }
-            
+        SkySectionCard(
+            title: vm.tr("Phần 2: Dưới iOS 27 (PC / Mac)", "Part 2: Below iOS 27 (PC / Mac)"),
+            icon: "laptopcomputer.and.iphone",
+            color: SkyTheme.primary
+        ) {
+            SwiftUI.Text(vm.tr("Tạo / Cài tệp Pairing qua Máy tính (Windows / Mac)", "Generate / Install Pairing via Computer (Windows / Mac)"))
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(SkyTheme.darkAccent)
+
             HStack(alignment: .top, spacing: 8) {
                 SwiftUI.Image(systemName: "info.circle.fill")
-                    .foregroundColor(.purple)
+                    .foregroundColor(SkyTheme.primary)
                     .font(.subheadline)
                 SwiftUI.Text(LocalizedStringKey(vm.tr(
                     "**Chuẩn bị chung:** Trên Windows cần cài đặt **iTunes** & **iCloud** bản chính chủ từ Apple (không tải bản Microsoft Store). Cắm cáp kết nối iPhone vào máy tính, mở khóa màn hình iPhone và nhấn **Tin cậy (Trust)** + nhập mật khẩu màn hình. Hãy chọn **1 trong 3 công cụ** dưới đây:",
@@ -1526,9 +1621,9 @@ struct PairingGuideSheetView: SwiftUI.View {
                 .foregroundColor(.secondary)
             }
             .padding(10)
-            .background(SwiftUI.Color.purple.opacity(0.1))
+            .background(SkyTheme.primary.opacity(0.1))
             .cornerRadius(10)
-            
+
             VStack(alignment: .leading, spacing: 12) {
                 GuideStepRow(
                     num: "1",
@@ -1541,7 +1636,7 @@ struct PairingGuideSheetView: SwiftUI.View {
                         "• Open **idevice_pair** on your computer and select your iPhone.\n• **Direct App Injection:** Under the app list in **idevice_pair**, select **SideStore** or **LiveContainer** and click **Load** (or **Install Pairing File**). It will automatically install the Pairing file into the app.\n• **Export `.mobiledevicepairing` Backup:** Click **Generate** then **Export / Save** to save the **`.mobiledevicepairing`** file. Send it to your iPhone, choose **Save to Files**, and tap **“Import Pairing File”** below."
                     ))
                 )
-                
+
                 GuideStepRow(
                     num: "2",
                     title: vm.tr(
@@ -1553,7 +1648,7 @@ struct PairingGuideSheetView: SwiftUI.View {
                         "• Download and extract **jitterbugpair** (Windows/macOS/Linux).\n• Keep your iPhone unlocked, then run **`jitterbugpair.exe`** (Windows) or **`./jitterbugpair`** in Terminal (Mac).\n• It will generate a **`<UDID>.mobiledevicepairing`** file in the same folder.\n• Transfer that **`.mobiledevicepairing`** file to your iPhone ➔ **Save to Files** ➔ tap **“Import Pairing File”** below."
                     ))
                 )
-                
+
                 GuideStepRow(
                     num: "3",
                     title: vm.tr(
@@ -1566,7 +1661,7 @@ struct PairingGuideSheetView: SwiftUI.View {
                     ))
                 )
             }
-            
+
             VStack(spacing: 10) {
                 SwiftUI.Button {
                     pairingMgmtVM.promptImport(for: .rppairing)
@@ -1580,10 +1675,10 @@ struct PairingGuideSheetView: SwiftUI.View {
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 46)
-                    .background(SwiftUI.Color.purple)
+                    .background(SkyTheme.primary)
                     .cornerRadius(13)
                 }
-                
+
                 SwiftUI.Button {
                     showDeleteConfirmAlert = true
                 } label: {
@@ -1602,9 +1697,6 @@ struct PairingGuideSheetView: SwiftUI.View {
             }
             .padding(.top, 4)
         }
-        .padding(16)
-        .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
-        .cornerRadius(16)
     }
 }
 
@@ -1612,16 +1704,16 @@ struct GuideStepRow: SwiftUI.View {
     let num: String
     var title: String? = nil
     let text: LocalizedStringKey
-    
+
     var body: some SwiftUI.View {
         HStack(alignment: .top, spacing: 10) {
             SwiftUI.Text(num)
                 .font(.caption.bold())
                 .foregroundColor(.white)
                 .frame(width: 24, height: 24)
-                .background(Circle().fill(SwiftUI.Color.accentColor))
+                .background(Circle().fill(SkyTheme.primary))
                 .padding(.top, 1)
-            
+
             VStack(alignment: .leading, spacing: 3) {
                 if let title = title {
                     SwiftUI.Text(title)
@@ -1640,7 +1732,7 @@ struct GuideStepRow: SwiftUI.View {
 struct VpnDetailSheetView: SwiftUI.View {
     @ObservedObject var vm: SystemCheckViewModel
     @Environment(\.dismiss) private var dismiss
-    
+
     var body: some SwiftUI.View {
         NavigationView {
             ScrollView(showsIndicators: false) {
@@ -1649,7 +1741,7 @@ struct VpnDetailSheetView: SwiftUI.View {
                         ZStack {
                             Circle()
                                 .fill(vm.isVpnOK ? SwiftUI.Color.green.opacity(0.15) : SwiftUI.Color.red.opacity(0.15))
-                                .frame(width: 44, height: 44)
+                                .frame(width: 46, height: 46)
                             SwiftUI.Image(systemName: vm.isVpnOK ? "checkmark.circle.fill" : "xmark.circle.fill")
                                 .font(.system(size: 24))
                                 .foregroundColor(vm.isVpnOK ? .green : .red)
@@ -1669,14 +1761,18 @@ struct VpnDetailSheetView: SwiftUI.View {
                         Spacer()
                     }
                     .padding(14)
-                    .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
-                    .cornerRadius(16)
-                    
-                    VStack(alignment: .leading, spacing: 12) {
-                        SwiftUI.Text(vm.tr("THÔNG SỐ KẾT NỐI HIỆN TẠI", "CURRENT CONNECTION DETAILS"))
-                            .font(.caption.bold())
-                            .foregroundColor(.secondary)
-                        
+                    .background(SkyTheme.cardBackground)
+                    .cornerRadius(18)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(SkyTheme.border, lineWidth: 1)
+                    )
+
+                    SkySectionCard(
+                        title: vm.tr("Thông Số Kết Nối Hiện Tại", "Current Connection Details"),
+                        icon: "network",
+                        color: SkyTheme.primary
+                    ) {
                         HStack {
                             SwiftUI.Text("Tunnel IP")
                                 .font(.footnote)
@@ -1695,22 +1791,19 @@ struct VpnDetailSheetView: SwiftUI.View {
                                 .font(.system(.subheadline, design: .monospaced).bold())
                         }
                     }
-                    .padding(16)
-                    .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
-                    .cornerRadius(16)
-                    
-                    VStack(alignment: .leading, spacing: 12) {
-                        SwiftUI.Label(vm.tr("Cấu hình khuyên dùng cho iOS 27", "Recommended Config for iOS 27"), systemImage: "lightbulb.fill")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.orange)
-                        
+
+                    SkySectionCard(
+                        title: vm.tr("Cấu hình khuyên dùng iOS 27", "Recommended Config iOS 27"),
+                        icon: "lightbulb.fill",
+                        color: SkyTheme.primary
+                    ) {
                         SwiftUI.Text(vm.tr(
                             "Nếu dùng iOS 27 và bản LiveContainer+SideStore này, hãy đặt IP trong LocalDevVPN theo thông số sau để kết nối nhanh nhất:",
                             "If using iOS 27 with this LiveContainer+SideStore build, set the IP addresses in LocalDevVPN as follows for the fastest connection:"
                         ))
                         .font(.footnote)
                         .foregroundColor(.secondary)
-                        
+
                         CopyableIPCard(
                             label: "Tunnel IP",
                             value: "10.7.1.1/32",
@@ -1724,19 +1817,17 @@ struct VpnDetailSheetView: SwiftUI.View {
                             copiedText: vm.tr("Đã chép", "Copied")
                         )
                     }
-                    .padding(16)
-                    .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
-                    .cornerRadius(16)
                 }
                 .padding(16)
             }
-            .background(SwiftUI.Color(UIColor.systemGroupedBackground))
+            .background(SkyTheme.pageBackground.ignoresSafeArea())
             .navigationTitle("LocalDevVPN")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     SwiftUI.Button(vm.tr("Xong", "Done")) { dismiss() }
                         .font(.headline)
+                        .foregroundColor(SkyTheme.primary)
                 }
             }
         }
@@ -1749,7 +1840,7 @@ struct CopyableIPCard: SwiftUI.View {
     let copyText: String
     let copiedText: String
     @State private var copied = false
-    
+
     var body: some SwiftUI.View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
@@ -1772,22 +1863,26 @@ struct CopyableIPCard: SwiftUI.View {
                     .font(.caption.bold())
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(copied ? SwiftUI.Color.green.opacity(0.2) : SwiftUI.Color.accentColor.opacity(0.15))
-                    .foregroundColor(copied ? .green : .accentColor)
+                    .background(copied ? SwiftUI.Color.green.opacity(0.2) : SkyTheme.primary.opacity(0.15))
+                    .foregroundColor(copied ? .green : SkyTheme.primary)
                     .cornerRadius(10)
             }
             .buttonStyle(PlainButtonStyle())
         }
         .padding(12)
-        .background(SwiftUI.Color(UIColor.tertiarySystemGroupedBackground))
+        .background(SkyTheme.innerRowBackground)
         .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(SkyTheme.innerBorder, lineWidth: 1)
+        )
     }
 }
 
 struct CellularDetailSheetView: SwiftUI.View {
     @ObservedObject var vm: SystemCheckViewModel
     @Environment(\.dismiss) private var dismiss
-    
+
     var body: some SwiftUI.View {
         NavigationView {
             ScrollView(showsIndicators: false) {
@@ -1796,7 +1891,7 @@ struct CellularDetailSheetView: SwiftUI.View {
                         ZStack {
                             Circle()
                                 .fill(vm.isCellularOK ? SwiftUI.Color.green.opacity(0.15) : SwiftUI.Color.red.opacity(0.15))
-                                .frame(width: 44, height: 44)
+                                .frame(width: 46, height: 46)
                             SwiftUI.Image(systemName: vm.isCellularOK ? "checkmark.circle.fill" : "xmark.circle.fill")
                                 .font(.system(size: 24))
                                 .foregroundColor(vm.isCellularOK ? .green : .red)
@@ -1813,17 +1908,18 @@ struct CellularDetailSheetView: SwiftUI.View {
                         Spacer()
                     }
                     .padding(14)
-                    .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
-                    .cornerRadius(16)
-                    
-                    VStack(alignment: .leading, spacing: 12) {
-                        SwiftUI.Label(
-                            vm.tr("Cài & Gia hạn App qua 4G + VPN", "Install & Refresh Apps via 4G + VPN"),
-                            systemImage: "antenna.radiowaves.left.and.right.circle.fill"
-                        )
-                        .font(.headline)
-                        .foregroundColor(.green)
-                        
+                    .background(SkyTheme.cardBackground)
+                    .cornerRadius(18)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(SkyTheme.border, lineWidth: 1)
+                    )
+
+                    SkySectionCard(
+                        title: vm.tr("Cài & Gia hạn App qua 4G + VPN", "Install & Refresh Apps via 4G + VPN"),
+                        icon: "antenna.radiowaves.left.and.right.circle.fill",
+                        color: SkyTheme.primary
+                    ) {
                         SwiftUI.Text(LocalizedStringKey(vm.tr(
                             "• **Không cần Wi-Fi:** Cài đặt IPA và làm mới ứng dụng trực tiếp qua **4G/5G + LocalDevVPN**.\n\n• **Tự động hóa:** Kết hợp phím tắt làm mới lúc 6:00 hoặc 15:00 để tự động gia hạn ứng dụng mỗi ngày.",
                             "• **No Wi-Fi Needed:** Install IPAs and refresh apps directly over **4G/5G + LocalDevVPN**.\n\n• **Automation:** Combine with the 6:00 AM or 3:00 PM shortcuts to automatically refresh apps daily."
@@ -1831,19 +1927,17 @@ struct CellularDetailSheetView: SwiftUI.View {
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     }
-                    .padding(16)
-                    .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
-                    .cornerRadius(16)
                 }
                 .padding(16)
             }
-            .background(SwiftUI.Color(UIColor.systemGroupedBackground))
+            .background(SkyTheme.pageBackground.ignoresSafeArea())
             .navigationTitle(vm.tr("Mạng 4G / Di Động", "4G / Cellular Data"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     SwiftUI.Button(vm.tr("Xong", "Done")) { dismiss() }
                         .font(.headline)
+                        .foregroundColor(SkyTheme.primary)
                 }
             }
         }
@@ -1854,7 +1948,7 @@ struct CellularDetailSheetView: SwiftUI.View {
 final class AnisetteQuickListViewModel: ObservableObject {
     @Published var servers: [AnisetteServerItem] = []
     @Published var isLoading: Bool = false
-    
+
     func loadCachedAndSync(customPrefix: String) async {
         let local = await AnisetteServersManager.shared.loadLocalServers().filter { !$0.isHidden }
         if !local.isEmpty {
@@ -1862,12 +1956,12 @@ final class AnisetteQuickListViewModel: ObservableObject {
         }
         await refreshFromRemote(customPrefix: customPrefix)
     }
-    
+
     func refreshFromRemote(customPrefix: String) async {
         guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
-        
+
         if let synced = try? await AnisetteServersManager.shared.syncWithRemote() {
             let visible = synced.filter { !$0.isHidden }
             self.servers = mergeWithCurrent(visible, customPrefix: customPrefix)
@@ -1876,12 +1970,12 @@ final class AnisetteQuickListViewModel: ObservableObject {
             self.servers = mergeWithCurrent(local, customPrefix: customPrefix)
         }
     }
-    
+
     func reloadCurrentSelection(customPrefix: String) async {
         let local = await AnisetteServersManager.shared.loadLocalServers().filter { !$0.isHidden }
         self.servers = mergeWithCurrent(local, customPrefix: customPrefix)
     }
-    
+
     private func mergeWithCurrent(_ items: [AnisetteServerItem], customPrefix: String) -> [AnisetteServerItem] {
         var result = items
         if result.isEmpty {
@@ -1908,11 +2002,11 @@ struct AnisetteDetailSheetView: SwiftUI.View {
     @StateObject private var listVM = AnisetteQuickListViewModel()
     @State private var customServerInput: String = ""
     @Environment(\.dismiss) private var dismiss
-    
+
     private var customServerPrefix: String {
         vm.tr("Máy chủ tùy chỉnh", "Custom Server")
     }
-    
+
     var body: some SwiftUI.View {
         NavigationView {
             ScrollView(showsIndicators: false) {
@@ -1921,7 +2015,7 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                         ZStack {
                             Circle()
                                 .fill(vm.isAnisetteOK ? SwiftUI.Color.green.opacity(0.15) : SwiftUI.Color.red.opacity(0.15))
-                                .frame(width: 44, height: 44)
+                                .frame(width: 46, height: 46)
                             SwiftUI.Image(systemName: vm.isAnisetteOK ? "checkmark.circle.fill" : "xmark.circle.fill")
                                 .font(.system(size: 24))
                                 .foregroundColor(vm.isAnisetteOK ? .green : .red)
@@ -1938,14 +2032,18 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                         Spacer()
                     }
                     .padding(14)
-                    .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
-                    .cornerRadius(16)
-                    
-                    VStack(alignment: .leading, spacing: 12) {
-                        SwiftUI.Label(vm.tr("Chế độ xác thực Anisette", "Anisette Authentication Mode"), systemImage: "switch.2")
-                            .font(.headline)
-                            .foregroundColor(.blue)
-                        
+                    .background(SkyTheme.cardBackground)
+                    .cornerRadius(18)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(SkyTheme.border, lineWidth: 1)
+                    )
+
+                    SkySectionCard(
+                        title: vm.tr("Chế độ xác thực Anisette", "Anisette Authentication Mode"),
+                        icon: "switch.2",
+                        color: SkyTheme.primary
+                    ) {
                         Toggle(isOn: Binding(
                             get: { vm.useOnDeviceAnisette },
                             set: { vm.setUseOnDeviceAnisette($0) }
@@ -1960,10 +2058,15 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                                     .foregroundColor(vm.useOnDeviceAnisette ? .red : .green)
                             }
                         }
+                        .tint(SkyTheme.primary)
                         .padding(12)
-                        .background(SwiftUI.Color(UIColor.tertiarySystemGroupedBackground))
+                        .background(SkyTheme.innerRowBackground)
                         .cornerRadius(12)
-                        
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(SkyTheme.innerBorder, lineWidth: 1)
+                        )
+
                         if vm.useOnDeviceAnisette {
                             SwiftUI.Button {
                                 vm.setUseOnDeviceAnisette(false)
@@ -1976,26 +2079,18 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
-                                .background(SwiftUI.Color.green)
+                                .background(SkyTheme.primary)
                                 .cornerRadius(12)
                             }
                         }
                     }
-                    .padding(16)
-                    .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
-                    .cornerRadius(16)
-                    
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            SwiftUI.Label(vm.tr("Chọn Máy chủ Anisette", "Select Anisette Server"), systemImage: "server.rack")
-                                .font(.headline)
-                                .foregroundColor(.primary)
-                            Spacer()
-                            if listVM.isLoading {
-                                ProgressView()
-                            }
-                        }
-                        
+
+                    SkySectionCard(
+                        title: vm.tr("Chọn Máy chủ Anisette", "Select Anisette Server"),
+                        icon: "server.rack",
+                        color: SkyTheme.primary,
+                        trailingView: listVM.isLoading ? AnyView(ProgressView().tint(SkyTheme.primary)) : nil
+                    ) {
                         VStack(spacing: 8) {
                             ForEach(listVM.servers) { server in
                                 let isSelected = (vm.selectedAnisetteServerURL.caseInsensitiveCompare(server.address) == .orderedSame)
@@ -2006,8 +2101,8 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                                     HStack(spacing: 12) {
                                         SwiftUI.Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                                             .font(.system(size: 20))
-                                            .foregroundColor(isSelected ? .green : .secondary)
-                                        
+                                            .foregroundColor(isSelected ? SkyTheme.primary : .secondary)
+
                                         VStack(alignment: .leading, spacing: 2) {
                                             SwiftUI.Text(server.name)
                                                 .font(.subheadline.bold())
@@ -2023,35 +2118,43 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                                                 .font(.caption2.bold())
                                                 .padding(.horizontal, 8)
                                                 .padding(.vertical, 4)
-                                                .background(SwiftUI.Color.green.opacity(0.15))
-                                                .foregroundColor(.green)
+                                                .background(SkyTheme.primary.opacity(0.15))
+                                                .foregroundColor(SkyTheme.primary)
                                                 .clipShape(Capsule())
                                         }
                                     }
                                     .padding(12)
-                                    .background(SwiftUI.Color(UIColor.tertiarySystemGroupedBackground))
+                                    .background(SkyTheme.innerRowBackground)
                                     .cornerRadius(12)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(isSelected ? SkyTheme.primary.opacity(0.45) : SkyTheme.innerBorder, lineWidth: 1)
+                                    )
                                 }
                                 .buttonStyle(PlainButtonStyle())
                             }
                         }
-                        
+
                         Divider().padding(.vertical, 2)
-                        
+
                         VStack(alignment: .leading, spacing: 8) {
                             SwiftUI.Text(vm.tr("Hoặc nhập URL máy chủ tùy chỉnh:", "Or enter custom server URL:"))
                                 .font(.caption.bold())
                                 .foregroundColor(.secondary)
-                            
+
                             HStack(spacing: 8) {
                                 TextField(AppConstants.Anisette.Servers.defaultServerURL, text: $customServerInput)
                                     .keyboardType(.URL)
                                     .autocapitalization(.none)
                                     .disableAutocorrection(true)
                                     .padding(10)
-                                    .background(SwiftUI.Color(UIColor.tertiarySystemGroupedBackground))
+                                    .background(SkyTheme.innerRowBackground)
                                     .cornerRadius(10)
-                                
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(SkyTheme.innerBorder, lineWidth: 1)
+                                    )
+
                                 SwiftUI.Button {
                                     let trimmed = customServerInput.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
                                     guard !trimmed.isEmpty else { return }
@@ -2064,25 +2167,23 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                                         .foregroundColor(.white)
                                         .padding(.horizontal, 16)
                                         .padding(.vertical, 10)
-                                        .background(SwiftUI.Color.accentColor)
+                                        .background(SkyTheme.primary)
                                         .cornerRadius(10)
                                 }
                             }
                         }
                     }
-                    .padding(16)
-                    .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
-                    .cornerRadius(16)
                 }
                 .padding(16)
             }
-            .background(SwiftUI.Color(UIColor.systemGroupedBackground))
+            .background(SkyTheme.pageBackground.ignoresSafeArea())
             .navigationTitle(vm.tr("Máy Chủ Anisette", "Anisette Server"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     SwiftUI.Button(vm.tr("Xong", "Done")) { dismiss() }
                         .font(.headline)
+                        .foregroundColor(SkyTheme.primary)
                 }
             }
             .task {

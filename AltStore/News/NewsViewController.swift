@@ -105,7 +105,7 @@ class NewsViewController: UICollectionViewController {
         CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
         
         self.title = "Check"
-        self.navigationItem.title = "Kiểm Tra Hệ Thống"
+        self.navigationItem.title = "Hệ Thống - Tính Năng"
         self.navigationItem.largeTitleDisplayMode = .never
         self.collectionView.backgroundColor = .systemGroupedBackground
         self.collectionView.contentInsetAdjustmentBehavior = .never
@@ -440,7 +440,7 @@ final class SystemCheckViewModel: ObservableObject {
         self.selectedAnisetteServerURL = selectedURL
         let serverHost = URL(string: selectedURL)?.host ?? selectedURL
         self.anisetteDetail = onDevice
-            ? "Chưa tối ưu • Hãy tắt Use On-Device Anisette"
+            ? "Không ổn định • Hãy tắt Use On-Device Anisette"
             : "Ổn định • Máy chủ: \(serverHost)"
         
         let currentCellularRefresh = UserDefaults.standard.isCellularRefreshEnabled
@@ -518,7 +518,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
             VpnDetailSheetView(isVpnOK: vm.isVpnOK, tunnelIP: vm.tunnelIP, deviceIP: vm.deviceIP)
         }
         .sheet(isPresented: $showCellularSheet) {
-            CellularDetailSheetView(isCellularOK: vm.isCellularOK, detail: vm.cellularDetail, hasInternet: vm.hasInternet)
+            CellularDetailSheetView(isCellularOK: vm.isCellularOK, detail: vm.cellularDetail)
         }
         .sheet(isPresented: $showAnisetteSheet) {
             AnisetteDetailSheetView(vm: vm)
@@ -537,7 +537,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
             
             CheckItemButton(
                 title: "Pairing File",
-                subtitle: vm.isPairingOK ? "Ổn định • \(vm.pairingProtocol)" : "Chưa có • Nhấn để Cài / Nhập Pairing",
+                subtitle: vm.isPairingOK ? "Ổn định" : "Bị lỗi",
                 icon: "doc.badge.gearshape.fill",
                 isStable: vm.isPairingOK
             ) {
@@ -546,7 +546,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
             
             CheckItemButton(
                 title: "LocalDevVPN",
-                subtitle: vm.isVpnOK ? "Ổn định • Tunnel: \(vm.tunnelIP)" : "Chưa kết nối • Nhấn xem cấu hình IP",
+                subtitle: vm.isVpnOK ? "Ổn định" : "Bị lỗi / Chưa kết nối",
                 icon: "network.badge.shield.half.filled",
                 isStable: vm.isVpnOK
             ) {
@@ -555,7 +555,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
             
             CheckItemButton(
                 title: "Mạng 4G / Di động",
-                subtitle: vm.cellularDetail,
+                subtitle: vm.isCellularOK ? "Ổn định" : "Chưa bật",
                 icon: "antenna.radiowaves.left.and.right",
                 isStable: vm.isCellularOK
             ) {
@@ -574,7 +574,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
             
             CheckItemButton(
                 title: "Máy chủ Anisette",
-                subtitle: vm.anisetteDetail,
+                subtitle: vm.isAnisetteOK ? "Ổn định" : "Không ổn định",
                 icon: "server.rack",
                 isStable: vm.isAnisetteOK
             ) {
@@ -640,11 +640,11 @@ struct SystemCheckDashboardView: SwiftUI.View {
                 VStack(spacing: 14) {
                     RemoteGuideImageView(
                         urlString: "https://raw.githubusercontent.com/Nguyenhuyhoan/icons/main/IMG_2589.jpeg",
-                        caption: "Bước 1: Mở Phím Tắt mục Auto Refresh 4G (Auto Refresh 4G 2) và nhấn vào dấu xổ xuống như trong ảnh."
+                        caption: "Bước 1: Mở Phím Tắt mục Auto Refresh 4G (Auto Refresh 4G 2) và nhấn vào dấu xổ xuống:"
                     )
                     RemoteGuideImageView(
                         urlString: "https://raw.githubusercontent.com/Nguyenhuyhoan/icons/main/IMG_2588.jpeg",
-                        caption: "Bước 2: Bật nút Tự động hóa như trong ảnh."
+                        caption: "Bước 2: Bật nút Tự động hóa:"
                     )
                 }
             }
@@ -764,7 +764,7 @@ struct CellularRefreshToggleRow: SwiftUI.View {
                 SwiftUI.Text("Cellular Refresh (Refresh Qua 4G)")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.primary)
-                SwiftUI.Text(isOn ? "Đang bật • Tự động bật/tắt 4G khi làm mới" : "Đang tắt • Chỉ làm mới thông thường")
+                SwiftUI.Text(isOn ? "Đang bật" : "Chưa bật")
                     .font(.caption)
                     .foregroundColor(isOn ? .green : .secondary)
                     .lineLimit(1)
@@ -1037,18 +1037,18 @@ struct PairingGuideSheetView: SwiftUI.View {
     
     private var ios27DirectPairingCard: some SwiftUI.View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                SwiftUI.Image(systemName: "iphone.radiowaves.left.and.right")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(.blue)
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    SwiftUI.Image(systemName: "iphone.radiowaves.left.and.right")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.blue)
                     SwiftUI.Text("PHẦN 1: DÀNH CHO iOS 27")
                         .font(.caption.bold())
                         .foregroundColor(.blue)
-                    SwiftUI.Text("Ghép nối trực tiếp trên iPhone (Không cần PC)")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.primary)
                 }
+                SwiftUI.Text("Ghép nối trực tiếp trên iPhone")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.primary)
             }
             
             VStack(alignment: .leading, spacing: 12) {
@@ -1178,25 +1178,25 @@ struct PairingGuideSheetView: SwiftUI.View {
     
     private var pcPairingGuideCard: some SwiftUI.View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                SwiftUI.Image(systemName: "laptopcomputer.and.iphone")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(.purple)
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    SwiftUI.Image(systemName: "laptopcomputer.and.iphone")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.purple)
                     SwiftUI.Text("PHẦN 2: DƯỚI iOS 27 (iOS 16 / 17 / 18...)")
                         .font(.caption.bold())
                         .foregroundColor(.purple)
-                    SwiftUI.Text("Tạo tệp Pairing qua Máy tính (Windows / Mac)")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.primary)
                 }
+                SwiftUI.Text("Tạo / Cài tệp Pairing qua Máy tính (Windows / Mac)")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.primary)
             }
             
             HStack(alignment: .top, spacing: 8) {
                 SwiftUI.Image(systemName: "info.circle.fill")
                     .foregroundColor(.purple)
                     .font(.subheadline)
-                SwiftUI.Text("**Lưu ý quan trọng:** Theo hiểu biết thiếu sót của mình thì các phiên bán iOS dưới 27 chưa hỗ trợ tự tạo tệp Pairing trực tiếp trên điện thoại. Bạn cần dùng máy tính tạo tệp 1 lần, sau đó có thể tái sử dụng tệp Pairing mà không cần máy tính (nếu đã lưu tệp Pairing vào Iphone).")
+                SwiftUI.Text("**Chuẩn bị chung:** Trên Windows cần cài đặt **iTunes** & **iCloud** bản chính chủ từ Apple (không tải bản Microsoft Store). Cắm cáp kết nối iPhone vào máy tính, mở khóa màn hình iPhone và nhấn **Tin cậy (Trust)** + nhập mật khẩu màn hình. Hãy chọn **1 trong 3 công cụ** dưới đây:")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -1207,32 +1207,20 @@ struct PairingGuideSheetView: SwiftUI.View {
             VStack(alignment: .leading, spacing: 12) {
                 GuideStepRow(
                     num: "1",
-                    title: "Chuẩn bị công cụ trên Máy tính",
-                    text: "• **Nếu dùng Windows:** Cài đặt **iTunes** và **iCloud**.\n• **Tải công cụ tạo Pairing:** Tải phần mềm **iLoader** (hoặc **idevice_pair / jitterbugpair**) về máy tính."
+                    title: "Cách 1: Dùng idevice_pair (Khuyên dùng - Hỗ trợ cả nạp thẳng & xuất tệp)",
+                    text: "• Mở phần mềm **idevice_pair** trên máy tính và chọn iPhone của bạn.\n• **Cách nạp thẳng vào ứng dụng:** Trong mục ứng dụng trên **idevice_pair**, chọn **SideStore** hoặc **LiveContainer** rồi nhấn nút **Load** (hoặc **Install Pairing File**). Phần mềm sẽ tự động chép thẳng tệp Pairing vào trong ứng dụng trên iPhone mà không cần làm thủ công.\n• **Cách xuất ra tệp `.mobiledevicepairing` dự phòng:** Nhấn nút **Generate** rồi chọn **Export / Save** để lưu tệp có đuôi **`.mobiledevicepairing`** ra máy tính. Gửi tệp này sang iPhone (qua Zalo, AirDrop, iCloud Drive), chọn **Lưu vào Tệp** rồi nhấn nút **“Nhập tệp Pairing”** ở dưới."
                 )
                 
                 GuideStepRow(
                     num: "2",
-                    title: "Kết nối cáp & Tin cậy thiết bị",
-                    text: "Mở khóa màn hình iPhone, cắm cáp kết nối iPhone vào máy tính. Khi điện thoại hiện thông báo **“Tin cậy máy tính này?” (Trust This Computer?)** ➔ nhấn **Tin cậy (Trust)** và nhập mật khẩu khóa màn hình iPhone."
+                    title: "Cách 2: Dùng jitterbugpair (Công cụ xuất tệp `.mobiledevicepairing` ra máy tính)",
+                    text: "• Tải và giải nén **jitterbugpair** (trên Windows/macOS/Linux).\n• Giữ màn hình iPhone luôn sáng và mở khóa, sau đó chạy file **`jitterbugpair.exe`** (trên Windows) hoặc chạy **`./jitterbugpair`** trong Terminal (trên Mac).\n• Công cụ sẽ tự động xuất ra một tệp có tên dạng **`<UDID>.mobiledevicepairing`** nằm ngay trong cùng thư mục chứa **jitterbugpair** (công cụ này chỉ xuất ra tệp chứ không tự chép vào app).\n• Gửi tệp **`.mobiledevicepairing`** đó sang iPhone ➔ chọn **Lưu vào Tệp (Save to Files)** ➔ nhấn nút **“Nhập tệp Pairing”** bên dưới để nạp vào ứng dụng."
                 )
                 
                 GuideStepRow(
                     num: "3",
-                    title: "Xuất tệp Pairing từ công cụ",
-                    text: "Mở công cụ **iLoader** (hoặc **idevice_pair**) trên máy tính:\n• Chọn đúng tên thiết bị iPhone của bạn.\n• Nhấn nút **Generate / Export Pairing File** để phần mềm tạo ra tệp có đuôi **`.mobiledevicepairing`** hoặc **`.plist`**.\n(Phần này AI viết chứ mình không biết chính xác, tuy nhiên 3 công cụ đó có thể tạo và cài Pairing lên iphone)"
-                )
-                
-                GuideStepRow(
-                    num: "4",
-                    title: "Chuyển tệp sang iPhone & Lưu vào Tệp",
-                    text: "Gửi tệp Pairing vừa tạo từ máy tính sang iPhone (qua **Zalo, Telegram, iCloud Drive** hoặc **AirDrop**). Mở tệp đó trên iPhone, nhấn nút **Chia sẻ** ➔ chọn **Lưu vào Tệp (Save to Files)**."
-                )
-                
-                GuideStepRow(
-                    num: "5",
-                    title: "Nhập tệp Pairing vào ứng dụng",
-                    text: "Nhấn vào nút **“Nhập tệp Pairing”** ở ngay bên dưới (hoặc ở khung trên) ➔ chọn đúng tệp Pairing bạn vừa lưu trong ứng dụng **Tệp**. Ứng dụng sẽ tự động xóa tệp cũ, nạp tệp mới và báo **Tích xanh**!"
+                    title: "Cách 3: Dùng iLoader (Cài đặt tự động vào ứng dụng trên iPhone)",
+                    text: "• Mở phần mềm **iLoader** trên máy tính, đăng nhập hoặc kết nối với iPhone đã nhấn Tin cậy.\n• **iLoader** chủ yếu hỗ trợ tính năng **Tự động tạo và nạp trực tiếp (Inject) Pairing File** vào **SideStore / LiveContainer** thông qua tùy chọn **Generate / Place Pairing File** ngay trong giao diện quản lý thiết bị (không phải công cụ chuyên xuất file lẻ ra ngoài màn hình Desktop như jitterbugpair).\n• Sau khi iLoader báo hoàn tất trên máy tính, hãy mở lại ứng dụng này trên iPhone để hệ thống tự nhận diện."
                 )
             }
             
@@ -1420,7 +1408,6 @@ struct CopyableIPCard: SwiftUI.View {
 struct CellularDetailSheetView: SwiftUI.View {
     let isCellularOK: Bool
     let detail: String
-    let hasInternet: Bool
     @Environment(\.dismiss) private var dismiss
     
     var body: some SwiftUI.View {
@@ -1454,7 +1441,7 @@ struct CellularDetailSheetView: SwiftUI.View {
                             .font(.headline)
                             .foregroundColor(.green)
                         
-                        SwiftUI.Text("• **Không cần Wi-Fi:** Cài đặt IPA và làm mới ứng dụng trực tiếp qua **4G/5G + LocalDevVPN**.\n\n• **Kết nối Internet:** \(hasInternet ? "Đang hoạt động tốt ✅" : "Chưa có kết nối ❌").\n\n• **Tự động hóa:** Kết hợp phím tắt làm mới lúc 6:00 hoặc 15:00 để tự động gia hạn ứng dụng mỗi ngày.")
+                        SwiftUI.Text("• **Không cần Wi-Fi:** Cài đặt IPA và làm mới ứng dụng trực tiếp qua **4G/5G + LocalDevVPN**.\n\n• **Tự động hóa:** Kết hợp phím tắt làm mới lúc 6:00 hoặc 15:00 để tự động gia hạn ứng dụng mỗi ngày.")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }

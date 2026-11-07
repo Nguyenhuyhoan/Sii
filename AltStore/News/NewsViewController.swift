@@ -105,7 +105,7 @@ class NewsViewController: UICollectionViewController {
         CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
         
         self.title = "Check"
-        self.navigationItem.title = "Hệ Thống - Tính Năng"
+        self.navigationItem.title = "Hệ Thống - Tiện Ích"
         self.navigationItem.largeTitleDisplayMode = .never
         self.collectionView.backgroundColor = .systemGroupedBackground
         self.collectionView.contentInsetAdjustmentBehavior = .never
@@ -447,7 +447,7 @@ final class SystemCheckViewModel: ObservableObject {
         } else if !self.isVpnOK {
             self.lastVerifiedPairingSuccess = false
             self.isPairingOK = false
-            self.pairingProtocol = "Không thể kết nối (Chưa bật LocalDevVPN)"
+            self.pairingProtocol = "(Để kiểm tra Pairing, hãy tắt Wifi và 4g rồi bật LocalDevVPN. Tích xanh là hoạt động tốt, tích đỏ là Pairing sai)"
         } else if self.lastVerifiedPairingSuccess {
             self.isPairingOK = true
             self.pairingProtocol = protocolName
@@ -581,6 +581,14 @@ struct SystemCheckDashboardView: SwiftUI.View {
                 color: .blue,
                 statusOK: allReady
             )
+            
+            SwiftUI.Text("(Để kiểm tra Pairing, hãy tắt Wifi và 4g rồi bật LocalDevVPN. Tích xanh là hoạt động tốt, tích đỏ là Pairing sai)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, 6)
+                .padding(.bottom, 2)
             
             // 1. LocalDevVPN lên trước
             CheckItemButton(
@@ -993,7 +1001,7 @@ struct PairingGuideSheetView: SwiftUI.View {
                 .padding(16)
             }
             .background(SwiftUI.Color(UIColor.systemGroupedBackground))
-            .navigationTitle("HD Cài Pairing")
+            .navigationTitle("Hướng Dẫn Cài Pairing")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

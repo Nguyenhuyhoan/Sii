@@ -12,6 +12,43 @@ import UniformTypeIdentifiers
 import MinimuxerCommon
 import Combine
 import Darwin
+import ObjectiveC.runtime
+
+private enum CellularRefreshDefaultBootstrapper {
+    private static let initializedKey = "com.sidestore.cellularRefresh.defaultEnabledInitialized"
+    private static var didInstallHook = false
+
+    static func installHookIfNeeded() {
+        guard !didInstallHook else { return }
+        didInstallHook = true
+
+        let origSel = NSSelectorFromString("registerDefaults")
+        let swizSel = #selector(UserDefaults.swizzled_cellularDefault_registerDefaults)
+        if let origMethod = class_getClassMethod(UserDefaults.self, origSel),
+           let swizMethod = class_getClassMethod(UserDefaults.self, swizSel) {
+            method_exchangeImplementations(origMethod, swizMethod)
+        }
+        applyDefaultTrueIfNeeded()
+    }
+
+    static func applyDefaultTrueIfNeeded() {
+        let defaults = UserDefaults.standard
+        defaults.register(defaults: [
+            #keyPath(UserDefaults.isCellularRefreshEnabled): true
+        ])
+        if !defaults.bool(forKey: initializedKey) {
+            defaults.set(true, forKey: initializedKey)
+            CellularRefreshManager.shared.setEnabled(true)
+        }
+    }
+}
+
+private extension UserDefaults {
+    @objc class func swizzled_cellularDefault_registerDefaults() {
+        self.swizzled_cellularDefault_registerDefaults()
+        CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
+    }
+}
 
 private enum AnisetteDefaultsHelper {
     static var currentServerURL: String {
@@ -51,17 +88,24 @@ private enum AnisetteDefaultsHelper {
 class NewsViewController: UICollectionViewController {
     var source: Source?
     
+    @objc class func load() {
+        CellularRefreshDefaultBootstrapper.installHookIfNeeded()
+    }
+    
     init?(source: Source?, coder: NSCoder) {
+        CellularRefreshDefaultBootstrapper.installHookIfNeeded()
         self.source = source
         super.init(coder: coder)
     }
     
     required init?(coder: NSCoder) {
+        CellularRefreshDefaultBootstrapper.installHookIfNeeded()
         super.init(coder: coder)
     }
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
         
         self.title = "Check"
         self.navigationItem.title = "Kiểm Tra Hệ Thống"
@@ -109,6 +153,11 @@ final class SystemCheckViewModel: ObservableObject {
     @Published var selectedAnisetteServerURL: String = AnisetteDefaultsHelper.currentServerURL
     @Published var anisetteDetail: String = "Đang kiểm tra..."
     
+    @Published var isCellularRefreshEnabled: Bool = {
+        CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
+        return UserDefaults.standard.isCellularRefreshEnabled
+    }()
+    
     private let pathMonitor = NWPathMonitor()
     private let cellularMonitor = NWPathMonitor(requiredInterfaceType: .cellular)
     private let monitorQueue = DispatchQueue(label: "com.sidestore.check.network")
@@ -122,6 +171,7 @@ final class SystemCheckViewModel: ObservableObject {
     private var lastVerifiedPairingSuccess: Bool = false
     
     init() {
+        CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
         updateInstantStatus()
         setupRealtimeListeners()
         Task {
@@ -295,6 +345,12 @@ final class SystemCheckViewModel: ObservableObject {
         updateInstantStatus()
     }
     
+    func setCellularRefreshEnabled(_ enabled: Bool) {
+        isCellularRefreshEnabled = enabled
+        CellularRefreshManager.shared.setEnabled(enabled)
+        updateInstantStatus()
+    }
+    
     func selectAnisetteServerURL(_ urlString: String, isCustom: Bool = false) {
         if isCustom {
             AnisetteDefaultsHelper.setCustomServerURL(urlString)
@@ -388,6 +444,11 @@ final class SystemCheckViewModel: ObservableObject {
         self.anisetteDetail = onDevice
             ? "Chưa tối ưu • Hãy tắt Use On-Device Anisette"
             : "Ổn định • Máy chủ: \(serverHost)"
+        
+        let currentCellularRefresh = UserDefaults.standard.isCellularRefreshEnabled
+        if self.isCellularRefreshEnabled != currentCellularRefresh {
+            self.isCellularRefreshEnabled = currentCellularRefresh
+        }
     }
     
     func checkAllStatuses(forceVerify: Bool = false) async {
@@ -530,6 +591,13 @@ struct SystemCheckDashboardView: SwiftUI.View {
                 title: "Phím Tắt",
                 icon: "bolt.circle.fill",
                 color: .orange
+            )
+            
+            CellularRefreshToggleRow(
+                isOn: Binding(
+                    get: { vm.isCellularRefreshEnabled },
+                    set: { vm.setCellularRefreshEnabled($0) }
+                )
             )
             
             ShortcutLinkRow(
@@ -677,6 +745,46 @@ struct CheckItemButton: SwiftUI.View {
             )
         }
         .buttonStyle(PlainButtonStyle())
+    }
+}
+
+struct CellularRefreshToggleRow: SwiftUI.View {
+    @Binding var isOn: Bool
+    
+    var body: some SwiftUI.View {
+        HStack(spacing: 13) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill((isOn ? SwiftUI.Color.green : SwiftUI.Color.secondary).opacity(0.14))
+                    .frame(width: 42, height: 42)
+                SwiftUI.Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundColor(isOn ? .green : .secondary)
+            }
+            
+            VStack(alignment: .leading, spacing: 3) {
+                SwiftUI.Text("Cellular Refresh (Refresh Qua 4G)")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.primary)
+                SwiftUI.Text(isOn ? "Đang bật • Tự động bật/tắt 4G khi làm mới" : "Đang tắt • Chỉ làm mới thông thường")
+                    .font(.caption)
+                    .foregroundColor(isOn ? .green : .secondary)
+                    .lineLimit(1)
+            }
+            
+            Spacer()
+            
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .tint(.green)
+        }
+        .padding(12)
+        .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
+        .cornerRadius(15)
+        .overlay(
+            RoundedRectangle(cornerRadius: 15)
+                .stroke(SwiftUI.Color.primary.opacity(0.05), lineWidth: 1)
+        )
     }
 }
 

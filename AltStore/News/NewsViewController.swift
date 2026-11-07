@@ -88,10 +88,6 @@ private enum AnisetteDefaultsHelper {
 class NewsViewController: UICollectionViewController {
     var source: Source?
     
-    @objc class func load() {
-        CellularRefreshDefaultBootstrapper.installHookIfNeeded()
-    }
-    
     init?(source: Source?, coder: NSCoder) {
         CellularRefreshDefaultBootstrapper.installHookIfNeeded()
         self.source = source
@@ -105,6 +101,7 @@ class NewsViewController: UICollectionViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        CellularRefreshDefaultBootstrapper.installHookIfNeeded()
         CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
         
         self.title = "Check"
@@ -171,6 +168,7 @@ final class SystemCheckViewModel: ObservableObject {
     private var lastVerifiedPairingSuccess: Bool = false
     
     init() {
+        CellularRefreshDefaultBootstrapper.installHookIfNeeded()
         CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
         updateInstantStatus()
         setupRealtimeListeners()

@@ -1,5 +1,4 @@
 
-
 //
 //  NewsViewController.swift
 //  AltStore
@@ -224,13 +223,15 @@ final class SystemCheckViewModel: ObservableObject {
 
     private var usesCellularPath: Bool = false
     private var isCellularPathSatisfied: Bool = false
-    private var cancellables = Set<AnyCancellable>()
+    private var cancellables = Set<Anyancellable>()
     private var timerTask: Task<Void, Never>?
 
     private var isChecking: Bool = false
     private var lastVerifiedPairingSuccess: Bool = false
     private var didAttemptLiveVerify: Bool = false
     private var consecutiveVerifyFailures: Int = 0
+
+    private typealias Anyancellable = AnyCancellable
 
     func tr(_ vi: String, _ en: String) -> String {
         language == .vi ? vi : en
@@ -652,14 +653,15 @@ struct SystemCheckDashboardView: SwiftUI.View {
 
     var body: some SwiftUI.View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 18) {
+            VStack(spacing: 16) {
+                languageTopCenteredSection
                 systemStatusSection
                 serverSection
                 shortcutsSection
                 automationGuideSection
             }
             .padding(.horizontal, 16)
-            .padding(.top, 8)
+            .padding(.top, 10)
             .padding(.bottom, 32)
         }
         .background(SkyTheme.pageBackground.ignoresSafeArea())
@@ -684,6 +686,18 @@ struct SystemCheckDashboardView: SwiftUI.View {
         }
     }
 
+    private var languageTopCenteredSection: some SwiftUI.View {
+        HStack {
+            Spacer()
+            CompactLanguageSwitchButton(
+                selectedLanguage: vm.language,
+                onSelect: { vm.setLanguage($0) }
+            )
+            Spacer()
+        }
+        .padding(.bottom, 2)
+    }
+
     private var systemStatusSection: some SwiftUI.View {
         let allReady = vm.isPairingOK && vm.isVpnOK && vm.isCellularOK && vm.isAnisetteOK
 
@@ -691,13 +705,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
             title: vm.tr("Trạng Thái Hệ Thống", "System Status"),
             icon: "cpu.fill",
             color: SkyTheme.primary,
-            statusOK: allReady,
-            trailingView: AnyView(
-                CompactLanguageSwitchButton(
-                    selectedLanguage: vm.language,
-                    onSelect: { vm.setLanguage($0) }
-                )
-            )
+            statusOK: allReady
         ) {
             CheckItemButton(
                 title: "LocalDevVPN",
@@ -763,7 +771,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
         ) {
             CellularRefreshToggleRow(
                 title: vm.tr("Cellular Refresh (Refresh Qua 4G)", "Cellular Refresh (Refresh via 4G)"),
-                onText: vm.tr("Đang bật", "Enabled"),
+                onText: vm.tr("Đã bật mặc định", "Enabled by Default"),
                 offText: vm.tr("Chưa bật", "Disabled"),
                 isOn: Binding(
                     get: { vm.isCellularRefreshEnabled },
@@ -887,49 +895,57 @@ struct CompactLanguageSwitchButton: SwiftUI.View {
     let onSelect: (CheckAppLanguage) -> Void
 
     var body: some SwiftUI.View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             SwiftUI.Button {
                 onSelect(.vi)
             } label: {
-                SwiftUI.Text("VI")
-                    .font(.system(size: 13.5, weight: .bold, design: .rounded))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(
-                        selectedLanguage == .vi
-                        ? LinearGradient(colors: [SkyTheme.primary, SkyTheme.secondary], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        : LinearGradient(colors: [SwiftUI.Color.clear, SwiftUI.Color.clear], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
-                    .foregroundColor(selectedLanguage == .vi ? .white : SkyTheme.darkAccent)
-                    .clipShape(Capsule())
+                HStack(spacing: 6) {
+                    SwiftUI.Text("🇻🇳")
+                        .font(.system(size: 16))
+                    SwiftUI.Text("Tiếng Việt")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 9)
+                .background(
+                    selectedLanguage == .vi
+                    ? LinearGradient(colors: [SkyTheme.primary, SkyTheme.secondary], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    : LinearGradient(colors: [SwiftUI.Color.clear, SwiftUI.Color.clear], startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+                .foregroundColor(selectedLanguage == .vi ? .white : SkyTheme.darkAccent)
+                .clipShape(Capsule())
             }
             .buttonStyle(PlainButtonStyle())
 
             SwiftUI.Button {
                 onSelect(.en)
             } label: {
-                SwiftUI.Text("EN")
-                    .font(.system(size: 13.5, weight: .bold, design: .rounded))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(
-                        selectedLanguage == .en
-                        ? LinearGradient(colors: [SkyTheme.primary, SkyTheme.secondary], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        : LinearGradient(colors: [SwiftUI.Color.clear, SwiftUI.Color.clear], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
-                    .foregroundColor(selectedLanguage == .en ? .white : SkyTheme.darkAccent)
-                    .clipShape(Capsule())
+                HStack(spacing: 6) {
+                    SwiftUI.Text("🇺🇸")
+                        .font(.system(size: 16))
+                    SwiftUI.Text("English")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 9)
+                .background(
+                    selectedLanguage == .en
+                    ? LinearGradient(colors: [SkyTheme.primary, SkyTheme.secondary], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    : LinearGradient(colors: [SwiftUI.Color.clear, SwiftUI.Color.clear], startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+                .foregroundColor(selectedLanguage == .en ? .white : SkyTheme.darkAccent)
+                .clipShape(Capsule())
             }
             .buttonStyle(PlainButtonStyle())
         }
-        .padding(3)
+        .padding(4)
         .background(SkyTheme.cardBackground)
         .clipShape(Capsule())
         .overlay(
             Capsule()
-                .stroke(SkyTheme.border, lineWidth: 1.2)
+                .stroke(SkyTheme.border, lineWidth: 1.4)
         )
-        .shadow(color: SkyTheme.shadow, radius: 4, x: 0, y: 2)
+        .shadow(color: SkyTheme.shadow, radius: 6, x: 0, y: 3)
     }
 }
 
@@ -1242,7 +1258,7 @@ struct PairingGuideSheetView: SwiftUI.View {
                 .padding(16)
             }
             .background(SkyTheme.pageBackground.ignoresSafeArea())
-            .navigationTitle(vm.tr("Hướng Dẫn Cài Pairing", "Pairing Setup Guide"))
+            .navigationTitle(vm.tr("Mục Cài Pairing", "Pairing Setup Section"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -1380,8 +1396,8 @@ struct PairingGuideSheetView: SwiftUI.View {
                 SwiftUI.Image(systemName: "lightbulb.fill")
                     .foregroundColor(SkyTheme.primary)
                 SwiftUI.Text(vm.tr(
-                    "Thứ tự chuẩn để kiểm tra Pairing File chính xác nhất",
-                    "Correct Order to Accurately Verify Pairing File"
+                    "Thứ Tự Kiểm Tra Pairing:",
+                    "Pairing Verification Order:"
                 ))
                 .font(.subheadline.bold())
                 .foregroundColor(.primary)
@@ -2053,7 +2069,7 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                                     .font(.subheadline.bold())
                                 SwiftUI.Text(vm.useOnDeviceAnisette
                                              ? vm.tr("Đang BẬT (Khuyên tắt để ổn định hơn)", "ENABLED (Recommended to turn OFF for stability)")
-                                             : vm.tr("(Nên Tắt)", "(Keep OFF)"))
+                                             : vm.tr("(Nên Tắt Để Dễ Đăng Nhập)", "(Keep OFF for Easy Login)"))
                                     .font(.caption)
                                     .foregroundColor(vm.useOnDeviceAnisette ? .red : .green)
                             }

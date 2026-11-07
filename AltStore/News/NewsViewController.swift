@@ -371,6 +371,7 @@ final class SystemCheckViewModel: ObservableObject {
     }
     
     func setCellularRefreshEnabled(_ enabled: Bool) {
+        guard isCellularRefreshEnabled != enabled || UserDefaults.standard.isCellularRefreshEnabled != enabled else { return }
         isCellularRefreshEnabled = enabled
         CellularRefreshManager.shared.setEnabled(enabled)
         updateInstantStatus()
@@ -474,13 +475,13 @@ final class SystemCheckViewModel: ObservableObject {
         } else if !self.isVpnOK {
             self.lastVerifiedPairingSuccess = false
             self.isPairingOK = false
-            self.pairingProtocol = ""
+            self.pairingProtocol = "Cần bật LocalDevVPN để kiểm tra"
         } else if self.lastVerifiedPairingSuccess {
             self.isPairingOK = true
             self.pairingProtocol = protocolName
         } else if self.didAttemptLiveVerify {
             self.isPairingOK = false
-            self.pairingProtocol = "Không thể kết nối"
+            self.pairingProtocol = "Lỗi kết nối (Nên tắt Wi-Fi & 4G, chỉ bật LocalDevVPN để kiểm tra)"
         } else {
             self.isPairingOK = false
             self.pairingProtocol = "Đang kiểm tra kết nối..."
@@ -503,19 +504,9 @@ final class SystemCheckViewModel: ObservableObject {
         }
     }
     
-    /// Tạm thời tắt hook CellularRefresh khi kiểm tra kết nối tới tunnel 10.7.0.1
-    /// và BẮT BUỘC dùng `forceLive: true` ở cả 2 lần thử để không bao giờ lấy UDID từ bộ nhớ đệm (cache)
+    /// Kiểm tra kết nối tới tunnel 10.7.0.1 mà KHÔNG can thiệp/bật tắt `CellularRefreshManager`
+    /// để tránh làm công tắc Cellular Refresh tự nhảy bật/tắt liên tục.
     private func verifyPairingOverTunnel() async -> Bool {
-        let wasCellularRefreshEnabled = UserDefaults.standard.isCellularRefreshEnabled
-        if wasCellularRefreshEnabled {
-            CellularRefreshManager.shared.setEnabled(false)
-        }
-        defer {
-            if wasCellularRefreshEnabled {
-                CellularRefreshManager.shared.setEnabled(true)
-            }
-        }
-        
         do {
             let udid = try await fetchUDID(forceLive: true)
             if !udid.isEmpty { return true }
@@ -626,32 +617,32 @@ struct SystemCheckDashboardView: SwiftUI.View {
     private var systemStatusSection: some SwiftUI.View {
         let allReady = vm.isPairingOK && vm.isVpnOK && vm.isCellularOK && vm.isAnisetteOK
 
-
         return VStack(alignment: .leading, spacing: 10) {
-    SectionHeaderView(
-        title: "Trạng Thái Hệ Thống",
-        icon: "cpu.fill",
-        color: .blue,
-        statusOK: allReady
-    )
-    
-    // 1. LocalDevVPN lên trước
-    CheckItemButton(
-        title: "LocalDevVPN",
-        subtitle: vm.isVpnOK ? "Ổn định" : "Chưa kết nối",
-        icon: "network.badge.shield.half.filled",
-        isStable: vm.isVpnOK
-    ) {
-        showVpnSheet = true
-    }
-
-
-
+            SectionHeaderView(
+                title: "Trạng Thái Hệ Thống",
+                icon: "cpu.fill",
+                color: .blue,
+                statusOK: allReady
+            )
+            
+            // 1. LocalDevVPN lên trước
+            CheckItemButton(
+                title: "LocalDevVPN",
+                subtitle: vm.isVpnOK ? "Ổn định" : "Chưa kết nối",
+                icon: "network.badge.shield.half.filled",
+                isStable: vm.isVpnOK
+            ) {
+                showVpnSheet = true
+            }
             
             // 2. Pairing File nằm dưới LocalDevVPN
             CheckItemButton(
                 title: "Pairing File",
-                subtitle: vm.isPairingOK ? "Ổn định" : (vm.hasAnyStoredPairingFile ? "Không thể kết nối" : "Chưa có Pairing File"),
+                subtitle: vm.isPairingOK
+                    ? "Ổn định (Tích xanh OK)"
+                    : (vm.hasAnyStoredPairingFile
+                       ? "Lỗi / Hãy tắt Wi-Fi & 4G, bật LocalDevVPN để kiểm tra"
+                       : "Chưa có Pairing File"),
                 icon: "doc.badge.gearshape.fill",
                 isStable: vm.isPairingOK
             ) {
@@ -1028,6 +1019,7 @@ struct PairingGuideSheetView: SwiftUI.View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 16) {
                     statusHeaderCard
+                    verificationAdviceCard
                     
                     if let banner = statusBannerMessage {
                         HStack(spacing: 10) {
@@ -1084,9 +1076,9 @@ struct PairingGuideSheetView: SwiftUI.View {
                     await vm.checkAllStatuses(forceVerify: true)
                     if case .success = result {
                         if vm.isPairingOK {
-                            statusBannerMessage = "Đã nạp và xác thực tệp Pairing mới thành công! Trạng thái đã chuyển sang Tích xanh."
+                            statusBannerMessage = "Đã nạp và xác thực tệp Pairing mới thành công! Trạng thái đã chuyển sang Tích xanh (OK)."
                         } else {
-                            statusBannerMessage = "Đã nạp tệp Pairing nhưng Không thể kết nối. Hãy kiểm tra lại LocalDevVPN hoặc tệp vừa nhập."
+                            statusBannerMessage = "Đã nạp tệp Pairing nhưng báo Tích đỏ (Lỗi). Hãy TẮT Wi-Fi và 4G, chỉ BẬT LocalDevVPN để kiểm tra chính xác."
                         }
                     }
                 }
@@ -1144,8 +1136,8 @@ struct PairingGuideSheetView: SwiftUI.View {
             VStack(alignment: .leading, spacing: 3) {
                 SwiftUI.Text(
                     vm.isPairingOK
-                    ? "Pairing File Đang Ổn Định"
-                    : (vm.hasAnyStoredPairingFile ? "Không thể kết nối" : "Chưa Có Tệp Pairing")
+                    ? "Pairing File Hoạt Động Tốt (Tích Xanh OK)"
+                    : (vm.hasAnyStoredPairingFile ? "Pairing File Đang Báo Lỗi (Tích Đỏ)" : "Chưa Có Tệp Pairing (Tích Đỏ)")
                 )
                 .font(.headline)
                 SwiftUI.Text(vm.pairingProtocol)
@@ -1157,6 +1149,47 @@ struct PairingGuideSheetView: SwiftUI.View {
         .padding(14)
         .background(SwiftUI.Color(UIColor.secondarySystemGroupedBackground))
         .cornerRadius(16)
+    }
+    
+    private var verificationAdviceCard: some SwiftUI.View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                SwiftUI.Image(systemName: "lightbulb.fill")
+                    .foregroundColor(.orange)
+                SwiftUI.Text("Mẹo kiểm tra Pairing File chính xác nhất")
+                    .font(.subheadline.bold())
+                    .foregroundColor(.primary)
+            }
+            
+            SwiftUI.Text("Để kiểm tra chính xác tệp Pairing có hoạt động hay không, bạn nên **TẮT cả Wi-Fi và 4G (Dữ liệu di động)**, sau đó **chỉ BẬT mỗi LocalDevVPN**:")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    SwiftUI.Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    SwiftUI.Text("**Hiện Tích xanh:** Tệp Pairing **OK** (Hoạt động bình thường, sau đó bạn có thể bật lại Wi-Fi / 4G để dùng).")
+                        .font(.caption)
+                        .foregroundColor(.primary)
+                }
+                HStack(spacing: 8) {
+                    SwiftUI.Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.red)
+                    SwiftUI.Text("**Hiện Tích đỏ:** Tệp Pairing **bị lỗi hoặc hết hạn** (Cần tạo hoặc nhập lại tệp Pairing mới theo hướng dẫn bên dưới).")
+                        .font(.caption)
+                        .foregroundColor(.primary)
+                }
+            }
+            .padding(.top, 2)
+        }
+        .padding(14)
+        .background(SwiftUI.Color.orange.opacity(0.12))
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(SwiftUI.Color.orange.opacity(0.28), lineWidth: 1)
+        )
     }
     
     private var ios27DirectPairingCard: some SwiftUI.View {

@@ -166,6 +166,7 @@ final class SystemCheckViewModel: ObservableObject {
     
     private var isChecking: Bool = false
     private var lastVerifiedPairingSuccess: Bool = false
+    private var didAttemptLiveVerify: Bool = false
     
     init() {
         CellularRefreshDefaultBootstrapper.installHookIfNeeded()
@@ -174,6 +175,7 @@ final class SystemCheckViewModel: ObservableObject {
         setupRealtimeListeners()
         Task {
             _ = try? await AnisetteServersManager.shared.syncWithRemote()
+            await checkAllStatuses(forceVerify: true)
         }
     }
     
@@ -214,7 +216,7 @@ final class SystemCheckViewModel: ObservableObject {
                 guard let self = self else { return }
                 self.updateInstantStatus()
                 Task { @MainActor [weak self] in
-                    await self?.checkAllStatuses()
+                    await self?.checkAllStatuses(forceVerify: true)
                 }
             }
             .store(in: &cancellables)
@@ -225,7 +227,7 @@ final class SystemCheckViewModel: ObservableObject {
                 guard let self = self else { return }
                 self.updateInstantStatus()
                 Task { @MainActor [weak self] in
-                    await self?.checkAllStatuses()
+                    await self?.checkAllStatuses(forceVerify: true)
                 }
             }
             .store(in: &cancellables)
@@ -252,8 +254,8 @@ final class SystemCheckViewModel: ObservableObject {
         timerTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self = self else { break }
-                await self.checkAllStatuses(forceVerify: false)
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                await self.checkAllStatuses(forceVerify: true)
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
             }
         }
     }
@@ -361,6 +363,17 @@ final class SystemCheckViewModel: ObservableObject {
         updateInstantStatus()
     }
     
+    func deleteAllPairingFiles() {
+        PairingFileManager.shared.resetAllPairingFiles()
+        minimuxer.core.unloadPairingFile()
+        self.hasAnyStoredPairingFile = false
+        self.lastVerifiedPairingSuccess = false
+        self.didAttemptLiveVerify = false
+        self.isPairingOK = false
+        self.pairingProtocol = "Chưa có Pairing File"
+        updateInstantStatus()
+    }
+    
     func updateInstantStatus() {
         let snapshot = Self.scanSystemInterfaces()
         
@@ -416,20 +429,35 @@ final class SystemCheckViewModel: ObservableObject {
             return .unknown
         }()
         
-        switch activeType {
-        case .rppairing:
-            self.pairingProtocol = "Remote Pairing (iOS 17+ / 27)"
-        case .lockdown:
-            self.pairingProtocol = "Lockdown Pairing"
-        case .unknown:
-            self.pairingProtocol = (hasAnyFile || coreLoaded) ? "Đã nạp Pairing File" : "Chưa có Pairing File"
-        }
+        let protocolName: String = {
+            switch activeType {
+            case .rppairing:
+                return "Remote Pairing (iOS 17+ / 27)"
+            case .lockdown:
+                return "Lockdown Pairing"
+            case .unknown:
+                return (hasAnyFile || coreLoaded) ? "Đã nạp Pairing File" : "Chưa có Pairing File"
+            }
+        }()
         
         if !hasAnyFile && !coreLoaded {
             self.lastVerifiedPairingSuccess = false
+            self.didAttemptLiveVerify = false
             self.isPairingOK = false
-        } else if coreLoaded || self.lastVerifiedPairingSuccess || hasAnyFile {
+            self.pairingProtocol = "Chưa có Pairing File"
+        } else if !self.isVpnOK {
+            self.lastVerifiedPairingSuccess = false
+            self.isPairingOK = false
+            self.pairingProtocol = "Không thể kết nối (Chưa bật LocalDevVPN)"
+        } else if self.lastVerifiedPairingSuccess {
             self.isPairingOK = true
+            self.pairingProtocol = protocolName
+        } else if self.didAttemptLiveVerify {
+            self.isPairingOK = false
+            self.pairingProtocol = "Không thể kết nối"
+        } else {
+            self.isPairingOK = false
+            self.pairingProtocol = "Đang kiểm tra kết nối..."
         }
         
         let onDevice = UserDefaults.standard.useOnDeviceAnisette
@@ -456,22 +484,41 @@ final class SystemCheckViewModel: ObservableObject {
         isChecking = true
         defer { isChecking = false }
         
+        guard hasAnyStoredPairingFile || minimuxer.core.isPairingFileLoaded else {
+            self.lastVerifiedPairingSuccess = false
+            self.didAttemptLiveVerify = false
+            self.isPairingOK = false
+            updateInstantStatus()
+            return
+        }
+        
         if hasAnyStoredPairingFile && !minimuxer.core.isPairingFileLoaded {
             let proto: PairingProtocol = PairingFileManager.shared.persistedActiveProtocol
                 ?? (PairingFileManager.shared.hasPairingFile(for: .rppairing) ? .rppairing : .lockdown)
             try? await minimuxerSwitchPairingProtocol(to: proto)
-            updateInstantStatus()
         }
         
-        if isVpnOK && (hasAnyStoredPairingFile || minimuxer.core.isPairingFileLoaded) {
-            if forceVerify || !lastVerifiedPairingSuccess {
-                if let udid = try? await fetchUDID(forceLive: false), !udid.isEmpty {
-                    self.lastVerifiedPairingSuccess = true
-                    self.isPairingOK = true
-                } else if minimuxer.core.isPairingFileLoaded || hasAnyStoredPairingFile {
-                    self.isPairingOK = true
+        if isVpnOK {
+            if forceVerify || !didAttemptLiveVerify || !lastVerifiedPairingSuccess {
+                do {
+                    if let udid = try await fetchUDID(forceLive: true), !udid.isEmpty {
+                        self.didAttemptLiveVerify = true
+                        self.lastVerifiedPairingSuccess = true
+                        self.isPairingOK = true
+                    } else {
+                        self.didAttemptLiveVerify = true
+                        self.lastVerifiedPairingSuccess = false
+                        self.isPairingOK = false
+                    }
+                } catch {
+                    self.didAttemptLiveVerify = true
+                    self.lastVerifiedPairingSuccess = false
+                    self.isPairingOK = false
                 }
             }
+        } else {
+            self.lastVerifiedPairingSuccess = false
+            self.isPairingOK = false
         }
         
         updateInstantStatus()
@@ -535,24 +582,27 @@ struct SystemCheckDashboardView: SwiftUI.View {
                 statusOK: allReady
             )
             
-            CheckItemButton(
-                title: "Pairing File",
-                subtitle: vm.isPairingOK ? "Ổn định" : "Bị lỗi",
-                icon: "doc.badge.gearshape.fill",
-                isStable: vm.isPairingOK
-            ) {
-                showPairingSheet = true
-            }
-            
+            // 1. LocalDevVPN lên trước
             CheckItemButton(
                 title: "LocalDevVPN",
-                subtitle: vm.isVpnOK ? "Ổn định" : "Bị lỗi / Chưa kết nối",
+                subtitle: vm.isVpnOK ? "Ổn định" : "Chưa kết nối",
                 icon: "network.badge.shield.half.filled",
                 isStable: vm.isVpnOK
             ) {
                 showVpnSheet = true
             }
             
+            // 2. Pairing File nằm dưới LocalDevVPN
+            CheckItemButton(
+                title: "Pairing File",
+                subtitle: vm.isPairingOK ? "Ổn định" : (vm.hasAnyStoredPairingFile ? "Không thể kết nối" : "Chưa có Pairing File"),
+                icon: "doc.badge.gearshape.fill",
+                isStable: vm.isPairingOK
+            ) {
+                showPairingSheet = true
+            }
+            
+            // 3. Mạng 4G / Di động
             CheckItemButton(
                 title: "Mạng 4G / Di động",
                 subtitle: vm.isCellularOK ? "Ổn định" : "Chưa bật",
@@ -906,6 +956,7 @@ struct PairingGuideSheetView: SwiftUI.View {
     @State private var isExportSheetPresented = false
     @State private var exportFileURL: URL? = nil
     @State private var didPressInstallPairing = false
+    @State private var showDeleteConfirmAlert = false
     
     @Environment(\.dismiss) private var dismiss
     
@@ -950,6 +1001,15 @@ struct PairingGuideSheetView: SwiftUI.View {
                         .font(.headline)
                 }
             }
+            .alert("Xoá tệp Pairing?", isPresented: $showDeleteConfirmAlert) {
+                SwiftUI.Button("Xoá", role: .destructive) {
+                    vm.deleteAllPairingFiles()
+                    statusBannerMessage = "Đã xoá tệp Pairing khỏi ứng dụng."
+                }
+                SwiftUI.Button("Huỷ", role: .cancel) {}
+            } message: {
+                SwiftUI.Text("Tệp Pairing hiện tại sẽ bị xoá hoàn toàn khỏi ứng dụng. Bạn sẽ cần nhập lại tệp mới để tiếp tục sử dụng.")
+            }
             #if !os(tvOS)
             .fileImporter(
                 isPresented: $pairingMgmtVM.showFileImporter,
@@ -967,7 +1027,11 @@ struct PairingGuideSheetView: SwiftUI.View {
                     vm.updateInstantStatus()
                     await vm.checkAllStatuses(forceVerify: true)
                     if case .success = result {
-                        statusBannerMessage = "Đã thay thế tệp cũ và nạp tệp Pairing mới thành công! Trạng thái đã chuyển sang Tích xanh."
+                        if vm.isPairingOK {
+                            statusBannerMessage = "Đã nạp và xác thực tệp Pairing mới thành công! Trạng thái đã chuyển sang Tích xanh."
+                        } else {
+                            statusBannerMessage = "Đã nạp tệp Pairing nhưng Không thể kết nối. Hãy kiểm tra lại LocalDevVPN hoặc tệp vừa nhập."
+                        }
                     }
                 }
             }
@@ -1022,8 +1086,12 @@ struct PairingGuideSheetView: SwiftUI.View {
                     .foregroundColor(vm.isPairingOK ? .green : .red)
             }
             VStack(alignment: .leading, spacing: 3) {
-                SwiftUI.Text(vm.isPairingOK ? "Pairing File Đang Ổn Định" : "Chưa Có Tệp Pairing")
-                    .font(.headline)
+                SwiftUI.Text(
+                    vm.isPairingOK
+                    ? "Pairing File Đang Ổn Định"
+                    : (vm.hasAnyStoredPairingFile ? "Không thể kết nối" : "Chưa Có Tệp Pairing")
+                )
+                .font(.headline)
                 SwiftUI.Text(vm.pairingProtocol)
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -1166,6 +1234,23 @@ struct PairingGuideSheetView: SwiftUI.View {
                     .background(SwiftUI.Color.blue)
                     .cornerRadius(13)
                 }
+                
+                // Nút Xoá tệp Pairing nằm dưới nút Nhập tệp Pairing
+                SwiftUI.Button {
+                    showDeleteConfirmAlert = true
+                } label: {
+                    HStack(spacing: 8) {
+                        SwiftUI.Image(systemName: "trash.fill")
+                            .font(.system(size: 17, weight: .bold))
+                        SwiftUI.Text("Xoá tệp Pairing")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .background(SwiftUI.Color.red)
+                    .cornerRadius(13)
+                }
             }
             .padding(12)
             .background(SwiftUI.Color(UIColor.tertiarySystemGroupedBackground))
@@ -1224,20 +1309,39 @@ struct PairingGuideSheetView: SwiftUI.View {
                 )
             }
             
-            SwiftUI.Button {
-                pairingMgmtVM.promptImport(for: .rppairing)
-            } label: {
-                HStack(spacing: 8) {
-                    SwiftUI.Image(systemName: "folder.fill.badge.plus")
-                        .font(.system(size: 17, weight: .bold))
-                    SwiftUI.Text("Nhập tệp Pairing (Từ ứng dụng Tệp)")
-                        .font(.system(size: 15, weight: .semibold))
+            VStack(spacing: 10) {
+                SwiftUI.Button {
+                    pairingMgmtVM.promptImport(for: .rppairing)
+                } label: {
+                    HStack(spacing: 8) {
+                        SwiftUI.Image(systemName: "folder.fill.badge.plus")
+                            .font(.system(size: 17, weight: .bold))
+                        SwiftUI.Text("Nhập tệp Pairing (Từ ứng dụng Tệp)")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                    .background(SwiftUI.Color.purple)
+                    .cornerRadius(13)
                 }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 46)
-                .background(SwiftUI.Color.purple)
-                .cornerRadius(13)
+                
+                // Nút Xoá tệp Pairing nằm dưới nút Nhập tệp Pairing
+                SwiftUI.Button {
+                    showDeleteConfirmAlert = true
+                } label: {
+                    HStack(spacing: 8) {
+                        SwiftUI.Image(systemName: "trash.fill")
+                            .font(.system(size: 17, weight: .bold))
+                        SwiftUI.Text("Xoá tệp Pairing")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                    .background(SwiftUI.Color.red)
+                    .cornerRadius(13)
+                }
             }
             .padding(.top, 4)
         }

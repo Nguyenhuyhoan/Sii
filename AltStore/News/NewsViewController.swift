@@ -105,8 +105,7 @@ class NewsViewController: UICollectionViewController {
         CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
         
         self.title = "Check"
-        self.navigationItem.title = "Hệ Thống - Tiện Ích"
-        self.navigationItem.largeTitleDisplayMode = .never
+        self.navigationController?.setNavigationBarHidden(true, animated: false)
         self.collectionView.backgroundColor = .systemGroupedBackground
         self.collectionView.contentInsetAdjustmentBehavior = .never
         
@@ -127,7 +126,12 @@ class NewsViewController: UICollectionViewController {
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        self.navigationController?.navigationBar.prefersLargeTitles = false
+        self.navigationController?.setNavigationBarHidden(true, animated: animated)
+    }
+    
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        self.navigationController?.setNavigationBarHidden(false, animated: animated)
     }
 }
 
@@ -547,7 +551,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
                     .padding(.top, 6)
             }
             .padding(.horizontal, 16)
-            .padding(.top, 6)
+            .padding(.top, 2)
             .padding(.bottom, 28)
         }
         .background(SwiftUI.Color(UIColor.systemGroupedBackground))
@@ -1243,7 +1247,6 @@ struct PairingGuideSheetView: SwiftUI.View {
                     .cornerRadius(13)
                 }
                 
-                // Nút Xoá tệp Pairing nằm dưới nút Nhập tệp Pairing
                 SwiftUI.Button {
                     showDeleteConfirmAlert = true
                 } label: {
@@ -1334,7 +1337,6 @@ struct PairingGuideSheetView: SwiftUI.View {
                     .cornerRadius(13)
                 }
                 
-                // Nút Xoá tệp Pairing nằm dưới nút Nhập tệp Pairing
                 SwiftUI.Button {
                     showDeleteConfirmAlert = true
                 } label: {

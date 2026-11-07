@@ -171,6 +171,7 @@ final class SystemCheckViewModel: ObservableObject {
     private var isChecking: Bool = false
     private var lastVerifiedPairingSuccess: Bool = false
     private var didAttemptLiveVerify: Bool = false
+    private var consecutiveVerifyFailures: Int = 0
     
     init() {
         CellularRefreshDefaultBootstrapper.installHookIfNeeded()
@@ -198,7 +199,7 @@ final class SystemCheckViewModel: ObservableObject {
                 self.usesCellularPath = usesCell
                 self.hasInternet = satisfied
                 self.updateInstantStatus()
-                await self.checkAllStatuses()
+                await self.checkAllStatuses(forceVerify: false)
             }
         }
         pathMonitor.start(queue: monitorQueue)
@@ -209,7 +210,7 @@ final class SystemCheckViewModel: ObservableObject {
                 guard let self = self else { return }
                 self.isCellularPathSatisfied = cellSatisfied
                 self.updateInstantStatus()
-                await self.checkAllStatuses()
+                await self.checkAllStatuses(forceVerify: false)
             }
         }
         cellularMonitor.start(queue: monitorQueue)
@@ -220,7 +221,7 @@ final class SystemCheckViewModel: ObservableObject {
                 guard let self = self else { return }
                 self.updateInstantStatus()
                 Task { @MainActor [weak self] in
-                    await self?.checkAllStatuses(forceVerify: true)
+                    await self?.checkAllStatuses(forceVerify: false)
                 }
             }
             .store(in: &cancellables)
@@ -231,7 +232,7 @@ final class SystemCheckViewModel: ObservableObject {
                 guard let self = self else { return }
                 self.updateInstantStatus()
                 Task { @MainActor [weak self] in
-                    await self?.checkAllStatuses(forceVerify: true)
+                    await self?.checkAllStatuses(forceVerify: false)
                 }
             }
             .store(in: &cancellables)
@@ -258,8 +259,9 @@ final class SystemCheckViewModel: ObservableObject {
         timerTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self = self else { break }
-                await self.checkAllStatuses(forceVerify: true)
-                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                let needsForce = !self.lastVerifiedPairingSuccess
+                await self.checkAllStatuses(forceVerify: needsForce)
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
             }
         }
     }
@@ -268,12 +270,14 @@ final class SystemCheckViewModel: ObservableObject {
         let hasCellularIPv4: Bool
         let hasActiveUtun: Bool
         let detectedUtunIPv4: String?
+        let detectedUtunName: String?
     }
     
     private nonisolated static func scanSystemInterfaces() -> SystemInterfaceSnapshot {
         var hasPdpIPv4 = false
         var hasUtun = false
         var bestUtunIP: String? = nil
+        var bestUtunName: String? = nil
         
         for iface in minimuxer.network.activeInterfaces {
             let lower = iface.name.lowercased()
@@ -325,8 +329,10 @@ final class SystemCheckViewModel: ObservableObject {
                                 if ip.hasPrefix("10.7.") {
                                     hasUtun = true
                                     bestUtunIP = ip
+                                    bestUtunName = name
                                 } else if bestUtunIP == nil {
                                     bestUtunIP = ip
+                                    bestUtunName = name
                                     hasUtun = true
                                 }
                             }
@@ -340,8 +346,24 @@ final class SystemCheckViewModel: ObservableObject {
         return SystemInterfaceSnapshot(
             hasCellularIPv4: hasPdpIPv4,
             hasActiveUtun: hasUtun,
-            detectedUtunIPv4: bestUtunIP
+            detectedUtunIPv4: bestUtunIP,
+            detectedUtunName: bestUtunName
         )
+    }
+    
+    /// Đảm bảo Peer IP (10.7.0.1) luôn được ghim vào ConnectionConfig khi bật cả 4G/Wi-Fi + VPN
+    private func ensureTunnelRoutingPinned(snapshot: SystemInterfaceSnapshot) {
+        let config = ConnectionConfig.shared
+        guard let utunIP = snapshot.detectedUtunIPv4 ?? config.tunnelIfaceIp else { return }
+        
+        if utunIP.hasPrefix("10.7.") {
+            if config.tunnelPeerIp == nil || config.tunnelPeerIp?.isEmpty == true {
+                if config.overrideTunnelPeerIp.isEmpty {
+                    config.overrideTunnelPeerIp = "10.7.0.1"
+                }
+                config.overrideTunnelPeerReachable = true
+            }
+        }
     }
     
     func setUseOnDeviceAnisette(_ enabled: Bool) {
@@ -372,6 +394,7 @@ final class SystemCheckViewModel: ObservableObject {
         self.hasAnyStoredPairingFile = false
         self.lastVerifiedPairingSuccess = false
         self.didAttemptLiveVerify = false
+        self.consecutiveVerifyFailures = 0
         self.isPairingOK = false
         self.pairingProtocol = "Chưa có Pairing File"
         updateInstantStatus()
@@ -379,6 +402,7 @@ final class SystemCheckViewModel: ObservableObject {
     
     func updateInstantStatus() {
         let snapshot = Self.scanSystemInterfaces()
+        ensureTunnelRoutingPinned(snapshot: snapshot)
         
         let cellularActive = usesCellularPath || (isCellularPathSatisfied && snapshot.hasCellularIPv4)
         self.isCellularOK = cellularActive
@@ -451,7 +475,7 @@ final class SystemCheckViewModel: ObservableObject {
         } else if !self.isVpnOK {
             self.lastVerifiedPairingSuccess = false
             self.isPairingOK = false
-            self.pairingProtocol = "(Để kiểm tra Pairing, hãy tắt Wifi và 4g rồi bật LocalDevVPN. Tích xanh là hoạt động tốt, tích đỏ là Pairing sai)"
+            self.pairingProtocol = ""
         } else if self.lastVerifiedPairingSuccess {
             self.isPairingOK = true
             self.pairingProtocol = protocolName
@@ -480,6 +504,31 @@ final class SystemCheckViewModel: ObservableObject {
         }
     }
     
+    /// Tạm thời tắt hook CellularRefresh khi kiểm tra kết nối tới tunnel 10.7.0.1
+    /// để tránh gói tin bị ép định tuyến nhầm sang cổng 4G (pdp_ip0) hoặc Wi-Fi (en0)
+    private func verifyPairingOverTunnel() async -> Bool {
+        let wasCellularRefreshEnabled = UserDefaults.standard.isCellularRefreshEnabled
+        if wasCellularRefreshEnabled {
+            CellularRefreshManager.shared.setEnabled(false)
+        }
+        defer {
+            if wasCellularRefreshEnabled {
+                CellularRefreshManager.shared.setEnabled(true)
+            }
+        }
+        
+        do {
+            let udid = try await fetchUDID(forceLive: true)
+            if !udid.isEmpty { return true }
+        } catch {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            if let udid = try? await fetchUDID(forceLive: false), !udid.isEmpty {
+                return true
+            }
+        }
+        return false
+    }
+    
     func checkAllStatuses(forceVerify: Bool = false) async {
         updateInstantStatus()
         
@@ -490,6 +539,7 @@ final class SystemCheckViewModel: ObservableObject {
         guard hasAnyStoredPairingFile else {
             self.lastVerifiedPairingSuccess = false
             self.didAttemptLiveVerify = false
+            self.consecutiveVerifyFailures = 0
             self.isPairingOK = false
             updateInstantStatus()
             return
@@ -503,24 +553,22 @@ final class SystemCheckViewModel: ObservableObject {
         
         if isVpnOK {
             if forceVerify || !didAttemptLiveVerify || !lastVerifiedPairingSuccess {
-                do {
-                    let udid = try await fetchUDID(forceLive: true)
-                    if !udid.isEmpty {
-                        self.didAttemptLiveVerify = true
-                        self.lastVerifiedPairingSuccess = true
-                        self.isPairingOK = true
-                    } else {
-                        self.didAttemptLiveVerify = true
+                let ok = await verifyPairingOverTunnel()
+                self.didAttemptLiveVerify = true
+                if ok {
+                    self.consecutiveVerifyFailures = 0
+                    self.lastVerifiedPairingSuccess = true
+                    self.isPairingOK = true
+                } else {
+                    self.consecutiveVerifyFailures += 1
+                    if !self.lastVerifiedPairingSuccess || self.consecutiveVerifyFailures >= 2 {
                         self.lastVerifiedPairingSuccess = false
                         self.isPairingOK = false
                     }
-                } catch {
-                    self.didAttemptLiveVerify = true
-                    self.lastVerifiedPairingSuccess = false
-                    self.isPairingOK = false
                 }
             }
         } else {
+            self.consecutiveVerifyFailures = 0
             self.lastVerifiedPairingSuccess = false
             self.isPairingOK = false
         }
@@ -586,7 +634,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
                 statusOK: allReady
             )
             
-            SwiftUI.Text("(Để kiểm tra Pairing, hãy tắt Wifi và 4g rồi bật LocalDevVPN. Tích xanh là hoạt động tốt, tích đỏ là Pairing sai)")
+            SwiftUI.Text("")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -1731,7 +1779,7 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                                         VStack(alignment: .leading, spacing: 2) {
                                             SwiftUI.Text(server.name)
                                                 .font(.subheadline.bold())
-                                                .foregroundColor(.primary)
+                                            .foregroundColor(.primary)
                                             SwiftUI.Text(server.address)
                                                 .font(.caption2)
                                                 .foregroundColor(.secondary)

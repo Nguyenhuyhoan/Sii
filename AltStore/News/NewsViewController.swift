@@ -684,7 +684,7 @@ final class SystemCheckViewModel: ObservableObject {
             }
         }()
 
-        // Điều kiện kiểm tra Pairing chính xác 100%:
+        // Điều kiện kiểm tra Pairing chính xác:
         // 1. Bật LocalDevVPN (vpnConnected == true)
         // 2. Tắt cả Wi-Fi và 4G (!wifiActive && !cellularActive) để kết nối thẳng qua LocalDevVPN
         let isDirectLocalDevOnly = vpnConnected && !wifiActive && !cellularActive
@@ -1537,7 +1537,7 @@ struct PairingGuideSheetView: SwiftUI.View {
             VStack(alignment: .leading, spacing: 3) {
                 SwiftUI.Text(
                     vm.isPairingOK
-                    ? vm.tr("Pairing Chính Xác 100% (Tích Xanh OK)", "Pairing 100% Verified (Green Check OK)")
+                    ? vm.tr("Pairing Hoạt Động Tốt (Tích Xanh)", "Pairing Verified & Ready (Green Check)")
                     : vm.tr("Chưa Xác Minh (Tích Đỏ)", "Unverified (Red X)")
                 )
                 .font(.headline)
@@ -1557,19 +1557,20 @@ struct PairingGuideSheetView: SwiftUI.View {
     }
 
     private var verificationAdviceCard: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 SwiftUI.Image(systemName: "checkmark.shield.fill")
+                    .font(.system(size: 18, weight: .bold))
                     .foregroundColor(SkyTheme.primary)
                 SwiftUI.Text(vm.tr(
-                    "2 Bước Kiểm Tra Pairing Chính Xác 100%:",
-                    "2 Steps to Verify Pairing 100% Accurately:"
+                    "2 Bước Kiểm Tra Pairing Chính Xác:",
+                    "2 Steps for Accurate Pairing Verification:"
                 ))
-                .font(.subheadline.bold())
+                .font(.system(size: 16, weight: .bold, design: .rounded))
                 .foregroundColor(.primary)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 GuideStepRow(
                     num: "1",
                     title: vm.tr("Bật LocalDevVPN", "Turn ON LocalDevVPN"),
@@ -1590,15 +1591,61 @@ struct PairingGuideSheetView: SwiftUI.View {
             }
 
             Divider()
+                .padding(.vertical, 4)
 
-            SwiftUI.Text(LocalizedStringKey(vm.tr(
-                "✅ **Tích xanh:** Chắc chắn Pairing OK.\n❌ **Tích đỏ:** Chắc chắn Pairing lỗi hoặc hết hạn.",
-                "✅ **Green Check:** Pairing is 100% OK.\n❌ **Red X:** Pairing is definitely invalid or expired."
-            )))
-            .font(.caption)
-            .foregroundColor(.primary)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 11) {
+                    SwiftUI.Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(.green)
+
+                    SwiftUI.Text(LocalizedStringKey(vm.tr(
+                        "**Tích xanh:** Pairing hoạt động tốt và ổn định.",
+                        "**Green Check:** Pairing is active and working properly."
+                    )))
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 13)
+                .padding(.vertical, 11)
+                .background(SwiftUI.Color.green.opacity(0.12))
+                .cornerRadius(13)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .stroke(SwiftUI.Color.green.opacity(0.35), lineWidth: 1)
+                )
+
+                HStack(spacing: 11) {
+                    SwiftUI.Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(.red)
+
+                    SwiftUI.Text(LocalizedStringKey(vm.tr(
+                        "**Tích đỏ:** Pairing bị lỗi hoặc đã hết hạn (cần cài lại).",
+                        "**Red X:** Pairing is invalid or expired (please re-pair)."
+                    )))
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 13)
+                .padding(.vertical, 11)
+                .background(SwiftUI.Color.red.opacity(0.12))
+                .cornerRadius(13)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .stroke(SwiftUI.Color.red.opacity(0.35), lineWidth: 1)
+                )
+            }
+            .padding(.top, 3)
+            .padding(.bottom, 2)
         }
-        .padding(14)
+        .padding(16)
         .background(SkyTheme.cardHeaderBackground)
         .cornerRadius(18)
         .overlay(

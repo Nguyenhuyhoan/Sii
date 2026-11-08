@@ -1159,7 +1159,7 @@ struct IPhone14VerticalVideoFrameView: SwiftUI.View {
     }
 }
 
-/// WebView nhúng trình phát YouTube tối ưu cho khung dọc 9:19.5 (hỗ trợ phát inline và toàn màn hình)
+/// WebView nhúng trình phát YouTube tối ưu cho khung dọc 9:19.5 (Fix lỗi 152 - 4)
 struct YouTubeVerticalPlayerWebView: UIViewRepresentable {
     let videoID: String
 
@@ -1178,6 +1178,8 @@ struct YouTubeVerticalPlayerWebView: UIViewRepresentable {
         webView.isOpaque = false
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
+        // Đặt User-Agent Safari iOS chuẩn để tránh bị YouTube chặn WebView
+        webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
         return webView
     }
 
@@ -1185,11 +1187,16 @@ struct YouTubeVerticalPlayerWebView: UIViewRepresentable {
         guard context.coordinator.loadedVideoID != videoID else { return }
         context.coordinator.loadedVideoID = videoID
 
+        // Sử dụng domain hợp lệ của ứng dụng làm origin thay vì giả mạo youtube.com
+        let originDomain = "https://sidestore.io"
+        let embedURL = "https://www.youtube-nocookie.com/embed/\(videoID)?playsinline=1&rel=0&modestbranding=1&fs=1&enablejsapi=1&origin=\(originDomain)"
+
         let embedHTML = """
         <!DOCTYPE html>
         <html>
         <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <meta name="referrer" content="strict-origin-when-cross-origin">
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
             html, body {
@@ -1216,8 +1223,9 @@ struct YouTubeVerticalPlayerWebView: UIViewRepresentable {
         <body>
             <div class="video-container">
                 <iframe
-                    src="https://www.youtube.com/embed/\(videoID)?playsinline=1&rel=0&modestbranding=1&fs=1"
+                    src="\(embedURL)"
                     title="YouTube video player"
+                    referrerpolicy="strict-origin-when-cross-origin"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                     allowfullscreen>
                 </iframe>
@@ -1226,7 +1234,8 @@ struct YouTubeVerticalPlayerWebView: UIViewRepresentable {
         </html>
         """
 
-        uiView.loadHTMLString(embedHTML, baseURL: URL(string: "https://www.youtube.com"))
+        // QUAN TRỌNG: Không dùng https://www.youtube.com làm baseURL vì sẽ gây lỗi 152-4
+        uiView.loadHTMLString(embedHTML, baseURL: URL(string: originDomain))
     }
 
     final class Coordinator {

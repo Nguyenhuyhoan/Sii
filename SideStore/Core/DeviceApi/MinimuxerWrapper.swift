@@ -1,3 +1,6 @@
+// SideStore/Core/DeviceApi/MinimuxerWrapper.swift
+
+
 //
 //  MinimuxerWrapper.swift
 //
@@ -6,6 +9,7 @@
 //
 
 import Foundation
+import UIKit
 import Network
 import Minimuxer
 import MinimuxerCommon
@@ -65,6 +69,13 @@ private func resolveDiscoveredRemotePairingPort() async -> UInt16? {
     if overridePort > 0 && overridePort <= 65535 {
         return UInt16(overridePort)
     }
+    
+    // FIX BACKGROUND BONJOUR DRAIN: Do not trigger mDNS/P2P network scans while app is idle in background!
+    let isBackground = await MainActor.run { UIApplication.shared.applicationState == .background }
+    if isBackground && !AppManager.shared.isActivelyManagingAnyApp {
+        return nil
+    }
+
     if let resolved = await BonjourDiscoveryManager.resolveFirstService(
         ofType: AppConstants.Minimuxer.remotePairingDaemonServiceType,
         timeout: AppConstants.Bonjour.defaultDiscoveryTimeout,
@@ -88,8 +99,9 @@ private func resolveDiscoveredRemotePairingPortThrottled() async -> UInt16? {
         return UInt16(overridePort)
     }
 
+    // Increase throttle cooldown from 5.0s to 30.0s to prevent continuous Bonjour scanning
     let now = Date()
-    guard now.timeIntervalSince(lastRemotePairingPortResolveTime) > 5.0 else {
+    guard now.timeIntervalSince(lastRemotePairingPortResolveTime) > 30.0 else {
         return nil
     }
 
@@ -179,7 +191,7 @@ func bindConnectionConfig() async {
             }
             switch failed.protocolType {
                 case .rppairing:
-                    if let discovered = await resolveDiscoveredRemotePairingPort() {
+                    if let discovered = await resolveDiscoveredRemotePairingPortThrottled() {
                         remotePairingPortCache = discovered
                         minimuxer.set(MinimuxerParams(remotePairingPort: discovered))
                         return ServicePort(protocolType: .rppairing, port: discovered)
@@ -230,7 +242,7 @@ extension MinimuxerError {
         case .invalidPairing(_, let reason):    return .invalidPairingFile(reason: reason)
         case .notStarted(let reason):           return .minimuxerNotStarted(reason: reason)
         case .pairingNotLoaded(let reason):            return .pairingNotComplete(reason: reason)
-        case .connectionModeNotConfigured(let reason): return .invalidParameters(reason)
+        case .connectionModeNotConfigured(let reason): return .invalidParameters(self.description)
         default:                                       return .invalidParameters(self.description)
         }
     }

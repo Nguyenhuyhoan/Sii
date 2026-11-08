@@ -219,19 +219,22 @@ final class SystemCheckViewModel: ObservableObject {
 
     private let pathMonitor = NWPathMonitor()
     private let cellularMonitor = NWPathMonitor(requiredInterfaceType: .cellular)
-    private let monitorQueue = DispatchQueue(label: "com.sidestore.check.network")
+    private let monitorQueue = DispatchQueue(label: "com.sidestore.check.network", qos: .utility)
 
     private var usesCellularPath: Bool = false
     private var isCellularPathSatisfied: Bool = false
-    private var cancellables = Set<Anyancellable>()
+    private var cancellables = Set<AnyCancellable>()
     private var timerTask: Task<Void, Never>?
 
+    private var isViewVisible: Bool = false
     private var isChecking: Bool = false
     private var lastVerifiedPairingSuccess: Bool = false
+    private var lastVerifiedTunnelIP: String = ""
+    private var lastLiveVerifyTimestamp: Date = .distantPast
     private var didAttemptLiveVerify: Bool = false
     private var consecutiveVerifyFailures: Int = 0
 
-    private typealias Anyancellable = AnyCancellable
+    private let networkChangeSubject = PassthroughSubject<Bool, Never>()
 
     func tr(_ vi: String, _ en: String) -> String {
         language == .vi ? vi : en
@@ -261,14 +264,61 @@ final class SystemCheckViewModel: ObservableObject {
         timerTask?.cancel()
     }
 
+    func setViewVisible(_ visible: Bool) {
+        guard isViewVisible != visible else { return }
+        isViewVisible = visible
+        if visible {
+            updateInstantStatus()
+            startSmartPeriodicMonitor()
+            Task { await checkAllStatuses(forceVerify: !lastVerifiedPairingSuccess) }
+        } else {
+            stopSmartPeriodicMonitor()
+        }
+    }
+
+    private func startSmartPeriodicMonitor() {
+        guard timerTask == nil else { return }
+        timerTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                let isAllGood = (self?.isVpnOK == true && self?.lastVerifiedPairingSuccess == true)
+                let sleepNanoseconds: UInt64 = isAllGood ? 12_000_000_000 : 4_500_000_000
+                try? await Task.sleep(nanoseconds: sleepNanoseconds)
+
+                guard let self = self, !Task.isCancelled, self.isViewVisible else { break }
+
+                let elapsed = Date().timeIntervalSince(self.lastLiveVerifyTimestamp)
+                let needDeepVerify = !self.lastVerifiedPairingSuccess || elapsed > 30
+                await self.checkAllStatuses(forceVerify: needDeepVerify)
+            }
+        }
+    }
+
+    private func stopSmartPeriodicMonitor() {
+        timerTask?.cancel()
+        timerTask = nil
+    }
+
     private func setupRealtimeListeners() {
+        networkChangeSubject
+            .debounce(for: .milliseconds(350), scheduler: DispatchQueue.main)
+            .sink { [weak self] forceVerify in
+                guard let self = self else { return }
+                self.updateInstantStatus()
+                guard self.isViewVisible else { return }
+                Task { @MainActor [weak self] in
+                    await self?.checkAllStatuses(forceVerify: forceVerify)
+                }
+            }
+            .store(in: &cancellables)
+
         pathMonitor.pathUpdateHandler = { [weak self] path in
             let usesCell = path.usesInterfaceType(.cellular)
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
-                self.usesCellularPath = usesCell
-                self.updateInstantStatus()
-                await self.checkAllStatuses(forceVerify: false)
+                if self.usesCellularPath != usesCell {
+                    self.usesCellularPath = usesCell
+                }
+                self.networkChangeSubject.send(false)
             }
         }
         pathMonitor.start(queue: monitorQueue)
@@ -277,9 +327,10 @@ final class SystemCheckViewModel: ObservableObject {
             let cellSatisfied = (path.status == .satisfied)
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
-                self.isCellularPathSatisfied = cellSatisfied
-                self.updateInstantStatus()
-                await self.checkAllStatuses(forceVerify: false)
+                if self.isCellularPathSatisfied != cellSatisfied {
+                    self.isCellularPathSatisfied = cellSatisfied
+                }
+                self.networkChangeSubject.send(false)
             }
         }
         cellularMonitor.start(queue: monitorQueue)
@@ -287,29 +338,22 @@ final class SystemCheckViewModel: ObservableObject {
         minimuxer.network.pathPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                guard let self = self else { return }
-                self.updateInstantStatus()
-                Task { @MainActor [weak self] in
-                    await self?.checkAllStatuses(forceVerify: false)
-                }
+                self?.networkChangeSubject.send(false)
             }
             .store(in: &cancellables)
 
         minimuxerStatusPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                guard let self = self else { return }
-                self.updateInstantStatus()
-                Task { @MainActor [weak self] in
-                    await self?.checkAllStatuses(forceVerify: true)
-                }
+                self?.networkChangeSubject.send(true)
             }
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
-            .receive(on: DispatchQueue.main)
+            .debounce(for: .milliseconds(400), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.updateInstantStatus()
+                guard let self = self, self.isViewVisible else { return }
+                self.updateInstantStatus()
             }
             .store(in: &cancellables)
 
@@ -318,6 +362,9 @@ final class SystemCheckViewModel: ObservableObject {
             .sink { [weak self] _ in
                 guard let self = self else { return }
                 self.updateInstantStatus()
+                if self.isViewVisible {
+                    self.startSmartPeriodicMonitor()
+                }
                 Task { @MainActor [weak self] in
                     _ = try? await AnisetteServersManager.shared.syncWithRemote()
                     await self?.checkAllStatuses(forceVerify: true)
@@ -325,13 +372,12 @@ final class SystemCheckViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        timerTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                guard let self = self else { break }
-                await self.checkAllStatuses(forceVerify: true)
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
+        NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.stopSmartPeriodicMonitor()
             }
-        }
+            .store(in: &cancellables)
     }
 
     private struct SystemInterfaceSnapshot: Sendable {
@@ -354,45 +400,32 @@ final class SystemCheckViewModel: ObservableObject {
                 let isUp = (flags & IFF_UP) != 0 && (flags & IFF_RUNNING) != 0
                 if isUp, let addr = current.pointee.ifa_addr {
                     let family = addr.pointee.sa_family
-                    let name = String(cString: current.pointee.ifa_name).lowercased()
-
-                    if family == UInt8(AF_INET), name == "pdp_ip0" {
-                        var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                        if getnameinfo(
-                            addr,
-                            socklen_t(addr.pointee.sa_len),
-                            &hostname,
-                            socklen_t(hostname.count),
-                            nil,
-                            0,
-                            NI_NUMERICHOST
-                        ) == 0 {
-                            let ip = String(cString: hostname)
-                            if !ip.isEmpty && !ip.hasPrefix("169.254.") && ip != "0.0.0.0" {
-                                hasPdpIPv4 = true
-                            }
-                        }
-                    }
-
-                    if family == UInt8(AF_INET), name.hasPrefix("utun") {
-                        var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                        if getnameinfo(
-                            addr,
-                            socklen_t(addr.pointee.sa_len),
-                            &hostname,
-                            socklen_t(hostname.count),
-                            nil,
-                            0,
-                            NI_NUMERICHOST
-                        ) == 0 {
-                            let ip = String(cString: hostname)
-                            if !ip.isEmpty && !ip.hasPrefix("169.254.") && ip != "0.0.0.0" {
-                                if ip.hasPrefix("10.7.") {
-                                    hasUtun = true
-                                    bestUtunIP = ip
-                                } else if bestUtunIP == nil {
-                                    bestUtunIP = ip
-                                    hasUtun = true
+                    if family == UInt8(AF_INET) {
+                        let name = String(cString: current.pointee.ifa_name).lowercased()
+                        if name == "pdp_ip0" || name.hasPrefix("utun") {
+                            var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                            if getnameinfo(
+                                addr,
+                                socklen_t(addr.pointee.sa_len),
+                                &hostname,
+                                socklen_t(hostname.count),
+                                nil,
+                                0,
+                                NI_NUMERICHOST
+                            ) == 0 {
+                                let ip = String(cString: hostname)
+                                if !ip.isEmpty && !ip.hasPrefix("169.254.") && ip != "0.0.0.0" {
+                                    if name == "pdp_ip0" {
+                                        hasPdpIPv4 = true
+                                    } else if name.hasPrefix("utun") {
+                                        if ip.hasPrefix("10.7.") {
+                                            hasUtun = true
+                                            bestUtunIP = ip
+                                        } else if bestUtunIP == nil {
+                                            bestUtunIP = ip
+                                            hasUtun = true
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -451,6 +484,7 @@ final class SystemCheckViewModel: ObservableObject {
         PairingFileManager.shared.resetAllPairingFiles()
         self.hasAnyStoredPairingFile = false
         self.lastVerifiedPairingSuccess = false
+        self.lastVerifiedTunnelIP = ""
         self.didAttemptLiveVerify = false
         self.consecutiveVerifyFailures = 0
         self.isPairingOK = false
@@ -475,28 +509,37 @@ final class SystemCheckViewModel: ObservableObject {
         return true
     }
 
+    private func assignIfChanged<T: Equatable>(_ keyPath: ReferenceWritableKeyPath<SystemCheckViewModel, T>, _ newValue: T) {
+        if self[keyPath: keyPath] != newValue {
+            self[keyPath: keyPath] = newValue
+        }
+    }
+
     func updateInstantStatus() {
         let snapshot = Self.scanSystemInterfaces()
         ensureTunnelRoutingPinned(snapshot: snapshot)
 
         let cellularActive = usesCellularPath || (isCellularPathSatisfied && snapshot.hasCellularIPv4)
-        self.isCellularOK = cellularActive
+        assignIfChanged(\.isCellularOK, cellularActive)
+
+        let newCellularDetail: String
         if usesCellularPath {
-            self.cellularDetail = tr(
+            newCellularDetail = tr(
                 "Ổn định • Đang dùng trực tiếp 4G / 5G",
                 "Stable • Using 4G / 5G directly"
             )
         } else if cellularActive {
-            self.cellularDetail = tr(
+            newCellularDetail = tr(
                 "Ổn định • 4G / 5G đang bật sẵn sàng",
                 "Stable • 4G / 5G is enabled and ready"
             )
         } else {
-            self.cellularDetail = tr(
+            newCellularDetail = tr(
                 "Chưa bật • Hãy bật Dữ liệu di động (4G/5G)",
                 "Disabled • Please turn on Cellular Data (4G/5G)"
             )
         }
+        assignIfChanged(\.cellularDetail, newCellularDetail)
 
         let disconnectedText = tr("Chưa kết nối", "Disconnected")
         let config = ConnectionConfig.shared
@@ -536,17 +579,18 @@ final class SystemCheckViewModel: ObservableObject {
             ? activeDeviceIP!
             : disconnectedText
 
-        self.tunnelIP = resolvedTunnelText
-        self.deviceIP = resolvedDeviceText
+        assignIfChanged(\.tunnelIP, resolvedTunnelText)
+        assignIfChanged(\.deviceIP, resolvedDeviceText)
 
         // Bắt buộc cả Tunnel IP và Device IP phải khác "Chưa kết nối" thì mới báo tích xanh
-        self.isVpnOK = (resolvedTunnelText != disconnectedText) && (resolvedDeviceText != disconnectedText)
+        let vpnConnected = (resolvedTunnelText != disconnectedText) && (resolvedDeviceText != disconnectedText)
+        assignIfChanged(\.isVpnOK, vpnConnected)
 
         let hasRp = PairingFileManager.shared.hasPairingFile(for: .rppairing)
         let hasLd = PairingFileManager.shared.hasPairingFile(for: .lockdown)
         let hasUnk = PairingFileManager.shared.hasPairingFile(for: .unknown)
         let hasAnyFile = hasRp || hasLd || hasUnk
-        self.hasAnyStoredPairingFile = hasAnyFile
+        assignIfChanged(\.hasAnyStoredPairingFile, hasAnyFile)
 
         let coreLoaded = minimuxer.core.isPairingFileLoaded && hasAnyFile
         let activeType: PairingProtocol = {
@@ -577,45 +621,46 @@ final class SystemCheckViewModel: ObservableObject {
 
         if !hasAnyFile {
             self.lastVerifiedPairingSuccess = false
+            self.lastVerifiedTunnelIP = ""
             self.didAttemptLiveVerify = false
-            self.isPairingOK = false
-            self.pairingProtocol = tr("Chưa có Pairing File", "No Pairing File")
-        } else if !self.isVpnOK {
+            assignIfChanged(\.isPairingOK, false)
+            assignIfChanged(\.pairingProtocol, tr("Chưa có Pairing File", "No Pairing File"))
+        } else if !vpnConnected {
             self.lastVerifiedPairingSuccess = false
-            self.isPairingOK = false
-            self.pairingProtocol = tr(
+            self.lastVerifiedTunnelIP = ""
+            assignIfChanged(\.isPairingOK, false)
+            assignIfChanged(\.pairingProtocol, tr(
                 "Chưa xác định • Hãy bật LocalDevVPN trước, sau đó tắt Wi-Fi & 4G để kiểm tra",
                 "Undetermined • Turn ON LocalDevVPN first, then turn OFF Wi-Fi & 4G to check"
-            )
+            ))
         } else if self.lastVerifiedPairingSuccess {
-            self.isPairingOK = true
-            self.pairingProtocol = protocolName
+            assignIfChanged(\.isPairingOK, true)
+            assignIfChanged(\.pairingProtocol, protocolName)
         } else if self.didAttemptLiveVerify {
-            self.isPairingOK = false
-            self.pairingProtocol = tr(
+            assignIfChanged(\.isPairingOK, false)
+            assignIfChanged(\.pairingProtocol, tr(
                 "Chưa xác định (Hãy bật LocalDevVPN trước, sau đó tắt Wi-Fi & 4G để kiểm tra)",
                 "Undetermined (Turn ON LocalDevVPN first, then turn OFF Wi-Fi & 4G to check)"
-            )
+            ))
         } else {
-            self.isPairingOK = false
-            self.pairingProtocol = tr("Đang kiểm tra kết nối...", "Checking connection...")
+            assignIfChanged(\.isPairingOK, false)
+            assignIfChanged(\.pairingProtocol, tr("Đang kiểm tra kết nối...", "Checking connection..."))
         }
 
         let onDevice = UserDefaults.standard.useOnDeviceAnisette
-        self.useOnDeviceAnisette = onDevice
-        self.isAnisetteOK = !onDevice
+        assignIfChanged(\.useOnDeviceAnisette, onDevice)
+        assignIfChanged(\.isAnisetteOK, !onDevice)
 
         let selectedURL = AnisetteDefaultsHelper.currentServerURL
-        self.selectedAnisetteServerURL = selectedURL
+        assignIfChanged(\.selectedAnisetteServerURL, selectedURL)
         let serverHost = URL(string: selectedURL)?.host ?? selectedURL
-        self.anisetteDetail = onDevice
+        let newAnisetteDetail = onDevice
             ? tr("Không ổn định • Hãy tắt Use On-Device Anisette", "Unstable • Please disable Use On-Device Anisette")
             : tr("Ổn định • Máy chủ: \(serverHost)", "Stable • Server: \(serverHost)")
+        assignIfChanged(\.anisetteDetail, newAnisetteDetail)
 
         let currentCellularRefresh = UserDefaults.standard.isCellularRefreshEnabled
-        if self.isCellularRefreshEnabled != currentCellularRefresh {
-            self.isCellularRefreshEnabled = currentCellularRefresh
-        }
+        assignIfChanged(\.isCellularRefreshEnabled, currentCellularRefresh)
     }
 
     private func verifyPairingOverTunnel() async -> Bool {
@@ -640,9 +685,10 @@ final class SystemCheckViewModel: ObservableObject {
 
         guard hasAnyStoredPairingFile else {
             self.lastVerifiedPairingSuccess = false
+            self.lastVerifiedTunnelIP = ""
             self.didAttemptLiveVerify = false
             self.consecutiveVerifyFailures = 0
-            self.isPairingOK = false
+            assignIfChanged(\.isPairingOK, false)
             updateInstantStatus()
             return
         }
@@ -654,25 +700,29 @@ final class SystemCheckViewModel: ObservableObject {
         }
 
         if isVpnOK {
-            if forceVerify || !didAttemptLiveVerify || !lastVerifiedPairingSuccess {
+            let tunnelChanged = (lastVerifiedTunnelIP != tunnelIP)
+            if forceVerify || !didAttemptLiveVerify || !lastVerifiedPairingSuccess || tunnelChanged {
                 let ok = await verifyPairingOverTunnel()
                 self.didAttemptLiveVerify = true
+                self.lastLiveVerifyTimestamp = Date()
                 if ok {
                     self.consecutiveVerifyFailures = 0
                     self.lastVerifiedPairingSuccess = true
-                    self.isPairingOK = true
+                    self.lastVerifiedTunnelIP = tunnelIP
+                    assignIfChanged(\.isPairingOK, true)
                 } else {
                     self.consecutiveVerifyFailures += 1
                     if forceVerify || !self.lastVerifiedPairingSuccess || self.consecutiveVerifyFailures >= 2 {
                         self.lastVerifiedPairingSuccess = false
-                        self.isPairingOK = false
+                        assignIfChanged(\.isPairingOK, false)
                     }
                 }
             }
         } else {
             self.consecutiveVerifyFailures = 0
             self.lastVerifiedPairingSuccess = false
-            self.isPairingOK = false
+            self.lastVerifiedTunnelIP = ""
+            assignIfChanged(\.isPairingOK, false)
         }
 
         updateInstantStatus()
@@ -701,8 +751,10 @@ struct SystemCheckDashboardView: SwiftUI.View {
         }
         .background(SkyTheme.pageBackground.ignoresSafeArea())
         .onAppear {
-            vm.updateInstantStatus()
-            Task { await vm.checkAllStatuses(forceVerify: true) }
+            vm.setViewVisible(true)
+        }
+        .onDisappear {
+            vm.setViewVisible(false)
         }
         .refreshable {
             await vm.checkAllStatuses(forceVerify: true)

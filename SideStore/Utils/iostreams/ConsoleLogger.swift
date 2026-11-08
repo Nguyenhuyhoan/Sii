@@ -1,3 +1,6 @@
+
+// SideStore/Utils/iostreams/ ConsoleLogger.swift
+
 //
 //  ConsoleCapture.swift
 //  SideStore
@@ -8,12 +11,12 @@
 
 import Foundation
 
-protocol ConsoleLogger{
+protocol ConsoleLogger {
     func startCapturing()
     func stopCapturing()
 }
 
-public class AbstractConsoleLogger<T: OutputStream>: ConsoleLogger{
+public class AbstractConsoleLogger<T: OutputStream>: ConsoleLogger {
     var outPipe: Pipe?
     var errPipe: Pipe?
     
@@ -25,7 +28,7 @@ public class AbstractConsoleLogger<T: OutputStream>: ConsoleLogger{
     
     let ostream: T
     
-    let writeQueue = DispatchQueue(label: "async-write-queue")
+    let writeQueue = DispatchQueue(label: "async-write-queue", qos: .utility)
     
     public init(stream: T) throws {
         // Since swift doesn't support compile time abstract classes Instantiation checking,
@@ -41,8 +44,7 @@ public class AbstractConsoleLogger<T: OutputStream>: ConsoleLogger{
         stopCapturing()
     }
     
-    public func startCapturing() {                          // made it public coz, let client ask for capturing
-
+    public func startCapturing() {
         // if already initialized within current instance, bail out
         guard outPipe == nil, errPipe == nil else {
             return
@@ -66,11 +68,9 @@ public class AbstractConsoleLogger<T: OutputStream>: ConsoleLogger{
         dup2(redirectedOutStream, STDOUT_FILENO)
         dup2(redirectedErrStream, STDERR_FILENO)
 
-        // Disable libc-level buffering
-        // (libc by default uses bufferring except its own console/TTYs such as for pipes)
-        // we do have our own buffering so we disable stdlib io level bufferring
-        setvbuf(stdout, nil, _IONBF, 0)  // disable buffering for stdout
-        setvbuf(stderr, nil, _IONBF, 0)  // disable buffering for stderr
+        // Use line-buffering (_IOLBF) instead of unbuffered (_IONBF) to prevent high CPU syscall overhead
+        setvbuf(stdout, nil, _IOLBF, 4096)
+        setvbuf(stderr, nil, _IOLBF, 4096)
         
         // Setup readability handlers for raw data
         setupReadabilityHandler(for: outputHandle, isError: false)
@@ -84,18 +84,27 @@ public class AbstractConsoleLogger<T: OutputStream>: ConsoleLogger{
     }
 
     private func readHandler(isError: Bool) -> (FileHandle) -> Void {
-        return { [weak self] _ in
+        return { [weak self] fileHandle in
             // Lock first before touching anything
             self?.shutdownLock.lock()
             defer { self?.shutdownLock.unlock() }
 
             // Capture strong self *after* lock is acquired
-            guard let self = self else { return }
+            guard let self = self else {
+                fileHandle.readabilityHandler = nil
+                return
+            }
             
             let handle = isError ? self.errorHandle : self.outputHandle
-            guard let data = handle?.availableData else { return }
+            
+            // FIX 100% CPU SPIN-LOCK: If availableData is empty (EOF/Pipe closed),
+            // we MUST nil out readabilityHandler immediately, otherwise libdispatch triggers it infinitely.
+            guard let data = handle?.availableData, !data.isEmpty else {
+                handle?.readabilityHandler = nil
+                return
+            }
 
-            writeQueue.async {
+            self.writeQueue.async {
                 try? self.writeData(data)
             }
 
@@ -130,7 +139,6 @@ public class AbstractConsoleLogger<T: OutputStream>: ConsoleLogger{
         }
     }
 
-    
     func writeData(_ data: Data) throws {
         throw AbstractClassError.abstractMethodInvoked
     }
@@ -163,16 +171,13 @@ public class AbstractConsoleLogger<T: OutputStream>: ConsoleLogger{
     }
 }
 
-
 public class UnBufferedConsoleLogger<T: OutputStream>: AbstractConsoleLogger<T> {
 
     required override init(stream: T) {
-        // cannot throw abstractInitializerInvoked, so need to override else client needs to handle it unnecessarily
         try! super.init(stream: stream)
     }
     
     override func writeData(_ data: Data) throws {
-        // directly write data to the stream without buffering
         ostream.write(data)
     }
 }
@@ -183,7 +188,7 @@ public class BufferedConsoleLogger<T: OutputStream>: AbstractConsoleLogger<T> {
     private let maxBufferSize: Int
     private var bufferedData = Data()
     
-    required init(stream: T, bufferSize: Int = 1024) {
+    required init(stream: T, bufferSize: Int = 4096) {
         self.maxBufferSize = bufferSize
         try! super.init(stream: stream)
     }
@@ -199,14 +204,17 @@ public class BufferedConsoleLogger<T: OutputStream>: AbstractConsoleLogger<T> {
     }
     
     private func flushBuffer() {
+        guard !bufferedData.isEmpty else { return }
         // Write all buffered data to the stream
         ostream.write(bufferedData)
-        bufferedData.removeAll()
+        bufferedData.removeAll(keepingCapacity: true)
     }
 
     override func stopCapturing() {
         // Flush buffer and close the file handles first
-        flushBuffer()
+        writeQueue.sync {
+            flushBuffer()
+        }
         super.stopCapturing()
     }
 }

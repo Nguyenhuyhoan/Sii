@@ -1,3 +1,5 @@
+//  AltStore/Core/Extensions/UserDefaults+AltStore.swift
+
 //
 //  UserDefaults+AltStore.swift
 //  AltStore
@@ -537,7 +539,8 @@ public extension UserDefaults
             #keyPath(UserDefaults.keepAnisetteHeadersAfterLogout): true,
             #keyPath(UserDefaults.keepSideSignHeadersAfterLogout): true,
             #keyPath(UserDefaults.isBackgroundRefreshEnabled): true,
-            #keyPath(UserDefaults.isBackgroundServiceEnabled): true,
+            // FIX BATTERY DRAIN: Disable 24/7 keepalive audio/location loop by default!
+            #keyPath(UserDefaults.isBackgroundServiceEnabled): false,
             #keyPath(UserDefaults.isBetaUpdatesEnabled): false,
             #keyPath(UserDefaults.permissionCheckingDisabled): true,
             #keyPath(UserDefaults.isBundleIDVerificationEnabled): true,

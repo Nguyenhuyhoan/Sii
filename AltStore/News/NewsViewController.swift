@@ -6,6 +6,7 @@
 
 @preconcurrency import UIKit
 import SwiftUI
+import WebKit
 import Network
 import UniformTypeIdentifiers
 @preconcurrency import Minimuxer
@@ -820,6 +821,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
                 serverSection
                 shortcutsSection
                 automationGuideSection
+                shortcutVideoGuideSection
             }
             .padding(.horizontal, 16)
             .padding(.top, 10)
@@ -1008,6 +1010,227 @@ struct SystemCheckDashboardView: SwiftUI.View {
                     .stroke(SkyTheme.innerBorder, lineWidth: 1)
             )
         }
+    }
+
+    private var shortcutVideoGuideSection: some SwiftUI.View {
+        SkySectionCard(
+            title: vm.tr("Hướng Dẫn Video Phím Tắt", "Shortcut Video Guide"),
+            icon: "play.rectangle.fill",
+            color: SkyTheme.primary
+        ) {
+            VStack(alignment: .leading, spacing: 14) {
+                // Hộp giải thích dễ hiểu
+                HStack(alignment: .top, spacing: 10) {
+                    SwiftUI.Image(systemName: "sparkles.tv.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(SkyTheme.primary)
+                        .padding(.top, 2)
+
+                    SwiftUI.Text(LocalizedStringKey(vm.tr(
+                        "Nếu phím tắt tải về **không tương thích với phiên bản iOS** trên máy của bạn, bạn có thể xem và làm theo từng bước trong video bên dưới để **tự tạo phím tắt thủ công**.",
+                        "If the downloaded shortcut **is not compatible with your iOS version**, you can follow the step-by-step video below to **create the shortcut manually**."
+                    )))
+                    .font(.system(size: 14.5, weight: .medium, design: .rounded))
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(13)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(SkyTheme.innerRowBackground)
+                .cornerRadius(16)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(SkyTheme.innerBorder, lineWidth: 1)
+                )
+
+                // Khung xem video dọc tỉ lệ 9:19.5 lớn, rõ nét, bo tròn 4 góc giống iPhone 14 (47.33pt continuous)
+                IPhone14VerticalVideoFrameView(
+                    videoID: "j0Ng2cYvd1o",
+                    backupLinks: [
+                        "https://youtu.be/j0Ng2cYvd1o?si=8b1cb7jl4b_gdeSY",
+                        "https://youtube.com/watch?v=j0Ng2cYvd1o&si=FacDDNhQneeX39Nt",
+                        "https://youtu.be/j0Ng2cYvd1o?si=HTwZt8N4_4J_cxWN"
+                    ],
+                    openInYouTubeTitle: vm.tr("Mở xem toàn màn hình trên YouTube", "Open Fullscreen in YouTube"),
+                    backupTitle: vm.tr("Link dự phòng:", "Backup Links:")
+                )
+            }
+        }
+    }
+}
+
+/// Khung phát video dọc tỉ lệ 9:19.5 được thiết kế lớn, sắc nét, bo tròn 4 góc chuẩn iPhone 14 (47.33pt continuous)
+struct IPhone14VerticalVideoFrameView: SwiftUI.View {
+    let videoID: String
+    let backupLinks: [String]
+    let openInYouTubeTitle: String
+    let backupTitle: String
+
+    // Độ bo góc màn hình chuẩn của dòng iPhone 14 / 14 Pro
+    private let iPhone14CornerRadius: CGFloat = 47.33
+
+    var body: some SwiftUI.View {
+        VStack(spacing: 14) {
+            // Khung máy iPhone 14 tỉ lệ 9:19.5 lớn, chiếm toàn bộ chiều rộng khả dụng để dễ nhìn và làm theo
+            ZStack {
+                YouTubeVerticalPlayerWebView(videoID: videoID)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(SwiftUI.Color.black)
+            }
+            .aspectRatio(9.0 / 19.5, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: iPhone14CornerRadius, style: .continuous))
+            .overlay(
+                // Viền bezel bo tròn 4 góc kiểu iPhone 14
+                RoundedRectangle(cornerRadius: iPhone14CornerRadius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                SkyTheme.primary.opacity(0.65),
+                                SkyTheme.secondary.opacity(0.35),
+                                SkyTheme.primary.opacity(0.65)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 4
+                    )
+            )
+            .shadow(color: SwiftUI.Color.black.opacity(0.18), radius: 14, x: 0, y: 8)
+            .padding(.horizontal, 4)
+
+            // Nút mở trực tiếp trên ứng dụng YouTube (dùng link chính)
+            if let primaryURLString = backupLinks.first, let primaryURL = URL(string: primaryURLString) {
+                SwiftUI.Button {
+                    UIApplication.shared.open(primaryURL)
+                } label: {
+                    HStack(spacing: 8) {
+                        SwiftUI.Image(systemName: "play.tv.fill")
+                            .font(.system(size: 16, weight: .bold))
+                        SwiftUI.Text(openInYouTubeTitle)
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        LinearGradient(
+                            colors: [SkyTheme.primary, SkyTheme.secondary],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .shadow(color: SkyTheme.primary.opacity(0.25), radius: 5, x: 0, y: 3)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+
+            // Hàng 3 nút Link dự phòng theo đúng 3 link người dùng cung cấp
+            HStack(spacing: 8) {
+                SwiftUI.Text(backupTitle)
+                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                    .foregroundColor(.secondary)
+
+                ForEach(Array(backupLinks.enumerated()), id: \.offset) { index, link in
+                    if let url = URL(string: link) {
+                        SwiftUI.Button {
+                            UIApplication.shared.open(url)
+                        } label: {
+                            HStack(spacing: 4) {
+                                SwiftUI.Image(systemName: "link")
+                                    .font(.system(size: 11, weight: .bold))
+                                SwiftUI.Text("Link \(index + 1)")
+                                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(SkyTheme.primary.opacity(0.14))
+                            .foregroundColor(SkyTheme.primary)
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+}
+
+/// WebView nhúng trình phát YouTube tối ưu cho khung dọc 9:19.5 (hỗ trợ phát inline và toàn màn hình)
+struct YouTubeVerticalPlayerWebView: UIViewRepresentable {
+    let videoID: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.allowsInlineMediaPlayback = true
+        config.mediaTypesRequiringUserActionForPlayback = []
+
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.bounces = false
+        webView.isOpaque = false
+        webView.backgroundColor = .black
+        webView.scrollView.backgroundColor = .black
+        return webView
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {
+        guard context.coordinator.loadedVideoID != videoID else { return }
+        context.coordinator.loadedVideoID = videoID
+
+        let embedHTML = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            html, body {
+                width: 100%;
+                height: 100%;
+                background-color: #000000;
+                overflow: hidden;
+            }
+            .video-container {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: #000000;
+            }
+            iframe {
+                width: 100%;
+                height: 100%;
+                border: 0;
+            }
+        </style>
+        </head>
+        <body>
+            <div class="video-container">
+                <iframe
+                    src="https://www.youtube.com/embed/\(videoID)?playsinline=1&rel=0&modestbranding=1&fs=1"
+                    title="YouTube video player"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowfullscreen>
+                </iframe>
+            </div>
+        </body>
+        </html>
+        """
+
+        uiView.loadHTMLString(embedHTML, baseURL: URL(string: "https://www.youtube.com"))
+    }
+
+    final class Coordinator {
+        var loadedVideoID: String?
     }
 }
 

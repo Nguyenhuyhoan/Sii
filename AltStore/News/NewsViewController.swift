@@ -310,7 +310,7 @@ final class SystemCheckViewModel: ObservableObject {
             updateInstantStatus()
             if !isWirelessPairingActive {
                 startSmartPeriodicMonitor()
-                Task { await checkAllStatuses(forceVerify: !lastVerifiedPairingSuccess) }
+                Task { await checkAllStatuses(forceVerify: true) }
             }
         } else {
             stopSmartPeriodicMonitor()
@@ -322,13 +322,13 @@ final class SystemCheckViewModel: ObservableObject {
         timerTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 let isAllGood = (self?.isVpnOK == true && self?.lastVerifiedPairingSuccess == true)
-                let sleepNanoseconds: UInt64 = isAllGood ? 14_000_000_000 : 5_000_000_000
+                let sleepNanoseconds: UInt64 = isAllGood ? 10_000_000_000 : 5_000_000_000
                 try? await Task.sleep(nanoseconds: sleepNanoseconds)
 
                 guard let self = self, !Task.isCancelled, self.isViewVisible, !self.isWirelessPairingActive else { break }
 
                 let elapsed = Date().timeIntervalSince(self.lastLiveVerifyTimestamp)
-                let needDeepVerify = !self.lastVerifiedPairingSuccess || elapsed > 45
+                let needDeepVerify = !self.lastVerifiedPairingSuccess || elapsed > 20
                 await self.checkAllStatuses(forceVerify: needDeepVerify)
             }
         }
@@ -457,7 +457,7 @@ final class SystemCheckViewModel: ObservableObject {
                                     if name == "pdp_ip0" {
                                         hasPdpIPv4 = true
                                     } else if name.hasPrefix("utun") {
-                                        // Chỉ nhận đúng utun của LocalDevVPN / StosVPN (10.7.x.x) hoặc trùng với tunnelIfaceIp của Minimuxer
+                                        // Chỉ nhận đúng utun của LocalDevVPN / StosVPN (10.7.x.x)
                                         if ip.hasPrefix("10.7.") {
                                             hasLocalDevUtun = true
                                             bestLocalDevUtunIP = ip
@@ -673,15 +673,16 @@ final class SystemCheckViewModel: ObservableObject {
                 "Chưa kết nối LocalDevVPN • Hãy bật VPN để sử dụng Pairing",
                 "LocalDevVPN Disconnected • Turn ON VPN to use Pairing"
             ))
-        } else if self.lastVerifiedPairingSuccess || coreLoaded {
-            // Khi VPN đã bật và Pairing đã từng xác thực (hoặc đã nạp vào lõi Minimuxer), giữ vững Tích Xanh kể cả khi bật 4G/Wi-Fi
+        } else if self.lastVerifiedPairingSuccess || (!self.didAttemptLiveVerify && coreLoaded) {
+            // Chỉ tạm dùng coreLoaded khi mới khởi động chưa kịp verify live.
+            // Khi đã verify live (didAttemptLiveVerify == true), bắt buộc phải dựa vào kết quả xác thực thực tế (lastVerifiedPairingSuccess).
             assignIfChanged(\.isPairingOK, true)
             assignIfChanged(\.pairingProtocol, protocolName)
         } else if self.didAttemptLiveVerify {
             assignIfChanged(\.isPairingOK, false)
             assignIfChanged(\.pairingProtocol, tr(
-                "Chưa xác định • Nếu đang bật Wi-Fi/4G, hãy thử tắt tạm để xác thực lần đầu",
-                "Undetermined • Temporarily turn OFF Wi-Fi/4G for initial verification"
+                "Pairing không hợp lệ hoặc đã bị xoá trong Cài đặt • Hãy cài lại Pairing",
+                "Pairing invalid or removed in Settings • Please re-pair"
             ))
         } else {
             assignIfChanged(\.isPairingOK, false)
@@ -753,12 +754,10 @@ final class SystemCheckViewModel: ObservableObject {
                     assignIfChanged(\.isPairingOK, true)
                 } else {
                     self.consecutiveVerifyFailures += 1
-                    // Nếu đang bật 4G hoặc Wi-Fi, gói tin fetchUDID có thể bị nghẽn bởi định tuyến hệ thống.
-                    // Nếu Pairing File đã nạp vào Minimuxer hoặc đã xác thực trước đó thì giữ nguyên Tích Xanh.
-                    if minimuxer.core.isPairingFileLoaded || self.lastVerifiedPairingSuccess {
-                        self.lastVerifiedPairingSuccess = true
-                        assignIfChanged(\.isPairingOK, true)
-                    } else if self.consecutiveVerifyFailures >= 3 {
+                    // Nếu kiểm tra trực tiếp (forceVerify: khi vừa mở lại app từ Cài đặt / kéo làm mới)
+                    // hoặc đã thất bại từ 2 chu kỳ trở lên (mỗi chu kỳ đã thử 3 lần qua tunnel 10.7.0.1)
+                    // -> Pairing đã bị xoá trong Cài đặt iPhone hoặc không còn hợp lệ -> Báo Đỏ ngay!
+                    if forceVerify || self.consecutiveVerifyFailures >= 2 {
                         self.lastVerifiedPairingSuccess = false
                         assignIfChanged(\.isPairingOK, false)
                     }
@@ -854,7 +853,9 @@ struct SystemCheckDashboardView: SwiftUI.View {
                 subtitle: vm.isPairingOK
                     ? vm.tr("Ổn định (Tích xanh OK)", "Stable (Green Check OK)")
                     : (vm.hasAnyStoredPairingFile
-                       ? vm.tr("Đã có tệp • Hãy bật LocalDevVPN", "File Loaded • Turn ON LocalDevVPN")
+                       ? (vm.isVpnOK
+                          ? vm.tr("Pairing lỗi hoặc đã bị xoá • Hãy cài lại", "Pairing invalid or removed • Re-pair")
+                          : vm.tr("Đã có tệp • Hãy bật LocalDevVPN", "File Loaded • Turn ON LocalDevVPN"))
                        : vm.tr("Chưa có Pairing File", "No Pairing File")),
                 icon: "doc.badge.gearshape.fill",
                 isStable: vm.isPairingOK
@@ -1510,7 +1511,9 @@ struct PairingGuideSheetView: SwiftUI.View {
                     vm.isPairingOK
                     ? vm.tr("Pairing File Hoạt Động Tốt (Tích Xanh OK)", "Pairing File Working Properly (Green Check OK)")
                     : (vm.hasAnyStoredPairingFile
-                       ? vm.tr("Đã Nạp Tệp Pairing (Hãy Bật LocalDevVPN)", "Pairing File Loaded (Please Turn ON LocalDevVPN)")
+                       ? (vm.isVpnOK
+                          ? vm.tr("Pairing Lỗi Hoặc Đã Xoá Trong Cài Đặt (Tích Đỏ)", "Pairing Invalid or Removed in Settings (Red X)")
+                          : vm.tr("Đã Nạp Tệp Pairing (Hãy Bật LocalDevVPN)", "Pairing File Loaded (Please Turn ON LocalDevVPN)"))
                        : vm.tr("Chưa Có Tệp Pairing (Tích Đỏ)", "No Pairing File Found (Red X)"))
                 )
                 .font(.headline)
@@ -1543,8 +1546,8 @@ struct PairingGuideSheetView: SwiftUI.View {
             }
 
             SwiftUI.Text(LocalizedStringKey(vm.tr(
-                "• Khi đã có tệp Pairing và bật **LocalDevVPN**, hệ thống sẽ tự động báo **Tích xanh** kể cả khi bạn đang bật **4G hoặc Wi-Fi**.\n• **Lưu ý quan trọng khi đang Cài Pairing mới (iOS 27):** Trong lúc nhấn nút *“Cài Pairing lên iPhone”* để vào Cài đặt nhập 6 số PIN, hãy **TẮT LocalDevVPN tạm thời** (chỉ bật Wi-Fi) để dòng *Pair with SideStore* trong Cài đặt không bị ngắt kết nối.",
-                "• Once a Pairing file is loaded and **LocalDevVPN** is ON, the status stays **Green** even with **4G or Wi-Fi** enabled.\n• **Important when Installing New Pairing (iOS 27):** While tapping *“Install Pairing on iPhone”* to enter the 6-digit PIN in Settings, **temporarily turn OFF LocalDevVPN** (keep Wi-Fi ON) so *Pair with SideStore* stays visible in Settings."
+                "• Khi đã có tệp Pairing hợp lệ và bật **LocalDevVPN**, hệ thống sẽ tự động báo **Tích xanh** kể cả khi bạn đang bật **4G hoặc Wi-Fi**.\n• **Lưu ý quan trọng khi đang Cài Pairing mới (iOS 27):** Trong lúc nhấn nút *“Cài Pairing lên iPhone”* để vào Cài đặt nhập 6 số PIN, hãy **TẮT LocalDevVPN tạm thời** (chỉ bật Wi-Fi) để dòng *Pair with SideStore* trong Cài đặt không bị ngắt kết nối.",
+                "• Once a valid Pairing file is loaded and **LocalDevVPN** is ON, the status stays **Green** even with **4G or Wi-Fi** enabled.\n• **Important when Installing New Pairing (iOS 27):** While tapping *“Install Pairing on iPhone”* to enter the 6-digit PIN in Settings, **temporarily turn OFF LocalDevVPN** (keep Wi-Fi ON) so *Pair with SideStore* stays visible in Settings."
             )))
             .font(.caption)
             .foregroundColor(.secondary)
@@ -1639,9 +1642,6 @@ struct PairingGuideSheetView: SwiftUI.View {
                         vm.setWirelessPairingActive(true)
                     }
                     wirelessVM.togglePairing()
-                    if !wirelessVM.isAdvertising {
-                        vm.setWirelessPairingActive(false)
-                    }
                 } label: {
                     HStack(spacing: 8) {
                         SwiftUI.Image(systemName: wirelessVM.isAdvertising ? "stop.circle.fill" : "antenna.radiowaves.left.and.right")

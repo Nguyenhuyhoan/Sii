@@ -345,10 +345,6 @@ final class SystemCheckViewModel: ObservableObject {
         var hasUtun = false
         var bestUtunIP: String? = nil
 
-        for iface in minimuxer.network.activeInterfaces {
-            if iface.name.lowercased().hasPrefix("utun") { hasUtun = true }
-        }
-
         var ifaddr: UnsafeMutablePointer<ifaddrs>?
         if getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr {
             defer { freeifaddrs(ifaddr) }
@@ -390,7 +386,7 @@ final class SystemCheckViewModel: ObservableObject {
                             NI_NUMERICHOST
                         ) == 0 {
                             let ip = String(cString: hostname)
-                            if !ip.isEmpty && !ip.hasPrefix("169.254.") {
+                            if !ip.isEmpty && !ip.hasPrefix("169.254.") && ip != "0.0.0.0" {
                                 if ip.hasPrefix("10.7.") {
                                     hasUtun = true
                                     bestUtunIP = ip
@@ -415,7 +411,7 @@ final class SystemCheckViewModel: ObservableObject {
 
     private func ensureTunnelRoutingPinned(snapshot: SystemInterfaceSnapshot) {
         let config = ConnectionConfig.shared
-        guard let utunIP = snapshot.detectedUtunIPv4 ?? config.tunnelIfaceIp else { return }
+        guard let utunIP = snapshot.detectedUtunIPv4 else { return }
 
         if utunIP.hasPrefix("10.7.") {
             if config.tunnelPeerIp == nil || config.tunnelPeerIp?.isEmpty == true {
@@ -461,6 +457,24 @@ final class SystemCheckViewModel: ObservableObject {
         updateInstantStatus()
     }
 
+    private static func isValidConnectedIP(_ value: String?, disconnectedText: String) -> Bool {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return false
+        }
+        let lower = trimmed.lowercased()
+        if trimmed == disconnectedText
+            || lower.contains("chưa kết nối")
+            || lower.contains("disconnected")
+            || lower == "none"
+            || lower == "nil"
+            || lower == "n/a"
+            || lower == "0.0.0.0" {
+            return false
+        }
+        return true
+    }
+
     func updateInstantStatus() {
         let snapshot = Self.scanSystemInterfaces()
         ensureTunnelRoutingPinned(snapshot: snapshot)
@@ -486,26 +500,47 @@ final class SystemCheckViewModel: ObservableObject {
 
         let disconnectedText = tr("Chưa kết nối", "Disconnected")
         let config = ConnectionConfig.shared
-        let rawTunnelIP = config.tunnelIfaceIp ?? snapshot.detectedUtunIPv4
-        let rawPeerIP: String? = {
-            if config.overrideTunnelPeerReachable, !config.overrideTunnelPeerIp.isEmpty {
-                return config.overrideTunnelPeerIp
+
+        // Chỉ nhận IP khi thực sự có utun IPv4 đang bật hoặc ConnectionConfig báo có tunnelIfaceIp đang hoạt động
+        let activeTunnelIP: String? = {
+            if let detected = snapshot.detectedUtunIPv4, !detected.isEmpty {
+                return config.formattedTunnelIface ?? config.tunnelIfaceIp ?? detected
+            }
+            if snapshot.hasActiveUtun, let formatted = config.formattedTunnelIface, !formatted.isEmpty {
+                return formatted
+            }
+            return nil
+        }()
+
+        let activeDeviceIP: String? = {
+            guard activeTunnelIP != nil else { return nil }
+            if let formattedPeer = config.formattedTunnelPeer, !formattedPeer.isEmpty {
+                return formattedPeer
             }
             if let peer = config.tunnelPeerIp, !peer.isEmpty {
                 return peer
             }
-            if let tIP = rawTunnelIP, tIP.hasPrefix("10.7.") {
+            if config.overrideTunnelPeerReachable, !config.overrideTunnelPeerIp.isEmpty {
+                return config.overrideTunnelPeerIp
+            }
+            if let tIP = activeTunnelIP, tIP.contains("10.7.") {
                 return "10.7.0.1"
             }
             return nil
         }()
 
-        self.tunnelIP = config.formattedTunnelIface ?? rawTunnelIP ?? disconnectedText
-        self.deviceIP = config.formattedTunnelPeer ?? rawPeerIP ?? disconnectedText
+        let resolvedTunnelText = Self.isValidConnectedIP(activeTunnelIP, disconnectedText: disconnectedText)
+            ? activeTunnelIP!
+            : disconnectedText
+        let resolvedDeviceText = Self.isValidConnectedIP(activeDeviceIP, disconnectedText: disconnectedText)
+            ? activeDeviceIP!
+            : disconnectedText
 
-        self.isVpnOK = minimuxer.network.isUTunAvailable
-            || (snapshot.hasActiveUtun && rawTunnelIP != nil)
-            || (config.formattedTunnelIface != nil && config.formattedTunnelPeer != nil)
+        self.tunnelIP = resolvedTunnelText
+        self.deviceIP = resolvedDeviceText
+
+        // Bắt buộc cả Tunnel IP và Device IP phải khác "Chưa kết nối" thì mới báo tích xanh
+        self.isVpnOK = (resolvedTunnelText != disconnectedText) && (resolvedDeviceText != disconnectedText)
 
         let hasRp = PairingFileManager.shared.hasPairingFile(for: .rppairing)
         let hasLd = PairingFileManager.shared.hasPairingFile(for: .lockdown)
@@ -549,8 +584,8 @@ final class SystemCheckViewModel: ObservableObject {
             self.lastVerifiedPairingSuccess = false
             self.isPairingOK = false
             self.pairingProtocol = tr(
-                "Hãy bật LocalDevVPN trước, sau đó tắt Wi-Fi & 4G để kiểm tra",
-                "Turn ON LocalDevVPN first, then turn OFF Wi-Fi & 4G to check"
+                "Chưa xác định • Hãy bật LocalDevVPN trước, sau đó tắt Wi-Fi & 4G để kiểm tra",
+                "Undetermined • Turn ON LocalDevVPN first, then turn OFF Wi-Fi & 4G to check"
             )
         } else if self.lastVerifiedPairingSuccess {
             self.isPairingOK = true
@@ -558,8 +593,8 @@ final class SystemCheckViewModel: ObservableObject {
         } else if self.didAttemptLiveVerify {
             self.isPairingOK = false
             self.pairingProtocol = tr(
-                "Lỗi kết nối (Hãy bật LocalDevVPN trước, sau đó tắt Wi-Fi & 4G để kiểm tra)",
-                "Connection error (Turn ON LocalDevVPN first, then turn OFF Wi-Fi & 4G to check)"
+                "Chưa xác định (Hãy bật LocalDevVPN trước, sau đó tắt Wi-Fi & 4G để kiểm tra)",
+                "Undetermined (Turn ON LocalDevVPN first, then turn OFF Wi-Fi & 4G to check)"
             )
         } else {
             self.isPairingOK = false
@@ -723,7 +758,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
                 subtitle: vm.isPairingOK
                     ? vm.tr("Ổn định (Tích xanh OK)", "Stable (Green Check OK)")
                     : (vm.hasAnyStoredPairingFile
-                       ? vm.tr("Lỗi • Hãy bật LocalDevVPN, sau đó tắt Wi-Fi & 4G để kiểm tra", "Error • Turn ON LocalDevVPN, then turn OFF Wi-Fi & 4G to check")
+                       ? vm.tr("Chưa xác định", "Undetermined")
                        : vm.tr("Chưa có Pairing File", "No Pairing File")),
                 icon: "doc.badge.gearshape.fill",
                 isStable: vm.isPairingOK
@@ -1306,8 +1341,8 @@ struct PairingGuideSheetView: SwiftUI.View {
                             )
                         } else {
                             statusBannerMessage = vm.tr(
-                                "Đã nạp tệp Pairing nhưng báo Tích đỏ (Lỗi). Hãy BẬT LocalDevVPN trước, sau đó TẮT Wi-Fi và 4G để kiểm tra chính xác.",
-                                "Pairing file imported but shows Red X (Error). Please turn ON LocalDevVPN first, then turn OFF Wi-Fi and 4G to check accurately."
+                                "Đã nạp tệp Pairing nhưng chưa xác thực được qua VPN. Hãy BẬT LocalDevVPN trước, sau đó TẮT Wi-Fi và 4G để kiểm tra chính xác.",
+                                "Pairing file imported but not yet verified over VPN. Please turn ON LocalDevVPN first, then turn OFF Wi-Fi and 4G to check accurately."
                             )
                         }
                     }
@@ -1371,7 +1406,7 @@ struct PairingGuideSheetView: SwiftUI.View {
                     vm.isPairingOK
                     ? vm.tr("Pairing File Hoạt Động Tốt (Tích Xanh OK)", "Pairing File Working Properly (Green Check OK)")
                     : (vm.hasAnyStoredPairingFile
-                       ? vm.tr("Pairing File Đang Báo Lỗi (Tích Đỏ)", "Pairing File Shows Error (Red X)")
+                       ? vm.tr("Pairing File Chưa Xác Định (Tích Đỏ)", "Pairing File Undetermined (Red X)")
                        : vm.tr("Chưa Có Tệp Pairing (Tích Đỏ)", "No Pairing File Found (Red X)"))
                 )
                 .font(.headline)

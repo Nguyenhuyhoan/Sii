@@ -226,10 +226,13 @@ final class SystemCheckViewModel: ObservableObject {
 
     private let pathMonitor = NWPathMonitor()
     private let cellularMonitor = NWPathMonitor(requiredInterfaceType: .cellular)
+    private let wifiMonitor = NWPathMonitor(requiredInterfaceType: .wifi)
     private let monitorQueue = DispatchQueue(label: "com.sidestore.check.network", qos: .utility)
 
     private var usesCellularPath: Bool = false
     private var isCellularPathSatisfied: Bool = false
+    private var usesWifiPath: Bool = false
+    private var isWifiPathSatisfied: Bool = false
     private var cancellables = Set<AnyCancellable>()
     private var timerTask: Task<Void, Never>?
 
@@ -280,10 +283,8 @@ final class SystemCheckViewModel: ObservableObject {
 
     func markPairingVerifiedImmediately() {
         self.hasAnyStoredPairingFile = true
-        self.lastVerifiedPairingSuccess = true
-        self.didAttemptLiveVerify = true
+        self.didAttemptLiveVerify = false
         self.consecutiveVerifyFailures = 0
-        self.lastLiveVerifyTimestamp = Date()
         updateInstantStatus()
     }
 
@@ -300,6 +301,7 @@ final class SystemCheckViewModel: ObservableObject {
     deinit {
         pathMonitor.cancel()
         cellularMonitor.cancel()
+        wifiMonitor.cancel()
         timerTask?.cancel()
     }
 
@@ -321,14 +323,14 @@ final class SystemCheckViewModel: ObservableObject {
         guard timerTask == nil, !isWirelessPairingActive else { return }
         timerTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                let isAllGood = (self?.isVpnOK == true && self?.lastVerifiedPairingSuccess == true)
-                let sleepNanoseconds: UInt64 = isAllGood ? 10_000_000_000 : 5_000_000_000
+                let isAllGood = (self?.isVpnOK == true && self?.isPairingOK == true)
+                let sleepNanoseconds: UInt64 = isAllGood ? 8_000_000_000 : 4_000_000_000
                 try? await Task.sleep(nanoseconds: sleepNanoseconds)
 
                 guard let self = self, !Task.isCancelled, self.isViewVisible, !self.isWirelessPairingActive else { break }
 
                 let elapsed = Date().timeIntervalSince(self.lastLiveVerifyTimestamp)
-                let needDeepVerify = !self.lastVerifiedPairingSuccess || elapsed > 20
+                let needDeepVerify = !self.lastVerifiedPairingSuccess || elapsed > 15
                 await self.checkAllStatuses(forceVerify: needDeepVerify)
             }
         }
@@ -341,7 +343,7 @@ final class SystemCheckViewModel: ObservableObject {
 
     private func setupRealtimeListeners() {
         networkChangeSubject
-            .debounce(for: .milliseconds(800), scheduler: DispatchQueue.main)
+            .debounce(for: .milliseconds(600), scheduler: DispatchQueue.main)
             .sink { [weak self] forceVerify in
                 guard let self = self, !self.isWirelessPairingActive else { return }
                 self.updateInstantStatus()
@@ -354,13 +356,17 @@ final class SystemCheckViewModel: ObservableObject {
 
         pathMonitor.pathUpdateHandler = { [weak self] path in
             let usesCell = path.usesInterfaceType(.cellular)
+            let usesWifi = path.usesInterfaceType(.wifi)
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 if self.usesCellularPath != usesCell {
                     self.usesCellularPath = usesCell
                 }
+                if self.usesWifiPath != usesWifi {
+                    self.usesWifiPath = usesWifi
+                }
                 guard !self.isWirelessPairingActive else { return }
-                self.networkChangeSubject.send(false)
+                self.networkChangeSubject.send(true)
             }
         }
         pathMonitor.start(queue: monitorQueue)
@@ -373,16 +379,29 @@ final class SystemCheckViewModel: ObservableObject {
                     self.isCellularPathSatisfied = cellSatisfied
                 }
                 guard !self.isWirelessPairingActive else { return }
-                self.networkChangeSubject.send(false)
+                self.networkChangeSubject.send(true)
             }
         }
         cellularMonitor.start(queue: monitorQueue)
+
+        wifiMonitor.pathUpdateHandler = { [weak self] path in
+            let wifiSatisfied = (path.status == .satisfied)
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                if self.isWifiPathSatisfied != wifiSatisfied {
+                    self.isWifiPathSatisfied = wifiSatisfied
+                }
+                guard !self.isWirelessPairingActive else { return }
+                self.networkChangeSubject.send(true)
+            }
+        }
+        wifiMonitor.start(queue: monitorQueue)
 
         minimuxer.network.pathPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self, !self.isWirelessPairingActive else { return }
-                self.networkChangeSubject.send(false)
+                self.networkChangeSubject.send(true)
             }
             .store(in: &cancellables)
 
@@ -421,12 +440,14 @@ final class SystemCheckViewModel: ObservableObject {
 
     private struct SystemInterfaceSnapshot: Sendable {
         let hasCellularIPv4: Bool
+        let hasWifiIPv4: Bool
         let hasActiveLocalDevUtun: Bool
         let detectedLocalDevUtunIPv4: String?
     }
 
     private nonisolated static func scanSystemInterfaces() -> SystemInterfaceSnapshot {
         var hasPdpIPv4 = false
+        var hasEn0IPv4 = false
         var hasLocalDevUtun = false
         var bestLocalDevUtunIP: String? = nil
 
@@ -441,7 +462,7 @@ final class SystemCheckViewModel: ObservableObject {
                     let family = addr.pointee.sa_family
                     if family == UInt8(AF_INET) {
                         let name = String(cString: current.pointee.ifa_name).lowercased()
-                        if name == "pdp_ip0" || name.hasPrefix("utun") {
+                        if name == "pdp_ip0" || name == "en0" || name.hasPrefix("utun") {
                             var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
                             if getnameinfo(
                                 addr,
@@ -456,8 +477,9 @@ final class SystemCheckViewModel: ObservableObject {
                                 if !ip.isEmpty && !ip.hasPrefix("169.254.") && ip != "0.0.0.0" {
                                     if name == "pdp_ip0" {
                                         hasPdpIPv4 = true
+                                    } else if name == "en0" {
+                                        hasEn0IPv4 = true
                                     } else if name.hasPrefix("utun") {
-                                        // Chỉ nhận đúng utun của LocalDevVPN / StosVPN (10.7.x.x)
                                         if ip.hasPrefix("10.7.") {
                                             hasLocalDevUtun = true
                                             bestLocalDevUtunIP = ip
@@ -474,12 +496,12 @@ final class SystemCheckViewModel: ObservableObject {
 
         return SystemInterfaceSnapshot(
             hasCellularIPv4: hasPdpIPv4,
+            hasWifiIPv4: hasEn0IPv4,
             hasActiveLocalDevUtun: hasLocalDevUtun,
             detectedLocalDevUtunIPv4: bestLocalDevUtunIP
         )
     }
 
-    /// Ghim cứng định tuyến về 10.7.0.1 ngay cả khi 4G hoặc Wi-Fi đang bật
     private func ensureTunnelRoutingPinned(snapshot: SystemInterfaceSnapshot) {
         guard !isWirelessPairingActive else { return }
         guard let utunIP = snapshot.detectedLocalDevUtunIPv4, utunIP.hasPrefix("10.7.") else { return }
@@ -560,6 +582,7 @@ final class SystemCheckViewModel: ObservableObject {
         ensureTunnelRoutingPinned(snapshot: snapshot)
 
         let cellularActive = usesCellularPath || isCellularPathSatisfied || snapshot.hasCellularIPv4
+        let wifiActive = usesWifiPath || isWifiPathSatisfied || snapshot.hasWifiIPv4
         assignIfChanged(\.isCellularOK, cellularActive)
 
         let newCellularDetail: String
@@ -661,32 +684,41 @@ final class SystemCheckViewModel: ObservableObject {
             }
         }()
 
+        // Điều kiện kiểm tra Pairing chính xác 100%:
+        // 1. Bật LocalDevVPN (vpnConnected == true)
+        // 2. Tắt cả Wi-Fi và 4G (!wifiActive && !cellularActive) để kết nối thẳng qua LocalDevVPN
+        let isDirectLocalDevOnly = vpnConnected && !wifiActive && !cellularActive
+
         if !hasAnyFile {
             self.lastVerifiedPairingSuccess = false
             self.lastVerifiedTunnelIP = ""
             self.didAttemptLiveVerify = false
             assignIfChanged(\.isPairingOK, false)
-            assignIfChanged(\.pairingProtocol, tr("Chưa có Pairing File", "No Pairing File"))
+            assignIfChanged(\.pairingProtocol, tr("Chưa xác minh • Chưa có Pairing File", "Unverified • No Pairing File"))
         } else if !vpnConnected {
             assignIfChanged(\.isPairingOK, false)
             assignIfChanged(\.pairingProtocol, tr(
-                "Chưa kết nối LocalDevVPN • Hãy bật VPN để sử dụng Pairing",
-                "LocalDevVPN Disconnected • Turn ON VPN to use Pairing"
+                "Chưa xác minh • Bước 1: Hãy bật LocalDevVPN",
+                "Unverified • Step 1: Please turn ON LocalDevVPN"
             ))
-        } else if self.lastVerifiedPairingSuccess || (!self.didAttemptLiveVerify && coreLoaded) {
-            // Chỉ tạm dùng coreLoaded khi mới khởi động chưa kịp verify live.
-            // Khi đã verify live (didAttemptLiveVerify == true), bắt buộc phải dựa vào kết quả xác thực thực tế (lastVerifiedPairingSuccess).
+        } else if wifiActive || cellularActive {
+            assignIfChanged(\.isPairingOK, false)
+            assignIfChanged(\.pairingProtocol, tr(
+                "Chưa xác minh • Bước 2: Hãy tắt Wi-Fi và 4G để kiểm tra",
+                "Unverified • Step 2: Turn OFF Wi-Fi & 4G to verify"
+            ))
+        } else if isDirectLocalDevOnly && self.lastVerifiedPairingSuccess {
             assignIfChanged(\.isPairingOK, true)
             assignIfChanged(\.pairingProtocol, protocolName)
         } else if self.didAttemptLiveVerify {
             assignIfChanged(\.isPairingOK, false)
             assignIfChanged(\.pairingProtocol, tr(
-                "Pairing không hợp lệ hoặc đã bị xoá trong Cài đặt • Hãy cài lại Pairing",
-                "Pairing invalid or removed in Settings • Please re-pair"
+                "Pairing lỗi hoặc hết hạn • Hãy cài lại Pairing",
+                "Pairing invalid or expired • Please re-pair"
             ))
         } else {
             assignIfChanged(\.isPairingOK, false)
-            assignIfChanged(\.pairingProtocol, tr("Đang kiểm tra kết nối...", "Checking connection..."))
+            assignIfChanged(\.pairingProtocol, tr("Đang kiểm tra qua LocalDevVPN...", "Verifying over LocalDevVPN..."))
         }
 
         let onDevice = UserDefaults.standard.useOnDeviceAnisette
@@ -706,9 +738,9 @@ final class SystemCheckViewModel: ObservableObject {
     }
 
     private func verifyPairingOverTunnel() async -> Bool {
-        for attempt in 0..<3 {
+        for attempt in 0..<2 {
             if attempt > 0 {
-                try? await Task.sleep(nanoseconds: UInt64(attempt) * 450_000_000)
+                try? await Task.sleep(nanoseconds: 350_000_000)
             }
             if let udid = try? await fetchUDID(forceLive: true), !udid.isEmpty {
                 return true
@@ -741,7 +773,12 @@ final class SystemCheckViewModel: ObservableObject {
             try? await minimuxerSwitchPairingProtocol(to: proto)
         }
 
-        if isVpnOK {
+        let snapshot = Self.scanSystemInterfaces()
+        let cellularActive = usesCellularPath || isCellularPathSatisfied || snapshot.hasCellularIPv4
+        let wifiActive = usesWifiPath || isWifiPathSatisfied || snapshot.hasWifiIPv4
+        let isDirectLocalDevOnly = isVpnOK && !wifiActive && !cellularActive
+
+        if isDirectLocalDevOnly {
             let tunnelChanged = (lastVerifiedTunnelIP != tunnelIP)
             if forceVerify || !didAttemptLiveVerify || !lastVerifiedPairingSuccess || tunnelChanged {
                 let ok = await verifyPairingOverTunnel()
@@ -754,17 +791,13 @@ final class SystemCheckViewModel: ObservableObject {
                     assignIfChanged(\.isPairingOK, true)
                 } else {
                     self.consecutiveVerifyFailures += 1
-                    // Nếu kiểm tra trực tiếp (forceVerify: khi vừa mở lại app từ Cài đặt / kéo làm mới)
-                    // hoặc đã thất bại từ 2 chu kỳ trở lên (mỗi chu kỳ đã thử 3 lần qua tunnel 10.7.0.1)
-                    // -> Pairing đã bị xoá trong Cài đặt iPhone hoặc không còn hợp lệ -> Báo Đỏ ngay!
-                    if forceVerify || self.consecutiveVerifyFailures >= 2 {
-                        self.lastVerifiedPairingSuccess = false
-                        assignIfChanged(\.isPairingOK, false)
-                    }
+                    self.lastVerifiedPairingSuccess = false
+                    assignIfChanged(\.isPairingOK, false)
                 }
             }
         } else {
             self.consecutiveVerifyFailures = 0
+            self.didAttemptLiveVerify = false
             assignIfChanged(\.isPairingOK, false)
         }
 
@@ -851,12 +884,8 @@ struct SystemCheckDashboardView: SwiftUI.View {
             CheckItemButton(
                 title: "Pairing File",
                 subtitle: vm.isPairingOK
-                    ? vm.tr("Ổn định (Tích xanh OK)", "Stable (Green Check OK)")
-                    : (vm.hasAnyStoredPairingFile
-                       ? (vm.isVpnOK
-                          ? vm.tr("Pairing lỗi hoặc đã bị xoá • Hãy cài lại", "Pairing invalid or removed • Re-pair")
-                          : vm.tr("Đã có tệp • Hãy bật LocalDevVPN", "File Loaded • Turn ON LocalDevVPN"))
-                       : vm.tr("Chưa có Pairing File", "No Pairing File")),
+                    ? vm.tr("Ổn định", "Stable")
+                    : vm.tr("Chưa xác minh", "Unverified"),
                 icon: "doc.badge.gearshape.fill",
                 isStable: vm.isPairingOK
             ) {
@@ -1444,8 +1473,8 @@ struct PairingGuideSheetView: SwiftUI.View {
                     await vm.checkAllStatuses(forceVerify: true)
                     if case .success = result {
                         statusBannerMessage = vm.tr(
-                            "Đã nạp tệp Pairing thành công! Hãy đảm bảo LocalDevVPN đang bật để sử dụng.",
-                            "Pairing file imported successfully! Make sure LocalDevVPN is turned ON to use."
+                            "Đã nạp tệp Pairing! Hãy làm theo 2 bước bên trên (Bật LocalDevVPN + Tắt Wi-Fi và 4G) để kiểm tra.",
+                            "Pairing file imported! Follow the 2 steps above (Turn ON LocalDevVPN + Turn OFF Wi-Fi & 4G) to verify."
                         )
                     }
                 }
@@ -1475,7 +1504,6 @@ struct PairingGuideSheetView: SwiftUI.View {
             }
             .onChange(of: wirelessVM.pairedDevice != nil) { isPaired in
                 if isPaired, let pairedURL = wirelessVM.shareSheetURL {
-                    // Ngắt chế độ phát sóng và tự động kích hoạt thẳng Pairing vừa tạo
                     wirelessVM.pinCode = nil
                     wirelessVM.isShareSheetPresented = false
                     vm.setWirelessPairingActive(false)
@@ -1487,8 +1515,8 @@ struct PairingGuideSheetView: SwiftUI.View {
                         vm.markPairingVerifiedImmediately()
                         await vm.checkAllStatuses(forceVerify: true)
                         statusBannerMessage = vm.tr(
-                            "Đã cài và kích hoạt Pairing thành công! Bạn không cần nhập lại tệp nữa. Khuyên dùng: Hãy nhấn nút “Xuất tệp Pairing (Lưu dự phòng)” bên dưới để lưu 1 bản vào Tệp.",
-                            "Pairing installed and activated! No need to re-import. Recommended: Tap “Export Pairing File (Backup)” below to save a backup copy in Files."
+                            "Đã cài và nạp Pairing! Hãy làm theo 2 bước kiểm tra phía trên (Bật LocalDevVPN + Tắt Wi-Fi & 4G) để xác minh Tích xanh.",
+                            "Pairing installed! Follow the 2 steps above (Turn ON LocalDevVPN + Turn OFF Wi-Fi & 4G) to verify Green Check."
                         )
                     }
                 }
@@ -1509,12 +1537,8 @@ struct PairingGuideSheetView: SwiftUI.View {
             VStack(alignment: .leading, spacing: 3) {
                 SwiftUI.Text(
                     vm.isPairingOK
-                    ? vm.tr("Pairing File Hoạt Động Tốt (Tích Xanh OK)", "Pairing File Working Properly (Green Check OK)")
-                    : (vm.hasAnyStoredPairingFile
-                       ? (vm.isVpnOK
-                          ? vm.tr("Pairing Lỗi Hoặc Đã Xoá Trong Cài Đặt (Tích Đỏ)", "Pairing Invalid or Removed in Settings (Red X)")
-                          : vm.tr("Đã Nạp Tệp Pairing (Hãy Bật LocalDevVPN)", "Pairing File Loaded (Please Turn ON LocalDevVPN)"))
-                       : vm.tr("Chưa Có Tệp Pairing (Tích Đỏ)", "No Pairing File Found (Red X)"))
+                    ? vm.tr("Pairing Chính Xác 100% (Tích Xanh OK)", "Pairing 100% Verified (Green Check OK)")
+                    : vm.tr("Chưa Xác Minh (Tích Đỏ)", "Unverified (Red X)")
                 )
                 .font(.headline)
                 SwiftUI.Text(vm.pairingProtocol)
@@ -1533,24 +1557,46 @@ struct PairingGuideSheetView: SwiftUI.View {
     }
 
     private var verificationAdviceCard: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                SwiftUI.Image(systemName: "lightbulb.fill")
+                SwiftUI.Image(systemName: "checkmark.shield.fill")
                     .foregroundColor(SkyTheme.primary)
                 SwiftUI.Text(vm.tr(
-                    "Lưu Ý Sử Dụng Pairing Với 4G / Wi-Fi:",
-                    "Using Pairing with 4G / Wi-Fi:"
+                    "2 Bước Kiểm Tra Pairing Chính Xác 100%:",
+                    "2 Steps to Verify Pairing 100% Accurately:"
                 ))
                 .font(.subheadline.bold())
                 .foregroundColor(.primary)
             }
 
+            VStack(alignment: .leading, spacing: 8) {
+                GuideStepRow(
+                    num: "1",
+                    title: vm.tr("Bật LocalDevVPN", "Turn ON LocalDevVPN"),
+                    text: LocalizedStringKey(vm.tr(
+                        "Mở ứng dụng **LocalDevVPN** và bật kết nối VPN.",
+                        "Open **LocalDevVPN** and turn ON the VPN connection."
+                    ))
+                )
+
+                GuideStepRow(
+                    num: "2",
+                    title: vm.tr("Tắt cả Wi-Fi và 4G", "Turn OFF both Wi-Fi and 4G"),
+                    text: LocalizedStringKey(vm.tr(
+                        "Tắt **Wi-Fi** và **Dữ liệu di động (4G/5G)** để ứng dụng kết nối thẳng vào thiết bị đã ghép nối qua **LocalDevVPN**.",
+                        "Turn OFF **Wi-Fi** and **Cellular Data (4G/5G)** so the app connects directly to the paired device via **LocalDevVPN**."
+                    ))
+                )
+            }
+
+            Divider()
+
             SwiftUI.Text(LocalizedStringKey(vm.tr(
-                "• Khi đã có tệp Pairing hợp lệ và bật **LocalDevVPN**, hệ thống sẽ tự động báo **Tích xanh** kể cả khi bạn đang bật **4G hoặc Wi-Fi**.\n• **Lưu ý quan trọng khi đang Cài Pairing mới (iOS 27):** Trong lúc nhấn nút *“Cài Pairing lên iPhone”* để vào Cài đặt nhập 6 số PIN, hãy **TẮT LocalDevVPN tạm thời** (chỉ bật Wi-Fi) để dòng *Pair with SideStore* trong Cài đặt không bị ngắt kết nối.",
-                "• Once a valid Pairing file is loaded and **LocalDevVPN** is ON, the status stays **Green** even with **4G or Wi-Fi** enabled.\n• **Important when Installing New Pairing (iOS 27):** While tapping *“Install Pairing on iPhone”* to enter the 6-digit PIN in Settings, **temporarily turn OFF LocalDevVPN** (keep Wi-Fi ON) so *Pair with SideStore* stays visible in Settings."
+                "✅ **Tích xanh:** Chắc chắn Pairing OK.\n❌ **Tích đỏ:** Chắc chắn Pairing lỗi hoặc hết hạn.",
+                "✅ **Green Check:** Pairing is 100% OK.\n❌ **Red X:** Pairing is definitely invalid or expired."
             )))
             .font(.caption)
-            .foregroundColor(.secondary)
+            .foregroundColor(.primary)
         }
         .padding(14)
         .background(SkyTheme.cardHeaderBackground)

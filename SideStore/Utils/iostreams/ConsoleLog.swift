@@ -1,10 +1,11 @@
+// SideStore/Utils/iostreams/ConsoleLog.swift
+
 //
 //  ConsoleLog.swift
 //  SideStore
 //
 //  Created by Magesh K on 25/11/24.
 //  Copyright © 2024 SideStore. All rights reserved.
-//
 //
 
 import Foundation
@@ -56,7 +57,8 @@ class ConsoleLog {
         let compositeStream = CompositeOutputStream([fileOutputStream, syslogOutputStream])
         self.compositeStream = compositeStream
         
-        return UnBufferedConsoleLogger(stream: compositeStream)
+        // FIX DISK I/O DRAIN: Use BufferedConsoleLogger (4KB) instead of UnBufferedConsoleLogger
+        return BufferedConsoleLogger(stream: compositeStream, bufferSize: 4096)
     }()
     
     public func formatFileName(baseName: String, suffixFormat: SuffixFormat) -> LogNameInfo {
@@ -161,4 +163,3 @@ class ConsoleLog {
         consoleLogger.stopCapturing()
     }
 }
-

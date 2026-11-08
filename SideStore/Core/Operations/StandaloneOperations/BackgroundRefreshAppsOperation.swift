@@ -1,3 +1,5 @@
+// SideStore/Core/Operations/StandaloneOperations/BackgroundRefreshAppsOperation.swift
+
 //
 //  BackgroundRefreshAppsOperation.swift
 //  AltStore
@@ -158,12 +160,12 @@ final class BackgroundRefreshAppsOperation: BaseStandaloneOperation<OperationCon
     }
     
     private func scheduleFinishedRefreshingNotification(for result: Result<[String: Result<InstalledApp, Error>], Error>, delay: TimeInterval = 5) {
-        func scheduleFinishedRefreshingNotification() {
+        // FIX INFINITE RECURSION: Limit reschedule retries (e.g. max 6 times = 30s) and only reschedule while AppManager is actively working
+        func scheduleNotificationOnly(remainingRetries: Int) {
             #if !os(tvOS)
             self.cancelFinishedRefreshingNotification()
             
             let content = UNMutableNotificationContent()
-            
             var shouldPresentAlert = true
             
             do {
@@ -195,23 +197,19 @@ final class BackgroundRefreshAppsOperation: BaseStandaloneOperation<OperationCon
             }
 
             if shouldPresentAlert {
-                // Using nil if delay == 0 fixes race condition where multiple notifications can appear (or none).
                 let trigger = delay == 0 ? nil : UNTimeIntervalNotificationTrigger(timeInterval: delay + 1, repeats: false)
                 
                 let request = UNNotificationRequest(identifier: self.refreshIdentifier, content: content, trigger: trigger)
                 UNUserNotificationCenter.current().add(request)
                 
-                if delay > 0 {
+                if delay > 0 && remainingRetries > 0 {
                     Task {
                         try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                        guard AppManager.shared.isActivelyManagingAnyApp else { return }
                         let requests = await UNUserNotificationCenter.current().pendingNotificationRequests()
-                        // If app is still running at this point, we schedule another notification with same identifier.
-                        // This prevents the currently scheduled notification from displaying, and starts another countdown timer.
-                        // First though, make sure there _is_ still a pending request, otherwise it's been cancelled
-                        // and we should stop polling.
                         guard requests.contains(where: { $0.identifier == self.refreshIdentifier }) else { return }
                         
-                        scheduleFinishedRefreshingNotification()
+                        scheduleNotificationOnly(remainingRetries: remainingRetries - 1)
                     }
                 }
             }
@@ -221,10 +219,10 @@ final class BackgroundRefreshAppsOperation: BaseStandaloneOperation<OperationCon
         }
         
         if self.presentsFinishedNotification {
-            scheduleFinishedRefreshingNotification()
+            scheduleNotificationOnly(remainingRetries: 6)
         }        
         
-        // Perform synchronously to ensure app doesn't quit before we've finishing saving to disk.
+        // Save to CoreData ONCE per call, outside of the recursive notification timer loop!
         let dbContext = self.context.dbBackgroundContext
         let childContext = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
         childContext.parent = dbContext

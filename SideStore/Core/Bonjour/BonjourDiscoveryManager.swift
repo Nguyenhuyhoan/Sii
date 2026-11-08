@@ -1,3 +1,5 @@
+// SideStore/Core/Bonjour/BonjourDiscoveryManager.swift
+
 //
 //  BonjourDiscoveryManager.swift
 //  SideStore
@@ -160,7 +162,8 @@ final class BonjourDiscoveryManager: NSObject, ObservableObject, NetServiceDeleg
         timeoutTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             guard let self = self, !Task.isCancelled else { return }
-            self.isSearching = false
+            // FIX: Actually cancel the 60+ NWBrowsers on timeout instead of leaving them running forever!
+            self.stopTypeSearch()
         }
     }
     
@@ -256,7 +259,8 @@ final class BonjourDiscoveryManager: NSObject, ObservableObject, NetServiceDeleg
         timeoutTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 4_000_000_000)
             guard let self = self, !Task.isCancelled else { return }
-            self.isSearching = false
+            // FIX: Cancel instance browsers after timeout to stop continuous mDNS/AWDL radio drain
+            self.stopInstanceSearch()
         }
     }
     

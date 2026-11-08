@@ -12,7 +12,6 @@ import UniformTypeIdentifiers
 import MinimuxerCommon
 import Combine
 import Darwin
-import ObjectiveC.runtime
 
 enum CheckAppLanguage: String, CaseIterable {
     case vi = "vi"
@@ -65,22 +64,12 @@ private enum SkyTheme {
 
 private enum CellularRefreshDefaultBootstrapper {
     private static let initializedKey = "com.sidestore.cellularRefresh.defaultEnabledInitialized"
-    private static var didInstallHook = false
-
-    static func installHookIfNeeded() {
-        guard !didInstallHook else { return }
-        didInstallHook = true
-
-        let origSel = NSSelectorFromString("registerDefaults")
-        let swizSel = #selector(UserDefaults.swizzled_cellularDefault_registerDefaults)
-        if let origMethod = class_getClassMethod(UserDefaults.self, origSel),
-           let swizMethod = class_getClassMethod(UserDefaults.self, swizSel) {
-            method_exchangeImplementations(origMethod, swizMethod)
-        }
-        applyDefaultTrueIfNeeded()
-    }
+    private static var didApply = false
 
     static func applyDefaultTrueIfNeeded() {
+        guard !didApply else { return }
+        didApply = true
+
         let defaults = UserDefaults.standard
         defaults.register(defaults: [
             #keyPath(UserDefaults.isCellularRefreshEnabled): true
@@ -89,13 +78,6 @@ private enum CellularRefreshDefaultBootstrapper {
             defaults.set(true, forKey: initializedKey)
             CellularRefreshManager.shared.setEnabled(true)
         }
-    }
-}
-
-private extension UserDefaults {
-    @objc class func swizzled_cellularDefault_registerDefaults() {
-        self.swizzled_cellularDefault_registerDefaults()
-        CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
     }
 }
 
@@ -138,19 +120,18 @@ class NewsViewController: UICollectionViewController {
     var source: Source?
 
     init?(source: Source?, coder: NSCoder) {
-        CellularRefreshDefaultBootstrapper.installHookIfNeeded()
+        CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
         self.source = source
         super.init(coder: coder)
     }
 
     required init?(coder: NSCoder) {
-        CellularRefreshDefaultBootstrapper.installHookIfNeeded()
+        CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
         super.init(coder: coder)
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        CellularRefreshDefaultBootstrapper.installHookIfNeeded()
         CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
 
         self.title = "Check"
@@ -248,7 +229,6 @@ final class SystemCheckViewModel: ObservableObject {
     }
 
     init() {
-        CellularRefreshDefaultBootstrapper.installHookIfNeeded()
         CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
         updateInstantStatus()
         setupRealtimeListeners()
@@ -443,14 +423,14 @@ final class SystemCheckViewModel: ObservableObject {
     }
 
     private func ensureTunnelRoutingPinned(snapshot: SystemInterfaceSnapshot) {
+        guard let utunIP = snapshot.detectedUtunIPv4, utunIP.hasPrefix("10.7.") else { return }
         let config = ConnectionConfig.shared
-        guard let utunIP = snapshot.detectedUtunIPv4 else { return }
 
-        if utunIP.hasPrefix("10.7.") {
-            if config.tunnelPeerIp == nil || config.tunnelPeerIp?.isEmpty == true {
-                if config.overrideTunnelPeerIp.isEmpty {
-                    config.overrideTunnelPeerIp = "10.7.0.1"
-                }
+        if config.tunnelPeerIp == nil || config.tunnelPeerIp?.isEmpty == true {
+            if config.overrideTunnelPeerIp.isEmpty {
+                config.overrideTunnelPeerIp = "10.7.0.1"
+            }
+            if !config.overrideTunnelPeerReachable {
                 config.overrideTunnelPeerReachable = true
             }
         }
@@ -597,9 +577,13 @@ final class SystemCheckViewModel: ObservableObject {
             if coreLoaded && minimuxer.core.pairingFileType != .unknown {
                 return minimuxer.core.pairingFileType
             }
-            if let persisted = PairingFileManager.shared.persistedActiveProtocol,
-               PairingFileManager.shared.hasPairingFile(for: persisted) {
-                return persisted
+            if let persisted = PairingFileManager.shared.persistedActiveProtocol {
+                let hasPersisted = (persisted == .rppairing && hasRp)
+                                || (persisted == .lockdown && hasLd)
+                                || (persisted == .unknown && hasUnk)
+                if hasPersisted {
+                    return persisted
+                }
             }
             if hasRp { return .rppairing }
             if hasLd { return .lockdown }

@@ -1,4 +1,4 @@
-//  AltStore/Core/Extensions/UserDefaults+AltStore.swift
+// AltStore/Core/Extensions/UserDefaults+AltStore.swift
 
 //
 //  UserDefaults+AltStore.swift
@@ -14,9 +14,7 @@ import MinimuxerCommon
 
 public extension UserDefaults
 {
-    // Default track for beta updates when beta-updates are enabled
     static let defaultBetaUpdatesTrack: String = ReleaseTrackType.nightly.description
-
 
     @objc var firstLaunch: Date? {
         get { self.object(forKey: #function) as? Date }
@@ -99,13 +97,14 @@ public extension UserDefaults
         set { self.set(newValue, forKey: #function) }
     }
     
+    // KHOÁ TẮT CHẠY NGẦM ĐỂ CHỐNG NÓNG MÁY & HAO PIN
     @objc var isBackgroundRefreshEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false }
+        set { self.set(false, forKey: #function) }
     }
     @objc var isBackgroundServiceEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false }
+        set { self.set(false, forKey: #function) }
     }
     var backgroundServiceMode: BackgroundServiceMode {
         get {
@@ -136,9 +135,10 @@ public extension UserDefaults
         get { self.integer(forKey: #function) }
         set { self.set(newValue, forKey: #function) }
     }
+    // KHOÁ TẮT TỰ ĐỘNG QUÉT BONJOUR NGẦM
     @objc var isAutoRetryRemotePairingPortEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false }
+        set { self.set(false, forKey: #function) }
     }
     @objc var isInstallConfirmationEnabled: Bool {
         get {
@@ -178,13 +178,8 @@ public extension UserDefaults
         set { self.set(newValue, forKey: #function) }
     }
     @objc var isRotateLogsOnStartupEnabled: Bool {
-        get {
-            if self.object(forKey: #function) == nil {
-                return true
-            }
-            return self.bool(forKey: #function)
-        }
-        set { self.set(newValue, forKey: #function) }
+        get { false }
+        set { self.set(false, forKey: #function) }
     }
     @objc var freeAcctAppIdDeletion: Bool {
         get { self.bool(forKey: #function) }
@@ -276,21 +271,22 @@ public extension UserDefaults
         get { self.bool(forKey: #function) }
         set { self.set(newValue, forKey: #function) }
     }
+    // KHOÁ TẮT TOÀN BỘ GHI LOG CHI TIẾT GÂY LAG
     @objc var isVerboseOperationsLoggingEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false }
+        set { self.set(false, forKey: #function) }
     }
     @objc var isAltSignVerboseLoggingEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false }
+        set { self.set(false, forKey: #function) }
     }
     @objc var isSideStoreVerboseLoggingEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false }
+        set { self.set(false, forKey: #function) }
     }
     @objc var isMinimuxerVerboseLoggingEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false }
+        set { self.set(false, forKey: #function) }
     }
     @objc var isMinimuxerBackendHotswapEnabled: Bool {
         get { self.bool(forKey: #function) }
@@ -410,7 +406,6 @@ public extension UserDefaults
         set { self.set(newValue, forKey: #function) }
     }
     
-    // Including "MacDirtyCow" in name triggers false positives with malware detectors 🤷‍♂️
     @objc var isCowExploitSupported: Bool {
         get { self.bool(forKey: #function) }
         set { self.set(newValue, forKey: #function) }
@@ -510,12 +505,10 @@ public extension UserDefaults
         let activeAppLimitIncludesExtensions = !ProcessInfo.processInfo.isOperatingSystemAtLeast(ios13_5)
         
         let ios14 = OperatingSystemVersion(majorVersion: 14, minorVersion: 0, patchVersion: 0)
-        
         let ios16 = OperatingSystemVersion(majorVersion: 16, minorVersion: 0, patchVersion: 0)
         let ios16_2 = OperatingSystemVersion(majorVersion: 16, minorVersion: 2, patchVersion: 0)
         let ios15_7_2 = OperatingSystemVersion(majorVersion: 15, minorVersion: 7, patchVersion: 2)
         
-        // MacDirtyCow supports iOS 14.0 - 15.7.1 OR 16.0 - 16.1.2
         let isMacDirtyCowSupported =
         (ProcessInfo.processInfo.isOperatingSystemAtLeast(ios14) && !ProcessInfo.processInfo.isOperatingSystemAtLeast(ios15_7_2)) ||
         (ProcessInfo.processInfo.isOperatingSystemAtLeast(ios16) && !ProcessInfo.processInfo.isOperatingSystemAtLeast(ios16_2))
@@ -523,23 +516,18 @@ public extension UserDefaults
         let preferredAppSorting: AppSorting = .default
         
         let defaults = [
-            // TODO: @mahee96: need to retire since irrelevant in ios 15+
             #keyPath(UserDefaults.isLegacyDeactivationSupported): isLegacyDeactivationSupported,
             #keyPath(UserDefaults.activeAppLimitIncludesExtensions): activeAppLimitIncludesExtensions,
-            
-            // still used on ios 15+
             #keyPath(UserDefaults.isAppLimitDisabled): false,
             #keyPath(UserDefaults.isCowExploitSupported): isMacDirtyCowSupported,
             #keyPath(UserDefaults._preferredAppSorting): preferredAppSorting.rawValue,
 
-            // sidestore actively used
             #keyPath(UserDefaults.minimuxerGatewayBackend): GatewayBackend.idevice.rawValue,
             #keyPath(UserDefaults.keepSigningCertsAfterLogout): true,
             #keyPath(UserDefaults.keepAnisetteDataAfterLogout): true,
             #keyPath(UserDefaults.keepAnisetteHeadersAfterLogout): true,
             #keyPath(UserDefaults.keepSideSignHeadersAfterLogout): true,
-            #keyPath(UserDefaults.isBackgroundRefreshEnabled): true,
-            // FIX BATTERY DRAIN: Disable 24/7 keepalive audio/location loop by default!
+            #keyPath(UserDefaults.isBackgroundRefreshEnabled): false,
             #keyPath(UserDefaults.isBackgroundServiceEnabled): false,
             #keyPath(UserDefaults.isBetaUpdatesEnabled): false,
             #keyPath(UserDefaults.permissionCheckingDisabled): true,
@@ -549,7 +537,7 @@ public extension UserDefaults
             #keyPath(UserDefaults.isChecksumVerificationEnabled): true,
             #keyPath(UserDefaults.isFileSizeVerificationEnabled): false,
             #keyPath(UserDefaults.appVerificationDisabled): false,
-            #keyPath(UserDefaults.isIdleTimeoutDisableEnabled): true,
+            #keyPath(UserDefaults.isIdleTimeoutDisableEnabled): false,
             #keyPath(UserDefaults.betaUdpatesTrack): defaultBetaUpdatesTrack,
             #keyPath(UserDefaults.menuAnisetteList): AppConstants.Anisette.Servers.defaultSource,
             #keyPath(UserDefaults.menuAnisetteURL): AppConstants.Anisette.Servers.defaultServerURL,
@@ -558,7 +546,7 @@ public extension UserDefaults
             #keyPath(UserDefaults.useOnDeviceAnisette): true,
             #keyPath(UserDefaults.useLocalVPN): true,
             #keyPath(UserDefaults.acceptIPv6ConnectionConfig): false,
-            #keyPath(UserDefaults.isAutoRetryRemotePairingPortEnabled): true,
+            #keyPath(UserDefaults.isAutoRetryRemotePairingPortEnabled): false,
             #keyPath(UserDefaults.enableEMPforWireguard): false,
             #keyPath(UserDefaults.skipNonCopyableBackupFiles): true,
             
@@ -583,7 +571,7 @@ public extension UserDefaults
             #keyPath(UserDefaults.isMinimuxerVerboseLoggingEnabled): false,
             #keyPath(UserDefaults.isMinimuxerBackendHotswapEnabled): false,
             #keyPath(UserDefaults.pairingFileEditSuppressedSHAs): [String: Bool](),
-            #keyPath(UserDefaults.isRotateLogsOnStartupEnabled): true,
+            #keyPath(UserDefaults.isRotateLogsOnStartupEnabled): false,
             #keyPath(UserDefaults.recreateDatabaseOnNextStart): false,
             #keyPath(UserDefaults.isCellularRefreshEnabled): false,
             #keyPath(UserDefaults.turnOffDataShortcutName): "TurnOffData",
@@ -591,100 +579,21 @@ public extension UserDefaults
             #keyPath(UserDefaults.isPairingReset): true,
             #keyPath(UserDefaults.isDebugModeEnabled): false,
             #keyPath(UserDefaults.isDeviceRegistered): false,
-
         ] as [String: Any]
 
-        // TODO: temporarily forcing this to be visible in nightlies, remove this in stable release later
-        UserDefaults.standard.isDebugModeEnabled = true
-        
         UserDefaults.standard.register(defaults: defaults)
         
-        // MDC is unsupported and spareRestore is patched
         if !isMacDirtyCowSupported && ProcessInfo().sparseRestorePatched
         {
-            // Disable isAppLimitDisabled if running iOS version that doesn't support MacDirtyCow.
             UserDefaults.standard.isAppLimitDisabled = false
         }
     }
     
     static func enableGlobalLogging() {
-        let setAnySelector = #selector(UserDefaults.set(_:forKey:) as (UserDefaults) -> (Any?, String) -> Void)
-        let setBoolSelector = #selector(UserDefaults.set(_:forKey:) as (UserDefaults) -> (Bool, String) -> Void)
-        let setIntSelector = #selector(UserDefaults.set(_:forKey:) as (UserDefaults) -> (Int, String) -> Void)
-        let removeSelector = #selector(UserDefaults.removeObject(forKey:))
-        
-        let swizzlePairs: [(Selector, Selector)] = [
-            (setAnySelector, #selector(swizzled_setObject(_:forKey:))),
-            (setBoolSelector, #selector(swizzled_setBool(_:forKey:))),
-            (setIntSelector, #selector(swizzled_setInteger(_:forKey:))),
-            (removeSelector, #selector(swizzled_removeObject(forKey:)))
-        ]
-        for (orig, swiz) in swizzlePairs {
-            if let m1 = class_getInstanceMethod(UserDefaults.self, orig),
-               let m2 = class_getInstanceMethod(UserDefaults.self, swiz) {
-                method_exchangeImplementations(m1, m2)
-            }
-        }
+        // Không can thiệp vào hệ thống lưu cài đặt
     }
     
     static func dumpAllSettingsOnBoot() {
-        debugLog("=== [UserDefaults] Standard Suite Dump ===")
-        dumpDictionary(UserDefaults.standard.dictionaryRepresentation())
-        
-        if let appGroup = Bundle.main.altstoreAppGroup,
-           let sharedDefaults = WidgetDataManager.sharedDefaults,
-           sharedDefaults != UserDefaults.standard 
-        {
-            debugLog("=== [UserDefaults] Shared AppGroup Suite Dump (\(appGroup)) ===")
-            dumpDictionary(sharedDefaults.dictionaryRepresentation())
-        }
-    }
-    
-    private static func dumpDictionary(_ dict: [String: Any]) {
-        let filtered = dict.filter { key, _ in
-            !key.hasPrefix("Apple") && !key.hasPrefix("NS") && !key.hasPrefix("PK")
-        }
-        
-        if JSONSerialization.isValidJSONObject(filtered),
-           let data = try? JSONSerialization.data(withJSONObject: filtered, options: [.prettyPrinted, .sortedKeys]),
-           let jsonString = String(data: data, encoding: .utf8) {
-            debugLog(jsonString)
-        } else {
-            debugLog("\(filtered)")
-        }
-    }
-}
-
-// diag logging hooks without changes to original source 
-// this is to catch any and all userdefault writes
-private extension UserDefaults {
-    private func formatValueForLog(_ value: Any?) -> String {
-        guard let value = value else { return "nil" }
-        if JSONSerialization.isValidJSONObject(value),
-           let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys]),
-           let jsonString = String(data: data, encoding: .utf8) {
-            return jsonString
-        }
-        return "\(value)"
-    }
-
-    @objc private func swizzled_setObject(_ value: Any?, forKey key: String) {
-        debugLog("[UserDefaults] Key '\(key)' -> \(formatValueForLog(value))")
-        self.swizzled_setObject(value, forKey: key)
-    }
-
-    @objc private func swizzled_setBool(_ value: Bool, forKey key: String) {
-        debugLog("[UserDefaults] Key '\(key)' -> \(value)")
-        self.swizzled_setBool(value, forKey: key)
-    }
-
-    @objc private func swizzled_setInteger(_ value: Int, forKey key: String) {
-        debugLog("[UserDefaults] Key '\(key)' -> \(value)")
-        self.swizzled_setInteger(value, forKey: key)
-    }
-
-    @objc private func swizzled_removeObject(forKey key: String) {
-        debugLog("[UserDefaults] Removed Key '\(key)'")
-        self.swizzled_removeObject(forKey: key)
+        // Không dump JSON lúc mở app
     }
 }

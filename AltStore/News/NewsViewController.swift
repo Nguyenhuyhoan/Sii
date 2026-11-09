@@ -953,7 +953,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
             }
 
             CheckItemButton(
-                title: vm.tr("Mạng 4G / Di động", "4G / Cellular Data"),
+                title: vm.tr("Mạng 4G/Di Động", "4G/Cellular Data"),
                 subtitle: vm.isCellularOK
                     ? vm.tr("Ổn định", "Stable")
                     : vm.tr("Chưa bật", "Disabled"),
@@ -1083,10 +1083,10 @@ struct SystemCheckDashboardView: SwiftUI.View {
                         .foregroundColor(SkyTheme.primary)
                         .padding(.top, 2)
 
-                    SwiftUI.Text(LocalizedStringKey(vm.tr(
-                        "Nếu phím tắt tải về **không tương thích với phiên bản iOS** trên máy của bạn, bạn có thể xem và làm theo từng bước trong video bên dưới để **tự tạo phím tắt thủ công**.",
-                        "If the downloaded shortcut **is not compatible with your iOS version**, you can follow the step-by-step video below to **create the shortcut manually**."
-                    )))
+                    SwiftUI.Text(vm.tr(
+                        "Nếu phím tắt tải về không tương thích với phiên bản iOS trên máy của bạn, bạn có thể xem video bên dưới để tự tạo phím tắt.",
+                        "If the downloaded shortcut is not compatible with your iOS version, you can watch the video below to create the shortcut yourself."
+                    ))
                     .font(.system(size: 14.5, weight: .medium, design: .rounded))
                     .foregroundColor(.primary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1695,6 +1695,11 @@ struct PairingGuideSheetView: SwiftUI.View {
             .navigationTitle(vm.tr("Kiểm Tra Pairing", "Pairing Verification"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    SwiftUI.Text(vm.tr("Kiểm Tra Pairing", "Pairing Verification"))
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.primary)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     SwiftUI.Button(vm.tr("Xong", "Done")) {
                         if wirelessVM.isAdvertising {
@@ -1898,11 +1903,28 @@ struct PairingGuideSheetView: SwiftUI.View {
                     num: "3",
                     title: vm.tr("Tắt cả Wi-Fi và 4G (Chỉ bật LocalDevVPN)", "Turn OFF Wi-Fi & 4G (Keep Only LocalDevVPN)"),
                     text: LocalizedStringKey(vm.tr(
-                        "Tắt cả **Wi-Fi** và **4G**, chỉ để lại mỗi **LocalDevVPN** đang bật. Sau đó nhìn lên mục **“Đang Chờ Xác Minh Pairing”** ở phía trên sẽ tự động hiện **Tích Xanh** (hoạt động tốt) hoặc **Tích Đỏ** (bị lỗi / cần cài lại).",
-                        "Turn OFF both **Wi-Fi** and **4G**, leaving only **LocalDevVPN** enabled. Then check the **“Waiting for Pairing Verification”** box above to see if it turns into a **Green Check** (working) or **Red X** (invalid / re-pair needed)."
+                        "Tắt cả **Wi-Fi** và **4G**, chỉ để lại mỗi **LocalDevVPN** đang bật.",
+                        "Turn OFF both **Wi-Fi** and **4G**, leaving only **LocalDevVPN** enabled."
                     ))
                 )
             }
+
+            SwiftUI.Text(vm.tr(
+                "Xong 3 bước trên, nhìn lên mục Đang Chờ Xác Minh Pairing ở phía trên sẽ tự động hiện Tích Xanh báo đang hoạt động tốt hoặc Tích Đỏ đã bị lỗi / cần cài lại.",
+                "After completing the 3 steps above, look at the Waiting for Pairing Verification section at the top — it will automatically show a Green Check (working properly) or a Red X (error / needs re-pairing)."
+            ))
+            .font(.system(size: 13.5, weight: .bold, design: .rounded))
+            .foregroundColor(SkyTheme.neutralInspect)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(SkyTheme.neutralInspect.opacity(0.10))
+            .cornerRadius(13)
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(SkyTheme.neutralInspect.opacity(0.32), lineWidth: 1)
+            )
+            .padding(.top, 6)
         }
         .padding(16)
         .background(SkyTheme.cardHeaderBackground)
@@ -1928,8 +1950,8 @@ struct PairingGuideSheetView: SwiftUI.View {
                     num: "1",
                     title: vm.tr("Bắt đầu phát tín hiệu Pairing", "Start Pairing Broadcast"),
                     text: LocalizedStringKey(vm.tr(
-                        "Tắt tạm LocalDevVPN (nếu đang bật), giữ kết nối Wi-Fi, sau đó nhấn vào nút **“Cài Pairing lên iPhone”** bên dưới để ứng dụng phát tín hiệu ghép đôi.",
-                        "Temporarily turn OFF LocalDevVPN (if active), keep Wi-Fi ON, then tap **“Install Pairing on iPhone”** below to start broadcasting."
+                        "Nhấn vào nút **\"Cài Pairing lên iPhone\"** ở bên dưới để ứng dụng phát tín hiệu ghép đôi.",
+                        "Tap the **\"Install Pairing on iPhone\"** button below so the app broadcasts the pairing signal."
                     ))
                 )
 
@@ -2307,6 +2329,11 @@ struct VpnDetailSheetView: SwiftUI.View {
             .navigationTitle("LocalDevVPN")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    SwiftUI.Text("LocalDevVPN")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.primary)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     SwiftUI.Button(vm.tr("Xong", "Done")) { dismiss() }
                         .font(.headline)
@@ -2381,8 +2408,8 @@ struct CellularDetailSheetView: SwiftUI.View {
                         }
                         VStack(alignment: .leading, spacing: 3) {
                             SwiftUI.Text(vm.isCellularOK
-                                         ? vm.tr("Mạng 4G / Di Động Ổn Định", "4G / Cellular Data is Stable")
-                                         : vm.tr("Mạng 4G / Di Động Đang Tắt", "4G / Cellular Data is Off"))
+                                         ? vm.tr("Mạng 4G/Di Động Ổn Định", "4G/Cellular Data is Stable")
+                                         : vm.tr("Mạng 4G/Di Động Đang Tắt", "4G/Cellular Data is Off"))
                                 .font(.headline)
                             SwiftUI.Text(vm.cellularDetail)
                                 .font(.caption)
@@ -2414,9 +2441,14 @@ struct CellularDetailSheetView: SwiftUI.View {
                 .padding(16)
             }
             .background(SkyTheme.pageBackground.ignoresSafeArea())
-            .navigationTitle(vm.tr("Mạng 4G / Di Động", "4G / Cellular Data"))
+            .navigationTitle(vm.tr("Mạng 4G/Di Động", "4G/Cellular Data"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    SwiftUI.Text(vm.tr("Mạng 4G/Di Động", "4G/Cellular Data"))
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.primary)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     SwiftUI.Button(vm.tr("Xong", "Done")) { dismiss() }
                         .font(.headline)
@@ -2663,6 +2695,11 @@ struct AnisetteDetailSheetView: SwiftUI.View {
             .navigationTitle(vm.tr("Máy Chủ Anisette", "Anisette Server"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    SwiftUI.Text(vm.tr("Máy Chủ Anisette", "Anisette Server"))
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.primary)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     SwiftUI.Button(vm.tr("Xong", "Done")) { dismiss() }
                         .font(.headline)

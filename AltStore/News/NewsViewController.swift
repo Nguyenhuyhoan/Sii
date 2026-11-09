@@ -1084,8 +1084,8 @@ struct SystemCheckDashboardView: SwiftUI.View {
                         .padding(.top, 2)
 
                     SwiftUI.Text(LocalizedStringKey(vm.tr(
-                        "Nếu phím tắt tải về **không tương thích với phiên bản iOS** trên máy của bạn, bạn có thể xem và làm theo từng bước trong video bên dưới để **tự tạo phím tắt thủ công**.",
-                        "If the downloaded shortcut **is not compatible with your iOS version**, you can follow the step-by-step video below to **create the shortcut manually**."
+                        "Nếu phím tắt tải về **không tương thích với phiên bản iOS** trên máy của bạn, bạn có thể xem video để **tự tạo phím tắt thủ công**.",
+                        “If the downloaded shortcut **is not compatible with the iOS version** on your device, you can watch the video to manually **create the shortcut yourself**.”
                     )))
                     .font(.system(size: 14.5, weight: .medium, design: .rounded))
                     .foregroundColor(.primary)

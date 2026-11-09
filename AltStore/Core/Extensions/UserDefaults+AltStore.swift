@@ -1,4 +1,4 @@
-// AltStore/Core/Extensions/UserDefaults+AltStore.swift
+// AltStore/Core/Extensions/UserDefaults+AltStore.swift:
 
 //
 //  UserDefaults+AltStore.swift
@@ -97,7 +97,7 @@ public extension UserDefaults
         set { self.set(newValue, forKey: #function) }
     }
     
-    // KHOÁ TẮT CHẠY NGẦM ĐỂ CHỐNG NÓNG MÁY & HAO PIN
+    // 1. KHOÁ TẮT CHẠY NGẦM ĐỂ CHỐNG NÓNG MÁY & HAO PIN QUA ĐÊM
     @objc var isBackgroundRefreshEnabled: Bool {
         get { false }
         set { self.set(false, forKey: #function) }
@@ -135,7 +135,8 @@ public extension UserDefaults
         get { self.integer(forKey: #function) }
         set { self.set(newValue, forKey: #function) }
     }
-    // KHOÁ TẮT TỰ ĐỘNG QUÉT BONJOUR NGẦM
+    
+    // 2. KHOÁ TẮT TỰ ĐỘNG QUÉT BONJOUR NGẦM
     @objc var isAutoRetryRemotePairingPortEnabled: Bool {
         get { false }
         set { self.set(false, forKey: #function) }
@@ -263,15 +264,18 @@ public extension UserDefaults
         get { self.bool(forKey: "autoFixAppGroupIDs") }
         set { self.set(newValue, forKey: "autoFixAppGroupIDs") }
     }
+    
+    // 3. TẮT NÉN LẠI FILE IPA SAU KHI KÝ (Bỏ qua CreateIpaOperation -> Giảm 50% CPU & nóng máy lúc cài app)
     @objc var preferResignedIPA: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false }
+        set { self.set(false, forKey: #function) }
     }
     @objc var isExportResignedAppEnabled: Bool {
         get { self.bool(forKey: #function) }
         set { self.set(newValue, forKey: #function) }
     }
-    // KHOÁ TẮT TOÀN BỘ GHI LOG CHI TIẾT GÂY LAG
+    
+    // 4. KHOÁ TẮT TOÀN BỘ GHI LOG CHI TIẾT GÂY LAG
     @objc var isVerboseOperationsLoggingEnabled: Bool {
         get { false }
         set { self.set(false, forKey: #function) }
@@ -427,17 +431,19 @@ public extension UserDefaults
         get { self.bool(forKey: #function) }
         set { self.set(newValue, forKey: #function) }
     }
+    
+    // 5. TẮT BĂM DỮ LIỆU CHECKSUM KHI CÀI APP NẶNG (Chống nghẽn ổ cứng & đơ cảm ứng)
     @objc var isChecksumVerificationEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false }
+        set { self.set(false, forKey: #function) }
     }
     @objc var isFileSizeVerificationEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false }
+        set { self.set(false, forKey: #function) }
     }
     @objc var appVerificationDisabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { true }
+        set { self.set(true, forKey: #function) }
     }
     @objc var responseCachingDisabled: Bool {
         get { self.bool(forKey: #function) }
@@ -534,9 +540,9 @@ public extension UserDefaults
             #keyPath(UserDefaults.isBundleIDVerificationEnabled): true,
             #keyPath(UserDefaults.isiOSVersionVerificationEnabled): true,
             #keyPath(UserDefaults.isAppVersionVerificationEnabled): true,
-            #keyPath(UserDefaults.isChecksumVerificationEnabled): true,
+            #keyPath(UserDefaults.isChecksumVerificationEnabled): false,
             #keyPath(UserDefaults.isFileSizeVerificationEnabled): false,
-            #keyPath(UserDefaults.appVerificationDisabled): false,
+            #keyPath(UserDefaults.appVerificationDisabled): true,
             #keyPath(UserDefaults.isIdleTimeoutDisableEnabled): false,
             #keyPath(UserDefaults.betaUdpatesTrack): defaultBetaUpdatesTrack,
             #keyPath(UserDefaults.menuAnisetteList): AppConstants.Anisette.Servers.defaultSource,
@@ -563,7 +569,7 @@ public extension UserDefaults
             #keyPath(UserDefaults.isInstallConfirmationEnabled): true,
             #keyPath(UserDefaults.isClearCustomizationsOnUninstallEnabled): true,
             #keyPath(UserDefaults.isAutoLaunchAppAfterInstallEnabled): false,
-            #keyPath(UserDefaults.preferResignedIPA): true,
+            #keyPath(UserDefaults.preferResignedIPA): false,
             #keyPath(UserDefaults.isExportResignedAppEnabled): false,
             #keyPath(UserDefaults.isVerboseOperationsLoggingEnabled): false,
             #keyPath(UserDefaults.isSideStoreVerboseLoggingEnabled): false,

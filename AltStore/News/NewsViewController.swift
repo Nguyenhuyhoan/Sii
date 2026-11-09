@@ -167,7 +167,11 @@ class NewsViewController: UICollectionViewController {
 
         self.title = "Check"
         self.navigationController?.setNavigationBarHidden(true, animated: false)
-        self.collectionView.backgroundColor = UIColor(SkyTheme.pageBackground)
+        self.view.backgroundColor = UIColor(SkyTheme.pageBackground)
+
+        // Tắt hoàn toàn collectionView thừa nằm ẩn bên dưới để iOS không tốn CPU tính toán layout
+        self.collectionView.isHidden = true
+        self.collectionView.isScrollEnabled = false
         self.collectionView.contentInsetAdjustmentBehavior = .never
 
         let hostingController = UIHostingController(rootView: SystemCheckDashboardView())
@@ -355,9 +359,12 @@ final class SystemCheckViewModel: ObservableObject {
         networkChangeSubject
             .debounce(for: .milliseconds(550), scheduler: DispatchQueue.main)
             .sink { [weak self] forceVerify in
-                guard let self = self, !self.isWirelessPairingActive else { return }
+                // Chỉ quét card mạng và kiểm tra khi Tab này đang mở trên màn hình
+                guard let self = self,
+                      self.isViewVisible,
+                      !self.isWirelessPairingActive,
+                      !self.isUpdatingDefaultsInternally else { return }
                 self.updateInstantStatus()
-                guard self.isViewVisible else { return }
                 Task { @MainActor [weak self] in
                     await self?.checkAllStatuses(forceVerify: forceVerify)
                 }
@@ -378,7 +385,7 @@ final class SystemCheckViewModel: ObservableObject {
                     self.usesWifiPath = usesWifi
                     changed = true
                 }
-                guard changed, !self.isWirelessPairingActive else { return }
+                guard changed, self.isViewVisible, !self.isWirelessPairingActive else { return }
                 self.networkChangeSubject.send(false)
             }
         }
@@ -390,7 +397,7 @@ final class SystemCheckViewModel: ObservableObject {
                 guard let self = self else { return }
                 guard self.isCellularPathSatisfied != cellSatisfied else { return }
                 self.isCellularPathSatisfied = cellSatisfied
-                guard !self.isWirelessPairingActive else { return }
+                guard self.isViewVisible, !self.isWirelessPairingActive else { return }
                 self.networkChangeSubject.send(false)
             }
         }
@@ -402,7 +409,7 @@ final class SystemCheckViewModel: ObservableObject {
                 guard let self = self else { return }
                 guard self.isWifiPathSatisfied != wifiSatisfied else { return }
                 self.isWifiPathSatisfied = wifiSatisfied
-                guard !self.isWirelessPairingActive else { return }
+                guard self.isViewVisible, !self.isWirelessPairingActive else { return }
                 self.networkChangeSubject.send(false)
             }
         }
@@ -411,7 +418,10 @@ final class SystemCheckViewModel: ObservableObject {
         minimuxer.network.pathPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                guard let self = self, !self.isWirelessPairingActive else { return }
+                guard let self = self,
+                      self.isViewVisible,
+                      !self.isWirelessPairingActive,
+                      !self.isUpdatingDefaultsInternally else { return }
                 self.networkChangeSubject.send(false)
             }
             .store(in: &cancellables)
@@ -419,7 +429,10 @@ final class SystemCheckViewModel: ObservableObject {
         minimuxerStatusPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                guard let self = self, !self.isWirelessPairingActive else { return }
+                guard let self = self,
+                      self.isViewVisible,
+                      !self.isWirelessPairingActive,
+                      !self.isUpdatingDefaultsInternally else { return }
                 self.networkChangeSubject.send(false)
             }
             .store(in: &cancellables)
@@ -427,9 +440,9 @@ final class SystemCheckViewModel: ObservableObject {
         NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                guard let self = self else { return }
+                guard let self = self, self.isViewVisible else { return }
                 self.updateInstantStatus()
-                guard !self.isWirelessPairingActive, self.isViewVisible else { return }
+                guard !self.isWirelessPairingActive else { return }
                 Task { @MainActor [weak self] in
                     _ = try? await AnisetteServersManager.shared.syncWithRemote()
                     await self?.checkAllStatuses(forceVerify: false)
@@ -862,7 +875,8 @@ struct SystemCheckDashboardView: SwiftUI.View {
 
     var body: some SwiftUI.View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 16) {
+            // Dùng LazyVStack để các thành phần nặng ở cuối trang (như WebView Video) chỉ khởi tạo khi cuộn tới
+            LazyVStack(spacing: 16) {
                 languageTopCenteredSection
                 systemStatusSection
                 serverSection
@@ -1111,14 +1125,18 @@ struct SystemCheckDashboardView: SwiftUI.View {
 /// Khung phát video dọc tỉ lệ 9:19.5 được thiết kế lớn, sắc nét, bo tròn 4 góc chuẩn iPhone 14 (47.33pt continuous)
 struct IPhone14VerticalVideoFrameView: SwiftUI.View {
     let videoID: String
+    @State private var isVisibleOnScreen: Bool = false
 
     private let iPhone14CornerRadius: CGFloat = 47.33
 
     var body: some SwiftUI.View {
         ZStack {
-            YouTubeVerticalPlayerWebView(videoID: videoID)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(SwiftUI.Color.black)
+            YouTubeVerticalPlayerWebView(
+                videoID: videoID,
+                isVisibleOnScreen: isVisibleOnScreen
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(SwiftUI.Color.black)
         }
         .aspectRatio(9.0 / 19.5, contentMode: .fit)
         .frame(maxWidth: .infinity)
@@ -1140,12 +1158,19 @@ struct IPhone14VerticalVideoFrameView: SwiftUI.View {
         )
         .shadow(color: SwiftUI.Color.black.opacity(0.18), radius: 14, x: 0, y: 8)
         .padding(.horizontal, 4)
+        .onAppear {
+            isVisibleOnScreen = true
+        }
+        .onDisappear {
+            isVisibleOnScreen = false
+        }
     }
 }
 
-/// WebView nhúng trình phát YouTube tối ưu cho khung dọc 9:19.5 (Fix lỗi 152 - 4)
+/// WebView nhúng trình phát YouTube tối ưu cho khung dọc 9:19.5 (Fix lỗi 152 - 4 và tự động dừng khi ẩn màn hình)
 struct YouTubeVerticalPlayerWebView: UIViewRepresentable {
     let videoID: String
+    let isVisibleOnScreen: Bool
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -1154,7 +1179,7 @@ struct YouTubeVerticalPlayerWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
-        config.mediaTypesRequiringUserActionForPlayback = []
+        config.mediaTypesRequiringUserActionForPlayback = [.all]
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.scrollView.isScrollEnabled = false
@@ -1167,6 +1192,15 @@ struct YouTubeVerticalPlayerWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {
+        if !isVisibleOnScreen {
+            // Tạm dừng ngay mọi video/audio đang phát trong iframe nếu người dùng chuyển Tab hoặc cuộn khuất
+            uiView.evaluateJavaScript(
+                "var iframe = document.querySelector('iframe'); if (iframe && iframe.contentWindow) { iframe.contentWindow.postMessage('{\"event\":\"command\",\"func\":\"pauseVideo\",\"args\":\"\"}', '*'); }",
+                completionHandler: nil
+            )
+            return
+        }
+
         guard context.coordinator.loadedVideoID != videoID else { return }
         context.coordinator.loadedVideoID = videoID
 
@@ -1217,6 +1251,13 @@ struct YouTubeVerticalPlayerWebView: UIViewRepresentable {
         """
 
         uiView.loadHTMLString(embedHTML, baseURL: URL(string: originDomain))
+    }
+
+    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
+        uiView.stopLoading()
+        if #available(iOS 15.0, *) {
+            uiView.pauseAllMediaPlayback()
+        }
     }
 
     final class Coordinator {
@@ -2012,10 +2053,9 @@ struct PairingGuideSheetView: SwiftUI.View {
 
                 SwiftUI.Button {
                     didPressInstallPairing = true
-                    if !wirelessVM.isAdvertising {
-                        vm.setWirelessPairingActive(true)
-                    }
                     wirelessVM.togglePairing()
+                    // Đồng bộ chính xác trạng thái thật sau khi togglePairing() chạy xong để tránh kẹt Background Task
+                    vm.setWirelessPairingActive(wirelessVM.isAdvertising)
                 } label: {
                     HStack(spacing: 8) {
                         SwiftUI.Image(systemName: wirelessVM.isAdvertising ? "stop.circle.fill" : "antenna.radiowaves.left.and.right")

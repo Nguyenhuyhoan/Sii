@@ -13,6 +13,7 @@ import UniformTypeIdentifiers
 import MinimuxerCommon
 import Combine
 import Darwin
+import ImageIO
 
 enum CheckAppLanguage: String, CaseIterable {
     case vi = "vi"
@@ -69,6 +70,74 @@ private enum SkyTheme {
     })
 
     static let shadow = SwiftUI.Color(red: 0.04, green: 0.42, blue: 0.78).opacity(0.08)
+}
+
+/// Bộ tải và giải mã ảnh trên Background Thread + Cache RAM giúp cuộn ScrollView mượt 120fps không bao giờ khựng
+private final class GuideImageCacheManager: @unchecked Sendable {
+    static let shared = GuideImageCacheManager()
+    private let cache = NSCache<NSString, UIImage>()
+    private let session: URLSession
+
+    private init() {
+        cache.countLimit = 12
+        cache.totalCostLimit = 30 * 1024 * 1024
+        let config = URLSessionConfiguration.default
+        config.requestCachePolicy = .returnCacheDataElseLoad
+        config.urlCache = URLCache(memoryCapacity: 20 * 1024 * 1024, diskCapacity: 80 * 1024 * 1024)
+        session = URLSession(configuration: config)
+    }
+
+    func cachedImage(for urlString: String) -> UIImage? {
+        cache.object(forKey: urlString as NSString)
+    }
+
+    func prefetchAllGuideImages() {
+        let urls = [
+            "https://raw.githubusercontent.com/Nguyenhuyhoan/icons/main/IMG_2589.jpeg",
+            "https://raw.githubusercontent.com/Nguyenhuyhoan/icons/main/IMG_2588.jpeg"
+        ]
+        for urlString in urls where cachedImage(for: urlString) == nil {
+            Task.detached(priority: .utility) {
+                _ = await Self.shared.loadAndDecodeImage(urlString: urlString)
+            }
+        }
+    }
+
+    func loadAndDecodeImage(urlString: String, maxDimension: CGFloat = 1080) async -> UIImage? {
+        if let existing = cachedImage(for: urlString) {
+            return existing
+        }
+        guard let url = URL(string: urlString) else { return nil }
+        do {
+            let (data, _) = try await session.data(from: url)
+            return await Task.detached(priority: .userInitiated) { () -> UIImage? in
+                let options: [CFString: Any] = [
+                    kCGImageSourceShouldCache: false
+                ]
+                guard let source = CGImageSourceCreateWithData(data as CFData, options as CFDictionary) else {
+                    return UIImage(data: data)
+                }
+                let downsampleOptions: [CFString: Any] = [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceShouldCacheImmediately: true, // Ép giải mã bitmap ngay trên Background Thread
+                    kCGImageSourceCreateThumbnailWithTransform: true,
+                    kCGImageSourceThumbnailMaxPixelSize: maxDimension
+                ]
+                if let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions as CFDictionary) {
+                    let decoded = UIImage(cgImage: cgImage)
+                    Self.shared.cache.setObject(decoded, forKey: urlString as NSString)
+                    return decoded
+                }
+                if let fallback = UIImage(data: data)?.preparingForDisplay() {
+                    Self.shared.cache.setObject(fallback, forKey: urlString as NSString)
+                    return fallback
+                }
+                return nil
+            }.value
+        } catch {
+            return nil
+        }
+    }
 }
 
 private enum CellularRefreshDefaultBootstrapper {
@@ -164,6 +233,7 @@ class NewsViewController: UICollectionViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
+        GuideImageCacheManager.shared.prefetchAllGuideImages()
 
         self.title = "Check"
         self.navigationController?.setNavigationBarHidden(true, animated: false)
@@ -252,6 +322,8 @@ final class SystemCheckViewModel: ObservableObject {
 
     private var isViewVisible: Bool = false
     private var isChecking: Bool = false
+    private var needsAnotherCheck: Bool = false
+    private var pendingForceVerify: Bool = false
     private var isUpdatingDefaultsInternally: Bool = false
 
     private var lastVerifiedPairingSuccess: Bool = UserDefaults.standard.bool(forKey: verifiedPairingCacheKey) {
@@ -364,7 +436,6 @@ final class SystemCheckViewModel: ObservableObject {
                       self.isViewVisible,
                       !self.isWirelessPairingActive,
                       !self.isUpdatingDefaultsInternally else { return }
-                self.updateInstantStatus()
                 Task { @MainActor [weak self] in
                     await self?.checkAllStatuses(forceVerify: forceVerify)
                 }
@@ -451,7 +522,7 @@ final class SystemCheckViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
-    private struct SystemInterfaceSnapshot: Sendable {
+    struct SystemInterfaceSnapshot: Sendable {
         let hasCellularIPv4: Bool
         let hasWifiIPv4: Bool
         let hasActiveLocalDevUtun: Bool
@@ -591,8 +662,8 @@ final class SystemCheckViewModel: ObservableObject {
         }
     }
 
-    func updateInstantStatus() {
-        let snapshot = Self.scanSystemInterfaces()
+    func updateInstantStatus(existingSnapshot: SystemInterfaceSnapshot? = nil) {
+        let snapshot = existingSnapshot ?? Self.scanSystemInterfaces()
         ensureTunnelRoutingPinned(snapshot: snapshot)
 
         let cellularActive = usesCellularPath || isCellularPathSatisfied || snapshot.hasCellularIPv4
@@ -760,9 +831,8 @@ final class SystemCheckViewModel: ObservableObject {
     }
 
     /// Kiểm tra chính xác Pairing và thiết bị đã ghép nối qua đường hầm LocalDevVPN (10.7.0.1)
-    private func verifyPairingOverTunnel() async -> Bool {
-        let snapshot = Self.scanSystemInterfaces()
-        ensureTunnelRoutingPinned(snapshot: snapshot)
+    private func verifyPairingOverTunnel(initialSnapshot: SystemInterfaceSnapshot) async -> Bool {
+        ensureTunnelRoutingPinned(snapshot: initialSnapshot)
 
         let hasRp = PairingFileManager.shared.hasPairingFile(for: .rppairing)
         let hasLd = PairingFileManager.shared.hasPairingFile(for: .lockdown)
@@ -793,9 +863,11 @@ final class SystemCheckViewModel: ObservableObject {
             for attempt in 0..<2 {
                 if attempt > 0 {
                     try? await Task.sleep(nanoseconds: 350_000_000)
+                    let retrySnap = await Task.detached(priority: .utility) {
+                        Self.scanSystemInterfaces()
+                    }.value
+                    ensureTunnelRoutingPinned(snapshot: retrySnap)
                 }
-                let latestSnap = Self.scanSystemInterfaces()
-                ensureTunnelRoutingPinned(snapshot: latestSnap)
 
                 if let udid = try? await fetchUDID(forceLive: true), !udid.isEmpty {
                     return true
@@ -807,11 +879,31 @@ final class SystemCheckViewModel: ObservableObject {
 
     func checkAllStatuses(forceVerify: Bool = false) async {
         guard !isWirelessPairingActive else { return }
-        updateInstantStatus()
 
-        guard !isChecking else { return }
+        if isChecking {
+            needsAnotherCheck = true
+            if forceVerify { pendingForceVerify = true }
+            return
+        }
+
         isChecking = true
-        defer { isChecking = false }
+        defer {
+            isChecking = false
+            if needsAnotherCheck {
+                let shouldForce = pendingForceVerify
+                needsAnotherCheck = false
+                pendingForceVerify = false
+                Task { @MainActor [weak self] in
+                    await self?.checkAllStatuses(forceVerify: shouldForce)
+                }
+            }
+        }
+
+        let snapshot = await Task.detached(priority: .userInitiated) {
+            Self.scanSystemInterfaces()
+        }.value
+
+        updateInstantStatus(existingSnapshot: snapshot)
 
         guard hasAnyStoredPairingFile else {
             self.lastVerifiedPairingSuccess = false
@@ -819,12 +911,9 @@ final class SystemCheckViewModel: ObservableObject {
             self.didAttemptLiveVerifyInCurrentMode = false
             self.isPairingVerifiedError = true
             assignIfChanged(\.isPairingOK, false)
-            updateInstantStatus()
+            updateInstantStatus(existingSnapshot: snapshot)
             return
         }
-
-        let snapshot = Self.scanSystemInterfaces()
-        ensureTunnelRoutingPinned(snapshot: snapshot)
 
         let cellularActive = usesCellularPath || isCellularPathSatisfied || snapshot.hasCellularIPv4
         let wifiActive = usesWifiPath || isWifiPathSatisfied || snapshot.hasWifiIPv4
@@ -840,7 +929,7 @@ final class SystemCheckViewModel: ObservableObject {
             let signatureChanged = (lastVerifiedModeSignature != currentSignature)
 
             if forceVerify || !didAttemptLiveVerifyInCurrentMode || signatureChanged {
-                let ok = await verifyPairingOverTunnel()
+                let ok = await verifyPairingOverTunnel(initialSnapshot: snapshot)
                 self.didAttemptLiveVerifyInCurrentMode = true
                 self.lastVerifiedModeSignature = currentSignature
                 if ok {
@@ -862,7 +951,7 @@ final class SystemCheckViewModel: ObservableObject {
             assignIfChanged(\.isPairingVerifiedError, false)
         }
 
-        updateInstantStatus()
+        updateInstantStatus(existingSnapshot: snapshot)
     }
 }
 
@@ -875,8 +964,9 @@ struct SystemCheckDashboardView: SwiftUI.View {
 
     var body: some SwiftUI.View {
         ScrollView(showsIndicators: false) {
-            // Dùng LazyVStack để các thành phần nặng ở cuối trang (như WebView Video) chỉ khởi tạo khi cuộn tới
-            LazyVStack(spacing: 16) {
+            // Dùng VStack thay cho LazyVStack để toàn bộ khung Chiều cao & WebView được bố cục cố định,
+            // giúp lúc người dùng vuốt ngón tay xuống không bị khựng do khởi tạo WKWebView giữa chừng.
+            VStack(spacing: 16) {
                 languageTopCenteredSection
                 systemStatusSection
                 serverSection
@@ -1126,17 +1216,23 @@ struct SystemCheckDashboardView: SwiftUI.View {
 struct IPhone14VerticalVideoFrameView: SwiftUI.View {
     let videoID: String
     @State private var isVisibleOnScreen: Bool = false
+    @State private var shouldMountWebView: Bool = false
 
     private let iPhone14CornerRadius: CGFloat = 47.33
 
     var body: some SwiftUI.View {
         ZStack {
-            YouTubeVerticalPlayerWebView(
-                videoID: videoID,
-                isVisibleOnScreen: isVisibleOnScreen
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(SwiftUI.Color.black)
+            SwiftUI.Color.black
+            if shouldMountWebView {
+                YouTubeVerticalPlayerWebView(
+                    videoID: videoID,
+                    isVisibleOnScreen: isVisibleOnScreen
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ProgressView()
+                    .tint(SkyTheme.primary)
+            }
         }
         .aspectRatio(9.0 / 19.5, contentMode: .fit)
         .frame(maxWidth: .infinity)
@@ -1156,10 +1252,17 @@ struct IPhone14VerticalVideoFrameView: SwiftUI.View {
                     lineWidth: 4
                 )
         )
-        .shadow(color: SwiftUI.Color.black.opacity(0.18), radius: 14, x: 0, y: 8)
+        .shadow(color: SwiftUI.Color.black.opacity(0.16), radius: 10, x: 0, y: 6)
         .padding(.horizontal, 4)
         .onAppear {
             isVisibleOnScreen = true
+            if !shouldMountWebView {
+                // Khởi tạo sẵn WebView ngay sau khi mở Tab 0.3s (lúc người dùng chưa kịp cuộn tới)
+                // để khi cuộn xuống tới nơi là mượt 120fps, không bị khựng do tạo WebKit giữa lúc đang vuốt.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    shouldMountWebView = true
+                }
+            }
         }
         .onDisappear {
             isVisibleOnScreen = false
@@ -1180,11 +1283,12 @@ struct YouTubeVerticalPlayerWebView: UIViewRepresentable {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = [.all]
+        config.suppressesIncrementalRendering = false
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.scrollView.isScrollEnabled = false
         webView.scrollView.bounces = false
-        webView.isOpaque = false
+        webView.isOpaque = true
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
         webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
@@ -1301,7 +1405,7 @@ struct SkySectionCard<Content: SwiftUI.View>: SwiftUI.View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(SkyTheme.border, lineWidth: 1.2)
         )
-        .shadow(color: SkyTheme.shadow, radius: 10, x: 0, y: 4)
+        .shadow(color: SkyTheme.shadow, radius: 8, x: 0, y: 4)
     }
 }
 
@@ -1624,11 +1728,15 @@ struct ShortcutLinkRow: SwiftUI.View {
     }
 }
 
+/// Hiển thị ảnh hướng dẫn đã được giải mã ngầm (Background Decoded) + Cache RAM giúp cuộn không bị khựng
 struct RemoteGuideImageView: SwiftUI.View {
     let urlString: String
     let caption: String
     let loadingText: String
     let errorText: String
+
+    @State private var uiImage: UIImage? = nil
+    @State private var didFail: Bool = false
 
     var body: some SwiftUI.View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1638,45 +1746,50 @@ struct RemoteGuideImageView: SwiftUI.View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, alignment: .center)
 
-            if let url = URL(string: urlString) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .tint(SkyTheme.primary)
-                            SwiftUI.Text(loadingText)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 150)
-                        .background(SkyTheme.cardBackground)
-                        .cornerRadius(14)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFit()
-                            .cornerRadius(14)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(SkyTheme.border, lineWidth: 1)
-                            )
-                    case .failure:
-                        VStack(spacing: 6) {
-                            SwiftUI.Image(systemName: "wifi.exclamationmark")
-                                .font(.title3)
-                                .foregroundColor(SkyTheme.primary)
-                            SwiftUI.Text(errorText)
-                                .font(.caption)
-                        }
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, minHeight: 110)
-                        .background(SkyTheme.cardBackground)
-                        .cornerRadius(14)
-                    @unknown default:
-                        EmptyView()
-                    }
+            if let image = uiImage {
+                SwiftUI.Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .cornerRadius(14)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(SkyTheme.border, lineWidth: 1)
+                    )
+            } else if didFail {
+                VStack(spacing: 6) {
+                    SwiftUI.Image(systemName: "wifi.exclamationmark")
+                        .font(.title3)
+                        .foregroundColor(SkyTheme.primary)
+                    SwiftUI.Text(errorText)
+                        .font(.caption)
                 }
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, minHeight: 160)
+                .background(SkyTheme.cardBackground)
+                .cornerRadius(14)
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .tint(SkyTheme.primary)
+                    SwiftUI.Text(loadingText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 220)
+                .background(SkyTheme.cardBackground)
+                .cornerRadius(14)
+            }
+        }
+        .task(id: urlString) {
+            if let cached = GuideImageCacheManager.shared.cachedImage(for: urlString) {
+                self.uiImage = cached
+                return
+            }
+            if let loaded = await GuideImageCacheManager.shared.loadAndDecodeImage(urlString: urlString) {
+                self.uiImage = loaded
+                self.didFail = false
+            } else {
+                self.didFail = true
             }
         }
     }
@@ -2390,6 +2503,7 @@ struct CopyableIPCard: SwiftUI.View {
     let copyText: String
     let copiedText: String
     @State private var copied = false
+    @State private var resetTask: Task<Void, Never>? = nil
 
     var body: some SwiftUI.View {
         HStack {
@@ -2405,8 +2519,12 @@ struct CopyableIPCard: SwiftUI.View {
             SwiftUI.Button(action: {
                 UIPasteboard.general.string = value
                 copied = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    copied = false
+                resetTask?.cancel()
+                resetTask = Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    if !Task.isCancelled {
+                        copied = false
+                    }
                 }
             }) {
                 SwiftUI.Label(copied ? copiedText : copyText, systemImage: copied ? "checkmark" : "doc.on.doc")

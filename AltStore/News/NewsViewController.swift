@@ -19,10 +19,18 @@ enum CheckAppLanguage: String, CaseIterable {
     case en = "en"
 }
 
+enum CheckItemVisualState: Equatable {
+    case actionRequired // Màu Tím Chàm (Indigo): Trung tính, mời nhấn vào kiểm tra (Không Xanh, Không Đỏ)
+    case verifiedOK     // Màu Xanh Lá (Green): Hoạt động tốt
+    case failedError    // Màu Đỏ (Red): Lỗi thật sự hoặc chưa có tệp
+}
+
 private enum SkyTheme {
     static let primary = SwiftUI.Color(red: 0.05, green: 0.58, blue: 0.96)
     static let secondary = SwiftUI.Color(red: 0.22, green: 0.72, blue: 1.00)
     static let darkAccent = SwiftUI.Color(red: 0.02, green: 0.44, blue: 0.82)
+    /// Màu trung tính để nhắc "Nhấn vào đây để kiểm tra" - tránh hiểu lầm với Xanh lá (Tốt) và Đỏ (Hư)
+    static let neutralInspect = SwiftUI.Color.indigo
 
     static let pageBackground = SwiftUI.Color(UIColor { trait in
         trait.userInterfaceStyle == .dark
@@ -202,6 +210,7 @@ final class SystemCheckViewModel: ObservableObject {
     }()
 
     @Published var isPairingOK: Bool = false
+    @Published var isPairingVerifiedError: Bool = false
     @Published var pairingProtocol: String = ""
     @Published var hasAnyStoredPairingFile: Bool = false
 
@@ -210,6 +219,7 @@ final class SystemCheckViewModel: ObservableObject {
     @Published var deviceIP: String = ""
 
     @Published var isCellularOK: Bool = false
+    @Published var isWifiActive: Bool = false
     @Published var cellularDetail: String = ""
 
     @Published var isAnisetteOK: Bool = !UserDefaults.standard.useOnDeviceAnisette
@@ -235,7 +245,6 @@ final class SystemCheckViewModel: ObservableObject {
     private var usesWifiPath: Bool = false
     private var isWifiPathSatisfied: Bool = false
     private var cancellables = Set<AnyCancellable>()
-    private var timerTask: Task<Void, Never>?
 
     private var isViewVisible: Bool = false
     private var isChecking: Bool = false
@@ -249,12 +258,39 @@ final class SystemCheckViewModel: ObservableObject {
         }
     }
 
-    private var lastVerifiedTunnelIP: String = ""
-    private var lastLiveVerifyTimestamp: Date = .distantPast
-    private var didAttemptLiveVerify: Bool = false
-    private var consecutiveVerifyFailures: Int = 0
+    private var lastVerifiedModeSignature: String = ""
+    private var didAttemptLiveVerifyInCurrentMode: Bool = false
 
     private let networkChangeSubject = PassthroughSubject<Bool, Never>()
+
+    /// Điều kiện cho phép tự động kiểm tra Pairing và hiện Xanh/Đỏ:
+    /// 1. Có LocalDevVPN + Wi-Fi (isVpnOK && isWifiActive)
+    /// 2. Hoặc chỉ bật LocalDevVPN độc lập, đã tắt cả Wi-Fi và 4G (isVpnOK && !isWifiActive && !isCellularOK)
+    /// Khi không có LocalDevVPN hoặc khi đang dùng LocalDevVPN + 4G (không có Wi-Fi) -> Trả về false (Hiện màu Tím)
+    var canAutoVerifyPairingInCurrentNetwork: Bool {
+        guard isVpnOK else { return false }
+        if isWifiActive {
+            return true
+        }
+        return !isCellularOK
+    }
+
+    /// Trạng thái màu sắc của Pairing (Xanh = Tốt, Đỏ = Hư/Chưa có tệp, Tím Chàm = Nhấn vào đây để kiểm tra)
+    var pairingVisualState: CheckItemVisualState {
+        if !hasAnyStoredPairingFile {
+            return .failedError
+        }
+        guard canAutoVerifyPairingInCurrentNetwork else {
+            return .actionRequired
+        }
+        if isPairingOK {
+            return .verifiedOK
+        }
+        if isPairingVerifiedError {
+            return .failedError
+        }
+        return .actionRequired
+    }
 
     func tr(_ vi: String, _ en: String) -> String {
         language == .vi ? vi : en
@@ -272,11 +308,9 @@ final class SystemCheckViewModel: ObservableObject {
         isWirelessPairingActive = active
         if active {
             PairingBackgroundKeepAliveManager.shared.beginKeepAlive()
-            stopSmartPeriodicMonitor()
         } else {
             PairingBackgroundKeepAliveManager.shared.endKeepAlive()
             if isViewVisible {
-                startSmartPeriodicMonitor()
                 Task { await checkAllStatuses(forceVerify: true) }
             }
         }
@@ -284,8 +318,9 @@ final class SystemCheckViewModel: ObservableObject {
 
     func markPairingVerifiedImmediately() {
         self.hasAnyStoredPairingFile = true
-        self.didAttemptLiveVerify = false
-        self.consecutiveVerifyFailures = 0
+        self.didAttemptLiveVerifyInCurrentMode = false
+        self.lastVerifiedModeSignature = ""
+        self.isPairingVerifiedError = false
         updateInstantStatus()
     }
 
@@ -303,7 +338,6 @@ final class SystemCheckViewModel: ObservableObject {
         pathMonitor.cancel()
         cellularMonitor.cancel()
         wifiMonitor.cancel()
-        timerTask?.cancel()
     }
 
     func setViewVisible(_ visible: Bool) {
@@ -312,39 +346,14 @@ final class SystemCheckViewModel: ObservableObject {
         if visible {
             updateInstantStatus()
             if !isWirelessPairingActive {
-                startSmartPeriodicMonitor()
-                Task { await checkAllStatuses(forceVerify: true) }
-            }
-        } else {
-            stopSmartPeriodicMonitor()
-        }
-    }
-
-    private func startSmartPeriodicMonitor() {
-        guard timerTask == nil, !isWirelessPairingActive else { return }
-        timerTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                let isAllGood = (self?.isVpnOK == true && self?.isPairingOK == true)
-                let sleepNanoseconds: UInt64 = isAllGood ? 8_000_000_000 : 4_000_000_000
-                try? await Task.sleep(nanoseconds: sleepNanoseconds)
-
-                guard let self = self, !Task.isCancelled, self.isViewVisible, !self.isWirelessPairingActive else { break }
-
-                let elapsed = Date().timeIntervalSince(self.lastLiveVerifyTimestamp)
-                let needDeepVerify = !self.lastVerifiedPairingSuccess || elapsed > 15
-                await self.checkAllStatuses(forceVerify: needDeepVerify)
+                Task { await checkAllStatuses(forceVerify: false) }
             }
         }
-    }
-
-    private func stopSmartPeriodicMonitor() {
-        timerTask?.cancel()
-        timerTask = nil
     }
 
     private func setupRealtimeListeners() {
         networkChangeSubject
-            .debounce(for: .milliseconds(600), scheduler: DispatchQueue.main)
+            .debounce(for: .milliseconds(550), scheduler: DispatchQueue.main)
             .sink { [weak self] forceVerify in
                 guard let self = self, !self.isWirelessPairingActive else { return }
                 self.updateInstantStatus()
@@ -360,14 +369,17 @@ final class SystemCheckViewModel: ObservableObject {
             let usesWifi = path.usesInterfaceType(.wifi)
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
+                var changed = false
                 if self.usesCellularPath != usesCell {
                     self.usesCellularPath = usesCell
+                    changed = true
                 }
                 if self.usesWifiPath != usesWifi {
                     self.usesWifiPath = usesWifi
+                    changed = true
                 }
-                guard !self.isWirelessPairingActive else { return }
-                self.networkChangeSubject.send(true)
+                guard changed, !self.isWirelessPairingActive else { return }
+                self.networkChangeSubject.send(false)
             }
         }
         pathMonitor.start(queue: monitorQueue)
@@ -376,11 +388,10 @@ final class SystemCheckViewModel: ObservableObject {
             let cellSatisfied = (path.status == .satisfied)
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
-                if self.isCellularPathSatisfied != cellSatisfied {
-                    self.isCellularPathSatisfied = cellSatisfied
-                }
+                guard self.isCellularPathSatisfied != cellSatisfied else { return }
+                self.isCellularPathSatisfied = cellSatisfied
                 guard !self.isWirelessPairingActive else { return }
-                self.networkChangeSubject.send(true)
+                self.networkChangeSubject.send(false)
             }
         }
         cellularMonitor.start(queue: monitorQueue)
@@ -389,11 +400,10 @@ final class SystemCheckViewModel: ObservableObject {
             let wifiSatisfied = (path.status == .satisfied)
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
-                if self.isWifiPathSatisfied != wifiSatisfied {
-                    self.isWifiPathSatisfied = wifiSatisfied
-                }
+                guard self.isWifiPathSatisfied != wifiSatisfied else { return }
+                self.isWifiPathSatisfied = wifiSatisfied
                 guard !self.isWirelessPairingActive else { return }
-                self.networkChangeSubject.send(true)
+                self.networkChangeSubject.send(false)
             }
         }
         wifiMonitor.start(queue: monitorQueue)
@@ -402,7 +412,7 @@ final class SystemCheckViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self, !self.isWirelessPairingActive else { return }
-                self.networkChangeSubject.send(true)
+                self.networkChangeSubject.send(false)
             }
             .store(in: &cancellables)
 
@@ -410,7 +420,7 @@ final class SystemCheckViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self, !self.isWirelessPairingActive else { return }
-                self.networkChangeSubject.send(true)
+                self.networkChangeSubject.send(false)
             }
             .store(in: &cancellables)
 
@@ -419,22 +429,11 @@ final class SystemCheckViewModel: ObservableObject {
             .sink { [weak self] _ in
                 guard let self = self else { return }
                 self.updateInstantStatus()
-                guard !self.isWirelessPairingActive else { return }
-                if self.isViewVisible {
-                    self.startSmartPeriodicMonitor()
-                }
+                guard !self.isWirelessPairingActive, self.isViewVisible else { return }
                 Task { @MainActor [weak self] in
                     _ = try? await AnisetteServersManager.shared.syncWithRemote()
-                    await self?.checkAllStatuses(forceVerify: true)
+                    await self?.checkAllStatuses(forceVerify: false)
                 }
-            }
-            .store(in: &cancellables)
-
-        NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self = self else { return }
-                self.stopSmartPeriodicMonitor()
             }
             .store(in: &cancellables)
     }
@@ -503,6 +502,7 @@ final class SystemCheckViewModel: ObservableObject {
         )
     }
 
+    /// Ghim chặt định tuyến vào cổng 10.7.0.1 của LocalDevVPN để không bị lỗi kiểm tra sai khi bật kèm Wi-Fi
     private func ensureTunnelRoutingPinned(snapshot: SystemInterfaceSnapshot) {
         guard !isWirelessPairingActive else { return }
         guard let utunIP = snapshot.detectedLocalDevUtunIPv4, utunIP.hasPrefix("10.7.") else { return }
@@ -547,9 +547,9 @@ final class SystemCheckViewModel: ObservableObject {
         PairingFileManager.shared.resetAllPairingFiles()
         self.hasAnyStoredPairingFile = false
         self.lastVerifiedPairingSuccess = false
-        self.lastVerifiedTunnelIP = ""
-        self.didAttemptLiveVerify = false
-        self.consecutiveVerifyFailures = 0
+        self.lastVerifiedModeSignature = ""
+        self.didAttemptLiveVerifyInCurrentMode = false
+        self.isPairingVerifiedError = true
         self.isPairingOK = false
         updateInstantStatus()
     }
@@ -585,6 +585,7 @@ final class SystemCheckViewModel: ObservableObject {
         let cellularActive = usesCellularPath || isCellularPathSatisfied || snapshot.hasCellularIPv4
         let wifiActive = usesWifiPath || isWifiPathSatisfied || snapshot.hasWifiIPv4
         assignIfChanged(\.isCellularOK, cellularActive)
+        assignIfChanged(\.isWifiActive, wifiActive)
 
         let newCellularDetail: String
         if usesCellularPath {
@@ -645,7 +646,8 @@ final class SystemCheckViewModel: ObservableObject {
         assignIfChanged(\.tunnelIP, resolvedTunnelText)
         assignIfChanged(\.deviceIP, resolvedDeviceText)
 
-        let vpnConnected = (resolvedTunnelText != disconnectedText) && (resolvedDeviceText != disconnectedText)
+        let vpnConnected = snapshot.hasActiveLocalDevUtun
+            || ((resolvedTunnelText != disconnectedText) && (resolvedDeviceText != disconnectedText))
         assignIfChanged(\.isVpnOK, vpnConnected)
 
         let hasRp = PairingFileManager.shared.hasPairingFile(for: .rppairing)
@@ -681,45 +683,51 @@ final class SystemCheckViewModel: ObservableObject {
             case .unknown:
                 return (hasAnyFile || coreLoaded)
                     ? tr("Đã nạp Pairing File", "Pairing File Loaded")
-                    : tr("Chưa có Pairing File", "No Pairing File")
+                    : tr("Chưa có tệp Pairing", "No Pairing File")
             }
         }()
 
-        // Điều kiện kiểm tra Pairing chính xác:
-        // 1. Bật LocalDevVPN (vpnConnected == true)
-        // 2. Tắt cả Wi-Fi và 4G (!wifiActive && !cellularActive) để kết nối thẳng qua LocalDevVPN
-        let isDirectLocalDevOnly = vpnConnected && !wifiActive && !cellularActive
+        // Điều kiện tự động kiểm tra:
+        // - Có LocalDevVPN + Wi-Fi (vpnConnected && wifiActive)
+        // - Hoặc chỉ bật LocalDevVPN, đã tắt cả Wi-Fi và 4G (vpnConnected && !wifiActive && !cellularActive)
+        let canVerifyNow = vpnConnected && (wifiActive || !cellularActive)
 
         if !hasAnyFile {
             self.lastVerifiedPairingSuccess = false
-            self.lastVerifiedTunnelIP = ""
-            self.didAttemptLiveVerify = false
+            self.lastVerifiedModeSignature = ""
+            self.didAttemptLiveVerifyInCurrentMode = false
             assignIfChanged(\.isPairingOK, false)
-            assignIfChanged(\.pairingProtocol, tr("Chưa xác minh • Chưa có Pairing File", "Unverified • No Pairing File"))
-        } else if !vpnConnected {
-            assignIfChanged(\.isPairingOK, false)
+            assignIfChanged(\.isPairingVerifiedError, true)
             assignIfChanged(\.pairingProtocol, tr(
-                "Chưa xác minh • Bước 1: Hãy bật LocalDevVPN",
-                "Unverified • Step 1: Please turn ON LocalDevVPN"
+                "Chưa có tệp Pairing",
+                "No Pairing File"
             ))
-        } else if wifiActive || cellularActive {
+        } else if !canVerifyNow {
+            // Khi không bật LocalDevVPN HOẶC khi bật LocalDevVPN + 4G (không có Wi-Fi) -> Màu Tím
             assignIfChanged(\.isPairingOK, false)
-            assignIfChanged(\.pairingProtocol, tr(
-                "Chưa xác minh • Bước 2: Hãy tắt Wi-Fi và 4G để kiểm tra",
-                "Unverified • Step 2: Turn OFF Wi-Fi & 4G to verify"
-            ))
-        } else if isDirectLocalDevOnly && self.lastVerifiedPairingSuccess {
+            assignIfChanged(\.isPairingVerifiedError, false)
+            assignIfChanged(\.pairingProtocol, "")
+        } else if self.didAttemptLiveVerifyInCurrentMode {
+            if self.lastVerifiedPairingSuccess {
+                assignIfChanged(\.isPairingOK, true)
+                assignIfChanged(\.isPairingVerifiedError, false)
+                assignIfChanged(\.pairingProtocol, protocolName)
+            } else {
+                assignIfChanged(\.isPairingOK, false)
+                assignIfChanged(\.isPairingVerifiedError, true)
+                assignIfChanged(\.pairingProtocol, tr(
+                    "Pairing bị lỗi hoặc hết hạn • Hãy cài lại Pairing mới",
+                    "Pairing invalid or expired • Please re-pair"
+                ))
+            }
+        } else if self.lastVerifiedPairingSuccess {
             assignIfChanged(\.isPairingOK, true)
+            assignIfChanged(\.isPairingVerifiedError, false)
             assignIfChanged(\.pairingProtocol, protocolName)
-        } else if self.didAttemptLiveVerify {
-            assignIfChanged(\.isPairingOK, false)
-            assignIfChanged(\.pairingProtocol, tr(
-                "Pairing lỗi hoặc hết hạn • Hãy cài lại Pairing",
-                "Pairing invalid or expired • Please re-pair"
-            ))
         } else {
             assignIfChanged(\.isPairingOK, false)
-            assignIfChanged(\.pairingProtocol, tr("Đang kiểm tra qua LocalDevVPN...", "Verifying over LocalDevVPN..."))
+            assignIfChanged(\.isPairingVerifiedError, false)
+            assignIfChanged(\.pairingProtocol, "")
         }
 
         let onDevice = UserDefaults.standard.useOnDeviceAnisette
@@ -738,13 +746,47 @@ final class SystemCheckViewModel: ObservableObject {
         assignIfChanged(\.isCellularRefreshEnabled, currentCellularRefresh)
     }
 
+    /// Kiểm tra chính xác Pairing và thiết bị đã ghép nối qua đường hầm LocalDevVPN (10.7.0.1)
     private func verifyPairingOverTunnel() async -> Bool {
-        for attempt in 0..<2 {
-            if attempt > 0 {
-                try? await Task.sleep(nanoseconds: 350_000_000)
+        let snapshot = Self.scanSystemInterfaces()
+        ensureTunnelRoutingPinned(snapshot: snapshot)
+
+        let hasRp = PairingFileManager.shared.hasPairingFile(for: .rppairing)
+        let hasLd = PairingFileManager.shared.hasPairingFile(for: .lockdown)
+
+        var candidateProtocols: [PairingProtocol] = []
+        if let persisted = PairingFileManager.shared.persistedActiveProtocol {
+            if (persisted == .rppairing && hasRp) || (persisted == .lockdown && hasLd) {
+                candidateProtocols.append(persisted)
             }
-            if let udid = try? await fetchUDID(forceLive: true), !udid.isEmpty {
-                return true
+        }
+        if hasRp && !candidateProtocols.contains(.rppairing) {
+            candidateProtocols.append(.rppairing)
+        }
+        if hasLd && !candidateProtocols.contains(.lockdown) {
+            candidateProtocols.append(.lockdown)
+        }
+        if candidateProtocols.isEmpty {
+            candidateProtocols.append(.unknown)
+        }
+
+        for proto in candidateProtocols {
+            if proto != .unknown {
+                if !minimuxer.core.isPairingFileLoaded || minimuxer.core.pairingFileType != proto {
+                    try? await minimuxerSwitchPairingProtocol(to: proto)
+                }
+            }
+
+            for attempt in 0..<2 {
+                if attempt > 0 {
+                    try? await Task.sleep(nanoseconds: 350_000_000)
+                }
+                let latestSnap = Self.scanSystemInterfaces()
+                ensureTunnelRoutingPinned(snapshot: latestSnap)
+
+                if let udid = try? await fetchUDID(forceLive: true), !udid.isEmpty {
+                    return true
+                }
             }
         }
         return false
@@ -760,46 +802,51 @@ final class SystemCheckViewModel: ObservableObject {
 
         guard hasAnyStoredPairingFile else {
             self.lastVerifiedPairingSuccess = false
-            self.lastVerifiedTunnelIP = ""
-            self.didAttemptLiveVerify = false
-            self.consecutiveVerifyFailures = 0
+            self.lastVerifiedModeSignature = ""
+            self.didAttemptLiveVerifyInCurrentMode = false
+            self.isPairingVerifiedError = true
             assignIfChanged(\.isPairingOK, false)
             updateInstantStatus()
             return
         }
 
-        if hasAnyStoredPairingFile && !minimuxer.core.isPairingFileLoaded {
-            let proto: PairingProtocol = PairingFileManager.shared.persistedActiveProtocol
-                ?? (PairingFileManager.shared.hasPairingFile(for: .rppairing) ? .rppairing : .lockdown)
-            try? await minimuxerSwitchPairingProtocol(to: proto)
-        }
-
         let snapshot = Self.scanSystemInterfaces()
+        ensureTunnelRoutingPinned(snapshot: snapshot)
+
         let cellularActive = usesCellularPath || isCellularPathSatisfied || snapshot.hasCellularIPv4
         let wifiActive = usesWifiPath || isWifiPathSatisfied || snapshot.hasWifiIPv4
-        let isDirectLocalDevOnly = isVpnOK && !wifiActive && !cellularActive
+        let vpnActive = isVpnOK || snapshot.hasActiveLocalDevUtun
 
-        if isDirectLocalDevOnly {
-            let tunnelChanged = (lastVerifiedTunnelIP != tunnelIP)
-            if forceVerify || !didAttemptLiveVerify || !lastVerifiedPairingSuccess || tunnelChanged {
+        // Chỉ tự động kiểm tra khi:
+        // 1. Có LocalDevVPN + Wi-Fi
+        // 2. Hoặc chỉ có LocalDevVPN (đã tắt cả Wi-Fi và 4G)
+        let canVerifyNow = vpnActive && (wifiActive || !cellularActive)
+
+        if canVerifyNow {
+            let currentSignature = "\(tunnelIP)|wifi:\(wifiActive)|cell:\(cellularActive)"
+            let signatureChanged = (lastVerifiedModeSignature != currentSignature)
+
+            if forceVerify || !didAttemptLiveVerifyInCurrentMode || signatureChanged {
                 let ok = await verifyPairingOverTunnel()
-                self.didAttemptLiveVerify = true
-                self.lastLiveVerifyTimestamp = Date()
+                self.didAttemptLiveVerifyInCurrentMode = true
+                self.lastVerifiedModeSignature = currentSignature
                 if ok {
-                    self.consecutiveVerifyFailures = 0
                     self.lastVerifiedPairingSuccess = true
-                    self.lastVerifiedTunnelIP = tunnelIP
                     assignIfChanged(\.isPairingOK, true)
+                    assignIfChanged(\.isPairingVerifiedError, false)
                 } else {
-                    self.consecutiveVerifyFailures += 1
                     self.lastVerifiedPairingSuccess = false
                     assignIfChanged(\.isPairingOK, false)
+                    assignIfChanged(\.isPairingVerifiedError, true)
                 }
             }
         } else {
-            self.consecutiveVerifyFailures = 0
-            self.didAttemptLiveVerify = false
+            // Không có LocalDevVPN hoặc đang dùng LocalDevVPN + 4G (không có Wi-Fi):
+            // Không chạy kiểm tra ngầm, giữ trạng thái Tím ("Nhấn vào đây để kiểm tra")
+            self.didAttemptLiveVerifyInCurrentMode = false
+            self.lastVerifiedModeSignature = ""
             assignIfChanged(\.isPairingOK, false)
+            assignIfChanged(\.isPairingVerifiedError, false)
         }
 
         updateInstantStatus()
@@ -866,11 +913,24 @@ struct SystemCheckDashboardView: SwiftUI.View {
     private var systemStatusSection: some SwiftUI.View {
         let allReady = vm.isPairingOK && vm.isVpnOK && vm.isCellularOK && vm.isAnisetteOK
 
+        let pairingSubtitleText: String = {
+            switch vm.pairingVisualState {
+            case .verifiedOK:
+                return vm.tr("Ổn định", "Stable")
+            case .failedError:
+                return !vm.hasAnyStoredPairingFile
+                    ? vm.tr("Chưa có tệp Pairing", "No Pairing File")
+                    : vm.tr("Pairing lỗi • Nhấn vào để cài lại", "Pairing error • Tap to re-pair")
+            case .actionRequired:
+                return vm.tr("Nhấn vào đây để kiểm tra", "Tap here to verify")
+            }
+        }()
+
         return SkySectionCard(
             title: vm.tr("Trạng Thái Hệ Thống", "System Status"),
             icon: "cpu.fill",
             color: SkyTheme.primary,
-            statusOK: allReady
+            statusOK: allReady ? true : nil
         ) {
             CheckItemButton(
                 title: "LocalDevVPN",
@@ -878,18 +938,16 @@ struct SystemCheckDashboardView: SwiftUI.View {
                     ? vm.tr("Ổn định", "Stable")
                     : vm.tr("Chưa kết nối", "Disconnected"),
                 icon: "network.badge.shield.half.filled",
-                isStable: vm.isVpnOK
+                visualState: vm.isVpnOK ? .verifiedOK : .failedError
             ) {
                 showVpnSheet = true
             }
 
             CheckItemButton(
                 title: "Pairing File",
-                subtitle: vm.isPairingOK
-                    ? vm.tr("Ổn định", "Stable")
-                    : vm.tr("Chưa xác minh", "Unverified"),
+                subtitle: pairingSubtitleText,
                 icon: "doc.badge.gearshape.fill",
-                isStable: vm.isPairingOK
+                visualState: vm.pairingVisualState
             ) {
                 showPairingSheet = true
             }
@@ -900,7 +958,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
                     ? vm.tr("Ổn định", "Stable")
                     : vm.tr("Chưa bật", "Disabled"),
                 icon: "antenna.radiowaves.left.and.right",
-                isStable: vm.isCellularOK
+                visualState: vm.isCellularOK ? .verifiedOK : .failedError
             ) {
                 showCellularSheet = true
             }
@@ -919,7 +977,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
                     ? vm.tr("Ổn định", "Stable")
                     : vm.tr("Không ổn định", "Unstable"),
                 icon: "server.rack",
-                isStable: vm.isAnisetteOK
+                visualState: vm.isAnisetteOK ? .verifiedOK : .failedError
             ) {
                 showAnisetteSheet = true
             }
@@ -1019,7 +1077,6 @@ struct SystemCheckDashboardView: SwiftUI.View {
             color: SkyTheme.primary
         ) {
             VStack(alignment: .leading, spacing: 14) {
-                // Hộp giải thích dễ hiểu
                 HStack(alignment: .top, spacing: 10) {
                     SwiftUI.Image(systemName: "sparkles.tv.fill")
                         .font(.system(size: 20, weight: .bold))
@@ -1043,7 +1100,6 @@ struct SystemCheckDashboardView: SwiftUI.View {
                         .stroke(SkyTheme.innerBorder, lineWidth: 1)
                 )
 
-                // Khung xem video dọc tỉ lệ 9:19.5 lớn, rõ nét, bo tròn 4 góc giống iPhone 14 (47.33pt continuous)
                 IPhone14VerticalVideoFrameView(
                     videoID: "j0Ng2cYvd1o"
                 )
@@ -1056,11 +1112,9 @@ struct SystemCheckDashboardView: SwiftUI.View {
 struct IPhone14VerticalVideoFrameView: SwiftUI.View {
     let videoID: String
 
-    // Độ bo góc màn hình chuẩn của dòng iPhone 14 / 14 Pro
     private let iPhone14CornerRadius: CGFloat = 47.33
 
     var body: some SwiftUI.View {
-        // Khung máy iPhone 14 tỉ lệ 9:19.5 lớn, chiếm toàn bộ chiều rộng khả dụng để dễ nhìn và làm theo
         ZStack {
             YouTubeVerticalPlayerWebView(videoID: videoID)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1070,7 +1124,6 @@ struct IPhone14VerticalVideoFrameView: SwiftUI.View {
         .frame(maxWidth: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: iPhone14CornerRadius, style: .continuous))
         .overlay(
-            // Viền bezel bo tròn 4 góc kiểu iPhone 14
             RoundedRectangle(cornerRadius: iPhone14CornerRadius, style: .continuous)
                 .strokeBorder(
                     LinearGradient(
@@ -1109,7 +1162,6 @@ struct YouTubeVerticalPlayerWebView: UIViewRepresentable {
         webView.isOpaque = false
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
-        // Đặt User-Agent Safari iOS chuẩn để tránh bị YouTube chặn WebView
         webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
         return webView
     }
@@ -1118,7 +1170,6 @@ struct YouTubeVerticalPlayerWebView: UIViewRepresentable {
         guard context.coordinator.loadedVideoID != videoID else { return }
         context.coordinator.loadedVideoID = videoID
 
-        // Sử dụng domain hợp lệ của ứng dụng làm origin thay vì giả mạo youtube.com
         let originDomain = "https://sidestore.io"
         let embedURL = "https://www.youtube-nocookie.com/embed/\(videoID)?playsinline=1&rel=0&modestbranding=1&fs=1&enablejsapi=1&origin=\(originDomain)"
 
@@ -1165,7 +1216,6 @@ struct YouTubeVerticalPlayerWebView: UIViewRepresentable {
         </html>
         """
 
-        // QUAN TRỌNG: Không dùng https://www.youtube.com làm baseURL vì sẽ gây lỗi 152-4
         uiView.loadHTMLString(embedHTML, baseURL: URL(string: originDomain))
     }
 
@@ -1326,19 +1376,74 @@ struct CheckItemButton: SwiftUI.View {
     let title: String
     let subtitle: String
     let icon: String
-    let isStable: Bool
+    let visualState: CheckItemVisualState
     let action: () -> Void
+
+    private var iconContainerColor: SwiftUI.Color {
+        switch visualState {
+        case .verifiedOK:
+            return SkyTheme.primary.opacity(0.14)
+        case .actionRequired:
+            return SkyTheme.neutralInspect.opacity(0.14)
+        case .failedError:
+            return SwiftUI.Color.red.opacity(0.12)
+        }
+    }
+
+    private var iconForegroundColor: SwiftUI.Color {
+        switch visualState {
+        case .verifiedOK:
+            return SkyTheme.primary
+        case .actionRequired:
+            return SkyTheme.neutralInspect
+        case .failedError:
+            return .red
+        }
+    }
+
+    private var subtitleForegroundColor: SwiftUI.Color {
+        switch visualState {
+        case .verifiedOK:
+            return .secondary
+        case .actionRequired:
+            return SkyTheme.neutralInspect
+        case .failedError:
+            return .secondary
+        }
+    }
+
+    private var trailingStatusIconName: String {
+        switch visualState {
+        case .verifiedOK:
+            return "checkmark.circle.fill"
+        case .actionRequired:
+            return "doc.text.magnifyingglass"
+        case .failedError:
+            return "xmark.circle.fill"
+        }
+    }
+
+    private var trailingStatusColor: SwiftUI.Color {
+        switch visualState {
+        case .verifiedOK:
+            return .green
+        case .actionRequired:
+            return SkyTheme.neutralInspect
+        case .failedError:
+            return .red
+        }
+    }
 
     var body: some SwiftUI.View {
         SwiftUI.Button(action: action) {
             HStack(spacing: 13) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .fill(isStable ? SkyTheme.primary.opacity(0.14) : SwiftUI.Color.red.opacity(0.12))
+                        .fill(iconContainerColor)
                         .frame(width: 46, height: 46)
                     SwiftUI.Image(systemName: icon)
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(isStable ? SkyTheme.primary : .red)
+                        .foregroundColor(iconForegroundColor)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -1346,17 +1451,17 @@ struct CheckItemButton: SwiftUI.View {
                         .font(.system(size: 16.5, weight: .semibold, design: .rounded))
                         .foregroundColor(.primary)
                     SwiftUI.Text(subtitle)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 13, weight: visualState == .actionRequired ? .bold : .medium, design: .rounded))
+                        .foregroundColor(subtitleForegroundColor)
                         .lineLimit(1)
                 }
 
                 Spacer()
 
-                SwiftUI.Image(systemName: isStable ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .font(.system(size: 22))
-                    .foregroundColor(isStable ? .green : .red)
-                    .animation(.spring(), value: isStable)
+                SwiftUI.Image(systemName: trailingStatusIconName)
+                    .font(.system(size: 21, weight: .semibold))
+                    .foregroundColor(trailingStatusColor)
+                    .animation(.spring(), value: visualState)
 
                 SwiftUI.Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .bold))
@@ -1367,7 +1472,12 @@ struct CheckItemButton: SwiftUI.View {
             .cornerRadius(16)
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(SkyTheme.innerBorder, lineWidth: 1)
+                    .stroke(
+                        visualState == .actionRequired
+                        ? SkyTheme.neutralInspect.opacity(0.35)
+                        : SkyTheme.innerBorder,
+                        lineWidth: 1
+                    )
             )
         }
         .buttonStyle(PlainButtonStyle())
@@ -1560,15 +1670,15 @@ struct PairingGuideSheetView: SwiftUI.View {
 
                     if let banner = statusBannerMessage {
                         HStack(spacing: 10) {
-                            SwiftUI.Image(systemName: "checkmark.seal.fill")
-                                .foregroundColor(SkyTheme.primary)
+                            SwiftUI.Image(systemName: vm.isPairingOK ? "checkmark.seal.fill" : "info.circle.fill")
+                                .foregroundColor(vm.isPairingOK ? .green : SkyTheme.primary)
                             SwiftUI.Text(banner)
                                 .font(.footnote.bold())
                                 .foregroundColor(.primary)
                             Spacer()
                         }
                         .padding(12)
-                        .background(SkyTheme.primary.opacity(0.12))
+                        .background((vm.isPairingOK ? SwiftUI.Color.green : SkyTheme.primary).opacity(0.12))
                         .cornerRadius(14)
                         .overlay(
                             RoundedRectangle(cornerRadius: 14)
@@ -1582,7 +1692,7 @@ struct PairingGuideSheetView: SwiftUI.View {
                 .padding(16)
             }
             .background(SkyTheme.pageBackground.ignoresSafeArea())
-            .navigationTitle(vm.tr("Mục Cài Pairing", "Pairing Setup Section"))
+            .navigationTitle(vm.tr("Kiểm Tra Pairing", "Pairing Verification"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -1636,8 +1746,8 @@ struct PairingGuideSheetView: SwiftUI.View {
                     await vm.checkAllStatuses(forceVerify: true)
                     if case .success = result {
                         statusBannerMessage = vm.tr(
-                            "Đã nạp tệp Pairing! Hãy làm theo 2 bước bên trên (Bật LocalDevVPN + Tắt Wi-Fi và 4G) để kiểm tra.",
-                            "Pairing file imported! Follow the 2 steps above (Turn ON LocalDevVPN + Turn OFF Wi-Fi & 4G) to verify."
+                            "Đã nạp tệp Pairing thành công!",
+                            "Pairing file imported successfully!"
                         )
                     }
                 }
@@ -1678,8 +1788,8 @@ struct PairingGuideSheetView: SwiftUI.View {
                         vm.markPairingVerifiedImmediately()
                         await vm.checkAllStatuses(forceVerify: true)
                         statusBannerMessage = vm.tr(
-                            "Đã cài và nạp Pairing! Hãy làm theo 2 bước kiểm tra phía trên (Bật LocalDevVPN + Tắt Wi-Fi & 4G) để xác minh Tích xanh.",
-                            "Pairing installed! Follow the 2 steps above (Turn ON LocalDevVPN + Turn OFF Wi-Fi & 4G) to verify Green Check."
+                            "Đã cài và nạp Pairing thành công!",
+                            "Pairing installed and activated successfully!"
                         )
                     }
                 }
@@ -1688,25 +1798,57 @@ struct PairingGuideSheetView: SwiftUI.View {
     }
 
     private var statusHeaderCard: some SwiftUI.View {
-        HStack(spacing: 12) {
+        let state = vm.pairingVisualState
+
+        let badgeColor: SwiftUI.Color = {
+            switch state {
+            case .verifiedOK: return .green
+            case .actionRequired: return SkyTheme.neutralInspect
+            case .failedError: return .red
+            }
+        }()
+
+        let badgeIcon: String = {
+            switch state {
+            case .verifiedOK: return "checkmark.circle.fill"
+            case .actionRequired: return "doc.text.magnifyingglass"
+            case .failedError: return "xmark.circle.fill"
+            }
+        }()
+
+        let headerTitle: String = {
+            switch state {
+            case .verifiedOK:
+                return vm.tr("Pairing Hoạt Động Tốt (Tích Xanh)", "Pairing Verified & Ready (Green Check)")
+            case .actionRequired:
+                return vm.tr("Đang Chờ Xác Minh Pairing", "Waiting for Pairing Verification")
+            case .failedError:
+                return !vm.hasAnyStoredPairingFile
+                    ? vm.tr("Chưa Có Tệp Pairing (Tích Đỏ)", "No Pairing File Found (Red X)")
+                    : vm.tr("Pairing Lỗi Hoặc Hết Hạn (Tích Đỏ)", "Pairing Invalid or Expired (Red X)")
+            }
+        }()
+
+        return HStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(vm.isPairingOK ? SwiftUI.Color.green.opacity(0.15) : SwiftUI.Color.red.opacity(0.15))
-                    .frame(width: 46, height: 46)
-                SwiftUI.Image(systemName: vm.isPairingOK ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .font(.system(size: 24))
-                    .foregroundColor(vm.isPairingOK ? .green : .red)
+                    .fill(badgeColor.opacity(0.15))
+                    .frame(width: 48, height: 48)
+                SwiftUI.Image(systemName: badgeIcon)
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(badgeColor)
             }
-            VStack(alignment: .leading, spacing: 3) {
-                SwiftUI.Text(
-                    vm.isPairingOK
-                    ? vm.tr("Pairing Hoạt Động Tốt (Tích Xanh)", "Pairing Verified & Ready (Green Check)")
-                    : vm.tr("Chưa Xác Minh (Tích Đỏ)", "Unverified (Red X)")
-                )
-                .font(.headline)
-                SwiftUI.Text(vm.pairingProtocol)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                SwiftUI.Text(headerTitle)
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .foregroundColor(.primary)
+
+                if state != .actionRequired && !vm.pairingProtocol.isEmpty {
+                    SwiftUI.Text(vm.pairingProtocol)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             Spacer()
         }
@@ -1715,7 +1857,7 @@ struct PairingGuideSheetView: SwiftUI.View {
         .cornerRadius(18)
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(SkyTheme.border, lineWidth: 1)
+                .stroke(badgeColor.opacity(0.35), lineWidth: 1.2)
         )
     }
 
@@ -1726,8 +1868,8 @@ struct PairingGuideSheetView: SwiftUI.View {
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(SkyTheme.primary)
                 SwiftUI.Text(vm.tr(
-                    "2 Bước Kiểm Tra Pairing Chính Xác:",
-                    "2 Steps for Accurate Pairing Verification:"
+                    "3 Bước Kiểm Tra Pairing Chính Xác:",
+                    "3 Steps for Accurate Pairing Verification:"
                 ))
                 .font(.system(size: 16, weight: .bold, design: .rounded))
                 .foregroundColor(.primary)
@@ -1736,78 +1878,31 @@ struct PairingGuideSheetView: SwiftUI.View {
             VStack(alignment: .leading, spacing: 10) {
                 GuideStepRow(
                     num: "1",
-                    title: vm.tr("Bật LocalDevVPN", "Turn ON LocalDevVPN"),
+                    title: vm.tr("Kết nối mạng trên iPhone", "Connect iPhone to Network"),
                     text: LocalizedStringKey(vm.tr(
-                        "Mở ứng dụng **LocalDevVPN** và bật kết nối VPN.",
-                        "Open **LocalDevVPN** and turn ON the VPN connection."
+                        "Đảm bảo iPhone của bạn đang có kết nối **Wi-Fi** hoặc **4G**.",
+                        "Make sure your iPhone is connected to **Wi-Fi** or **4G**."
                     ))
                 )
 
                 GuideStepRow(
                     num: "2",
-                    title: vm.tr("Tắt cả Wi-Fi và 4G", "Turn OFF both Wi-Fi and 4G"),
+                    title: vm.tr("Bật LocalDevVPN", "Turn ON LocalDevVPN"),
                     text: LocalizedStringKey(vm.tr(
-                        "Tắt **Wi-Fi** và **Dữ liệu di động (4G/5G)** để ứng dụng kết nối thẳng vào thiết bị đã ghép nối qua **LocalDevVPN**.",
-                        "Turn OFF **Wi-Fi** and **Cellular Data (4G/5G)** so the app connects directly to the paired device via **LocalDevVPN**."
+                        "Mở ứng dụng **LocalDevVPN** và bật kết nối VPN lên.",
+                        "Open **LocalDevVPN** and turn ON the VPN connection."
+                    ))
+                )
+
+                GuideStepRow(
+                    num: "3",
+                    title: vm.tr("Tắt cả Wi-Fi và 4G (Chỉ bật LocalDevVPN)", "Turn OFF Wi-Fi & 4G (Keep Only LocalDevVPN)"),
+                    text: LocalizedStringKey(vm.tr(
+                        "Tắt cả **Wi-Fi** và **4G**, chỉ để lại mỗi **LocalDevVPN** đang bật. Sau đó nhìn lên mục **“Đang Chờ Xác Minh Pairing”** ở phía trên sẽ tự động hiện **Tích Xanh** (hoạt động tốt) hoặc **Tích Đỏ** (bị lỗi / cần cài lại).",
+                        "Turn OFF both **Wi-Fi** and **4G**, leaving only **LocalDevVPN** enabled. Then check the **“Waiting for Pairing Verification”** box above to see if it turns into a **Green Check** (working) or **Red X** (invalid / re-pair needed)."
                     ))
                 )
             }
-
-            Divider()
-                .padding(.vertical, 4)
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 11) {
-                    SwiftUI.Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundColor(.green)
-
-                    SwiftUI.Text(LocalizedStringKey(vm.tr(
-                        "**Tích xanh:** Pairing hoạt động tốt và ổn định.",
-                        "**Green Check:** Pairing is active and working properly."
-                    )))
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundColor(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 13)
-                .padding(.vertical, 11)
-       
-                .background(SwiftUI.Color.green.opacity(0.12))
-                .cornerRadius(13)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .stroke(SwiftUI.Color.green.opacity(0.35), lineWidth: 1)
-                )
-
-                HStack(spacing: 11) {
-                    SwiftUI.Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundColor(.red)
-
-                    SwiftUI.Text(LocalizedStringKey(vm.tr(
-                        "**Tích đỏ:** Pairing bị lỗi hoặc đã hết hạn (cần cài lại).",
-                        "**Red X:** Pairing is invalid or expired (please re-pair)."
-                    )))
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundColor(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 13)
-                .padding(.vertical, 11)
-                .background(SwiftUI.Color.red.opacity(0.12))
-                .cornerRadius(13)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .stroke(SwiftUI.Color.red.opacity(0.35), lineWidth: 1)
-                )
-            }
-            .padding(.top, 3)
-            .padding(.bottom, 2)
         }
         .padding(16)
         .background(SkyTheme.cardHeaderBackground)

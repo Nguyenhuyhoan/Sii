@@ -257,14 +257,18 @@ public extension UserDefaults
         get { self.bool(forKey: "autoFixAppGroupIDs") }
         set { self.set(newValue, forKey: "autoFixAppGroupIDs") }
     }
+    
+    // ĐÃ SỬA: Ép cứng về false để không nén lại IPA, cài thẳng .app
     @objc var preferResignedIPA: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false }
+        set { self.set(false, forKey: #function) }
     }
+    // ĐÃ SỬA: Ép cứng về false để không chạy bước nén IPA xuất file
     @objc var isExportResignedAppEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false }
+        set { self.set(false, forKey: #function) }
     }
+    
     @objc var isVerboseOperationsLoggingEnabled: Bool {
         get { false }
         set { self.set(false, forKey: #function) }
@@ -551,8 +555,11 @@ public extension UserDefaults
             #keyPath(UserDefaults.isInstallConfirmationEnabled): true,
             #keyPath(UserDefaults.isClearCustomizationsOnUninstallEnabled): true,
             #keyPath(UserDefaults.isAutoLaunchAppAfterInstallEnabled): false,
-            #keyPath(UserDefaults.preferResignedIPA): true,
+            
+            // ĐÃ SỬA: Đặt mặc định là false
+            #keyPath(UserDefaults.preferResignedIPA): false,
             #keyPath(UserDefaults.isExportResignedAppEnabled): false,
+            
             #keyPath(UserDefaults.isVerboseOperationsLoggingEnabled): false,
             #keyPath(UserDefaults.isSideStoreVerboseLoggingEnabled): false,
             #keyPath(UserDefaults.isAltSignVerboseLoggingEnabled): false,

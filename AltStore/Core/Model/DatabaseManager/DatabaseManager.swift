@@ -7,7 +7,6 @@
 //
 
 import CoreData
-
 import SideSign
 
 extension CFNotificationName
@@ -32,10 +31,6 @@ public class DatabaseManager: @unchecked Sendable
     }
     
     private var startTask: Task<Void, Error>?
-    
-    private let coordinator = NSFileCoordinator()
-    private let coordinatorQueue = OperationQueue()
-    
     private var ignoreWillMigrateDatabaseNotification = false
 
     private init()
@@ -49,22 +44,17 @@ public class DatabaseManager: @unchecked Sendable
     
     public class func deleteDatabase() -> Bool
     {
-        // delete existing database and start fresh if required
         do {
             let container = Self.shared.persistentContainer
-            
-            var databaseStore = container.persistentStoreCoordinator.persistentStores.first
+            let databaseStore = container.persistentStoreCoordinator.persistentStores.first
             let databaseStoreURL = databaseStore?.url ?? PersistentContainer.defaultDirectoryURL().appendingPathComponent(AppConstants.Database.fileName)
             
-            // Reset the managed object context
             Self.shared.persistentContainer.viewContext.reset()
 
-            // Remove all existing persistent stores
             for store in Self.shared.persistentContainer.persistentStoreCoordinator.persistentStores {
                 try? Self.shared.persistentContainer.persistentStoreCoordinator.remove(store)
             }
 
-            // Now destroy the persistent store
             if FileManager.default.fileExists(atPath: databaseStoreURL.path) {
                 try Self.shared.persistentContainer.persistentStoreCoordinator.destroyPersistentStore(
                     at: databaseStoreURL,
@@ -73,20 +63,14 @@ public class DatabaseManager: @unchecked Sendable
                 )
                 try? FileManager.default.removeItem(at: databaseStoreURL)
             }
-                
-            debugLog("\nDatabase Delete: SUCCEEDED\n")
             return true
         } catch {
-            debugLog("\nDatabase Delete request FAILED: \(error)\n")
             return false
         }
     }
     
     public class func recreateDatabase() {
-        // Try to perform delete if one exists
         _ = Self.deleteDatabase()
-        
-        // create new instance and load persistence store
         Self.shared = DatabaseManager()
     }
 
@@ -110,12 +94,10 @@ public class DatabaseManager: @unchecked Sendable
         }
     }
 
-
     private func performStart() async throws
     {
         if self.persistentContainer.isMigrationRequired
         {
-            // Quit any other running AltStore processes to prevent concurrent database access during and after migration.
             self.ignoreWillMigrateDatabaseNotification = true
             CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), .willMigrateDatabase, nil, nil, true)
         }
@@ -134,50 +116,11 @@ public class DatabaseManager: @unchecked Sendable
         }
     }
 
-    
     public func updateFeaturedSortIDs() async
     {
-        let context = DatabaseManager.shared.persistentContainer.newBackgroundContext()
-        context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy // DON'T use our custom merge policy, because that one ignores changes to featuredSortID.
-        await context.performAsync {
-            do
-            {
-                // Randomize source order
-                let fetchRequest = Source.fetchRequest()
-                let sources = try context.fetch(fetchRequest)
-                
-                for source in sources
-                {
-                    source.featuredSortID = UUID().uuidString
-                }
-                
-                try context.save()
-            }
-            catch
-            {
-                debugLog("Failed to update source order. \(error.localizedDescription)")
-            }
-            
-            do
-            {
-                // Randomize app order
-                let fetchRequest = StoreApp.fetchRequest()
-                let apps = try context.fetch(fetchRequest)
-                
-                for app in apps
-                {
-                    app.featuredSortID = UUID().uuidString
-                }
-                
-                try context.save()
-            }
-            catch
-            {
-                debugLog("Failed to update app order. \(error.localizedDescription)")
-            }
-        }
+        // ĐÃ TẮT HOÀN TOÀN: Không bao giờ lôi toàn bộ Nguồn và App trong DB ra gán lại UUID ngẫu nhiên rồi save() nữa!
+        return
     }
-
 
     public var viewContext: NSManagedObjectContext {
         return self.persistentContainer.viewContext
@@ -186,17 +129,13 @@ public class DatabaseManager: @unchecked Sendable
     public func activeAccount(in context: NSManagedObjectContext) -> Account?
     {
         let predicate = NSPredicate(format: "%K == YES", #keyPath(Account.isActiveAccount))
-        
-        let activeAccount = Account.first(satisfying: predicate, in: context)
-        return activeAccount
+        return Account.first(satisfying: predicate, in: context)
     }
     
     public func activeTeam(in context: NSManagedObjectContext) -> Team?
     {
         let predicate = NSPredicate(format: "%K == YES", #keyPath(Team.isActiveTeam))
-        
-        let activeTeam = Team.first(satisfying: predicate, in: context)
-        return activeTeam
+        return Team.first(satisfying: predicate, in: context)
     }
 
     private func prepareDatabase() async throws
@@ -214,44 +153,29 @@ public class DatabaseManager: @unchecked Sendable
             #endif
             
             let altStoreSource: Source
-            
-            if let source = Source.first(satisfying: NSPredicate(format: "%K == %@", #keyPath(Source.identifier), Source.altStoreIdentifier), in: context)
-            {
+            if let source = Source.first(satisfying: NSPredicate(format: "%K == %@", #keyPath(Source.identifier), Source.altStoreIdentifier), in: context) {
                 altStoreSource = source
-            }
-            else
-            {
+            } else {
                 altStoreSource = Source.makeAltStoreSource(in: context)
             }
             
-            // Make sure to always update source URL to be current.
             try! altStoreSource.setSourceURL(Source.altStoreSourceURL)
             
             let storeApp: StoreApp
-            
-            if let app = StoreApp.first(satisfying: NSPredicate(format: "%K == %@", #keyPath(StoreApp.bundleIdentifier), StoreApp.altstoreAppID), in: context)
-            {
+            if let app = StoreApp.first(satisfying: NSPredicate(format: "%K == %@", #keyPath(StoreApp.bundleIdentifier), StoreApp.altstoreAppID), in: context) {
                 storeApp = app
-            }
-            else
-            {
+            } else {
                 storeApp = StoreApp.makeAltStoreApp(version: localAppBundle.version, buildVersion: nil, in: context)
                 storeApp.source = altStoreSource
             }
                         
-            let serialNumber = CertificateManager.shared.getSigningCertificate(at: Bundle.Info.activeBundleURL)?.serialNumber
+            let serialNumber = CertificateManager.shared.activeCertificate?.serialNumber
+                ?? CertificateManager.shared.getSigningCertificate(at: Bundle.Info.activeBundleURL)?.serialNumber
             
             let installedApp: InstalledApp
-            
-            if let app = storeApp.installedApp
-            {
+            if let app = storeApp.installedApp {
                 installedApp = app
-            }
-            else
-            {
-                //TODO: Support build versions.
-                // For backwards compatibility reasons, we cannot use localApp's buildVersion as storeBuildVersion,
-                // or else the latest update will _always_ be considered new because we don't use buildVersions in our source (yet).
+            } else {
                 installedApp = try InstalledApp(
                     resignedAppBundle: localAppBundle,
                     originalBundleIdentifier: StoreApp.altstoreAppID,
@@ -260,19 +184,11 @@ public class DatabaseManager: @unchecked Sendable
                     context: context
                 )
                 
-                // figure out if the current AltStoreApp is signed with "Use Main Profie" option
-                // by checking if the first extension's entitlement's application-identifier matches current one
                 repeat {
-                    guard let pluginURL = Bundle.main.builtInPlugInsURL else {
-                        installedApp.useMainProfile = true
-                        break
-                    }
-                    guard let pluginFolders = try? FileManager.default.contentsOfDirectory(at: pluginURL, includingPropertiesForKeys: nil) else {
-                        installedApp.useMainProfile = true
-                        break
-                    }
-                    
-                    guard let pluginFolder = pluginFolders.first, let altPluginAppBundle = ALTApplication(fileURL: pluginFolder) else {
+                    guard let pluginURL = Bundle.main.builtInPlugInsURL,
+                          let pluginFolders = try? FileManager.default.contentsOfDirectory(at: pluginURL, includingPropertiesForKeys: nil),
+                          let pluginFolder = pluginFolders.first,
+                          let altPluginAppBundle = ALTApplication(fileURL: pluginFolder) else {
                         installedApp.useMainProfile = true
                         break
                     }
@@ -280,21 +196,13 @@ public class DatabaseManager: @unchecked Sendable
                     let entitlements = altPluginAppBundle.entitlements
                     guard let appId = entitlements[ALTEntitlement.applicationIdentifier] as? String else {
                         installedApp.useMainProfile = false
-                        debugLog("no ALTEntitlementApplicationIdentifier???")
                         break
                     }
                     
-                    if appId.hasSuffix(Bundle.Info.activeBundleIdentifier) {
-                        installedApp.useMainProfile = true
-                    } else {
-                        installedApp.useMainProfile = false
-                    }
-                    
-                    
+                    installedApp.useMainProfile = appId.hasSuffix(Bundle.Info.activeBundleIdentifier)
                 } while(false)
                 
                 installedApp.storeApp = storeApp
-                // Persist the release track for newly created self-app entries
                 if installedApp.releaseTrack == nil,
                    let trackEntity = storeApp.latestSupportedVersion?.releaseTrack {
                     installedApp.releaseTrack = trackEntity
@@ -303,119 +211,76 @@ public class DatabaseManager: @unchecked Sendable
             
             /* App Extensions */
             var installedExtensions = Set<InstalledExtension>()
-            
             for appExtension in localAppBundle.appExtensions
             {
                 let resignedBundleID = appExtension.bundleIdentifier
                 let originalBundleID = resignedBundleID.replacingOccurrences(of: localAppBundle.bundleIdentifier, with: StoreApp.altstoreAppID)
                 
                 let installedExtension: InstalledExtension
-                
-                if let appExtension = installedApp.appExtensions.first(where: { $0.bundleIdentifier == originalBundleID })
-                {
-                    installedExtension = appExtension
-                }
-                else
-                {
+                if let existing = installedApp.appExtensions.first(where: { $0.bundleIdentifier == originalBundleID }) {
+                    installedExtension = existing
+                } else {
                     installedExtension = try InstalledExtension(resignedAppExtensionBundle: appExtension, originalBundleIdentifier: originalBundleID, context: context)
                 }
-                
                 installedExtension.update(resignedAppExtensionBundle: appExtension)
-                
                 installedExtensions.insert(installedExtension)
             }
-            
             installedApp.appExtensions = installedExtensions
             
-            let bundleURL = Bundle.Info.activeBundleURL
-            let altstoreAppID = StoreApp.altstoreAppID
-            let extensionBundleIDMap = installedExtensions.reduce(into: [String: String]()) { dict, ext in
-                dict[ext.resignedBundleIdentifier] = ext.bundleIdentifier
-            }
-            
-            FileManager.default.prepareTemporaryURL { temporaryFileURL in
-                do {
-                    try FileManager.default.copyItem(at: bundleURL, to: temporaryFileURL)
-                    
-                    guard let tempAppBundle = ALTApplication(fileURL: temporaryFileURL) else { throw ALTError(.invalidApp) }
-                    try tempAppBundle.updateInfoPlist(with: [kCFBundleIdentifierKey as String: altstoreAppID])
-                    
-                    for appExtension in tempAppBundle.appExtensions {
-                        guard let originalBundleID = extensionBundleIDMap[appExtension.bundleIdentifier] else { throw ALTError(.invalidApp) }
-                        try appExtension.updateInfoPlist(with: [kCFBundleIdentifierKey as String: originalBundleID])
-                    }
-                    
-                    let (signature, _) = try CacheAppOperation.cachePayload(for: temporaryFileURL)
-                    installedApp.appBundleFingerprint = signature
-                } catch {
-                    debugLog("Failed to cache SideStore app bundle: \(error)")
+            // ĐÃ XÓA BỎ HOÀN TOÀN ĐOẠN COPY BỘ CÀI SIDESTORE RA THƯ MỤC TẠM VÀ BĂM LẠI MỖI KHI MỞ APP!
+            // Chỉ thực hiện đúng 1 lần duy nhất nếu chưa từng có fingerprint hoặc vừa cập nhật phiên bản SideStore mới:
+            if installedApp.appBundleFingerprint == nil || installedApp.version != localAppBundle.version {
+                let bundleURL = Bundle.Info.activeBundleURL
+                let altstoreAppID = StoreApp.altstoreAppID
+                let extensionBundleIDMap = installedExtensions.reduce(into: [String: String]()) { dict, ext in
+                    dict[ext.resignedBundleIdentifier] = ext.bundleIdentifier
+                }
+                
+                FileManager.default.prepareTemporaryURL { temporaryFileURL in
+                    do {
+                        try FileManager.default.copyItem(at: bundleURL, to: temporaryFileURL)
+                        guard let tempAppBundle = ALTApplication(fileURL: temporaryFileURL) else { throw ALTError(.invalidApp) }
+                        try tempAppBundle.updateInfoPlist(with: [kCFBundleIdentifierKey as String: altstoreAppID])
+                        for appExtension in tempAppBundle.appExtensions {
+                            guard let originalBundleID = extensionBundleIDMap[appExtension.bundleIdentifier] else { throw ALTError(.invalidApp) }
+                            try appExtension.updateInfoPlist(with: [kCFBundleIdentifierKey as String: originalBundleID])
+                        }
+                        let (signature, _) = try CacheAppOperation.cachePayload(for: temporaryFileURL)
+                        installedApp.appBundleFingerprint = signature
+                    } catch {}
                 }
             }
             
             let cachedRefreshedDate = installedApp.refreshedDate
             let cachedExpirationDate = installedApp.expirationDate
                         
-            // Must go after comparing versions to see if we need to update our cached AltStore app bundle.
             self.reconcileSelfFromSelfBinary(installedApp: installedApp, localAppBundle: localAppBundle, serialNumber: serialNumber)
             
             if installedApp.refreshedDate < cachedRefreshedDate
             {
-                // Embedded provisioning profile has a creation date older than our refreshed date.
-                // This most likely means we've refreshed the app since then, and profile is now outdated,
-                // so use cached dates instead (i.e. not the dates updated from provisioning profile).
-                
                 installedApp.refreshedDate = cachedRefreshedDate
                 installedApp.expirationDate = cachedExpirationDate
             }
             
-            try context.save()
+            if context.hasChanges {
+                try context.save()
+            }
         }
-        
-        await self.updateFeaturedSortIDs()
     }
     
     private func reconcileSelfFromSelfBinary(installedApp: InstalledApp, localAppBundle: ALTApplication, serialNumber: String?) {
-        debugLog("[DatabaseManager] reconcileSelfFromSelfBinary: Started for '\(localAppBundle.name)' (\(localAppBundle.bundleIdentifier)).")
-        var binaryCertSerial: String? = nil
-        defer {
-            debugLog("""
-            [DatabaseManager] reconcileSelfFromSelfBinary: Completed
-              • name: '\(installedApp.name)'
-              • bundleID: '\(installedApp.bundleIdentifier)'
-              • version: '\(installedApp.version)'
-              • buildVersion: '\(installedApp.buildVersion)'
-              • refreshedDate: \(installedApp.refreshedDate)
-              • expirationDate: \(installedApp.expirationDate)
-              • installCertSerial: '\(installedApp.certificateSerialNumber ?? "nil")'
-              • binaryCertSerial: '\(binaryCertSerial ?? "nil")'
-              • binaryCertStatus: \(installedApp.certificateStatus)
-            
-            """)
-        }
-        
         installedApp.name = localAppBundle.name
         installedApp.resignedBundleIdentifier = localAppBundle.bundleIdentifier
         installedApp.version = localAppBundle.version
         installedApp.buildVersion = localAppBundle.buildVersion
         
-        var status: CertificateStatus = .valid(isCrossSigned: false)
-        if let binaryCert = CertificateManager.shared.getSigningCertificate(at: localAppBundle.fileURL) {
-            binaryCertSerial = binaryCert.serialNumber
-            CertificateManager.shared.saveX509Certificate(binaryCert)
-            if binaryCert.expiryDate <= Date() {
-                status = .expired
-            }
-        }
-        
-        let effectiveSerial = binaryCertSerial ?? serialNumber
+        // TỐI ƯU: Không đọc và phân tích lại file nhị phân Mach-O lần thứ 2 nữa, dùng luôn serialNumber đã lấy ở trên!
+        let effectiveSerial = serialNumber
         installedApp.certificateSerialNumber = effectiveSerial
         
         let activeKeychainSerial = CertificateManager.shared.activeCertificate?.serialNumber
         let isCross = (activeKeychainSerial != nil && !activeKeychainSerial!.isEmpty && effectiveSerial != nil && effectiveSerial != activeKeychainSerial)
-        if case .valid = status {
-            status = .valid(isCrossSigned: isCross)
-        }
-        installedApp.certificateStatus = status
+        installedApp.certificateStatus = .valid(isCrossSigned: isCross)
         
         if let provisioningProfile = localAppBundle.provisioningProfile {
             installedApp.refreshedDate = provisioningProfile.creationDate
@@ -426,10 +291,7 @@ public class DatabaseManager: @unchecked Sendable
     fileprivate func receivedWillMigrateDatabaseNotification()
     {
         defer { self.ignoreWillMigrateDatabaseNotification = false }
-
-        // Ignore notifications sent by the current process.
         guard !self.ignoreWillMigrateDatabaseNotification else { return }
-
         exit(104)
     }
 }

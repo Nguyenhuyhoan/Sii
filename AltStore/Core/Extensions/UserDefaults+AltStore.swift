@@ -97,11 +97,11 @@ public extension UserDefaults
     }
     
     @objc var isBackgroundRefreshEnabled: Bool {
-        get { false } // ĐÃ KHÓA CỨNG: Luôn tắt làm mới ngầm
+        get { false }
         set { self.set(false, forKey: #function) }
     }
     @objc var isBackgroundServiceEnabled: Bool {
-        get { false } // ĐÃ KHÓA CỨNG: Luôn tắt dịch vụ chạy ngầm 24/7 hút pin
+        get { false }
         set { self.set(false, forKey: #function) }
     }
     var backgroundServiceMode: BackgroundServiceMode {
@@ -167,7 +167,7 @@ public extension UserDefaults
         set { self.set(newValue, forKey: #function) }
     }
     @objc var isIdleTimeoutDisableEnabled: Bool {
-        get { false } // ĐÃ KHÓA CỨNG: Không cho phép ép sáng màn hình liên tục gây nóng máy
+        get { false }
         set { self.set(false, forKey: #function) }
     }
     @objc var isAppLimitDisabled: Bool {
@@ -175,7 +175,7 @@ public extension UserDefaults
         set { self.set(newValue, forKey: #function) }
     }
     @objc var isRotateLogsOnStartupEnabled: Bool {
-        get { false } // ĐÃ KHÓA CỨNG: Luôn tắt xoay vòng file log lúc khởi động
+        get { false }
         set { self.set(false, forKey: #function) }
     }
     @objc var freeAcctAppIdDeletion: Bool {
@@ -183,8 +183,8 @@ public extension UserDefaults
         set { self.set(newValue, forKey: #function) }
     }
     @objc var isBetaUpdatesEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false }
+        set { self.set(false, forKey: #function) }
     }
     @objc var customizeInfoPlist: Bool {
         get { self.bool(forKey: #function) }
@@ -266,19 +266,19 @@ public extension UserDefaults
         set { self.set(newValue, forKey: #function) }
     }
     @objc var isVerboseOperationsLoggingEnabled: Bool {
-        get { false } // ĐÃ KHÓA CỨNG: Luôn tắt log chi tiết
+        get { false }
         set { self.set(false, forKey: #function) }
     }
     @objc var isAltSignVerboseLoggingEnabled: Bool {
-        get { false } // ĐÃ KHÓA CỨNG: Luôn tắt log chi tiết
+        get { false }
         set { self.set(false, forKey: #function) }
     }
     @objc var isSideStoreVerboseLoggingEnabled: Bool {
-        get { false } // ĐÃ KHÓA CỨNG: Luôn tắt log chi tiết
+        get { false }
         set { self.set(false, forKey: #function) }
     }
     @objc var isMinimuxerVerboseLoggingEnabled: Bool {
-        get { false } // ĐÃ KHÓA CỨNG: Luôn tắt log chi tiết
+        get { false }
         set { self.set(false, forKey: #function) }
     }
     @objc var isMinimuxerBackendHotswapEnabled: Bool {
@@ -358,8 +358,8 @@ public extension UserDefaults
         set { self.set(newValue, forKey: #function) }
     }
     @objc var isDebugModeEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false }
+        set { self.set(false, forKey: #function) }
     }
     @objc var presentedLaunchReminderNotification: Bool {
         get { self.bool(forKey: #function) }
@@ -421,12 +421,12 @@ public extension UserDefaults
         set { self.set(newValue, forKey: #function) }
     }
     @objc var isChecksumVerificationEnabled: Bool {
-        get { false } // ĐÃ KHÓA CỨNG: Luôn bỏ qua việc băm kiểm tra lại file IPA để cài đặt nhanh nhất
+        get { false }
         set { self.set(false, forKey: #function) }
     }
     @objc var isFileSizeVerificationEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false }
+        set { self.set(false, forKey: #function) }
     }
     @objc var appVerificationDisabled: Bool {
         get { self.bool(forKey: #function) }
@@ -578,10 +578,8 @@ public extension UserDefaults
     }
     
     static func enableGlobalLogging() {
-        // ĐÃ TẮT HOÀN TOÀN: Không đánh tráo (swizzle) các hàm của UserDefaults nữa!
     }
     
     static func dumpAllSettingsOnBoot() {
-        // ĐÃ TẮT HOÀN TOÀN: Không chuyển đổi JSON và in toàn bộ cài đặt lúc mở máy nữa!
     }
 }

@@ -1,5 +1,3 @@
-// AltStore/Core/Extensions/UserDefaults+AltStore.swift:
-
 //
 //  UserDefaults+AltStore.swift
 //  AltStore
@@ -97,14 +95,13 @@ public extension UserDefaults
         set { self.set(newValue, forKey: #function) }
     }
     
-    // 1. KHOÁ TẮT CHẠY NGẦM ĐỂ CHỐNG NÓNG MÁY & HAO PIN QUA ĐÊM
     @objc var isBackgroundRefreshEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
+        get { self.bool(forKey: #function) }
+        set { self.set(newValue, forKey: #function) }
     }
     @objc var isBackgroundServiceEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
+        get { self.bool(forKey: #function) }
+        set { self.set(newValue, forKey: #function) }
     }
     var backgroundServiceMode: BackgroundServiceMode {
         get {
@@ -135,11 +132,9 @@ public extension UserDefaults
         get { self.integer(forKey: #function) }
         set { self.set(newValue, forKey: #function) }
     }
-    
-    // 2. KHOÁ TẮT TỰ ĐỘNG QUÉT BONJOUR NGẦM
     @objc var isAutoRetryRemotePairingPortEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
+        get { self.bool(forKey: #function) }
+        set { self.set(newValue, forKey: #function) }
     }
     @objc var isInstallConfirmationEnabled: Bool {
         get {
@@ -179,8 +174,13 @@ public extension UserDefaults
         set { self.set(newValue, forKey: #function) }
     }
     @objc var isRotateLogsOnStartupEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
+        get {
+            if self.object(forKey: #function) == nil {
+                return false // ĐÃ TẮT: Không cần xoay vòng file log lúc khởi động nữa
+            }
+            return self.bool(forKey: #function)
+        }
+        set { self.set(newValue, forKey: #function) }
     }
     @objc var freeAcctAppIdDeletion: Bool {
         get { self.bool(forKey: #function) }
@@ -241,11 +241,8 @@ public extension UserDefaults
         set { self.set(newValue, forKey: "customizeAppExtensions") }
     }
     var appImportSourceMode: AppImportSourceMode {
-        get { _appImportSourceMode.flatMap { AppImportSourceMode(rawValue: $0) } ?? .prompt
-        }
-        set {
-            _appImportSourceMode = newValue.rawValue
-        }
+        get { _appImportSourceMode.flatMap { AppImportSourceMode(rawValue: $0) } ?? .prompt }
+        set { _appImportSourceMode = newValue.rawValue }
     }
     @objc(appImportSourceMode) private var _appImportSourceMode: String? {
         get { self.string(forKey: "appImportSourceMode") }
@@ -264,32 +261,28 @@ public extension UserDefaults
         get { self.bool(forKey: "autoFixAppGroupIDs") }
         set { self.set(newValue, forKey: "autoFixAppGroupIDs") }
     }
-    
-    // 3. TẮT NÉN LẠI FILE IPA SAU KHI KÝ (Bỏ qua CreateIpaOperation -> Giảm 50% CPU & nóng máy lúc cài app)
     @objc var preferResignedIPA: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
+        get { self.bool(forKey: #function) }
+        set { self.set(newValue, forKey: #function) }
     }
     @objc var isExportResignedAppEnabled: Bool {
         get { self.bool(forKey: #function) }
         set { self.set(newValue, forKey: #function) }
     }
-    
-    // 4. KHOÁ TẮT TOÀN BỘ GHI LOG CHI TIẾT GÂY LAG
     @objc var isVerboseOperationsLoggingEnabled: Bool {
-        get { false }
+        get { false } // ĐÃ ÉP TẮT LOG CHI TIẾT
         set { self.set(false, forKey: #function) }
     }
     @objc var isAltSignVerboseLoggingEnabled: Bool {
-        get { false }
+        get { false } // ĐÃ ÉP TẮT LOG CHI TIẾT
         set { self.set(false, forKey: #function) }
     }
     @objc var isSideStoreVerboseLoggingEnabled: Bool {
-        get { false }
+        get { false } // ĐÃ ÉP TẮT LOG CHI TIẾT
         set { self.set(false, forKey: #function) }
     }
     @objc var isMinimuxerVerboseLoggingEnabled: Bool {
-        get { false }
+        get { false } // ĐÃ ÉP TẮT LOG CHI TIẾT
         set { self.set(false, forKey: #function) }
     }
     @objc var isMinimuxerBackendHotswapEnabled: Bool {
@@ -431,19 +424,17 @@ public extension UserDefaults
         get { self.bool(forKey: #function) }
         set { self.set(newValue, forKey: #function) }
     }
-    
-    // 5. TẮT BĂM DỮ LIỆU CHECKSUM KHI CÀI APP NẶNG (Chống nghẽn ổ cứng & đơ cảm ứng)
     @objc var isChecksumVerificationEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
+        get { self.bool(forKey: #function) }
+        set { self.set(newValue, forKey: #function) }
     }
     @objc var isFileSizeVerificationEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
+        get { self.bool(forKey: #function) }
+        set { self.set(newValue, forKey: #function) }
     }
     @objc var appVerificationDisabled: Bool {
-        get { true }
-        set { self.set(true, forKey: #function) }
+        get { self.bool(forKey: #function) }
+        set { self.set(newValue, forKey: #function) }
     }
     @objc var responseCachingDisabled: Bool {
         get { self.bool(forKey: #function) }
@@ -474,16 +465,11 @@ public extension UserDefaults
     }
     
     @nonobjc var activeAppsLimit: Int? {
-        get {
-            return self._activeAppsLimit?.intValue
-        }
+        get { return self._activeAppsLimit?.intValue }
         set {
-            if let value = newValue
-            {
+            if let value = newValue {
                 self._activeAppsLimit = NSNumber(value: value)
-            }
-            else
-            {
+            } else {
                 self._activeAppsLimit = nil
             }
         }
@@ -533,17 +519,17 @@ public extension UserDefaults
             #keyPath(UserDefaults.keepAnisetteDataAfterLogout): true,
             #keyPath(UserDefaults.keepAnisetteHeadersAfterLogout): true,
             #keyPath(UserDefaults.keepSideSignHeadersAfterLogout): true,
-            #keyPath(UserDefaults.isBackgroundRefreshEnabled): false,
-            #keyPath(UserDefaults.isBackgroundServiceEnabled): false,
+            #keyPath(UserDefaults.isBackgroundRefreshEnabled): false, // ĐÃ TẮT MẶC ĐỊNH
+            #keyPath(UserDefaults.isBackgroundServiceEnabled): false, // ĐÃ TẮT CHẠY NGẦM 24/7 HÚT PIN
             #keyPath(UserDefaults.isBetaUpdatesEnabled): false,
             #keyPath(UserDefaults.permissionCheckingDisabled): true,
             #keyPath(UserDefaults.isBundleIDVerificationEnabled): true,
             #keyPath(UserDefaults.isiOSVersionVerificationEnabled): true,
             #keyPath(UserDefaults.isAppVersionVerificationEnabled): true,
-            #keyPath(UserDefaults.isChecksumVerificationEnabled): false,
+            #keyPath(UserDefaults.isChecksumVerificationEnabled): false, // TẮT BĂM KIỂM TRA LẠI FILE CHO NHANH
             #keyPath(UserDefaults.isFileSizeVerificationEnabled): false,
-            #keyPath(UserDefaults.appVerificationDisabled): true,
-            #keyPath(UserDefaults.isIdleTimeoutDisableEnabled): false,
+            #keyPath(UserDefaults.appVerificationDisabled): false,
+            #keyPath(UserDefaults.isIdleTimeoutDisableEnabled): false, // ĐÃ TẮT GIỮ SÁNG MÀN HÌNH GÂY NÓNG MÁY
             #keyPath(UserDefaults.betaUdpatesTrack): defaultBetaUpdatesTrack,
             #keyPath(UserDefaults.menuAnisetteList): AppConstants.Anisette.Servers.defaultSource,
             #keyPath(UserDefaults.menuAnisetteURL): AppConstants.Anisette.Servers.defaultServerURL,
@@ -552,7 +538,7 @@ public extension UserDefaults
             #keyPath(UserDefaults.useOnDeviceAnisette): true,
             #keyPath(UserDefaults.useLocalVPN): true,
             #keyPath(UserDefaults.acceptIPv6ConnectionConfig): false,
-            #keyPath(UserDefaults.isAutoRetryRemotePairingPortEnabled): false,
+            #keyPath(UserDefaults.isAutoRetryRemotePairingPortEnabled): true,
             #keyPath(UserDefaults.enableEMPforWireguard): false,
             #keyPath(UserDefaults.skipNonCopyableBackupFiles): true,
             
@@ -569,7 +555,7 @@ public extension UserDefaults
             #keyPath(UserDefaults.isInstallConfirmationEnabled): true,
             #keyPath(UserDefaults.isClearCustomizationsOnUninstallEnabled): true,
             #keyPath(UserDefaults.isAutoLaunchAppAfterInstallEnabled): false,
-            #keyPath(UserDefaults.preferResignedIPA): false,
+            #keyPath(UserDefaults.preferResignedIPA): true,
             #keyPath(UserDefaults.isExportResignedAppEnabled): false,
             #keyPath(UserDefaults.isVerboseOperationsLoggingEnabled): false,
             #keyPath(UserDefaults.isSideStoreVerboseLoggingEnabled): false,
@@ -577,7 +563,7 @@ public extension UserDefaults
             #keyPath(UserDefaults.isMinimuxerVerboseLoggingEnabled): false,
             #keyPath(UserDefaults.isMinimuxerBackendHotswapEnabled): false,
             #keyPath(UserDefaults.pairingFileEditSuppressedSHAs): [String: Bool](),
-            #keyPath(UserDefaults.isRotateLogsOnStartupEnabled): false,
+            #keyPath(UserDefaults.isRotateLogsOnStartupEnabled): false, // ĐÃ TẮT XOAY LOG KHI MỞ APP
             #keyPath(UserDefaults.recreateDatabaseOnNextStart): false,
             #keyPath(UserDefaults.isCellularRefreshEnabled): false,
             #keyPath(UserDefaults.turnOffDataShortcutName): "TurnOffData",
@@ -587,6 +573,7 @@ public extension UserDefaults
             #keyPath(UserDefaults.isDeviceRegistered): false,
         ] as [String: Any]
 
+        // ĐÃ XÓA DÒNG CƯỠNG BỨC BẬT DEBUG MODE (isDebugModeEnabled = true)
         UserDefaults.standard.register(defaults: defaults)
         
         if !isMacDirtyCowSupported && ProcessInfo().sparseRestorePatched
@@ -596,10 +583,10 @@ public extension UserDefaults
     }
     
     static func enableGlobalLogging() {
-        // Không can thiệp vào hệ thống lưu cài đặt
+        // ĐÃ TẮT HOÀN TOÀN: Không đánh tráo (swizzle) các hàm của UserDefaults nữa!
     }
     
     static func dumpAllSettingsOnBoot() {
-        // Không dump JSON lúc mở app
+        // ĐÃ TẮT HOÀN TOÀN: Không chuyển đổi JSON và in toàn bộ cài đặt lúc mở máy nữa!
     }
 }

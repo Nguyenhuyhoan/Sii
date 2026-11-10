@@ -1,3 +1,4 @@
+
 //
 //  UserDefaults+AltStore.swift
 //  AltStore
@@ -96,12 +97,12 @@ public extension UserDefaults
     }
     
     @objc var isBackgroundRefreshEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false } // ĐÃ KHÓA CỨNG: Luôn tắt làm mới ngầm
+        set { self.set(false, forKey: #function) }
     }
     @objc var isBackgroundServiceEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false } // ĐÃ KHÓA CỨNG: Luôn tắt dịch vụ chạy ngầm 24/7 hút pin
+        set { self.set(false, forKey: #function) }
     }
     var backgroundServiceMode: BackgroundServiceMode {
         get {
@@ -166,21 +167,16 @@ public extension UserDefaults
         set { self.set(newValue, forKey: #function) }
     }
     @objc var isIdleTimeoutDisableEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false } // ĐÃ KHÓA CỨNG: Không cho phép ép sáng màn hình liên tục gây nóng máy
+        set { self.set(false, forKey: #function) }
     }
     @objc var isAppLimitDisabled: Bool {
         get { self.bool(forKey: #function) }
         set { self.set(newValue, forKey: #function) }
     }
     @objc var isRotateLogsOnStartupEnabled: Bool {
-        get {
-            if self.object(forKey: #function) == nil {
-                return false // ĐÃ TẮT: Không cần xoay vòng file log lúc khởi động nữa
-            }
-            return self.bool(forKey: #function)
-        }
-        set { self.set(newValue, forKey: #function) }
+        get { false } // ĐÃ KHÓA CỨNG: Luôn tắt xoay vòng file log lúc khởi động
+        set { self.set(false, forKey: #function) }
     }
     @objc var freeAcctAppIdDeletion: Bool {
         get { self.bool(forKey: #function) }
@@ -270,19 +266,19 @@ public extension UserDefaults
         set { self.set(newValue, forKey: #function) }
     }
     @objc var isVerboseOperationsLoggingEnabled: Bool {
-        get { false } // ĐÃ ÉP TẮT LOG CHI TIẾT
+        get { false } // ĐÃ KHÓA CỨNG: Luôn tắt log chi tiết
         set { self.set(false, forKey: #function) }
     }
     @objc var isAltSignVerboseLoggingEnabled: Bool {
-        get { false } // ĐÃ ÉP TẮT LOG CHI TIẾT
+        get { false } // ĐÃ KHÓA CỨNG: Luôn tắt log chi tiết
         set { self.set(false, forKey: #function) }
     }
     @objc var isSideStoreVerboseLoggingEnabled: Bool {
-        get { false } // ĐÃ ÉP TẮT LOG CHI TIẾT
+        get { false } // ĐÃ KHÓA CỨNG: Luôn tắt log chi tiết
         set { self.set(false, forKey: #function) }
     }
     @objc var isMinimuxerVerboseLoggingEnabled: Bool {
-        get { false } // ĐÃ ÉP TẮT LOG CHI TIẾT
+        get { false } // ĐÃ KHÓA CỨNG: Luôn tắt log chi tiết
         set { self.set(false, forKey: #function) }
     }
     @objc var isMinimuxerBackendHotswapEnabled: Bool {
@@ -425,8 +421,8 @@ public extension UserDefaults
         set { self.set(newValue, forKey: #function) }
     }
     @objc var isChecksumVerificationEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
+        get { false } // ĐÃ KHÓA CỨNG: Luôn bỏ qua việc băm kiểm tra lại file IPA để cài đặt nhanh nhất
+        set { self.set(false, forKey: #function) }
     }
     @objc var isFileSizeVerificationEnabled: Bool {
         get { self.bool(forKey: #function) }
@@ -519,17 +515,17 @@ public extension UserDefaults
             #keyPath(UserDefaults.keepAnisetteDataAfterLogout): true,
             #keyPath(UserDefaults.keepAnisetteHeadersAfterLogout): true,
             #keyPath(UserDefaults.keepSideSignHeadersAfterLogout): true,
-            #keyPath(UserDefaults.isBackgroundRefreshEnabled): false, // ĐÃ TẮT MẶC ĐỊNH
-            #keyPath(UserDefaults.isBackgroundServiceEnabled): false, // ĐÃ TẮT CHẠY NGẦM 24/7 HÚT PIN
+            #keyPath(UserDefaults.isBackgroundRefreshEnabled): false,
+            #keyPath(UserDefaults.isBackgroundServiceEnabled): false,
             #keyPath(UserDefaults.isBetaUpdatesEnabled): false,
             #keyPath(UserDefaults.permissionCheckingDisabled): true,
             #keyPath(UserDefaults.isBundleIDVerificationEnabled): true,
             #keyPath(UserDefaults.isiOSVersionVerificationEnabled): true,
             #keyPath(UserDefaults.isAppVersionVerificationEnabled): true,
-            #keyPath(UserDefaults.isChecksumVerificationEnabled): false, // TẮT BĂM KIỂM TRA LẠI FILE CHO NHANH
+            #keyPath(UserDefaults.isChecksumVerificationEnabled): false,
             #keyPath(UserDefaults.isFileSizeVerificationEnabled): false,
             #keyPath(UserDefaults.appVerificationDisabled): false,
-            #keyPath(UserDefaults.isIdleTimeoutDisableEnabled): false, // ĐÃ TẮT GIỮ SÁNG MÀN HÌNH GÂY NÓNG MÁY
+            #keyPath(UserDefaults.isIdleTimeoutDisableEnabled): false,
             #keyPath(UserDefaults.betaUdpatesTrack): defaultBetaUpdatesTrack,
             #keyPath(UserDefaults.menuAnisetteList): AppConstants.Anisette.Servers.defaultSource,
             #keyPath(UserDefaults.menuAnisetteURL): AppConstants.Anisette.Servers.defaultServerURL,
@@ -563,7 +559,7 @@ public extension UserDefaults
             #keyPath(UserDefaults.isMinimuxerVerboseLoggingEnabled): false,
             #keyPath(UserDefaults.isMinimuxerBackendHotswapEnabled): false,
             #keyPath(UserDefaults.pairingFileEditSuppressedSHAs): [String: Bool](),
-            #keyPath(UserDefaults.isRotateLogsOnStartupEnabled): false, // ĐÃ TẮT XOAY LOG KHI MỞ APP
+            #keyPath(UserDefaults.isRotateLogsOnStartupEnabled): false,
             #keyPath(UserDefaults.recreateDatabaseOnNextStart): false,
             #keyPath(UserDefaults.isCellularRefreshEnabled): false,
             #keyPath(UserDefaults.turnOffDataShortcutName): "TurnOffData",
@@ -573,7 +569,6 @@ public extension UserDefaults
             #keyPath(UserDefaults.isDeviceRegistered): false,
         ] as [String: Any]
 
-        // ĐÃ XÓA DÒNG CƯỠNG BỨC BẬT DEBUG MODE (isDebugModeEnabled = true)
         UserDefaults.standard.register(defaults: defaults)
         
         if !isMacDirtyCowSupported && ProcessInfo().sparseRestorePatched

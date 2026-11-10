@@ -622,6 +622,12 @@ final class AppManager: ObservableObject, @unchecked Sendable
     
     func enableJIT(for installedApp: InstalledApp, completionHandler: @escaping (Result<Void, Error>) -> Void)
     {
+        var fetchedName: String = ""
+        installedApp.managedObjectContext?.performAndWait {
+            fetchedName = installedApp.name
+        }
+        let appName = fetchedName.isEmpty ? installedApp.name : fetchedName
+
         Task.detached(priority: .utility) {
             let dbBackgroundContext = DatabaseManager.shared.persistentContainer.newBackgroundContext()
             let context = StandaloneOperationContext(steps: .enableJIT, dbBackgroundContext: dbBackgroundContext)
@@ -631,13 +637,9 @@ final class AppManager: ObservableObject, @unchecked Sendable
                     _ = try await enableJITOperation.execute()
                     completionHandler(.success(()))
                 } catch {
-                    var appName: String = ""
-                    installedApp.managedObjectContext?.performAndWait {
-                        appName = installedApp.name
-                    }
-                    if appName.isEmpty { appName = installedApp.name }
                     let localizedTitle = String(format: NSLocalizedString("Failed to Enable JIT for %@", comment: ""), appName)
                     let mappedError = (error as NSError).withLocalizedTitle(localizedTitle)
+                    self.log(error, operation: .enableJIT, app: installedApp)
                     completionHandler(.failure(mappedError))
                 }
             } catch {
@@ -814,22 +816,30 @@ extension AppManager: PipelineProgress, PipelineExecutionContext, PipelineErrorL
     
     func log(_ error: Error, operation: LoggedError.Operation, app: AppProtocol)
     {
-        var bundleIdentifier = app.bundleIdentifier
-        if let managedObject = app as? NSManagedObject, let context = managedObject.managedObjectContext {
-            context.performAndWait {
-                bundleIdentifier = app.bundleIdentifier
-            }
+        switch error
+        {
+            case is CancellationError: return
+            case let nsError as NSError where nsError.domain == CancellationError()._domain: return
+            default: break
         }
-        
-        DatabaseManager.shared.persistentContainer.performBackgroundTask { (context) in
-            let sanitizedError = (error as NSError).sanitizedForSerialization()
-            _ = LoggedError(error: sanitizedError, appBundleIdentifier: bundleIdentifier, operation: operation, context: context)
-            
-            do {
-                try context.save()
-            } catch {
-                Logger.main.error("Failed to save LoggedError: \(error.localizedDescription, privacy: .public)")
+
+        let sanitizedError = (error as NSError).sanitizedForSerialization()
+
+        DatabaseManager.shared.persistentContainer.performBackgroundTask { context in
+            var app = app
+            if let managedApp = app as? NSManagedObject, let tempApp = context.object(with: managedApp.objectID) as? AppProtocol
+            {
+                app = tempApp
             }
+
+            do
+            {
+                _ = LoggedError(error: sanitizedError, app: app, operation: operation, context: context)
+                if context.hasChanges {
+                    try context.save()
+                }
+            }
+            catch {}
         }
     }
 }

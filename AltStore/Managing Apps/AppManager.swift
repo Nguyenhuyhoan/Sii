@@ -42,7 +42,7 @@ final class AppManager: ObservableObject, @unchecked Sendable
     }()
 
     @Published
-    private(set) var updateSourcesResult: Result<Void, Error>? // nil == loading
+    private(set) var updateSourcesResult: Result<Void, Error>?
     
     @Published private var installationProgress = [String: Progress]()
     @Published private var refreshProgress = [String: Progress]()
@@ -51,9 +51,6 @@ final class AppManager: ObservableObject, @unchecked Sendable
     private let progressLock = NSLock()
     
     private init() {
-        // TỐI ƯU 1: Dùng Set($0.keys) và .removeDuplicates() để chỉ quét CoreData trên Main Thread
-        // khi danh sách app đang làm mới THỰC SỰ thay đổi (bắt đầu hoặc kết thúc),
-        // tránh việc quét RAM hàng trăm lần khi thanh phần trăm Progress nhảy liên tục.
         self.$refreshProgress
             .map { Set($0.keys) }
             .removeDuplicates()
@@ -542,7 +539,6 @@ final class AppManager: ObservableObject, @unchecked Sendable
             actualGroup = RefreshGroup(dbContext: context)
         }
         
-        // TỐI ƯU 2: Hạ priority xuống .utility để chạy trên nhân tiết kiệm điện (E-core)
         actualGroup.activeTask = Task.detached(priority: .utility) {
             do {
                 try await self.pipelineRunner.perform(installedApps.map { .refresh($0) }, handler: pipelineHandler, group: actualGroup)
@@ -696,7 +692,6 @@ extension AppManager {
 }
 typealias InstallTarget = AppManager.InstallTarget
 
-// MARK: - PipelineRunner Protocol Conformances
 extension AppManager: PipelineProgress, PipelineExecutionContext, PipelineErrorLogger {
     
     private func makePipelineHandler(presentingViewController: UIViewController?) -> PipelineExecutionHandler {
@@ -819,7 +814,22 @@ extension AppManager: PipelineProgress, PipelineExecutionContext, PipelineErrorL
     
     func log(_ error: Error, operation: LoggedError.Operation, app: AppProtocol)
     {
-        // TỐI ƯU 3: ĐÃ TẮT HOÀN TOÀN GHI LỖI XUỐNG Ổ CỨNG SQLITE COREDATA!
-        return
+        var bundleIdentifier = app.bundleIdentifier
+        if let managedObject = app as? NSManagedObject, let context = managedObject.managedObjectContext {
+            context.performAndWait {
+                bundleIdentifier = app.bundleIdentifier
+            }
+        }
+        
+        DatabaseManager.shared.persistentContainer.performBackgroundTask { (context) in
+            let sanitizedError = (error as NSError).sanitizedForSerialization()
+            _ = LoggedError(error: sanitizedError, appBundleIdentifier: bundleIdentifier, operation: operation, context: context)
+            
+            do {
+                try context.save()
+            } catch {
+                Logger.main.error("Failed to save LoggedError: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 }

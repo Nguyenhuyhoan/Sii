@@ -1,4 +1,3 @@
-
 //
 //  PipelineRunner.swift
 //  AltStore
@@ -140,7 +139,16 @@ final class PipelineRunner: Sendable
             }
         }
         
-        if !CellularRefreshManager.shared.isShortcutTwoStageMode {
+        let allAreRefresh = operations.allSatisfy {
+            if case .refresh = $0 { return true }
+            return false
+        }
+        
+        // Hỗ trợ Refresh 4G cho cả 1 app đơn lẻ lẫn nhiều app (trong App hoặc qua Shortcut)
+        let isCellularRefreshGroup = (CellularRefreshManager.shared.isShortcutTwoStageMode || CellularRefreshManager.shared.isCellularMode) && allAreRefresh
+        group.isCellularRefreshGroup = isCellularRefreshGroup
+        
+        if !isCellularRefreshGroup {
             do {
                 try await ensureMinimuxerReady()
             } catch let opError as OperationError {
@@ -163,7 +171,7 @@ final class PipelineRunner: Sendable
             group.progress.addChild(progress, withPendingUnitCount: 100)
         }
         
-        if !CellularRefreshManager.shared.isShortcutTwoStageMode {
+        if !isCellularRefreshGroup {
             let unhandledOperations = operations.filter { operation in
                 let isSideStore = (operation.app as? ALTApplication)?.isAltStoreApp == true ||
                                    operation.bundleIdentifier.isAltStoreAppID
@@ -202,13 +210,6 @@ final class PipelineRunner: Sendable
         }
         
         let operationsCount = sortedOperations.count
-        let allAreRefresh = sortedOperations.allSatisfy {
-            if case .refresh = $0 { return true }
-            return false
-        }
-        
-        let isCellularRefreshGroup = (CellularRefreshManager.shared.isShortcutTwoStageMode || (operationsCount >= 2 && CellularRefreshManager.shared.isCellularMode)) && allAreRefresh
-        group.isCellularRefreshGroup = isCellularRefreshGroup
         debugLog("[PipelineRunner] Configured fast pipeline for \(operationsCount) operation(s): isCellularRefreshGroup = \(isCellularRefreshGroup)")
 
         for operation in sortedOperations {
@@ -259,7 +260,7 @@ final class PipelineRunner: Sendable
         }
         do {
             let result = try await self.performPipeline(for: operation, handler: handler, group: group, operationsCount: operationsCount)
-            if operationsCount <= 1 || !group.isCellularRefreshGroup {
+            if !group.isCellularRefreshGroup {
                 progress.set(nil, for: operation)
                 debugLog("[AppManager] performOperation: completed successfully. progress was reset for installedApp: \(result.bundleIdentifier)")
             }

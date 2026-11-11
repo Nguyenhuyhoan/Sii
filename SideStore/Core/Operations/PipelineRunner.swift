@@ -23,6 +23,27 @@ protocol PipelineErrorLogger: AnyObject, Sendable {
     func getMappedError(for operation: AppOperation, error: Error) -> Error
 }
 
+private final class SingleCompletionGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var didComplete = false
+    private let handler: (Result<InstalledApp, Error>) -> Void
+
+    init(_ handler: @escaping (Result<InstalledApp, Error>) -> Void) {
+        self.handler = handler
+    }
+
+    func complete(with result: Result<InstalledApp, Error>) {
+        let shouldInvoke = lock.withLock {
+            guard !didComplete else { return false }
+            didComplete = true
+            return true
+        }
+        if shouldInvoke {
+            handler(result)
+        }
+    }
+}
+
 
 final class PipelineRunner: Sendable
 {
@@ -48,6 +69,7 @@ final class PipelineRunner: Sendable
                                 dbContext: NSManagedObjectContext,
                                 completionHandler: @escaping (Result<InstalledApp, Error>) -> Void) -> RefreshGroup
     {
+        let completionGate = SingleCompletionGate(completionHandler)
         let group = RefreshGroup(dbContext: dbContext)
         group.completionHandler = { (results) in
             do
@@ -56,11 +78,11 @@ final class PipelineRunner: Sendable
                     throw group.error ?? OperationError.unknownResult
                 }
                 let installedApp = try result.get()
-                completionHandler(.success(installedApp))
+                completionGate.complete(with: .success(installedApp))
             }
             catch
             {
-                completionHandler(.failure(error))
+                completionGate.complete(with: .failure(error))
             }
         }
         debugLog("[AppManager] performSingleOperation started for: \(operation.bundleIdentifier)")
@@ -71,11 +93,11 @@ final class PipelineRunner: Sendable
             } catch {
                 if Task.isCancelled || error is CancellationError {
                     debugLog("[AppManager] performSingleOperation task CANCELLED for: \(operation.bundleIdentifier)")
-                    completionHandler(.failure(OperationError.cancelled))
+                    completionGate.complete(with: .failure(OperationError.cancelled))
                     return
                 }
                 debugLog("[AppManager] performSingleOperation task failed for: \(operation.bundleIdentifier) with error: \(error)")
-                completionHandler(.failure(error))
+                completionGate.complete(with: .failure(error))
             }
         }
         
@@ -239,9 +261,19 @@ final class PipelineRunner: Sendable
                     }
                 )
                 try await injectOp.execute()
-                
-                await WidgetDataManager.publishCurrentInstalledApps(in: group.dbContext)
             }
+        }
+
+        // Chỉ tải lại Widget đúng 1 lần duy nhất sau khi toàn bộ tác vụ hoàn tất
+        let shouldReloadWidgets = !(isCellularRefreshGroup && CellularRefreshManager.shared.isShortcutTwoStageMode)
+        let hasSuccessfulOperation = group.results.values.contains {
+            if case .success = $0 { return true }
+            return false
+        }
+        if shouldReloadWidgets && hasSuccessfulOperation {
+            debugLog("[PipelineRunner] Reloading widget timelines once for completed batch...")
+            await WidgetDataManager.publishCurrentInstalledApps(in: group.dbContext)
+            debugLog("[PipelineRunner] Reloading COMPLETE for widget timelines.")
         }
 
         await MainActor.run {
@@ -284,12 +316,6 @@ final class PipelineRunner: Sendable
             
             let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
             operation.logSummary(status: "SUCCESS", elapsed: elapsed)
-            
-            if !group.isCellularRefreshGroup {
-                debugLog("[AppManager] performOperation: Reloading widget timelines...")
-                await WidgetDataManager.publishCurrentInstalledApps(in: dbContext)
-                debugLog("[AppManager] performOperation: Reloading COMPLETE for widget timelines.")
-            }
             
             if result.bundleIdentifier == StoreApp.altstoreAppID {
                 let context = StandaloneOperationContext(steps: .scheduleExpirationWarningNotification, dbBackgroundContext: group.dbContext)

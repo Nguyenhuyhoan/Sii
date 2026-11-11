@@ -1,5 +1,3 @@
-
-//
 //  InjectBatchProfilesOperation.swift
 //  SideStore
 //
@@ -10,6 +8,7 @@
 import Foundation
 import CoreData
 import SideSign
+import Minimuxer
 
 final class InjectBatchProfilesOperation: BaseStandaloneOperation<StandaloneOperationContext, Void>, @unchecked Sendable {
     let batches: [PendingProfileBatch]
@@ -54,31 +53,69 @@ final class InjectBatchProfilesOperation: BaseStandaloneOperation<StandaloneOper
         // Tắt 4G đúng 1 lần duy nhất (nếu chạy trong app; nếu chạy qua Shortcut 2 giai đoạn thì tự bỏ qua)
         await CellularRefreshManager.shared.turnOffDataIfNeeded()
         
-        // Khởi động EMProxy và Minimuxer giống hệt Wi-Fi Refresh (vì ở Bước 1 đã bỏ qua ensureMinimuxerReady)
+        // Nạp lại PairingFile & khởi động lại Minimuxer trên giao diện mạng hiện tại (sau khi tắt 4G / bật VPN)
+        if let pf = PairingFileManager.shared.fetchPairingFile() {
+            try? await AppBootManager.shared.startMinimuxer(pairingFile: pf)
+        }
         if UserDefaults.standard.enableEMPforWireguard {
             try? await startEMProxy()
         }
-        _ = await CellularRefreshManager.shared.waitForMinimuxerReady(timeout: 5.0)
+        
+        // Đợi đường truyền lockdownd thực sự thông suốt (chống lỗi ProfileInstall khi bảng định tuyến vừa đổi)
+        _ = await CellularRefreshManager.shared.waitForMinimuxerReady(timeout: 6.0)
         try? await ensureMinimuxerReady()
         
         do {
             for batch in sortedBatches {
                 debugLog("[InjectBatchProfilesOperation] Installing \(batch.profiles.count) profile(s) for \(batch.bundleID)...")
+                var mainProfile: ALTProvisioningProfile?
+                
                 for profileData in batch.profiles {
+                    if mainProfile == nil, let parsed = ALTProvisioningProfile(data: profileData) {
+                        mainProfile = parsed
+                    }
+                    
                     do {
                         try await installProvisioningProfiles(profileData)
                     } catch {
-                        debugLog("[InjectBatchProfilesOperation] First attempt failed for \(batch.bundleID), retrying: \(error)")
-                        _ = await CellularRefreshManager.shared.waitForMinimuxerReady(timeout: 3.0)
+                        debugLog("[InjectBatchProfilesOperation] First attempt failed for \(batch.bundleID), resetting muxer & retrying: \(error)")
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        if let pf = PairingFileManager.shared.fetchPairingFile() {
+                            try? await minimuxerStart(pf, preferred: PairingFileManager.shared.preferredProtocol)
+                        }
+                        _ = await CellularRefreshManager.shared.waitForMinimuxerReady(timeout: 5.0)
                         try await installProvisioningProfiles(profileData)
                     }
                 }
 
-                if let installedApp = batch.app, let dbContext = installedApp.managedObjectContext {
-                    debugLog("[InjectBatchProfilesOperation] Updating database record for \(batch.bundleID)...")
-                    try? await dbContext.perform {
-                        if let certStatus = batch.certStatus {
+                // Cập nhật Database cho cả trường hợp chạy trong App (batch.app != nil)
+                // VÀ trường hợp chạy từ Shortcut Giai đoạn 2 đọc từ JSON (batch.app == nil)
+                let dbContext = batch.app?.managedObjectContext ?? self.context.dbBackgroundContext
+                let targetBundleID = batch.bundleID
+                let certStatus = batch.certStatus
+                let parsedCreationDate = mainProfile?.creationDate
+                let parsedExpirationDate = mainProfile?.expirationDate
+
+                try? await dbContext.perform {
+                    let appToUpdate: InstalledApp?
+                    if let existingApp = batch.app {
+                        appToUpdate = existingApp
+                    } else {
+                        let predicate = NSPredicate(
+                            format: "%K == %@ OR %K == %@",
+                            #keyPath(InstalledApp.bundleIdentifier), targetBundleID,
+                            #keyPath(InstalledApp.resignedBundleIdentifier), targetBundleID
+                        )
+                        appToUpdate = InstalledApp.first(satisfying: predicate, in: dbContext)
+                    }
+                    
+                    if let installedApp = appToUpdate {
+                        if let certStatus = certStatus {
                             installedApp.certificateStatus = certStatus
+                        }
+                        if let creationDate = parsedCreationDate, let expirationDate = parsedExpirationDate {
+                            installedApp.refreshedDate = creationDate
+                            installedApp.expirationDate = expirationDate
                         }
                         if dbContext.hasChanges {
                             try dbContext.save()

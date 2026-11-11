@@ -1,4 +1,3 @@
-
 //
 //  InjectBatchProfilesOperation.swift
 //  SideStore
@@ -61,9 +60,11 @@ final class InjectBatchProfilesOperation: BaseStandaloneOperation<StandaloneOper
             try? await AppBootManager.shared.startMinimuxer(pairingFile: pf)
         }
         
-        // Đợi đường truyền lockdownd thực sự thông suốt (chống lỗi ProfileInstall khi bảng định tuyến vừa đổi)
-        _ = await CellularRefreshManager.shared.waitForMinimuxerReady(timeout: 6.0)
-        try? await ensureMinimuxerReady()
+        // Đợi đường truyền lockdownd thực sự thông suốt (chỉ gọi ensureMinimuxerReady nếu chưa sẵn sàng để tránh kiểm tra trùng)
+        let isMuxerReady = await CellularRefreshManager.shared.waitForMinimuxerReady(timeout: 6.0)
+        if !isMuxerReady {
+            try? await ensureMinimuxerReady()
+        }
         
         do {
             for batch in sortedBatches {
@@ -141,4 +142,3 @@ final class InjectBatchProfilesOperation: BaseStandaloneOperation<StandaloneOper
         self.setProgress(100)
     }
 }
-

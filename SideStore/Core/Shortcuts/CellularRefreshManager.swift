@@ -1,3 +1,4 @@
+//
 //  CellularRefreshManager.swift
 //  SideStore
 //
@@ -270,7 +271,6 @@ public final class CellularRefreshManager: @unchecked Sendable {
             didTurnOffData = true
             let effectiveBaseDelay = turnOffDataBaseDelayOverride ?? AppConstants.Shortcuts.defaultTurnOffDataBaseDelay
             await sleep(baseDelay: effectiveBaseDelay, addOnDelay: addOnDelay)
-            _ = await waitForMinimuxerReady(timeout: 3.0)
         }
         return success
     }

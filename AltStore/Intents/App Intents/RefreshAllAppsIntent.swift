@@ -1,3 +1,4 @@
+
 //
 //  RefreshAllAppsIntent.swift
 //  AltStore
@@ -53,6 +54,8 @@ struct InstallIPAIntent: AppIntent, ProgressReportingIntent
         do
         {
             try await DatabaseManager.shared.start()
+            await AppBootManager.shared.performBootSequence()
+            _ = await CellularRefreshManager.shared.waitForMinimuxerReady(timeout: 5.0)
 
             let temporaryDirectory = FileManager.default.uniqueTemporaryURL()
             defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
@@ -186,12 +189,15 @@ private extension RefreshAllAppsIntent
     func refreshAllApps() async throws
     {
         try await DatabaseManager.shared.start()
+        
+        // Đảm bảo Minimuxer đã được nạp Pairing File & cập nhật trạng thái mạng khi gọi ngầm từ Phím tắt
+        await AppBootManager.shared.performBootSequence()
+        await minimuxer.network.refreshEndpoint()
 
         // 1. KIỂM TRA NẾU ĐÃ CÓ PROFILE LƯU TẠM TỪ GIAI ĐOẠN 1 (TRONG VÒNG 3 PHÚT) -> CHẠY GIAI ĐOẠN 2 TIÊM PROFILE!
         if CellularRefreshManager.shared.hasRecentStagedBatches {
             defer {
                 CellularRefreshManager.shared.isShortcutTwoStageMode = false
-                CellularRefreshManager.shared.stagedBatches = []
             }
             let batches = CellularRefreshManager.shared.stagedBatches
             if !batches.isEmpty {
@@ -199,6 +205,10 @@ private extension RefreshAllAppsIntent
                 let injectContext = StandaloneOperationContext(steps: .injectBatchProfiles, dbBackgroundContext: dbContext)
                 let injectOp = try InjectBatchProfilesOperation(batches: batches, context: injectContext)
                 try await injectOp.execute()
+                
+                // Chỉ xóa dữ liệu lưu tạm sau khi đã tiêm thành công 100%
+                CellularRefreshManager.shared.stagedBatches = []
+                
                 await WidgetDataManager.publishCurrentInstalledApps(in: dbContext)
                 self.progress.completedUnitCount = 1
                 return
@@ -210,6 +220,10 @@ private extension RefreshAllAppsIntent
         if isFourGMode {
             CellularRefreshManager.shared.isShortcutTwoStageMode = true
             CellularRefreshManager.shared.stagedBatches = []
+        } else {
+            // Chế độ Wi-Fi: Mở kết nối thật tới lockdownd trước khi chạy Pipeline
+            CellularRefreshManager.shared.isShortcutTwoStageMode = false
+            _ = await CellularRefreshManager.shared.waitForMinimuxerReady(timeout: 5.0)
         }
 
         let context = DatabaseManager.shared.persistentContainer.newBackgroundContext()

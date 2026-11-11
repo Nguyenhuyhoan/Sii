@@ -1,5 +1,3 @@
-
-//
 //  CellularRefreshManager.swift
 //  SideStore
 //
@@ -233,13 +231,23 @@ public final class CellularRefreshManager: @unchecked Sendable {
     public func waitForMinimuxerReady(timeout: TimeInterval) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         debugLog("[CellularRefreshManager] Waiting for minimuxer endpoint to become ready (timeout: \(timeout)s)...")
+        
+        // 1. Đảm bảo Minimuxer đã được nạp Pairing File nếu chạy từ tiến trình ngầm (Shortcuts)
+        if case .success(false) = await minimuxer.core.isReady(withNetworkCheck: false) {
+            if let pf = PairingFileManager.shared.fetchPairingFile() {
+                try? await AppBootManager.shared.startMinimuxer(pairingFile: pf)
+            }
+        }
+
         while Date() < deadline {
             await minimuxer.network.refreshEndpoint()
-            if case .success(true) = await minimuxer.core.isReady(withNetworkCheck: false) {
-                debugLog("[CellularRefreshManager] Minimuxer is ready.")
+            // 2. Ép bắt tay trực tiếp tới lockdownd bằng fetchUDID(forceLive: true)
+            // Đảm bảo đường truyền tới misagent đã mở thông suốt trước khi cài Profile
+            if (try? await fetchUDID(forceLive: true)) != nil {
+                debugLog("[CellularRefreshManager] Minimuxer live lockdown connection is ready.")
                 return true
             }
-            try? await Task.sleep(nanoseconds: 200_000_000)
+            try? await Task.sleep(nanoseconds: 250_000_000)
         }
         debugLog("[CellularRefreshManager] Timed out waiting for minimuxer to become ready.")
         return false
@@ -262,7 +270,7 @@ public final class CellularRefreshManager: @unchecked Sendable {
             didTurnOffData = true
             let effectiveBaseDelay = turnOffDataBaseDelayOverride ?? AppConstants.Shortcuts.defaultTurnOffDataBaseDelay
             await sleep(baseDelay: effectiveBaseDelay, addOnDelay: addOnDelay)
-            _ = await waitForMinimuxerReady(timeout: 2.0)
+            _ = await waitForMinimuxerReady(timeout: 3.0)
         }
         return success
     }

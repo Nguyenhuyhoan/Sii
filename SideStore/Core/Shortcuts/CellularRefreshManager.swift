@@ -1,3 +1,4 @@
+
 //
 //  CellularRefreshManager.swift
 //  SideStore
@@ -37,49 +38,66 @@ public final class CellularRefreshManager: @unchecked Sendable {
         FileManager.default.temporaryDirectory.appendingPathComponent("cellular_staged_batches.json")
     }
 
-    /// Kiểm tra xem có dữ liệu Profile của Bước 1 vừa lưu trong vòng 180 giây qua không
-    public var hasRecentStagedBatches: Bool {
-        lock.withLock {
-            guard let data = try? Data(contentsOf: stagedBatchesFileURL),
-                  let persisted = try? JSONDecoder().decode([PersistedProfileBatch].self, from: data),
-                  let first = persisted.first else {
-                return false
-            }
-            let age = Date().timeIntervalSince1970 - first.timestamp
-            if age <= 180 {
-                return true
+    private var cachedStagedBatches: [PendingProfileBatch] = []
+    private var cachedStagedTimestamp: TimeInterval = 0
+
+    /// Hàm nội bộ (gọi bên trong `lock.withLock`): Kiểm tra RAM trước, chỉ đọc ổ cứng 1 lần duy nhất nếu RAM trống
+    private func loadValidStagedBatchesLocked() -> [PendingProfileBatch] {
+        let now = Date().timeIntervalSince1970
+
+        if !cachedStagedBatches.isEmpty && cachedStagedTimestamp > 0 {
+            if (now - cachedStagedTimestamp) <= 180 {
+                return cachedStagedBatches
             } else {
-                try? FileManager.default.removeItem(at: stagedBatchesFileURL)
                 cachedStagedBatches = []
-                return false
+                cachedStagedTimestamp = 0
+                try? FileManager.default.removeItem(at: stagedBatchesFileURL)
+                return []
             }
+        }
+
+        guard let data = try? Data(contentsOf: stagedBatchesFileURL),
+              let persisted = try? JSONDecoder().decode([PersistedProfileBatch].self, from: data),
+              let first = persisted.first else {
+            return []
+        }
+
+        if (now - first.timestamp) <= 180 {
+            cachedStagedTimestamp = first.timestamp
+            cachedStagedBatches = persisted.map {
+                PendingProfileBatch(bundleID: $0.bundleID, profiles: $0.profiles, app: nil, certStatus: nil)
+            }
+            return cachedStagedBatches
+        } else {
+            cachedStagedBatches = []
+            cachedStagedTimestamp = 0
+            try? FileManager.default.removeItem(at: stagedBatchesFileURL)
+            return []
         }
     }
 
-    private var cachedStagedBatches: [PendingProfileBatch] = []
+    /// Kiểm tra xem có dữ liệu Profile của Bước 1 vừa lưu trong vòng 180 giây qua không
+    public var hasRecentStagedBatches: Bool {
+        lock.withLock {
+            !loadValidStagedBatchesLocked().isEmpty
+        }
+    }
+
     internal var stagedBatches: [PendingProfileBatch] {
         get {
             lock.withLock {
-                if !cachedStagedBatches.isEmpty {
-                    return cachedStagedBatches
-                }
-                guard let data = try? Data(contentsOf: stagedBatchesFileURL),
-                      let persisted = try? JSONDecoder().decode([PersistedProfileBatch].self, from: data) else {
-                    return []
-                }
-                cachedStagedBatches = persisted.map {
-                    PendingProfileBatch(bundleID: $0.bundleID, profiles: $0.profiles, app: nil, certStatus: nil)
-                }
-                return cachedStagedBatches
+                loadValidStagedBatchesLocked()
             }
         }
         set {
             lock.withLock {
                 cachedStagedBatches = newValue
                 if newValue.isEmpty {
+                    cachedStagedTimestamp = 0
                     try? FileManager.default.removeItem(at: stagedBatchesFileURL)
                 } else {
                     let now = Date().timeIntervalSince1970
+                    cachedStagedTimestamp = now
                     let persisted = newValue.map {
                         PersistedProfileBatch(bundleID: $0.bundleID, profiles: $0.profiles, timestamp: now)
                     }
@@ -248,7 +266,7 @@ public final class CellularRefreshManager: @unchecked Sendable {
                 debugLog("[CellularRefreshManager] Minimuxer live lockdown connection is ready.")
                 return true
             }
-            try? await Task.sleep(nanoseconds: 250_000_000)
+            try? await Task.sleep(nanoseconds: 600_000_000)
         }
         debugLog("[CellularRefreshManager] Timed out waiting for minimuxer to become ready.")
         return false

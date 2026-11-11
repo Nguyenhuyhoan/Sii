@@ -1,3 +1,4 @@
+
 //
 //  DatabaseManager.swift
 //  AltStore
@@ -159,7 +160,9 @@ public class DatabaseManager: @unchecked Sendable
                 altStoreSource = Source.makeAltStoreSource(in: context)
             }
             
-            try! altStoreSource.setSourceURL(Source.altStoreSourceURL)
+            if altStoreSource.sourceURL != Source.altStoreSourceURL {
+                try? altStoreSource.setSourceURL(Source.altStoreSourceURL)
+            }
             
             let storeApp: StoreApp
             if let app = StoreApp.first(satisfying: NSPredicate(format: "%K == %@", #keyPath(StoreApp.bundleIdentifier), StoreApp.altstoreAppID), in: context) {
@@ -225,10 +228,11 @@ public class DatabaseManager: @unchecked Sendable
                 installedExtension.update(resignedAppExtensionBundle: appExtension)
                 installedExtensions.insert(installedExtension)
             }
-            installedApp.appExtensions = installedExtensions
+            if installedApp.appExtensions != installedExtensions {
+                installedApp.appExtensions = installedExtensions
+            }
             
-            // ĐÃ XÓA BỎ HOÀN TOÀN ĐOẠN COPY BỘ CÀI SIDESTORE RA THƯ MỤC TẠM VÀ BĂM LẠI MỖI KHI MỞ APP!
-            // Chỉ thực hiện đúng 1 lần duy nhất nếu chưa từng có fingerprint hoặc vừa cập nhật phiên bản SideStore mới:
+            // Chỉ copy và băm bộ cài đúng 1 lần duy nhất nếu chưa từng có fingerprint hoặc vừa cập nhật phiên bản mới:
             if installedApp.appBundleFingerprint == nil || installedApp.version != localAppBundle.version {
                 let bundleURL = Bundle.Info.activeBundleURL
                 let altstoreAppID = StoreApp.altstoreAppID
@@ -250,17 +254,8 @@ public class DatabaseManager: @unchecked Sendable
                     } catch {}
                 }
             }
-            
-            let cachedRefreshedDate = installedApp.refreshedDate
-            let cachedExpirationDate = installedApp.expirationDate
                         
             self.reconcileSelfFromSelfBinary(installedApp: installedApp, localAppBundle: localAppBundle, serialNumber: serialNumber)
-            
-            if installedApp.refreshedDate < cachedRefreshedDate
-            {
-                installedApp.refreshedDate = cachedRefreshedDate
-                installedApp.expirationDate = cachedExpirationDate
-            }
             
             if context.hasChanges {
                 try context.save()
@@ -269,20 +264,36 @@ public class DatabaseManager: @unchecked Sendable
     }
     
     private func reconcileSelfFromSelfBinary(installedApp: InstalledApp, localAppBundle: ALTApplication, serialNumber: String?) {
-        installedApp.name = localAppBundle.name
-        installedApp.resignedBundleIdentifier = localAppBundle.bundleIdentifier
-        installedApp.version = localAppBundle.version
-        installedApp.buildVersion = localAppBundle.buildVersion
+        if installedApp.name != localAppBundle.name {
+            installedApp.name = localAppBundle.name
+        }
+        if installedApp.resignedBundleIdentifier != localAppBundle.bundleIdentifier {
+            installedApp.resignedBundleIdentifier = localAppBundle.bundleIdentifier
+        }
+        if installedApp.version != localAppBundle.version {
+            installedApp.version = localAppBundle.version
+        }
+        if installedApp.buildVersion != localAppBundle.buildVersion {
+            installedApp.buildVersion = localAppBundle.buildVersion
+        }
         
-        // TỐI ƯU: Không đọc và phân tích lại file nhị phân Mach-O lần thứ 2 nữa, dùng luôn serialNumber đã lấy ở trên!
         let effectiveSerial = serialNumber
-        installedApp.certificateSerialNumber = effectiveSerial
+        if installedApp.certificateSerialNumber != effectiveSerial {
+            installedApp.certificateSerialNumber = effectiveSerial
+        }
         
         let activeKeychainSerial = CertificateManager.shared.activeCertificate?.serialNumber
         let isCross = (activeKeychainSerial != nil && !activeKeychainSerial!.isEmpty && effectiveSerial != nil && effectiveSerial != activeKeychainSerial)
-        installedApp.certificateStatus = .valid(isCrossSigned: isCross)
+        let newStatus: CertificateStatus = .valid(isCrossSigned: isCross)
+        if installedApp.certificateStatus != newStatus {
+            installedApp.certificateStatus = newStatus
+        }
         
-        if let provisioningProfile = localAppBundle.provisioningProfile {
+        // TỐI ƯU & BẢO VỆ DỮ LIỆU REFRESH:
+        // Chỉ cập nhật ngày từ file nhị phân gốc nếu ngày hết hạn trong file nhị phân MỚI HƠN ngày đang lưu trong DB.
+        // Giúp giữ nguyên 100% hạn 7 ngày sau khi Refresh bằng 4G / Shortcut và tránh ghi SQLite thừa mỗi lần mở app.
+        if let provisioningProfile = localAppBundle.provisioningProfile,
+           provisioningProfile.expirationDate > installedApp.expirationDate {
             installedApp.refreshedDate = provisioningProfile.creationDate
             installedApp.expirationDate = provisioningProfile.expirationDate
         }
@@ -295,3 +306,4 @@ public class DatabaseManager: @unchecked Sendable
         exit(104)
     }
 }
+

@@ -1,5 +1,5 @@
 
-
+//
 //  InjectBatchProfilesOperation.swift
 //  SideStore
 //
@@ -56,11 +56,9 @@ final class InjectBatchProfilesOperation: BaseStandaloneOperation<StandaloneOper
         await CellularRefreshManager.shared.turnOffDataIfNeeded()
         
         // Nạp lại PairingFile & khởi động lại Minimuxer trên giao diện mạng hiện tại (sau khi tắt 4G / bật VPN)
+        // (startMinimuxer đã bao gồm sẵn startEMProxy nếu bật WireGuard EMP)
         if let pf = PairingFileManager.shared.fetchPairingFile() {
             try? await AppBootManager.shared.startMinimuxer(pairingFile: pf)
-        }
-        if UserDefaults.standard.enableEMPforWireguard {
-            try? await startEMProxy()
         }
         
         // Đợi đường truyền lockdownd thực sự thông suốt (chống lỗi ProfileInstall khi bảng định tuyến vừa đổi)
@@ -73,7 +71,6 @@ final class InjectBatchProfilesOperation: BaseStandaloneOperation<StandaloneOper
                 var mainProfile: ALTProvisioningProfile?
                 
                 for profileData in batch.profiles {
-                    // ĐÃ SỬA: Thêm `try?` vì hàm khởi tạo của ALTProvisioningProfile có ném lỗi (throws)
                     if mainProfile == nil, let parsed = try? ALTProvisioningProfile(data: profileData) {
                         mainProfile = parsed
                     }
@@ -98,8 +95,6 @@ final class InjectBatchProfilesOperation: BaseStandaloneOperation<StandaloneOper
                 let certStatus = batch.certStatus
                 let parsedCreationDate = mainProfile?.creationDate
                 let parsedExpirationDate = mainProfile?.expirationDate
-                
-                // ĐÃ SỬA: Lấy ObjectID (chuẩn Sendable) thay vì bắt giữ trực tiếp biến `batch` bên trong closure @Sendable
                 let existingAppObjectID = batch.app?.objectID
 
                 try? await dbContext.perform {
@@ -146,3 +141,4 @@ final class InjectBatchProfilesOperation: BaseStandaloneOperation<StandaloneOper
         self.setProgress(100)
     }
 }
+

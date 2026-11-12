@@ -38,4 +38,3 @@ public struct ShortcutsProvider: AppShortcutsProvider
         return .teal
     }
 }
-

@@ -1,3 +1,4 @@
+
 //
 //  AppBootManager.swift
 //  SideStore
@@ -37,11 +38,15 @@ public final class AppBootManager {
         let preferred = PairingFileManager.shared.preferredProtocol
         try await minimuxerStart(pairingFile, preferred: preferred)
         
-        // TỐI ƯU: Dùng forceLive: false để lấy ngay UDID từ Keychain cache nếu đã có,
-        // không bắt máy phải mở kết nối mạng/VPN giả lập tới lockdownd mỗi lần mở app!
+        // Ưu tiên lấy UDID từ Keychain cache (forceLive: false) để mở app nhanh.
+        // Nếu chưa có trong cache thì fallback sang forceLive: true để lấy và lưu vào Keychain.
         do {
-            _ = try await fetchUDID(forceLive: false)
-            self.needsPairingPrompt = false
+            if let udid = try? await fetchUDID(forceLive: false), !udid.isEmpty {
+                self.needsPairingPrompt = false
+            } else {
+                _ = try await fetchUDID(forceLive: true)
+                self.needsPairingPrompt = false
+            }
         } catch {
             if case MinimuxerError.invalidPairing = error {
                 self.needsPairingPrompt = true
@@ -89,7 +94,6 @@ public final class AppBootManager {
     }
     
     public nonisolated func performBootSequence() async {
-        // ĐÃ XÓA BỎ HOÀN TOÀN KHỐI `jitCheck` QUÉT MẠNG NỘI BỘ TÌM SIDEJITSERVER LÚC KHỞI ĐỘNG!
         guard let pf = PairingFileManager.shared.fetchPairingFile() else {
             #if !targetEnvironment(simulator)
             self.needsPairingPrompt = true

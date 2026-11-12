@@ -9,6 +9,7 @@
 @preconcurrency import UIKit
 import CoreData
 import SideSign
+import Minimuxer
 
 
 protocol PipelineProgress: Sendable{
@@ -181,6 +182,9 @@ final class PipelineRunner: Sendable
                 }
                 throw opError
             }
+        } else if (try? await fetchUDID(forceLive: false)) == nil {
+            // Đảm bảo luôn có UDID trước khi gọi Apple API để tránh lỗi 8220
+            _ = await CellularRefreshManager.shared.waitForMinimuxerReady(timeout: 5.0)
         }
         
         group.progress.totalUnitCount = Int64(operations.count * 100)

@@ -51,19 +51,17 @@ final class InjectBatchProfilesOperation: BaseStandaloneOperation<StandaloneOper
 
         debugLog("[InjectBatchProfilesOperation] Running batch injection for \(sortedBatches.count) app(s)")
 
-        // Tắt 4G đúng 1 lần duy nhất (nếu chạy trong app; nếu chạy qua Shortcut 2 giai đoạn thì tự bỏ qua)
-        await CellularRefreshManager.shared.turnOffDataIfNeeded()
+        // Tắt 4G đúng 1 lần duy nhất.
+        // Lưu ý: Nếu hàm này trả về true, nó ĐÃ tự gọi resetAndPrepareMinimuxer() bên trong.
+        let didTurnOffAndReset = await CellularRefreshManager.shared.turnOffDataIfNeeded()
         
-        // Nạp lại PairingFile & khởi động lại Minimuxer trên giao diện mạng hiện tại (sau khi tắt 4G / bật VPN)
-        // (startMinimuxer đã bao gồm sẵn startEMProxy nếu bật WireGuard EMP)
-        if let pf = PairingFileManager.shared.fetchPairingFile() {
-            try? await AppBootManager.shared.startMinimuxer(pairingFile: pf)
-        }
-        
-        // Đợi đường truyền lockdownd thực sự thông suốt (chỉ gọi ensureMinimuxerReady nếu chưa sẵn sàng để tránh kiểm tra trùng)
-        let isMuxerReady = await CellularRefreshManager.shared.waitForMinimuxerReady(timeout: 6.0)
-        if !isMuxerReady {
-            try? await ensureMinimuxerReady()
+        if !didTurnOffAndReset {
+            // Trường hợp chạy qua Shortcut 2 giai đoạn (4G đã tắt sẵn từ bên ngoài) hoặc Wi-Fi:
+            // Reset sạch Minimuxer (Stop -> Sleep -> Start -> Wait) để tránh lỗi MinimuxerError 35
+            let isReady = await CellularRefreshManager.shared.resetAndPrepareMinimuxer(timeout: 6.0)
+            if !isReady {
+                try? await ensureMinimuxerReady()
+            }
         }
         
         do {
@@ -76,16 +74,21 @@ final class InjectBatchProfilesOperation: BaseStandaloneOperation<StandaloneOper
                         mainProfile = parsed
                     }
                     
-                    do {
-                        try await installProvisioningProfiles(profileData)
-                    } catch {
-                        debugLog("[InjectBatchProfilesOperation] First attempt failed for \(batch.bundleID), resetting muxer & retrying: \(error)")
-                        try? await Task.sleep(nanoseconds: 1_000_000_000)
-                        if let pf = PairingFileManager.shared.fetchPairingFile() {
-                            try? await minimuxerStart(pf, preferred: PairingFileManager.shared.preferredProtocol)
+                    var lastError: Error?
+                    for attempt in 1...3 {
+                        do {
+                            try await installProvisioningProfiles(profileData)
+                            lastError = nil
+                            break
+                        } catch {
+                            lastError = error
+                            debugLog("[InjectBatchProfilesOperation] Attempt \(attempt) failed for \(batch.bundleID), resetting muxer & retrying: \(error)")
+                            try? await Task.sleep(nanoseconds: 600_000_000)
+                            _ = await CellularRefreshManager.shared.resetAndPrepareMinimuxer(timeout: 6.0)
                         }
-                        _ = await CellularRefreshManager.shared.waitForMinimuxerReady(timeout: 5.0)
-                        try await installProvisioningProfiles(profileData)
+                    }
+                    if let error = lastError {
+                        throw error
                     }
                 }
 

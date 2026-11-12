@@ -1,3 +1,4 @@
+
 //
 //  DeviceRegistrationFlow.swift
 //  SideStore
@@ -46,7 +47,13 @@ final class DeviceRegistrationFlow: @unchecked Sendable {
     }
     
     private func fetchDeviceUDID() async throws -> String {
-        let isCellularEnabled = CellularRefreshManager.shared.isEnabled
+        // 1. Ưu tiên lấy ngay UDID từ Keychain Cache (không cần tắt 4G hay mở kết nối tới lockdownd)
+        if let cachedUDID = try? await fetchUDID(forceLive: false), !cachedUDID.isEmpty {
+            return cachedUDID
+        }
+        
+        // 2. Chỉ khi Cache hoàn toàn trống mới cần kết nối live tới Minimuxer
+        let isCellularEnabled = CellularRefreshManager.shared.isEnabled && !CellularRefreshManager.shared.isShortcutTwoStageMode
         if isCellularEnabled {
             await CellularRefreshManager.shared.turnOffDataIfNeeded()
         }

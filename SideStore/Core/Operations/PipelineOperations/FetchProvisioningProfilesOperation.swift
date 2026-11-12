@@ -72,7 +72,6 @@ class FetchProvisioningProfilesOperation: BasePipelineOperation<InstallAppOperat
                 group.addTask {
                     self.verboseLog("[FetchProvisioningProfiles] Preparing extension profile for \(appExtension.bundleIdentifier)...")
                     let extProfile = try await self.provisionAndFetchProfile(for: appExtension, parentAppBundle: targetAppBundle, team: team)
-                    // Use customized bundle ID if applicable
                     let updatedExtensionBundleId = appExtension.bundleIdentifier.replacingOccurrences(of: targetAppBundle.bundleIdentifier, with: effectiveBundleId)
                     self.verboseLog("[FetchProvisioningProfiles] Extension profile prepared for \(updatedExtensionBundleId)")
                     return (updatedExtensionBundleId, extProfile)
@@ -115,27 +114,19 @@ class FetchProvisioningProfilesOperation: BasePipelineOperation<InstallAppOperat
                 return nil
             }
             
-            // Teams match if installedApp.team has same identifier as team (or team is nil)
-            // AND installedApp.resignedBundleIdentifier actually contains the team's identifier.
             let teamsMatch = (installedApp.team?.identifier == team.identifier || installedApp.team == nil)
                              && installedApp.resignedBundleIdentifier.contains(team.identifier)
             
             self.verboseLog("[FetchProvisioningProfiles] preferredBundleID check: app=\(targetAppBundle.bundleIdentifier), installedResignedID=\(installedApp.resignedBundleIdentifier), installedTeam=\(installedApp.team?.identifier ?? "nil"), targetTeam=\(team.identifier), teamsMatch=\(teamsMatch)")
 
-            // TODO: @mahee96: Try to keep the debug build and release build operations similar, refactor later with proper reasoning
-            //                 for now, restricted it to debug on simulator only
             #if DEBUG && targetEnvironment(simulator)
-
             let result = teamsMatch ? installedApp.resignedBundleIdentifier : nil
             self.debugLog("[FetchProvisioningProfiles] preferredBundleID result (DEBUG simulator): \(result ?? "nil")")
             return result
-
             #else
-            
             let result = teamsMatch ? installedApp.resignedBundleIdentifier : nil
             self.debugLog("[FetchProvisioningProfiles] preferredBundleID result: \(result ?? "nil")")
             return result
-            
             #endif
         }
     }
@@ -185,7 +176,23 @@ class FetchProvisioningProfilesOperation: BasePipelineOperation<InstallAppOperat
         
         verboseLog(targetAppBundle.dumpMachOInfo())
         self.debugLog("[FetchProvisioningProfiles] Fetching provisioning profile from Apple for App ID \(groupAppID.bundleIdentifier)...")
-        let profile = try await DeveloperPortalProxy.shared.downloadProvisioningProfile(for: groupAppID, deviceType: DeveloperPortalProxy.currentDeviceType, team: team)
+        
+        let profile: ALTProvisioningProfile
+        do {
+            profile = try await DeveloperPortalProxy.shared.downloadProvisioningProfile(for: groupAppID, deviceType: DeveloperPortalProxy.currentDeviceType, team: team)
+        } catch {
+            // TỰ ĐỘNG KHẮC PHỤC LỖI 8220 (Tài khoản chưa có thiết bị nào được đăng ký)
+            let nsError = error as NSError
+            if nsError.code == 8220 || nsError.localizedDescription.contains("8220") || nsError.localizedDescription.localizedCaseInsensitiveContains("no devices") {
+                self.debugLog("[FetchProvisioningProfiles] Caught error 8220 (No devices on team). Registering current device now and retrying...")
+                UserDefaults.standard.isDeviceRegistered = false
+                _ = try await DeviceRegistrationFlow().registerCurrentDevice(for: team)
+                profile = try await DeveloperPortalProxy.shared.downloadProvisioningProfile(for: groupAppID, deviceType: DeveloperPortalProxy.currentDeviceType, team: team)
+            } else {
+                throw error
+            }
+        }
+        
         self.debugLog("[FetchProvisioningProfiles] Provisioning profile fetched for \(groupAppID.bundleIdentifier) (Name: \(profile.name), Expiration: \(String(describing: profile.expirationDate)))")
         return profile
     }
@@ -245,7 +252,6 @@ private extension FetchProvisioningProfilesOperation{
         var targetFeatures: [ALTFeature: String] = [:]
         var droppedFeatures: Set<ALTFeature> = []
         
-        // Filter applicable features
         for (key, value) in entitlements {
             guard let feature = ALTFeature(entitlement: ALTEntitlement(rawValue: key)) else { 
                 continue 
@@ -259,7 +265,6 @@ private extension FetchProvisioningProfilesOperation{
             }
         }
         
-        // Force apply mandatory features
         for feature in AppConstants.mandatoryFeatures {
             if allowedFeatures.contains(feature) {
                 targetFeatures[feature] = "true"
@@ -273,10 +278,8 @@ private extension FetchProvisioningProfilesOperation{
             self.debugLog("[FetchProvisioningProfiles] Dropped non-applicable features for team type \(team.type):\n\(bulleted)")
         }
         
-        // check if we really need to make a update on portal
         let currentFeatures = appID.features
         let needsUpdate = targetFeatures.contains { feature, targetValue in
-            // if not available yet assume feature = off
             let currentValue = currentFeatures[feature] ?? "false"
             return currentValue != targetValue
         }
@@ -285,7 +288,6 @@ private extension FetchProvisioningProfilesOperation{
             return appID 
         }
         
-        // set for requesting and send request
         var appID = appID
         appID.features = targetFeatures
         
@@ -309,8 +311,6 @@ private extension FetchProvisioningProfilesOperation{
                 
         guard var applicationGroups = entitlements[ALTEntitlement.appGroups.rawValue] as? [String], !applicationGroups.isEmpty else {
             verboseLog("[FetchProvisioningProfiles] App ID \(appID.bundleIdentifier) has no app groups, skipping assignment.")
-            // Assigning an App ID to an empty app group array fails,
-            // so just do nothing if there are no app groups.
             return appID
         }
         
@@ -324,7 +324,6 @@ private extension FetchProvisioningProfilesOperation{
         if targetAppBundle.isAltStoreApp {
             verboseLog("[FetchProvisioningProfiles] Application groups before modifying for SideStore: \(applicationGroups)")
             
-            // Remove app groups that contain AltStore since they can be problematic (cause SideStore to expire early)
             for (index, group) in applicationGroups.enumerated() {
                 if group.contains("AltStore") {
                     verboseLog("[FetchProvisioningProfiles] Removing application group: \(group)")
@@ -332,7 +331,6 @@ private extension FetchProvisioningProfilesOperation{
                 }
             }
             
-            // Make sure we add .AltWidget for the widget
             var altStoreAppGroupID = Bundle.baseAltStoreAppGroupID
             for (_, group) in applicationGroups.enumerated() {
                 if group.contains("AltWidget") {
@@ -341,10 +339,6 @@ private extension FetchProvisioningProfilesOperation{
                 }
             }
             
-            // Potentially updating app groups for this specific AltStore.
-            // Find the (unique) AltStore app group, then replace it
-            // with the correct "base" app group ID.
-            // Otherwise, we may append a duplicate team identifier to the end.
             if let index = applicationGroups.firstIndex(where: { $0.contains(Bundle.baseAltStoreAppGroupID) }) {
                 applicationGroups[index] = altStoreAppGroupID
             } else {
@@ -379,11 +373,9 @@ private extension FetchProvisioningProfilesOperation{
                 if let existing = self.context.sharedContext.appGroups?.first(where: { $0.groupIdentifier == adjustedGroupIdentifier }) {
                     group = existing
                 } else {
-                    // Not all characters are allowed in group names, so we replace periods with spaces (like Apple does).
                     let name = "SideStore " + groupIdentifier.replacingOccurrences(of: ".", with: " ")
                     do {
                         group = try await TaskChainCoalescer.shared.coalesce(key: "add_app_group_\(adjustedGroupIdentifier)") {
-                            // skip add if already added into shared by other tasks
                             if let existing = self.context.sharedContext.appGroups?.first(where: { $0.groupIdentifier == adjustedGroupIdentifier }) {
                                 return existing
                             }
@@ -413,7 +405,6 @@ private extension FetchProvisioningProfilesOperation{
     }
 
     func adjustedGroupIdentifier(for groupIdentifier: String, appID: ALTAppID, targetAppBundle: ALTApplication, team: ALTTeam) async throws -> String {
-        // Currently Build.xconfig for debug appends suffix as TEAMID already
         #if DEBUG
         if groupIdentifier.contains(Bundle.baseAltStoreAppGroupID) && groupIdentifier.contains(team.identifier) {
             return groupIdentifier

@@ -1,3 +1,4 @@
+
 //
 //  BrowseViewController.swift
 //  AltStore
@@ -11,262 +12,201 @@ import Combine
 import CoreData
 @preconcurrency import Nuke
 
-class BrowseViewController: UICollectionViewController
-{
-    // Nil == Show apps from all sources.
+class BrowseViewController: UICollectionViewController {
     let source: Source?
-    
+
     private(set) var category: StoreCategory? {
-        didSet {
-            self.updateDataSource()
-            self.update()
-        }
+        didSet { updateDataSource(); update() }
     }
-    
+
     var searchPredicate: NSPredicate? {
-        didSet {
-            self.updateDataSource()
-        }
+        didSet { updateDataSource() }
     }
-    
-    private lazy var dataSource = self.makeDataSource()
+
+    private lazy var dataSource = makeDataSource()
     private lazy var placeholderView = PlaceholderView(frame: .zero)
-    
+
     private let prototypeCell = AppCardCollectionViewCell(frame: .zero)
     private var sortButton: UIBarButtonItem?
-    
     private var preferredAppSorting: AppSorting = UserDefaults.standard.preferredAppSorting
-    
     private var cancellables = Set<AnyCancellable>()
-    
+
     private var titleStackView: UIStackView!
     private var titleSourceIconView: AppIconImageView!
     private var titleCategoryIconView: UIImageView!
     private var titleLabel: UILabel!
-    
-    init?(source: Source?, coder: NSCoder)
-    {
-        self.source = source
-        self.category = nil
-        
-        super.init(coder: coder)
-    }
-    
-    init?(category: StoreCategory?, coder: NSCoder)
-    {
-        self.source = nil
-        self.category = category
-        
-        super.init(coder: coder)
-    }
-    
-    required init?(coder: NSCoder)
-    {
-        self.source = nil
-        self.category = nil
-        
-        super.init(coder: coder)
-    }
-    
     private var cachedItemSizes = [String: CGSize]()
-    
+
     @IBOutlet private var sourcesBarButtonItem: UIBarButtonItem!
-    
-    override func viewDidLoad()
-    {
+
+    init?(source: Source?, coder: NSCoder) {
+        self.source = source; self.category = nil
+        super.init(coder: coder)
+    }
+
+    init?(category: StoreCategory?, coder: NSCoder) {
+        self.source = nil; self.category = category
+        super.init(coder: coder)
+    }
+
+    required init?(coder: NSCoder) {
+        self.source = nil; self.category = nil
+        super.init(coder: coder)
+    }
+
+    override func viewDidLoad() {
         super.viewDidLoad()
-        
-        self.collectionView.backgroundColor = .altBackground
-        self.collectionView.alwaysBounceVertical = true
-        
-        self.dataSource.searchableKeyPaths = [#keyPath(StoreApp.name),
-                                               #keyPath(StoreApp.subtitle),
-                                               #keyPath(StoreApp.developerName),
-                                               #keyPath(StoreApp.bundleIdentifier)]
+
+        view.backgroundColor = .clear
+        view.applyCSSBodyGradient()
+        collectionView.backgroundColor = .clear
+        collectionView.alwaysBounceVertical = true
+
+        // Áp dụng giao diện Thẻ chuẩn CSS từ ThemeManager cho Placeholder
+        placeholderView.textLabel.applySectionTitle(text: "")
+        placeholderView.detailTextLabel.textColor = AppUI.Colors.dark
+        placeholderView.activityIndicatorView.color = AppUI.Colors.blue
+        placeholderView.stackView.spacing = 12
+        placeholderView.stackView.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 20, leading: 20, bottom: 20, trailing: 20)
+        placeholderView.stackView.isLayoutMarginsRelativeArrangement = true
+        placeholderView.stackView.applyCSSCardStyle()
+
+        dataSource.searchableKeyPaths = [#keyPath(StoreApp.name), #keyPath(StoreApp.subtitle), #keyPath(StoreApp.developerName), #keyPath(StoreApp.bundleIdentifier)]
         #if !os(tvOS)
-        self.navigationItem.searchController = self.dataSource.searchController
+        navigationItem.searchController = dataSource.searchController
         #endif
-        
-        self.prototypeCell.contentView.translatesAutoresizingMaskIntoConstraints = false
-        
-        self.collectionView.register(AppCardCollectionViewCell.self, forCellWithReuseIdentifier: CellContentGenericCellIdentifier)
-        
-        self.collectionView.dataSource = self.dataSource
-        self.collectionView.prefetchDataSource = self.dataSource
-        self.dataSource.contentView = self.collectionView
-        
-        let collectionViewLayout = self.collectionViewLayout as! UICollectionViewFlowLayout
-        collectionViewLayout.minimumLineSpacing = 30
-        
+
+        prototypeCell.contentView.translatesAutoresizingMaskIntoConstraints = false
+        collectionView.register(AppCardCollectionViewCell.self, forCellWithReuseIdentifier: CellContentGenericCellIdentifier)
+        collectionView.dataSource = dataSource
+        collectionView.prefetchDataSource = dataSource
+        dataSource.contentView = collectionView
+
+        (collectionViewLayout as! UICollectionViewFlowLayout).minimumLineSpacing = 24
+
         #if !os(tvOS)
-        self.registerForPreviewing(with: self, sourceView: self.collectionView)
-        
-        let refreshControl = UIRefreshControl(frame: .zero, primaryAction: UIAction { [weak self] _ in
-            self?.updateSources()
-        })
-        self.collectionView.refreshControl = refreshControl
-        #endif
-        
-        #if !os(tvOS)
-        if self.category != nil, #available(iOS 16, *)
-        {
+        registerForPreviewing(with: self, sourceView: collectionView)
+        let rc = UIRefreshControl(frame: .zero, primaryAction: UIAction { [weak self] _ in self?.updateSources() })
+        rc.tintColor = AppUI.Colors.blue
+        collectionView.refreshControl = rc
+
+        if category != nil, #available(iOS 16, *) {
             let categoriesMenu = UIMenu(children: [
-                UIDeferredMenuElement.uncached { [weak self] completion in
-                    let actions = self?.makeCategoryActions() ?? []
-                    completion(actions)
-                }
+                UIDeferredMenuElement.uncached { [weak self] completion in completion(self?.makeCategoryActions() ?? []) }
             ])
-            
-            self.navigationItem.titleMenuProvider = { _ in categoriesMenu }
+            navigationItem.titleMenuProvider = { _ in categoriesMenu }
         }
         #endif
-        
-        self.titleSourceIconView = AppIconImageView(style: .circular)
-        
-        self.titleCategoryIconView = UIImageView(frame: .zero)
-        self.titleCategoryIconView.contentMode = .scaleAspectFit
-        
-        self.titleLabel = UILabel()
-        self.titleLabel.font = UIFont.preferredFont(forTextStyle: .headline)
-        
-        self.titleStackView = UIStackView(arrangedSubviews: [self.titleSourceIconView, self.titleCategoryIconView, self.titleLabel])
-        self.titleStackView.spacing = 4
-        self.titleStackView.translatesAutoresizingMaskIntoConstraints = false
-        
+
+        titleSourceIconView = AppIconImageView(style: .circular)
+        titleCategoryIconView = UIImageView(frame: .zero)
+        titleCategoryIconView.contentMode = .scaleAspectFit
+
+        titleLabel = UILabel()
+        titleLabel.font = .systemFont(ofSize: 17, weight: .bold)
+        titleLabel.textColor = AppUI.Colors.dark
+
+        titleStackView = UIStackView(arrangedSubviews: [titleSourceIconView, titleCategoryIconView, titleLabel])
+        titleStackView.spacing = 6
+        titleStackView.translatesAutoresizingMaskIntoConstraints = false
+
         #if !os(tvOS)
-        self.navigationItem.largeTitleDisplayMode = .never
-        
-        if #available(iOS 16, *)
-        {
-            self.navigationItem.preferredSearchBarPlacement = .automatic
-        }
+        navigationItem.largeTitleDisplayMode = .never
+        if #available(iOS 16, *) { navigationItem.preferredSearchBarPlacement = .automatic }
         #endif
-        
-        self.prepareAppSorting()
-        
-        self.preparePipeline()
-        
+
+        prepareAppSorting()
+        preparePipeline()
+
         NSLayoutConstraint.activate([
-            // Source icon = equal width and height
-            self.titleSourceIconView.heightAnchor.constraint(equalToConstant: 26),
-            self.titleSourceIconView.widthAnchor.constraint(equalTo: self.titleSourceIconView.heightAnchor),
-            
-            // Category icon = constant height, variable widths
-            self.titleCategoryIconView.heightAnchor.constraint(equalToConstant: 26)
+            titleSourceIconView.heightAnchor.constraint(equalToConstant: 26),
+            titleSourceIconView.widthAnchor.constraint(equalTo: titleSourceIconView.heightAnchor),
+            titleCategoryIconView.heightAnchor.constraint(equalToConstant: 26)
         ])
-        
-        self.updateDataSource()
-        self.update()
+
+        updateDataSource()
+        update()
     }
-    
-    override func viewWillAppear(_ animated: Bool)
-    {
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        view.updateCSSBodyGradientFrame()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        
-        self.update()
+        update()
     }
-    
-    override func viewDidDisappear(_ animated: Bool) 
-    {
+
+    override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
-        
-        self.navigationController?.navigationBar.tintColor = nil
+        navigationController?.navigationBar.tintColor = nil
     }
 }
 
-private extension BrowseViewController
-{
-    func preparePipeline()
-    {
+private extension BrowseViewController {
+    func preparePipeline() {
         AppManager.shared.$updateSourcesResult
-            .receive(on: RunLoop.main) // Delay to next run loop so we receive _current_ value (not previous value).
-            .sink { [weak self] result in
-                self?.update()
-            }
-            .store(in: &self.cancellables)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.update() }
+            .store(in: &cancellables)
     }
-    
-    func makeFetchRequest() -> NSFetchRequest<StoreApp>
-    {
+
+    func makeFetchRequest() -> NSFetchRequest<StoreApp> {
         let fetchRequest = StoreApp.fetchRequest() as NSFetchRequest<StoreApp>
         fetchRequest.returnsObjectsAsFaults = false
-        
+
         let predicate = StoreApp.visibleAppsPredicate
-        
-        if let source = self.source
-        {
-            let filterPredicate = NSPredicate(format: "%K == %@", #keyPath(StoreApp._source), source)
-            fetchRequest.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [filterPredicate, predicate])
-        }
-        else if let category = self.category
-        {
-            let categoryPredicate = switch category {
-            case .other: StoreApp.otherCategoryPredicate
-            default: NSPredicate(format: "%K == %@", #keyPath(StoreApp._category), category.rawValue)
-            }
-            fetchRequest.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, predicate])
-        }
-        else
-        {
+        if let source {
+            fetchRequest.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [NSPredicate(format: "%K == %@", #keyPath(StoreApp._source), source), predicate])
+        } else if let category {
+            let catPredicate = (category == .other) ? StoreApp.otherCategoryPredicate : NSPredicate(format: "%K == %@", #keyPath(StoreApp._category), category.rawValue)
+            fetchRequest.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [catPredicate, predicate])
+        } else {
             fetchRequest.predicate = predicate
         }
-        
-        var sortDescriptors = [NSSortDescriptor(keyPath: \StoreApp.name, ascending: true),
-                               NSSortDescriptor(keyPath: \StoreApp.bundleIdentifier, ascending: true),
-                               NSSortDescriptor(keyPath: \StoreApp.sourceIdentifier, ascending: true)]
-        
-        switch self.preferredAppSorting
-        {
-        case .default:
-            let descriptor = NSSortDescriptor(keyPath: \StoreApp.sortIndex, ascending: self.preferredAppSorting.isAscending)
-            sortDescriptors.insert(descriptor, at: 0)
-            
-        case .name:
-            // Already sorting by name, no need to prepend additional sort descriptor.
-            break
-            
-        case .developer:
-            let descriptor = NSSortDescriptor(keyPath: \StoreApp.developerName, ascending: self.preferredAppSorting.isAscending)
-            sortDescriptors.insert(descriptor, at: 0)
-            
-        case .lastUpdated:
-            let descriptor = NSSortDescriptor(keyPath: \StoreApp.latestSupportedVersion?.date, ascending: self.preferredAppSorting.isAscending)
-            sortDescriptors.insert(descriptor, at: 0)
+
+        var sortDescriptors = [
+            NSSortDescriptor(keyPath: \StoreApp.name, ascending: true),
+            NSSortDescriptor(keyPath: \StoreApp.bundleIdentifier, ascending: true),
+            NSSortDescriptor(keyPath: \StoreApp.sourceIdentifier, ascending: true)
+        ]
+
+        switch preferredAppSorting {
+        case .default: sortDescriptors.insert(NSSortDescriptor(keyPath: \StoreApp.sortIndex, ascending: preferredAppSorting.isAscending), at: 0)
+        case .name: break
+        case .developer: sortDescriptors.insert(NSSortDescriptor(keyPath: \StoreApp.developerName, ascending: preferredAppSorting.isAscending), at: 0)
+        case .lastUpdated: sortDescriptors.insert(NSSortDescriptor(keyPath: \StoreApp.latestSupportedVersion?.date, ascending: preferredAppSorting.isAscending), at: 0)
         }
-        
+
         fetchRequest.sortDescriptors = sortDescriptors
-        
         return fetchRequest
     }
-    
-    func makeDataSource() -> FetchedResultsCollectionViewPrefetchingDataSource<StoreApp, UIImage>
-    {
-        let fetchRequest = self.makeFetchRequest()
-        
-        let context = self.source?.managedObjectContext ?? DatabaseManager.shared.viewContext
-        let dataSource = FetchedResultsCollectionViewPrefetchingDataSource<StoreApp, UIImage>(fetchRequest: fetchRequest, managedObjectContext: context)
-        dataSource.placeholderView = self.placeholderView
-        dataSource.cellConfigurationHandler = { [weak self] (cell, app, indexPath) in
+
+    func makeDataSource() -> FetchedResultsCollectionViewPrefetchingDataSource<StoreApp, UIImage> {
+        let context = source?.managedObjectContext ?? DatabaseManager.shared.viewContext
+        let ds = FetchedResultsCollectionViewPrefetchingDataSource<StoreApp, UIImage>(fetchRequest: makeFetchRequest(), managedObjectContext: context)
+        ds.placeholderView = placeholderView
+        ds.cellConfigurationHandler = { [weak self] (cell, app, _) in
             guard let self else { return }
-            
             let cell = cell as! AppCardCollectionViewCell
+            cell.backgroundColor = .clear
+            cell.contentView.backgroundColor = .clear
             cell.layoutMargins.left = self.view.layoutMargins.left
             cell.layoutMargins.right = self.view.layoutMargins.right
-            
-            let showSourceIcon = (self.source == nil) // Hide source icon if redundant
-            cell.configure(for: app, showSourceIcon: showSourceIcon)
-            
+
+            cell.configure(for: app, showSourceIcon: self.source == nil)
+            cell.bannerView.applyCSSBannerShadow()
+
             cell.bannerView.iconImageView.image = nil
             cell.bannerView.iconImageView.isIndicatingActivity = true
-            
-            cell.bannerView.button.addTarget(self, action: #selector(BrowseViewController.performAppAction(_:)), for: .primaryActionTriggered)
+
+            cell.bannerView.button.addTarget(self, action: #selector(performAppAction(_:)), for: .primaryActionTriggered)
             cell.bannerView.button.activityIndicatorView.style = .medium
-            cell.bannerView.button.activityIndicatorView.color = .white
-            
-            let tintColor = app.tintColor ?? .altPrimary
-            cell.tintColor = tintColor
+            cell.bannerView.button.activityIndicatorView.color = AppUI.Colors.white
+            cell.tintColor = app.tintColor ?? AppUI.Colors.blue
         }
-        dataSource.prefetchHandler = { (storeApp, indexPath) in
+        ds.prefetchHandler = { (storeApp, _) in
             let image = try await ImagePipeline.shared.image(for: storeApp.iconURL)
             return await Task.detached(priority: .userInitiated) {
                 _ = image.isPredominantlyLight
@@ -274,408 +214,226 @@ private extension BrowseViewController
                 return image
             }.value
         }
-        dataSource.prefetchCompletionHandler = { [weak dataSource] (cell, image, indexPath, error) in
+        ds.prefetchCompletionHandler = { [weak ds] (cell, image, indexPath, error) in
             let cell = cell as! AppCardCollectionViewCell
             cell.bannerView.iconImageView.isIndicatingActivity = false
             cell.bannerView.iconImageView.image = image
-            
-            if let error = error, let dataSource
-            {
-                let app = dataSource.item(at: indexPath)
-                debugLog("Failed to load app icon from \(app.iconURL). \(error.localizedDescription)")
+            if let error, let ds {
+                debugLog("Failed to load app icon from \(ds.item(at: indexPath).iconURL). \(error.localizedDescription)")
             }
         }
-        
-        return dataSource
+        return ds
     }
-    
-    func updateDataSource()
-    {
-        let fetchRequest = self.makeFetchRequest()
-        
-        let context = self.source?.managedObjectContext ?? DatabaseManager.shared.viewContext
-        let fetchedResultsController = NSFetchedResultsController(fetchRequest: fetchRequest, managedObjectContext: context, sectionNameKeyPath: nil, cacheName: nil)
-        self.dataSource.fetchedResultsController = fetchedResultsController
-        
-        self.dataSource.predicate = self.searchPredicate
+
+    func updateDataSource() {
+        let context = source?.managedObjectContext ?? DatabaseManager.shared.viewContext
+        dataSource.fetchedResultsController = NSFetchedResultsController(fetchRequest: makeFetchRequest(), managedObjectContext: context, sectionNameKeyPath: nil, cacheName: nil)
+        dataSource.predicate = searchPredicate
     }
-    
-    func updateSources()
-    {
+
+    func updateSources() {
         AppManager.shared.updateAllSources { result in
             #if !os(tvOS)
             self.collectionView.refreshControl?.endRefreshing()
             #endif
-            
-            guard case .failure(let error) = result else { return }
-            
-            if self.dataSource.itemCount > 0
-            {
+            if case .failure(let error) = result, self.dataSource.itemCount > 0 {
                 let toastView = ToastView(error: error)
                 toastView.addTarget(nil, action: #selector(TabBarController.presentSources), for: .touchUpInside)
                 toastView.show(in: self)
             }
         }
     }
-    
-    func update()
-    {
-        if self.searchPredicate != nil
-        {
-            self.placeholderView.textLabel.text = NSLocalizedString("No Apps", comment: "")
-            self.placeholderView.textLabel.isHidden = false
-            
-            self.placeholderView.detailTextLabel.text = NSLocalizedString("Please make sure your spelling is correct, or try searching for another app.", comment: "")
-            self.placeholderView.detailTextLabel.isHidden = false
-            
-            self.placeholderView.activityIndicatorView.stopAnimating()
-        }
-        else
-        {
-            switch AppManager.shared.updateSourcesResult
-            {
+
+    func update() {
+        if searchPredicate != nil {
+            placeholderView.textLabel.text = AppStrings.Browse.noApps
+            placeholderView.textLabel.isHidden = false
+            placeholderView.detailTextLabel.text = AppStrings.Browse.searchNoAppsDetail
+            placeholderView.detailTextLabel.isHidden = false
+            placeholderView.activityIndicatorView.stopAnimating()
+        } else {
+            switch AppManager.shared.updateSourcesResult {
             case nil:
-                self.placeholderView.textLabel.isHidden = true
-                self.placeholderView.detailTextLabel.isHidden = false
-                
-                self.placeholderView.detailTextLabel.text = NSLocalizedString("Loading...", comment: "")
-                
-                self.placeholderView.activityIndicatorView.startAnimating()
-                
+                placeholderView.textLabel.isHidden = true
+                placeholderView.detailTextLabel.isHidden = false
+                placeholderView.detailTextLabel.text = AppStrings.Browse.loading
+                placeholderView.activityIndicatorView.startAnimating()
             case .failure(let error):
-                self.placeholderView.textLabel.isHidden = false
-                self.placeholderView.detailTextLabel.isHidden = false
-                
-                self.placeholderView.textLabel.text = NSLocalizedString("Unable to Fetch Apps", comment: "")
-                self.placeholderView.detailTextLabel.text = error.localizedDescription
-                
-                self.placeholderView.activityIndicatorView.stopAnimating()
-                
+                placeholderView.textLabel.isHidden = false
+                placeholderView.detailTextLabel.isHidden = false
+                placeholderView.textLabel.text = AppStrings.Browse.unableToFetchApps
+                placeholderView.detailTextLabel.text = error.localizedDescription
+                placeholderView.activityIndicatorView.stopAnimating()
             case .success:
-                self.placeholderView.textLabel.text = NSLocalizedString("No Apps", comment: "")
-                self.placeholderView.textLabel.isHidden = false
-                self.placeholderView.detailTextLabel.isHidden = true
-                
-                self.placeholderView.activityIndicatorView.stopAnimating()
+                placeholderView.textLabel.text = AppStrings.Browse.noApps
+                placeholderView.textLabel.isHidden = false
+                placeholderView.detailTextLabel.isHidden = true
+                placeholderView.activityIndicatorView.stopAnimating()
             }
         }
-        
+
         let tintColor: UIColor
-        
-        if let source = self.source
-        {
-            tintColor = source.effectiveTintColor?.adjustedForDisplay ?? .altPrimary
-            
-            self.title = source.name
-                        
-            self.titleSourceIconView.backgroundColor = tintColor
-            self.titleSourceIconView.isHidden = false
-            
-            self.titleCategoryIconView.isHidden = true
-            
-            if let iconURL = source.effectiveIconURL
-            {
+        if let source {
+            tintColor = source.effectiveTintColor?.adjustedForDisplay ?? AppUI.Colors.blue
+            title = source.name
+            titleSourceIconView.backgroundColor = tintColor
+            titleSourceIconView.isHidden = false
+            titleCategoryIconView.isHidden = true
+
+            if let iconURL = source.effectiveIconURL {
                 Task { [weak self] in
-                    do
-                    {
-                        let image = try await ImagePipeline.shared.image(for: iconURL)
-                        guard let self else { return }
-                        self.titleSourceIconView.image = image
-                        self.titleSourceIconView.backgroundColor = .white
-                    }
-                    catch
-                    {
-                        debugLog("Failed to fetch source icon at \(iconURL). \(error.localizedDescription)")
+                    if let image = try? await ImagePipeline.shared.image(for: iconURL) {
+                        self?.titleSourceIconView.image = image
+                        self?.titleSourceIconView.backgroundColor = AppUI.Colors.white
                     }
                 }
             }
-        }
-        else if let category = self.category
-        {
+        } else if let category {
             tintColor = category.tintColor
-            
-            self.title = category.localizedName
-            
-            let image = UIImage(systemName: category.filledSymbolName)?.withTintColor(tintColor, renderingMode: .alwaysOriginal)
-            self.titleCategoryIconView.image = image
-            self.titleCategoryIconView.isHidden = false
-            
-            self.titleSourceIconView.isHidden = true
+            title = category.localizedName
+            titleCategoryIconView.image = UIImage(systemName: category.filledSymbolName)?.withTintColor(tintColor, renderingMode: .alwaysOriginal)
+            titleCategoryIconView.isHidden = false
+            titleSourceIconView.isHidden = true
+        } else {
+            tintColor = AppUI.Colors.blue
+            title = AppStrings.Browse.title
+            titleSourceIconView.isHidden = true
+            titleCategoryIconView.isHidden = true
         }
-        else
-        {
-            tintColor = .altPrimary
-            
-            self.title = NSLocalizedString("Browse", comment: "")
-            
-            self.titleSourceIconView.isHidden = true
-            self.titleCategoryIconView.isHidden = true
-        }
-        
-        self.titleLabel.text = self.title
-        self.titleStackView.sizeToFit()
-        self.navigationItem.titleView = self.titleStackView
-        
-        self.view.tintColor = tintColor
-        
-        #if !os(tvOS)
-        let appearance = NavigationBarAppearance()
-        appearance.configureWithTintColor(tintColor)
-        appearance.configureWithDefaultBackground()
-        
-        let edgeAppearance = appearance.copy()
-        edgeAppearance.configureWithTransparentBackground()
-        
-        self.navigationItem.standardAppearance = appearance
-        self.navigationItem.scrollEdgeAppearance = edgeAppearance
-        #endif
-        
-        // Necessary to tint UISearchController's inline bar button.
-        self.navigationController?.navigationBar.tintColor = tintColor
-        
-        if let sortButton
-        {
+
+        titleLabel.text = title
+        titleStackView.sizeToFit()
+        navigationItem.titleView = titleStackView
+        view.tintColor = tintColor
+
+        // Đồng bộ thanh Navigation Bar kính mờ từ ThemeManager
+        applyCSSNavigationBar(tintColor: tintColor, transparentEdge: true)
+
+        if let sortButton {
             sortButton.image = sortButton.image?.withTintColor(tintColor, renderingMode: .alwaysOriginal)
         }
     }
-    
-    func makeCategoryActions() -> [UIAction]
-    {
-        let handler = { [weak self] (category: StoreCategory) in
-            self?.category = category
-        }
-        
-        let fetchRequest = NSFetchRequest(entityName: StoreApp.entity().name!) as NSFetchRequest<NSDictionary>
+
+    func makeCategoryActions() -> [UIAction] {
+        let fetchRequest = NSFetchRequest<NSDictionary>(entityName: StoreApp.entity().name!)
         fetchRequest.resultType = .dictionaryResultType
         fetchRequest.returnsDistinctResults = true
         fetchRequest.propertiesToFetch = [#keyPath(StoreApp._category)]
         fetchRequest.predicate = StoreApp.visibleAppsPredicate
-        
-        do
-        {
-            let dictionaries = try DatabaseManager.shared.viewContext.fetch(fetchRequest)
-            
-            // Keep nil values
-            let categories = dictionaries.map { $0[#keyPath(StoreApp._category)] as? String? ?? nil }.map { rawCategory -> StoreCategory in
-                guard let rawCategory else { return .other }
-                return StoreCategory(rawValue: rawCategory) ?? .other
+
+        guard let dictionaries = try? DatabaseManager.shared.viewContext.fetch(fetchRequest) else { return [] }
+        let categories = dictionaries.map { ($0[#keyPath(StoreApp._category)] as? String).flatMap(StoreCategory.init(rawValue:)) ?? .other }
+
+        var sorted = Set(categories).sorted { $0.localizedName.localizedStandardCompare($1.localizedName) == .orderedAscending }
+        if let otherIdx = sorted.firstIndex(of: .other) { sorted.move(fromOffsets: [otherIdx], toOffset: sorted.count) }
+
+        return sorted.map { cat in
+            let image = UIImage(systemName: cat.filledSymbolName)?.withTintColor(cat.tintColor, renderingMode: .alwaysOriginal)
+            return UIAction(title: cat.localizedName, image: image, state: (cat == self.category) ? .on : .off) { [weak self] _ in
+                self?.category = cat
             }
-            
-            var sortedCategories = Set(categories).sorted(by: { $0.localizedName.localizedStandardCompare($1.localizedName) == .orderedAscending })
-            if let otherIndex = sortedCategories.firstIndex(of: .other)
-            {
-                // Ensure "Other" is always last
-                sortedCategories.move(fromOffsets: [otherIndex], toOffset: sortedCategories.count)
-            }
-            
-            let actions = sortedCategories.map { category in
-                let state: UIAction.State = (category == self.category) ? .on : .off
-                let image = UIImage(systemName: category.filledSymbolName)?.withTintColor(category.tintColor, renderingMode: .alwaysOriginal)
-                return UIAction(title: category.localizedName, image: image, state: state) { _ in
-                    handler(category)
-                }
-            }
-            
-            return actions
-        }
-        catch
-        {
-            debugLog("Failed to fetch categories. \(error.localizedDescription)")
-            
-            return []
         }
     }
-    
-    func prepareAppSorting()
-    {
-        if self.preferredAppSorting == .default && self.source == nil
-        {
-            // Only allow `default` sorting if source is non-nil.
-            // Otherwise, fall back to `lastUpdated` sorting.
-            self.preferredAppSorting = .lastUpdated
-            
-            // Don't update UserDefaults unless explicitly changed by user.
-            // UserDefaults.standard.preferredAppSorting = .lastUpdated
-        }
-        
+
+    func prepareAppSorting() {
+        if preferredAppSorting == .default && source == nil { preferredAppSorting = .lastUpdated }
+
         let children = UIDeferredMenuElement.uncached { [weak self] completion in
             guard let self else { return completion([]) }
-            
-            var sortingOptions = AppSorting.allCases
-            if self.source == nil
-            {
-                // Only allow `default` sorting when source is non-nil.
-                sortingOptions = sortingOptions.filter { $0 != .default }
-            }
-            
-            let actions = sortingOptions.map { sorting in
-                let state: UIMenuElement.State = (sorting == self.preferredAppSorting) ? .on : .off
-                let action = UIAction(title: sorting.localizedName, image: nil, state: state) { action in
+            let options = (self.source == nil) ? AppSorting.allCases.filter { $0 != .default } : AppSorting.allCases
+            completion(options.map { sorting in
+                UIAction(title: sorting.localizedName, state: (sorting == self.preferredAppSorting) ? .on : .off) { _ in
                     self.preferredAppSorting = sorting
-                    UserDefaults.standard.preferredAppSorting = sorting // Update separately to save change.
-                    
+                    UserDefaults.standard.preferredAppSorting = sorting
                     self.updateDataSource()
                 }
-                
-                return action
-            }
-            
-            completion(actions)
+            })
         }
-        
-        let sortMenu = UIMenu(title: NSLocalizedString("Sort by…", comment: ""), options: [.singleSelection], children: [children])
-        let sortIcon = UIImage(systemName: "arrow.up.arrow.down")
-        
-        let sortButton = UIBarButtonItem(title: NSLocalizedString("Sort by…", comment: ""), image: sortIcon, primaryAction: nil, menu: sortMenu)
-        self.sortButton = sortButton
-        
-        self.navigationItem.rightBarButtonItems = [sortButton]
-    }
-}
 
-private extension BrowseViewController
-{
-    @IBAction func performAppAction(_ sender: PillButton)
-    {
-        let point = self.collectionView.convert(sender.center, from: sender.superview)
-        guard let indexPath = self.collectionView.indexPathForItem(at: point) else { return }
-        
-        let app = self.dataSource.item(at: indexPath)
-        
-        // if let installedApp = app.installedApp, !installedApp.isUpdateAvailable
-        if let installedApp = app.installedApp, !installedApp.hasUpdate
-        {
-            self.open(installedApp)
-        }
-        else
-        {
-            self.install(app, at: indexPath) { progress in
-                sender.progress = progress
-            }
+        let sortMenu = UIMenu(title: AppStrings.Browse.sortBy, options: [.singleSelection], children: [children])
+        let btn = UIBarButtonItem(title: AppStrings.Browse.sortBy, image: UIImage(systemName: "arrow.up.arrow.down"), primaryAction: nil, menu: sortMenu)
+        sortButton = btn
+        navigationItem.rightBarButtonItems = [btn]
+    }
+
+    @IBAction func performAppAction(_ sender: PillButton) {
+        let point = collectionView.convert(sender.center, from: sender.superview)
+        guard let indexPath = collectionView.indexPathForItem(at: point) else { return }
+        let app = dataSource.item(at: indexPath)
+
+        if let installedApp = app.installedApp, !installedApp.hasUpdate {
+            UIApplication.shared.open(installedApp.openAppURL)
+        } else {
+            install(app, at: indexPath) { sender.progress = $0 }
         }
     }
-    
-    func install(_ app: StoreApp, at indexPath: IndexPath, progressUpdateHandler: @escaping (Progress) -> Void)
-    {
+
+    func install(_ app: StoreApp, at indexPath: IndexPath, progressUpdateHandler: @escaping (Progress) -> Void) {
         InstallAppDialog.present(storeApp: app, from: self) { [weak self] in
             guard let self else { return }
-            let previousProgress = AppManager.shared.installationProgress(for: app)
-            guard previousProgress == nil else {
-                previousProgress?.cancel()
-                return
-            }
-            
-            // if let installedApp = app.installedApp, installedApp.isUpdateAvailable
-            if let installedApp = app.installedApp, installedApp.hasUpdate
-            {
-                let progress = AppManager.shared.update(installedApp, presentingViewController: self, completionHandler: finish(_:))
-                progressUpdateHandler(progress)
-            }
-            else
-            {
-                let group = AppManager.shared.install(.app(app), presentingViewController: self, completionHandler: finish(_:))
-                progressUpdateHandler(group.progress)
-            }
-            
-            func finish(_ result: Result<InstalledApp, Error>)
-            {
-                debugLog("BrowseViewController.finish invoked with result: \(result) for \(app.bundleIdentifier)")
+            if let prev = AppManager.shared.installationProgress(for: app) { prev.cancel(); return }
+
+            func finish(_ result: Result<InstalledApp, Error>) {
                 DispatchQueue.main.async {
-                    switch result
-                    {
-                    case .failure(let error) where error is CancellationError: break // Ignore
-                    case .failure(let error):
-                        let toastView = ToastView(error: error, opensLog: true)
-                        toastView.show(in: self)
-                        
-                    case .success: debugLog("Installed app: \(app.bundleIdentifier)")
+                    if case .failure(let error) = result, !(error is CancellationError) {
+                        ToastView(error: error, opensLog: true).show(in: self)
                     }
-                    
                     UIView.performWithoutAnimation {
-                        if let indexPath = self.dataSource.fetchedResultsController.indexPath(forObject: app)
-                        {
-                            debugLog("BrowseViewController.finish: reloading item at \(indexPath)")
-                            self.collectionView.reloadItems(at: [indexPath])
-                        }
-                        else
-                        {
-                            debugLog("BrowseViewController.finish: reloading section")
+                        if let ip = self.dataSource.fetchedResultsController.indexPath(forObject: app) {
+                            self.collectionView.reloadItems(at: [ip])
+                        } else {
                             self.collectionView.reloadData()
                         }
                     }
                 }
             }
+
+            if let installedApp = app.installedApp, installedApp.hasUpdate {
+                progressUpdateHandler(AppManager.shared.update(installedApp, presentingViewController: self, completionHandler: finish(_:)))
+            } else {
+                progressUpdateHandler(AppManager.shared.install(.app(app), presentingViewController: self, completionHandler: finish(_:)).progress)
+            }
         }
-    }
-    
-    func open(_ installedApp: InstalledApp)
-    {
-        UIApplication.shared.open(installedApp.openAppURL)
     }
 }
 
-extension BrowseViewController: UICollectionViewDelegateFlowLayout
-{
-    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize
-    {
-        let item = self.dataSource.item(at: indexPath)
+extension BrowseViewController: UICollectionViewDelegateFlowLayout {
+    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
+        let item = dataSource.item(at: indexPath)
         let itemID = item.globallyUniqueID ?? item.bundleIdentifier
+        if let previousSize = cachedItemSizes[itemID] { return previousSize }
 
-        if let previousSize = self.cachedItemSizes[itemID]
-        {
-            return previousSize
-        }
-        
-        self.dataSource.cellConfigurationHandler(self.prototypeCell, item, indexPath)
-        
-        let insets = (self.view.layoutMargins.left + self.view.layoutMargins.right)
-
-        let widthConstraint = self.prototypeCell.contentView.widthAnchor.constraint(equalToConstant: collectionView.bounds.width - insets)
+        dataSource.cellConfigurationHandler(prototypeCell, item, indexPath)
+        let insets = view.layoutMargins.left + view.layoutMargins.right
+        let widthConstraint = prototypeCell.contentView.widthAnchor.constraint(equalToConstant: collectionView.bounds.width - insets)
         widthConstraint.isActive = true
         defer { widthConstraint.isActive = false }
 
-        // Manually update cell width & layout so we can accurately calculate screenshot sizes.
-        self.prototypeCell.frame.size.width = widthConstraint.constant
-        self.prototypeCell.layoutIfNeeded()
-        
-        let itemSize = self.prototypeCell.contentView.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
-        self.cachedItemSizes[itemID] = itemSize
+        prototypeCell.frame.size.width = widthConstraint.constant
+        prototypeCell.layoutIfNeeded()
+
+        let itemSize = prototypeCell.contentView.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+        cachedItemSizes[itemID] = itemSize
         return itemSize
     }
-    
-    override func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath)
-    {
-        let app = self.dataSource.item(at: indexPath)
-        let appViewController = AppViewController.makeAppViewController(app: app)
-        
-        // Fall back to presentingViewController.navigationController in case we're being used for search results.
-        let navigationController = self.navigationController ?? self.presentingViewController?.navigationController
-        navigationController?.pushViewController(appViewController, animated: true)
+
+    override func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        let appVC = AppViewController.makeAppViewController(app: dataSource.item(at: indexPath))
+        (navigationController ?? presentingViewController?.navigationController)?.pushViewController(appVC, animated: true)
     }
 }
 
-extension BrowseViewController: UIViewControllerPreviewingDelegate
-{
+extension BrowseViewController: UIViewControllerPreviewingDelegate {
     @available(iOS, deprecated: 13.0)
-    func previewingContext(_ previewingContext: UIViewControllerPreviewing, viewControllerForLocation location: CGPoint) -> UIViewController?
-    {
-        guard
-            let indexPath = self.collectionView.indexPathForItem(at: location),
-            let cell = self.collectionView.cellForItem(at: indexPath)
-        else { return nil }
-        
+    func previewingContext(_ previewingContext: UIViewControllerPreviewing, viewControllerForLocation location: CGPoint) -> UIViewController? {
+        guard let indexPath = collectionView.indexPathForItem(at: location),
+              let cell = collectionView.cellForItem(at: indexPath) else { return nil }
         previewingContext.sourceRect = cell.frame
-        
-        let app = self.dataSource.item(at: indexPath)
-        
-        let appViewController = AppViewController.makeAppViewController(app: app)
-        return appViewController
+        return AppViewController.makeAppViewController(app: dataSource.item(at: indexPath))
     }
-    
+
     @available(iOS, deprecated: 13.0)
-    func previewingContext(_ previewingContext: UIViewControllerPreviewing, commit viewControllerToCommit: UIViewController)
-    {
-        self.navigationController?.pushViewController(viewControllerToCommit, animated: true)
+    func previewingContext(_ previewingContext: UIViewControllerPreviewing, commit viewControllerToCommit: UIViewController) {
+        navigationController?.pushViewController(viewControllerToCommit, animated: true)
     }
 }
-

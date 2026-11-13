@@ -56,8 +56,12 @@ public struct AppStrings {
         public static let advanced = NSLocalizedString("Nâng cao", comment: "")
         public static let about = NSLocalizedString("Giới thiệu", comment: "")
         public static let help = NSLocalizedString("Trợ giúp", comment: "")
-        public static letdismiss = NSLocalizedString("Bỏ qua", comment: "")
+        public static let dismiss = NSLocalizedString("Bỏ qua", comment: "")
         public static let confirm = NSLocalizedString("Xác nhận", comment: "")
+        
+        public static func resetToDefault() -> String {
+            return NSLocalizedString("Khôi phục mặc định", comment: "")
+        }
     }
     
     public struct Toast {
@@ -118,8 +122,13 @@ public struct AppStrings {
         public static let title = NSLocalizedString("Ứng dụng của tôi", comment: "")
         public static let activeApps = NSLocalizedString("Đang hoạt động", comment: "")
         public static let inactiveApps = NSLocalizedString("Không hoạt động", comment: "")
+        public static let installedHeader = NSLocalizedString("Đã cài đặt", comment: "")
+        public static let activeHeader = NSLocalizedString("Đang hoạt động", comment: "")
+        public static let inactiveHeader = NSLocalizedString("Không hoạt động", comment: "")
         public static let updatesAvailable = NSLocalizedString("Bản cập nhật khả dụng", comment: "")
         public static let noUpdatesAvailable = NSLocalizedString("Không có bản cập nhật mới", comment: "")
+        public static let unsupportedUpdatesAvailable = NSLocalizedString("Có bản cập nhật không tương thích", comment: "")
+        public static let unsupportedUpdateAvailableSingle = NSLocalizedString("1 bản cập nhật không tương thích", comment: "")
         public static let noInstalledApps = NSLocalizedString("Chưa có ứng dụng nào", comment: "")
         public static let noInstalledAppsDetail = NSLocalizedString("Nhấn vào nút '+' ở góc trên để cài đặt tệp .ipa hoặc tải ứng dụng từ mục Khám phá.", comment: "")
         public static let noRemovedApps = NSLocalizedString("Không có ứng dụng đã gỡ", comment: "")
@@ -128,6 +137,7 @@ public struct AppStrings {
         public static let refreshAll = NSLocalizedString("Làm mới tất cả", comment: "")
         public static let daysRemaining = NSLocalizedString("Còn %d ngày", comment: "")
         public static let expired = NSLocalizedString("Đã hết hạn", comment: "")
+        public static let expiresIn = NSLocalizedString("Hết hạn sau", comment: "")
         public static let expiresToday = NSLocalizedString("Hết hạn hôm nay", comment: "")
         public static let expiresInOneDay = NSLocalizedString("Hết hạn sau 1 ngày", comment: "")
         public static let refreshing = NSLocalizedString("Đang làm mới...", comment: "")
@@ -135,17 +145,130 @@ public struct AppStrings {
         public static let updating = NSLocalizedString("Đang cập nhật...", comment: "")
         public static let backingUp = NSLocalizedString("Đang sao lưu...", comment: "")
         public static let restoring = NSLocalizedString("Đang khôi phục...", comment: "")
+        public static let open = NSLocalizedString("Mở", comment: "")
+        public static let refresh = NSLocalizedString("Làm mới", comment: "")
+        public static let resign = NSLocalizedString("Ký lại (Resign)", comment: "")
+        public static let reinstall = NSLocalizedString("Cài đặt lại", comment: "")
+        public static let fromCache = NSLocalizedString("Từ bộ nhớ đệm", comment: "")
+        public static let fromSource = NSLocalizedString("Từ nguồn tải", comment: "")
         public static let activate = NSLocalizedString("Kích hoạt", comment: "")
+        public static let activateUpper = NSLocalizedString("KÍCH HOẠT", comment: "")
         public static let deactivate = NSLocalizedString("Hủy kích hoạt", comment: "")
+        public static let deleteApp = NSLocalizedString("Xóa ứng dụng", comment: "")
+        public static let delete = NSLocalizedString("Xóa", comment: "")
+        public static let remove = NSLocalizedString("Gỡ bỏ", comment: "")
+        public static let cancel = NSLocalizedString("Hủy", comment: "")
         public static let backup = NSLocalizedString("Sao lưu", comment: "")
+        public static let backupMenu = NSLocalizedString("Sao lưu & Khôi phục", comment: "")
+        public static let createBackup = NSLocalizedString("Tạo bản sao lưu", comment: "")
+        public static let exportBackup = NSLocalizedString("Xuất bản sao lưu", comment: "")
+        public static let exportRaw = NSLocalizedString("Thư mục gốc", comment: "")
+        public static let exportZip = NSLocalizedString("Tệp nén (.zip)", comment: "")
+        public static let importBackup = NSLocalizedString("Nhập bản sao lưu", comment: "")
+        public static let importRaw = NSLocalizedString("Từ thư mục", comment: "")
+        public static let importZip = NSLocalizedString("Từ tệp nén (.zip)", comment: "")
         public static let restore = NSLocalizedString("Khôi phục", comment: "")
+        public static let restoreBackup = NSLocalizedString("Khôi phục bản sao lưu", comment: "")
+        public static let restorePreviousBackup = NSLocalizedString("Khôi phục bản sao lưu trước đó", comment: "")
+        public static let deleteBackup = NSLocalizedString("Xóa bản sao lưu", comment: "")
+        public static let photos = NSLocalizedString("Thư viện ảnh", comment: "")
+        public static let removeIcon = NSLocalizedString("Khôi phục biểu tượng gốc", comment: "")
+        public static let changeIcon = NSLocalizedString("Đổi biểu tượng", comment: "")
+        public static let info = NSLocalizedString("Thông tin chi tiết", comment: "")
+        public static let changeProvisioningProfile = NSLocalizedString("Đổi hồ sơ cấp phép", comment: "")
+        public static let resetProvisioningProfile = NSLocalizedString("Đặt lại hồ sơ mặc định", comment: "")
+        public static let provisioningProfileMenu = NSLocalizedString("Hồ sơ (Profile)", comment: "")
         public static let enableJIT = NSLocalizedString("Bật JIT", comment: "")
         public static let openInFiles = NSLocalizedString("Mở trong Tệp", comment: "")
         public static let removeAppTitle = NSLocalizedString("Gỡ bỏ ứng dụng", comment: "")
         public static let removeAppMessage = NSLocalizedString("Bạn có chắc chắn muốn gỡ bỏ %@ không? Mọi dữ liệu của ứng dụng sẽ bị xóa vĩnh viễn.", comment: "")
         public static let appIdsRemaining = NSLocalizedString("Còn lại %d ID ứng dụng", comment: "")
+        public static let oneAppIDRemaining = NSLocalizedString("Còn lại 1 App ID", comment: "")
         public static let viewAppIds = NSLocalizedString("Xem ID ứng dụng", comment: "")
         public static let installFromFile = NSLocalizedString("Cài đặt từ tệp (.ipa)", comment: "")
+        public static let sideloadIPA = NSLocalizedString("Cài đặt tệp .ipa", comment: "")
+        public static let exportAppBackupTitle = NSLocalizedString("Xuất bản sao lưu ứng dụng", comment: "")
+        public static let uploadCustomAppIconTitle = NSLocalizedString("Tải lên biểu tượng ứng dụng", comment: "")
+        public static let unableToCheckForUpdates = NSLocalizedString("Không thể kiểm tra cập nhật", comment: "")
+        public static let failedToRefreshOneApp = NSLocalizedString("Không thể làm mới 1 ứng dụng", comment: "")
+        public static let whatAreInactiveAppsTitle = NSLocalizedString("Ứng dụng không hoạt động là gì?", comment: "")
+        public static let inactiveAppsLimitWithExtensionsMsg = NSLocalizedString("Tài khoản Apple ID miễn phí chỉ cho phép tối đa 3 ứng dụng (bao gồm cả tiện ích mở rộng) hoạt động cùng lúc. Bạn có thể hủy kích hoạt ứng dụng để nhường chỗ cho ứng dụng khác mà không làm mất dữ liệu.", comment: "")
+        public static let inactiveAppsLimitStandardMsg = NSLocalizedString("Tài khoản Apple ID miễn phí chỉ cho phép tối đa 3 ứng dụng hoạt động cùng lúc. Bạn có thể hủy kích hoạt ứng dụng để nhường chỗ cho ứng dụng khác mà không làm mất dữ liệu.", comment: "")
+        public static let inactiveAppsLimitMDCNote = NSLocalizedString("Lưu ý: Bạn đã bật tính năng gỡ giới hạn 3 ứng dụng.", comment: "")
+        public static let cannotActivateMoreThan3AppsTitle = NSLocalizedString("Không thể kích hoạt quá 3 ứng dụng", comment: "")
+        public static let cannotActivateMoreThan3AppsAndExtTitle = NSLocalizedString("Đã đạt giới hạn ứng dụng và tiện ích", comment: "")
+        public static let chooseAppToDeactivateWithExtMsg = NSLocalizedString("Vui lòng chọn một ứng dụng đang hoạt động để hủy kích hoạt trước.", comment: "")
+        public static let chooseAppToDeactivateStandardMsg = NSLocalizedString("Vui lòng chọn một ứng dụng đang hoạt động để hủy kích hoạt nhằm nhường chỗ.", comment: "")
+        public static let appExtensionSingular = NSLocalizedString("tiện ích mở rộng", comment: "")
+        public static let appExtensionPlural = NSLocalizedString("tiện ích mở rộng", comment: "")
+        public static let removeLegacyDeactivationMessage = NSLocalizedString("Ứng dụng sẽ bị xóa khỏi danh sách không hoạt động.", comment: "")
+        public static let removeEraseBackupMessage = NSLocalizedString("Bản sao lưu dữ liệu của ứng dụng này cũng sẽ bị xóa.", comment: "")
+        public static let startBackupTitle = NSLocalizedString("Sao lưu dữ liệu ứng dụng", comment: "")
+        public static let startBackupMessage = NSLocalizedString("Ứng dụng sẽ được mở lên trong giây lát để tiến hành sao lưu dữ liệu.", comment: "")
+        public static let importBackupSuccessDetail = NSLocalizedString("Bạn có thể khôi phục bản sao lưu này từ menu của ứng dụng.", comment: "")
+        public static let restoreBackupConfirmTitle = NSLocalizedString("Khôi phục dữ liệu?", comment: "")
+        public static let deleteBackupConfirmMessage = NSLocalizedString("Hành động này sẽ xóa vĩnh viễn bản sao lưu hiện tại của ứng dụng.", comment: "")
+
+        public static func version(_ ver: String) -> String {
+            return String(format: NSLocalizedString("Phiên bản %@", comment: ""), ver)
+        }
+        public static func betaAppName(_ name: String) -> String {
+            return String(format: NSLocalizedString("%@ (Beta)", comment: ""), name)
+        }
+        public static func updateAccessibilityLabel(_ name: String, _ ver: String, _ date: String) -> String {
+            return "\(name), phiên bản \(ver), \(date)"
+        }
+        public static func updateAppAccessibility(_ name: String) -> String {
+            return "Cập nhật \(name)"
+        }
+        public static func refreshAppAccessibility(_ name: String) -> String {
+            return "Làm mới \(name)"
+        }
+        public static func activateAppAccessibility(_ name: String) -> String {
+            return "Kích hoạt \(name)"
+        }
+        public static func failedToRefreshAppsCount(_ count: Int) -> String {
+            return String(format: NSLocalizedString("Không thể làm mới %d ứng dụng", comment: ""), count)
+        }
+        public static func unsupportedUpdatesAvailableCount(_ count: Int) -> String {
+            return String(format: NSLocalizedString("%d bản cập nhật không tương thích", comment: ""), count)
+        }
+        public static func unsupportedUpdatesMessage(_ osVer: String) -> String {
+            return String(format: NSLocalizedString("Các bản cập nhật sau không tương thích với iOS %@ trên thiết bị của bạn:", comment: ""), osVer)
+        }
+        public static func iOSOrLater(_ ver: String) -> String {
+            return String(format: NSLocalizedString("iOS %@ trở lên", comment: ""), ver)
+        }
+        public static func iOSOrEarlier(_ ver: String) -> String {
+            return String(format: NSLocalizedString("iOS %@ trở xuống", comment: ""), ver)
+        }
+        public static func chooseAppToDeactivateContainingExtMsg(_ name: String, _ count: Int, _ extText: String) -> String {
+            return String(format: NSLocalizedString("%@ bao gồm %d %@. Vui lòng chọn ứng dụng để hủy kích hoạt.", comment: ""), name, count, extText)
+        }
+        public static func deleteAppConfirmTitle(_ name: String) -> String {
+            return String(format: NSLocalizedString("Xóa “%@”?", comment: ""), name)
+        }
+        public static func deleteAppConfirmMessage(_ name: String) -> String {
+            return String(format: NSLocalizedString("Bạn có chắc chắn muốn xóa %@ không?", comment: ""), name)
+        }
+        public static func removeAppConfirmTitle(_ name: String) -> String {
+            return String(format: NSLocalizedString("Gỡ bỏ “%@”?", comment: ""), name)
+        }
+        public static func backUpAppAction(_ name: String) -> String {
+            return String(format: NSLocalizedString("Sao lưu %@", comment: ""), name)
+        }
+        public static func importBackupSuccessText(_ name: String) -> String {
+            return String(format: NSLocalizedString("Đã nhập bản sao lưu cho %@", comment: ""), name)
+        }
+        public static func restoreBackupConfirmMessage(_ name: String) -> String {
+            return String(format: NSLocalizedString("Mọi dữ liệu hiện tại của %@ sẽ bị ghi đè bởi bản sao lưu.", comment: ""), name)
+        }
+        public static func deleteBackupConfirmTitle(_ name: String) -> String {
+            return String(format: NSLocalizedString("Xóa bản sao lưu của “%@”?", comment: ""), name)
+        }
+        public static func appIDsRemainingCount(_ count: Int) -> String {
+            return String(format: NSLocalizedString("Còn lại %d App ID", comment: ""), count)
+        }
     }
     
     public struct AppDetail {
@@ -171,15 +294,22 @@ public struct AppStrings {
     
     public struct Settings {
         public static let title = NSLocalizedString("Cài đặt", comment: "")
+        public static let none = NSLocalizedString("Không có", comment: "")
         public static let account = NSLocalizedString("Tài khoản Apple ID", comment: "")
         public static let signIn = NSLocalizedString("Đăng nhập", comment: "")
         public static let signOut = NSLocalizedString("Đăng xuất", comment: "")
-        public static let signOutConfirmationTitle = NSLocalizedString("Đăng xuất Apple ID?", comment: "")
-        public static let signOutConfirmationMessage = NSLocalizedString("Bạn sẽ cần phải đăng nhập lại để cài đặt hoặc làm mới các ứng dụng.", comment: "")
+        public static let signOutConfirmTitle = NSLocalizedString("Đăng xuất Apple ID?", comment: "")
+        public static let signOutConfirmMessage = NSLocalizedString("Bạn sẽ cần phải đăng nhập lại để cài đặt hoặc làm mới các ứng dụng.", comment: "")
+        public static let signOutConfirmationTitle = signOutConfirmTitle
+        public static let signOutConfirmationMessage = signOutConfirmMessage
         public static let activeAccount = NSLocalizedString("Tài khoản đang dùng", comment: "")
         public static let teamType = NSLocalizedString("Loại đội ngũ (Team)", comment: "")
         public static let freeDeveloperAccount = NSLocalizedString("Tài khoản miễn phí", comment: "")
         public static let paidDeveloperAccount = NSLocalizedString("Tài khoản trả phí", comment: "")
+        public static let linkPatreon = NSLocalizedString("Liên kết tài khoản Patreon", comment: "")
+        public static let unlinkPatreon = NSLocalizedString("Hủy liên kết Patreon", comment: "")
+        public static let unlinkPatreonConfirmTitle = NSLocalizedString("Hủy liên kết Patreon?", comment: "")
+        public static let unlinkPatreonConfirmMessage = NSLocalizedString("Bạn sẽ không còn nhận được các đặc quyền dành cho người ủng hộ cho đến khi liên kết lại.", comment: "")
         public static let anisetteServer = NSLocalizedString("Máy chủ Anisette", comment: "")
         public static let customAnisetteURL = NSLocalizedString("URL Anisette tùy chỉnh", comment: "")
         public static let backgroundRefresh = NSLocalizedString("Làm mới trong nền", comment: "")
@@ -190,6 +320,11 @@ public struct AppStrings {
         public static let exportLogs = NSLocalizedString("Xuất nhật ký lỗi (Logs)", comment: "")
         public static let errorLogs = NSLocalizedString("Nhật ký lỗi", comment: "")
         public static let clearCache = NSLocalizedString("Xóa bộ nhớ đệm", comment: "")
+        public static let clearCacheConfirmTitle = NSLocalizedString("Xóa bộ nhớ đệm ứng dụng?", comment: "")
+        public static let clearedAppCache = NSLocalizedString("Đã xóa bộ nhớ đệm ứng dụng", comment: "")
+        public static let resetAll = NSLocalizedString("Đặt lại tất cả cài đặt", comment: "")
+        public static let resetAllConfirmTitle = NSLocalizedString("Đặt lại tất cả cài đặt?", comment: "")
+        public static let resetAllConfirmMessage = NSLocalizedString("Thao tác này sẽ khôi phục mọi thiết lập của SideStore về trạng thái mặc định ban đầu.", comment: "")
         public static let patreon = NSLocalizedString("Patreon", comment: "")
         public static let credits = NSLocalizedString("Đóng góp & Ghi công", comment: "")
         public static let acknowledgements = NSLocalizedString("Lời cảm ơn", comment: "")
@@ -201,6 +336,30 @@ public struct AppStrings {
         public static let disconnected = NSLocalizedString("Chưa kết nối", comment: "")
         public static let ready = NSLocalizedString("Sẵn sàng", comment: "")
         public static let notReady = NSLocalizedString("Chưa sẵn sàng", comment: "")
+        
+        public struct Server {
+            public static let headerDescription = NSLocalizedString("Chọn máy chủ Anisette để xác thực Apple ID hoặc tự thiết lập máy chủ riêng.", comment: "")
+            public static let hostYourOwnLink = NSLocalizedString("tự thiết lập máy chủ riêng", comment: "")
+            public static let footerDescription = NSLocalizedString("Máy chủ Anisette giúp cung cấp dữ liệu xác thực thiết bị cần thiết để đăng nhập Apple ID.", comment: "")
+            public static let enterCustomURL = NSLocalizedString("Nhập URL tùy chỉnh...", comment: "")
+            public static let custom = NSLocalizedString("Tùy chỉnh", comment: "")
+            public static let selectAnisetteServer = NSLocalizedString("Chọn máy chủ Anisette", comment: "")
+            public static let customAnisetteServerTitle = NSLocalizedString("Máy chủ Anisette tùy chỉnh", comment: "")
+            public static let customAnisetteServerMessage = NSLocalizedString("Nhập địa chỉ URL của máy chủ Anisette bạn muốn sử dụng:", comment: "")
+        }
+        
+        public struct PairingFile {
+            public static let reset = NSLocalizedString("Đặt lại tệp ghép nối", comment: "")
+            public static let resetConfirmTitle = NSLocalizedString("Đặt lại tệp ghép nối?", comment: "")
+            public static let resetConfirmMessage = NSLocalizedString("Tệp ghép nối hiện tại sẽ bị xóa và bạn sẽ được yêu cầu chọn tệp mới.", comment: "")
+            public static let importSuccessTitle = NSLocalizedString("Nhập thành công", comment: "")
+            public static let importSuccessMessage = NSLocalizedString("Tệp ghép nối đã được lưu thành công.", comment: "")
+            public static let notFoundTitle = NSLocalizedString("Không tìm thấy tệp ghép nối", comment: "")
+            public static let notFoundMessage = NSLocalizedString("Hiện chưa có tệp ghép nối nào được lưu trên thiết bị.", comment: "")
+            public static let testSuccessTitle = NSLocalizedString("Kiểm tra thành công", comment: "")
+            public static let testSuccessMessage = NSLocalizedString("Tệp ghép nối hợp lệ và kết nối thiết bị hoạt động tốt!", comment: "")
+            public static let testFailedTitle = NSLocalizedString("Kiểm tra thất bại", comment: "")
+        }
         
         // User Customizations & Cache
         public static let customizationsTitle = NSLocalizedString("Tùy chỉnh giao diện", comment: "")
@@ -235,6 +394,38 @@ public struct AppStrings {
         public static let certificatesTitle = NSLocalizedString("Chứng chỉ (Certificates)", comment: "")
         public static let revokeCertificate = NSLocalizedString("Thu hồi chứng chỉ", comment: "")
         public static let revokeCertificateWarning = NSLocalizedString("Thu hồi chứng chỉ hiện tại sẽ tạo một chứng chỉ mới. Bạn có muốn tiếp tục?", comment: "")
+    }
+    
+    public struct UserCustomizations {
+        public static let title = NSLocalizedString("Tùy chỉnh", comment: "")
+    }
+    
+    public struct Customizations {
+        public static let layoutSectionHeader = NSLocalizedString("Bố cục hiển thị", comment: "")
+        public static let hideAppDescriptionsToggle = NSLocalizedString("Ẩn mô tả ứng dụng", comment: "")
+        public static let hideScreenShotsToggle = NSLocalizedString("Ẩn ảnh chụp màn hình", comment: "")
+        public static let showAppSourceBadgeToggle = NSLocalizedString("Hiện biểu tượng nguồn ứng dụng", comment: "")
+        public static let tintColorSectionHeader = NSLocalizedString("Màu chủ đạo", comment: "")
+        public static let customTintColorToggle = NSLocalizedString("Dùng màu chủ đạo tùy chỉnh", comment: "")
+        public static let selectColorPicker = NSLocalizedString("Chọn màu sắc", comment: "")
+        public static let presetColorsHeader = NSLocalizedString("Màu mẫu có sẵn", comment: "")
+        public static let colorDescription = NSLocalizedString("Màu", comment: "")
+        public static let cacheSectionHeader = NSLocalizedString("Bộ nhớ đệm", comment: "")
+        public static let clearCacheFooter = NSLocalizedString("Xóa các dữ liệu hình ảnh và phản hồi mạng tạm thời.", comment: "")
+        public static let clearCacheButton = NSLocalizedString("Xóa bộ nhớ đệm", comment: "")
+        public static let cacheClearedTitle = NSLocalizedString("Đã xóa bộ nhớ đệm", comment: "")
+        public static let cacheClearedMessage = NSLocalizedString("Bộ nhớ đệm đã được dọn sạch.", comment: "")
+        public static let logsSectionHeader = NSLocalizedString("Nhật ký hoạt động (Logs)", comment: "")
+        public static let enableDetailedLogsToggle = NSLocalizedString("Bật ghi nhật ký chi tiết", comment: "")
+        public static let exportLogsButton = NSLocalizedString("Xuất tệp nhật ký", comment: "")
+        public static let clearLogsButton = NSLocalizedString("Xóa tệp nhật ký", comment: "")
+        public static let clearLogsConfirmationTitle = NSLocalizedString("Xóa nhật ký?", comment: "")
+        public static let clearLogsConfirmationMessage = NSLocalizedString("Bạn có chắc chắn muốn xóa toàn bộ nhật ký hoạt động hiện tại không?", comment: "")
+    }
+    
+    public struct Error {
+        public static let invalidURLTitle = NSLocalizedString("URL không hợp lệ", comment: "")
+        public static let invalidURLMessage = NSLocalizedString("Vui lòng nhập một địa chỉ URL hợp lệ (bắt đầu bằng http:// hoặc https://).", comment: "")
     }
     
     public struct Errors {

@@ -52,6 +52,7 @@ private final class ErrorLogGradientBackgroundView: UIView {
     }
 
     private func setupGradient() {
+        self.isUserInteractionEnabled = false
         guard let gradientLayer = self.layer as? CAGradientLayer else { return }
         gradientLayer.colors = [ErrorLogCSSTheme.bgGradientStart, ErrorLogCSSTheme.bgGradientEnd]
         gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
@@ -98,6 +99,11 @@ final class ErrorLogViewController: UITableViewController
     {
         super.viewDidLoad()
         
+        // Khóa giao diện Light Mode chuẩn CSS để không bao giờ bị hệ thống ép về nền đen
+        self.overrideUserInterfaceStyle = .light
+        self.view.overrideUserInterfaceStyle = .light
+        self.tableView.overrideUserInterfaceStyle = .light
+        
         // Ẩn tiêu đề mặc định để đồng bộ giao diện tràn viền với SettingsViewController
         self.title = nil
         self.navigationItem.title = nil
@@ -129,6 +135,7 @@ final class ErrorLogViewController: UITableViewController
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
+        self.enforceBrightGradientBackground()
         self.setupFloatingClearAllButton()
         self.updateFloatingClearAllButtonState()
     }
@@ -145,6 +152,7 @@ final class ErrorLogViewController: UITableViewController
            let heroCard = heroHeader.subviews.first {
             self.heroGradientLayer?.frame = heroCard.bounds
         }
+        self.enforceBrightGradientBackground()
         self.updateFloatingClearAllButtonState()
     }
     
@@ -167,15 +175,92 @@ final class ErrorLogViewController: UITableViewController
 private extension ErrorLogViewController
 {
     func applySmartWebCSSTheme() {
-        // 1. Nền Gradient cố định
-        let bgView = ErrorLogGradientBackgroundView(frame: UIScreen.main.bounds)
-        bgView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        self.tableView.backgroundView = bgView
-        self.tableView.backgroundColor = .clear
+        // 1. Đảm bảo nền Gradient sáng luôn hoạt động kể cả khi có hay không có dữ liệu
+        self.enforceBrightGradientBackground()
         self.tableView.separatorStyle = .none
         
         // 2. Tạo Hero Banner kèm nút mở Nhật ký Console
         self.setupCSSHeroBanner()
+    }
+    
+    /// Hàm giữ cho nền sáng Gradient không bao giờ bị biến thành nền đen khi xóa hết nhật ký
+    func enforceBrightGradientBackground() {
+        // Màu nền fallback sáng phòng trường hợp backgroundView bị thay thế tạm thời
+        let fallbackBrightColor = UIColor(red: 235/255, green: 238/255, blue: 255/255, alpha: 1.0)
+        self.view.backgroundColor = fallbackBrightColor
+        self.tableView.backgroundColor = fallbackBrightColor
+        
+        // Nếu dataSource đang gắn PlaceholderView làm backgroundView (khi danh sách trống)
+        if let placeholder = self.tableView.backgroundView, !(placeholder is ErrorLogGradientBackgroundView) {
+            placeholder.overrideUserInterfaceStyle = .light
+            placeholder.backgroundColor = .clear
+            
+            let bgTag = 991122
+            if let existingGradient = placeholder.viewWithTag(bgTag) {
+                existingGradient.frame = placeholder.bounds
+                placeholder.sendSubviewToBack(existingGradient)
+            } else {
+                let gradientBg = ErrorLogGradientBackgroundView(frame: placeholder.bounds)
+                gradientBg.tag = bgTag
+                gradientBg.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                placeholder.insertSubview(gradientBg, at: 0)
+            }
+        } else if self.tableView.backgroundView == nil {
+            let bgView = ErrorLogGradientBackgroundView(frame: UIScreen.main.bounds)
+            bgView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            self.tableView.backgroundView = bgView
+        }
+    }
+    
+    /// Trang trí giao diện Placeholder (khi xóa hết nhật ký) hài hòa với nền sáng CSS
+    func styleBrightPlaceholderView(_ placeholderView: PlaceholderView) {
+        placeholderView.overrideUserInterfaceStyle = .light
+        placeholderView.backgroundColor = .clear
+        
+        // Lót trực tiếp nền Gradient sáng vào dưới đáy của PlaceholderView
+        let bgTag = 991122
+        if placeholderView.viewWithTag(bgTag) == nil {
+            let gradientBg = ErrorLogGradientBackgroundView(frame: UIScreen.main.bounds)
+            gradientBg.tag = bgTag
+            gradientBg.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            placeholderView.insertSubview(gradientBg, at: 0)
+        }
+        
+        // Chỉnh màu chữ và kiểu dáng nổi bật, sắc nét trên nền sáng
+        placeholderView.textLabel.text = "✓ Hệ Thống Hoạt Động Ổn Định"
+        placeholderView.textLabel.textColor = ErrorLogCSSTheme.blue
+        placeholderView.textLabel.font = UIFont.systemFont(ofSize: 19, weight: .heavy)
+        
+        placeholderView.detailTextLabel.text = "Nhật ký hiện đang trống.\nMọi sự cố phát sinh khi cài đặt IPA hoặc làm mới (Refresh) ứng dụng sẽ được ghi lại tại đây."
+        placeholderView.detailTextLabel.textColor = ErrorLogCSSTheme.dark.withAlphaComponent(0.85)
+        placeholderView.detailTextLabel.font = UIFont.systemFont(ofSize: 14, weight: .medium)
+        
+        // Tạo thẻ Card trắng bán trong suốt bao quanh cụm thông báo trống để chữ luôn rõ ràng, sang trọng
+        if let stackView = placeholderView.textLabel.superview {
+            let cardTag = 991133
+            if placeholderView.viewWithTag(cardTag) == nil {
+                let cardBg = UIView()
+                cardBg.tag = cardTag
+                cardBg.translatesAutoresizingMaskIntoConstraints = false
+                cardBg.backgroundColor = ErrorLogCSSTheme.white.withAlphaComponent(0.88)
+                cardBg.layer.cornerRadius = ErrorLogCSSTheme.cornerRadius + 3
+                cardBg.layer.borderWidth = 1.0
+                cardBg.layer.borderColor = ErrorLogCSSTheme.white.cgColor
+                cardBg.layer.shadowColor = ErrorLogCSSTheme.blue.cgColor
+                cardBg.layer.shadowOffset = CGSize(width: 0, height: 6)
+                cardBg.layer.shadowRadius = 16
+                cardBg.layer.shadowOpacity = 0.12
+                cardBg.isUserInteractionEnabled = false
+                
+                placeholderView.insertSubview(cardBg, belowSubview: stackView)
+                NSLayoutConstraint.activate([
+                    cardBg.leadingAnchor.constraint(equalTo: stackView.leadingAnchor, constant: -20),
+                    cardBg.trailingAnchor.constraint(equalTo: stackView.trailingAnchor, constant: 20),
+                    cardBg.topAnchor.constraint(equalTo: stackView.topAnchor, constant: -24),
+                    cardBg.bottomAnchor.constraint(equalTo: stackView.bottomAnchor, constant: 24)
+                ])
+            }
+        }
     }
     
     func setupCSSHeroBanner() {
@@ -334,6 +419,7 @@ private extension ErrorLogViewController
             Task {
                 await self?.clearLoggedErrors()
                 await MainActor.run {
+                    self?.enforceBrightGradientBackground()
                     self?.updateFloatingClearAllButtonState()
                 }
             }
@@ -376,7 +462,6 @@ private extension ErrorLogViewController
             return exact
         }
         
-        // Dịch theo mẫu câu động (ví dụ: "Failed to Refresh SideStore", "Failed to Install Delta"...)
         let prefixReplacements: [(String, String)] = [
             ("Failed to Refresh ", "Lỗi làm mới "),
             ("Failed to Install ", "Lỗi cài đặt "),
@@ -594,11 +679,7 @@ private extension ErrorLogViewController
         }
         
         let placeholderView = PlaceholderView()
-        placeholderView.textLabel.text = "Hệ Thống Hoạt Động Ổn Định ✓"
-        placeholderView.textLabel.textColor = ErrorLogCSSTheme.blue
-        placeholderView.textLabel.font = UIFont.systemFont(ofSize: 18, weight: .bold)
-        placeholderView.detailTextLabel.text = "Chưa ghi nhận bất kỳ lỗi nào.\nCác sự cố phát sinh khi cài đặt IPA hoặc làm mới (Refresh) ứng dụng sẽ xuất hiện tại đây."
-        placeholderView.detailTextLabel.textColor = ErrorLogCSSTheme.dark.withAlphaComponent(0.75)
+        self.styleBrightPlaceholderView(placeholderView)
         dataSource.placeholderView = placeholderView
         
         return dataSource
@@ -666,6 +747,7 @@ private extension ErrorLogViewController
             Task {
                 await self.clearLoggedErrors()
                 await MainActor.run {
+                    self.enforceBrightGradientBackground()
                     self.updateFloatingClearAllButtonState()
                 }
             }
@@ -828,6 +910,7 @@ extension ErrorLogViewController
                     
                     try context.save()
                     DispatchQueue.main.async {
+                        self.enforceBrightGradientBackground()
                         self.updateFloatingClearAllButtonState()
                         completion(true)
                     }

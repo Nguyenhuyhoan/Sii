@@ -1,3 +1,4 @@
+
 //  AltStore/TabBarController.swift
 //  TabBarController.swift
 //  AltStore
@@ -10,13 +11,22 @@
 
 extension TabBarController
 {
-    private enum Tab: Int, CaseIterable
+    // Thứ tự ban đầu được nạp từ Storyboard
+    private enum StoryboardTab: Int, CaseIterable
     {
         case news
         case sources
         case browse
         case myApps
         case settings
+    }
+
+    // Thứ tự 3 tab thực tế sau khi đã bỏ Sources và Browse
+    private enum ActiveTab: Int
+    {
+        case overview = 0 // Tổng Quan
+        case myApps   = 1 // My Apps
+        case settings = 2 // Cài Đặt
     }
 }
 
@@ -26,7 +36,7 @@ final class TabBarController: UITabBarController
     
     private var _viewDidAppear = false
     
-    private var sourcesViewController: SourcesViewController!
+    private var sourcesViewController: SourcesViewController?
     
     required init?(coder aDecoder: NSCoder)
     {
@@ -42,19 +52,26 @@ final class TabBarController: UITabBarController
         super.viewDidLoad()
         debugLog("[TabBarController] viewDidLoad()")
         
-        // Đổi tab News thành Check kèm icon dấu tích
-        if let checkNavigationController = self.viewControllers?[Tab.news.rawValue] as? UINavigationController
-        {
-            checkNavigationController.tabBarItem.title = "Check"
-            checkNavigationController.tabBarItem.image = UIImage(systemName: "checkmark.shield")
-            checkNavigationController.tabBarItem.selectedImage = UIImage(systemName: "checkmark.shield.fill")
-        }
+        guard let allControllers = self.viewControllers,
+              allControllers.count > StoryboardTab.settings.rawValue else { return }
         
-        let browseNavigationController = self.viewControllers![Tab.browse.rawValue] as! UINavigationController
-        browseNavigationController.tabBarItem.image = UIImage(systemName: "bag")
+        // 1. Tab Tổng Quan (News cũ)
+        let overviewNav = allControllers[StoryboardTab.news.rawValue]
+        overviewNav.tabBarItem.title = "Tổng Quan"
+        overviewNav.tabBarItem.image = UIImage(systemName: "checkmark.shield")
+        overviewNav.tabBarItem.selectedImage = UIImage(systemName: "checkmark.shield.fill")
         
-        let sourcesNavigationController = self.viewControllers![Tab.sources.rawValue] as! UINavigationController
-        self.sourcesViewController = sourcesNavigationController.viewControllers.first as? SourcesViewController
+        // 2. Tab My Apps
+        let myAppsNav = allControllers[StoryboardTab.myApps.rawValue]
+        
+        // 3. Tab Cài Đặt (Settings)
+        let settingsNav = allControllers[StoryboardTab.settings.rawValue]
+        settingsNav.tabBarItem.title = "Cài Đặt"
+        settingsNav.tabBarItem.image = UIImage(systemName: "gearshape")
+        settingsNav.tabBarItem.selectedImage = UIImage(systemName: "gearshape.fill")
+        
+        // Bỏ 2 tab Sources (Nguồn) và Browse khỏi thanh TabBar
+        self.viewControllers = [overviewNav, myAppsNav, settingsNav]
     }
     
     override func viewDidAppear(_ animated: Bool)
@@ -86,6 +103,7 @@ extension TabBarController
 {
     @objc func presentSources(_ sender: Any)
     {
+        // Vì đã bỏ tab Nguồn nên nếu có deep link thêm nguồn thì chuyển về tab My Apps
         if let presentedViewController = self.presentedViewController
         {
             presentedViewController.dismiss(animated: true) {
@@ -94,13 +112,8 @@ extension TabBarController
             
             return
         }
-                
-        if let notification = (sender as? Notification), let sourceURL = notification.userInfo?[AppDelegate.addSourceDeepLinkURLKey] as? URL
-        {
-            self.sourcesViewController?.deepLinkSourceURL = sourceURL
-        }
         
-        self.selectedIndex = Tab.sources.rawValue
+        self.selectedIndex = ActiveTab.myApps.rawValue
     }
 }
 
@@ -108,11 +121,11 @@ private extension TabBarController
 {
     @objc func importApp(_ notification: Notification)
     {
-        self.selectedIndex = Tab.myApps.rawValue
+        self.selectedIndex = ActiveTab.myApps.rawValue
     }
 
     @objc func openErrorLog(_ notification: Notification)
     {
-        self.selectedIndex = Tab.settings.rawValue
+        self.selectedIndex = ActiveTab.settings.rawValue
     }
 }

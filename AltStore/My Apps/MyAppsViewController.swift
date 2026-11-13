@@ -707,6 +707,38 @@ private extension MyAppsViewController {
         return result
     }
     
+    // Cố định nút chứa số ngày (PillButton) luôn có nền xanh (hoặc đỏ khi hết hạn) và chữ luôn màu trắng
+    func stylePillButton(_ pillButton: PillButton) {
+        pillButton.overrideUserInterfaceStyle = .light
+        
+        let titleText = (pillButton.title(for: .normal) ?? "").uppercased()
+        let isWarning = titleText.contains("HẾT HẠN") || titleText.contains("THU HỒI") || titleText.contains("EXPIRED") || titleText.contains("REVOKED")
+        let bgColor = isWarning ? CSSTheme.red : CSSTheme.blue
+        
+        // Cố định màu nền xanh (hoặc đỏ khi hết hạn)
+        pillButton.backgroundColor = bgColor
+        pillButton.tintColor = bgColor
+        pillButton.layer.backgroundColor = bgColor.cgColor
+        pillButton.layer.borderWidth = 0.0
+        
+        // Cố định chữ luôn màu trắng cho mọi trạng thái
+        pillButton.setTitleColor(CSSTheme.white, for: .normal)
+        pillButton.setTitleColor(CSSTheme.white.withAlphaComponent(0.85), for: .highlighted)
+        pillButton.setTitleColor(CSSTheme.white, for: .selected)
+        pillButton.setTitleColor(CSSTheme.white.withAlphaComponent(0.75), for: .disabled)
+        
+        pillButton.titleLabel?.textColor = CSSTheme.white
+        pillButton.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .bold)
+        pillButton.activityIndicatorView.color = CSSTheme.white
+        
+        // Đảm bảo tất cả UILabel bên trong PillButton luôn giữ màu chữ trắng
+        for subview in pillButton.subviews {
+            if let label = subview as? UILabel {
+                label.textColor = CSSTheme.white
+            }
+        }
+    }
+    
     // Triệt tiêu hoàn toàn mọi lớp nền tối/blur của hệ thống hoặc của AppBannerView và cố định nền sáng trắng
     func applyWhiteCardAndBlackText(in rootView: UIView) {
         rootView.overrideUserInterfaceStyle = .light
@@ -723,6 +755,23 @@ private extension MyAppsViewController {
                 continue
             }
             
+            // Nếu là PillButton (khung chứa số ngày / Cập nhật / Kích hoạt): Cố định nền xanh chữ trắng và KHÔNG đệ quy vào bên trong nút
+            if let pillButton = subview as? PillButton {
+                stylePillButton(pillButton)
+                continue
+            }
+            
+            // Nếu là UIButton thông thường (ví dụ nút "Xem thêm / Thu gọn")
+            if let button = subview as? UIButton {
+                button.tintColor = CSSTheme.blue
+                button.setTitleColor(CSSTheme.blue, for: .normal)
+                button.setTitleColor(CSSTheme.blue.withAlphaComponent(0.7), for: .highlighted)
+                button.setTitleColor(CSSTheme.blue, for: .selected)
+                button.titleLabel?.textColor = CSSTheme.blue
+                button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .bold)
+                continue
+            }
+            
             // Nếu có view nền phụ bên dưới (không phải nút hay ảnh), ép về trong suốt để lộ nền trắng cố định của thẻ
             if !(subview is UIControl) && !(subview is UIImageView) && !(subview is UILabel) && !(subview is UITextView) && !(subview is UIStackView) {
                 if subview.backgroundColor != nil && subview.backgroundColor != .clear && subview.backgroundColor != CSSTheme.white {
@@ -735,23 +784,6 @@ private extension MyAppsViewController {
             } else if let textView = subview as? UITextView {
                 textView.textColor = CSSTheme.textSecondary
                 textView.backgroundColor = .clear
-            } else if let button = subview as? UIButton {
-                let titleText = (button.title(for: .normal) ?? "").uppercased()
-                let isWarning = titleText.contains("HẾT HẠN") || titleText.contains("THU HỒI") || titleText.contains("EXPIRED") || titleText.contains("REVOKED")
-                let tint = isWarning ? CSSTheme.red : CSSTheme.blue
-                
-                button.tintColor = tint
-                button.setTitleColor(tint, for: .normal)
-                button.setTitleColor(tint.withAlphaComponent(0.7), for: .highlighted)
-                button.setTitleColor(tint, for: .selected)
-                button.titleLabel?.textColor = tint
-                button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .bold)
-                
-                if button is PillButton {
-                    button.backgroundColor = isWarning ? CSSTheme.redBg : CSSTheme.pillBg
-                    button.layer.borderWidth = 1.0
-                    button.layer.borderColor = isWarning ? CSSTheme.red.withAlphaComponent(0.28).cgColor : CSSTheme.pillBorder.cgColor
-                }
             }
             
             applyWhiteCardAndBlackText(in: subview)
@@ -791,6 +823,7 @@ private extension MyAppsViewController {
             
             // Đệ quy dọn sạch mọi lớp nền đen/blur và chuẩn hóa nút bấm
             applyWhiteCardAndBlackText(in: banner)
+            stylePillButton(banner.button)
             
             // Tinh chỉnh phân cấp Typography & Icon sau khi dọn nền
             banner.titleLabel.textColor = CSSTheme.textPrimary
@@ -832,6 +865,7 @@ private extension MyAppsViewController {
             }
             
             applyWhiteCardAndBlackText(in: updateCell.contentView)
+            stylePillButton(banner.button)
             
             banner.titleLabel.textColor = CSSTheme.textPrimary
             banner.titleLabel.font = UIFont.systemFont(ofSize: 16, weight: .bold)
@@ -986,7 +1020,7 @@ private extension MyAppsViewController
             cell.bannerView.iconImageView.isIndicatingActivity = false
             cell.bannerView.iconImageView.image = image
             
-            // Ép lại nền trắng sáng ngay sau khi gán ảnh icon để tránh AppBannerView tự đổi màu nền sang đen
+            // Ép lại nền trắng sáng và nút xanh chữ trắng ngay sau khi gán ảnh icon
             self?.styleAppCardCell(cell)
             
             if let error = error
@@ -1079,6 +1113,9 @@ private extension MyAppsViewController
             {
                 cell.bannerView.button.progress = nil
             }
+            
+            // Đảm bảo sau khi gán progress, nút vẫn cố định nền xanh chữ trắng
+            self.stylePillButton(cell.bannerView.button)
         }
         dataSource.prefetchHandler = { (item, indexPath) in
             return try await item.loadIcon()
@@ -1088,7 +1125,7 @@ private extension MyAppsViewController
             cell.bannerView.iconImageView.image = image
             cell.bannerView.iconImageView.isIndicatingActivity = false
             
-            // Khoá cứng nền trắng ngay khi tải xong Icon ứng dụng
+            // Khoá cứng nền trắng và nút xanh chữ trắng ngay khi tải xong Icon ứng dụng
             self?.styleAppCardCell(cell)
         }
         
@@ -1160,6 +1197,9 @@ private extension MyAppsViewController
             {
                 cell.bannerView.button.progress = nil
             }
+            
+            // Đảm bảo sau khi gán progress, nút vẫn cố định nền xanh chữ trắng
+            self.stylePillButton(cell.bannerView.button)
         }
         dataSource.prefetchHandler = { (item, indexPath) in
             return try await item.loadIcon()
@@ -1169,7 +1209,7 @@ private extension MyAppsViewController
             cell.bannerView.iconImageView.image = image
             cell.bannerView.iconImageView.isIndicatingActivity = false
             
-            // Khoá cứng nền trắng ngay khi tải xong Icon ứng dụng
+            // Khoá cứng nền trắng và nút xanh chữ trắng ngay khi tải xong Icon ứng dụng
             self?.styleAppCardCell(cell)
         }
         
@@ -1462,6 +1502,7 @@ private extension MyAppsViewController
         if let pillButton = sender as? PillButton
         {
             pillButton.progress = progress
+            self.stylePillButton(pillButton)
         }
     }
     
@@ -2430,7 +2471,7 @@ extension MyAppsViewController
 {
     override func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath)
     {
-        // Đảm bảo mỗi khi cell hiển thị trên màn hình (kể cả khi cuộn nhanh hoặc tái sử dụng), nền luôn được khóa trắng sáng
+        // Đảm bảo mỗi khi cell hiển thị trên màn hình (kể cả khi mới mở app, cuộn nhanh hoặc tái sử dụng), nền thẻ luôn trắng và nút chứa số ngày luôn nền xanh chữ trắng
         self.styleAppCardCell(cell)
     }
     

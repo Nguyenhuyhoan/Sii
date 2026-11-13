@@ -6,12 +6,10 @@
 //  Copyright © 2020 Riley Testut. All rights reserved.
 //
 
-import UIKit
+@preconcurrency import UIKit
 import CoreData
 import SafariServices
-
-import AltStoreCore
-import Roxas
+@preconcurrency import Nuke
 
 extension SourcesViewController
 {
@@ -29,7 +27,7 @@ final class SourcesViewController: UICollectionViewController
     private lazy var existingSourcesDataSource = self.makeExistingSourcesDataSource()
     private lazy var recommendedSourcesDataSource = self.makeRecommendedSourcesDataSource()
     
-    private lazy var placeholderView = RSTPlaceholderView(frame: .zero)
+    private lazy var placeholderView = PlaceholderView(frame: .zero)
     
     private var isFetchingRecommendedSources = false
     private var fetchError: Error?
@@ -44,7 +42,6 @@ final class SourcesViewController: UICollectionViewController
         
         self.title = AppStrings.Sources.title
         
-        // 1. Áp dụng CSS Body Gradient & Navigation Bar
         self.view.applyCSSBodyGradient()
         self.collectionView.backgroundColor = .clear
         self.navigationController?.applyCSSNavigationBar()
@@ -54,8 +51,7 @@ final class SourcesViewController: UICollectionViewController
         
         self.collectionView.dataSource = self.dataSource
         self.collectionView.prefetchDataSource = self.dataSource
-        
-        self.collectionView.register(CollectionSectionHeaderView.nib, forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader, withReuseIdentifier: "Header")
+        self.dataSource.contentView = self.collectionView
         
         self.placeholderView.textLabel.isHidden = true
         self.placeholderView.detailTextLabel.isHidden = false
@@ -67,8 +63,6 @@ final class SourcesViewController: UICollectionViewController
         
         NotificationCenter.default.addObserver(self, selector: #selector(SourcesViewController.didAddSource(_:)), name: AppManager.didAddSourceNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(SourcesViewController.didRemoveSource(_:)), name: AppManager.didRemoveSourceNotification, object: nil)
-        
-        // Lắng nghe thay đổi màu sắc chủ đề từ cài đặt
         NotificationCenter.default.addObserver(self, selector: #selector(SourcesViewController.themeDidChange), name: .themeDidChange, object: nil)
         
         self.fetchRecommendedSources()
@@ -113,23 +107,14 @@ private extension SourcesViewController
             let groupSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1.0), heightDimension: .estimated(100))
             let group = NSCollectionLayoutGroup.horizontal(layoutSize: groupSize, subitems: [item])
             
-            let headerSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1.0), heightDimension: .estimated(44))
-            let header = NSCollectionLayoutBoundarySupplementaryItem(layoutSize: headerSize, elementKind: UICollectionView.elementKindSectionHeader, alignment: .top)
-            
             let layoutSection = NSCollectionLayoutSection(group: group)
             layoutSection.interGroupSpacing = 12
             layoutSection.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 16, trailing: 16)
             
             switch sectionType
             {
-            case .existingSources:
+            case .existingSources, .recommendedSources:
                 break
-                
-            case .recommendedSources:
-                if !self.recommendedSourcesDataSource.items.isEmpty
-                {
-                    layoutSection.boundarySupplementaryItems = [header]
-                }
             }
             
             return layoutSection
@@ -138,25 +123,25 @@ private extension SourcesViewController
         return layout
     }
     
-    func makeDataSource() -> RSTCompositeCollectionViewPrefetchingDataSource<Source, UIImage>
+    func makeDataSource() -> CompositeCollectionViewPrefetchingDataSource<Source, UIImage>
     {
-        let dataSource = RSTCompositeCollectionViewPrefetchingDataSource<Source, UIImage>(dataSources: [self.existingSourcesDataSource, self.recommendedSourcesDataSource])
+        let dataSource = CompositeCollectionViewPrefetchingDataSource<Source, UIImage>(dataSources: [self.existingSourcesDataSource, self.recommendedSourcesDataSource])
         dataSource.placeholderView = self.placeholderView
         dataSource.cellConfigurationHandler = { [weak self] (cell, source, indexPath) in
             guard let self = self else { return }
             
             let cell = cell as! AppBannerCollectionViewCell
-            cell.bannerView.style = .source
             
-            // Áp dụng CSS Card Style (Nền trắng, bo góc 18px, đổ bóng chuẩn CSS)
             cell.contentView.applyCSSCardStyle(cornerRadius: AppUI.Layout.cardCornerRadius)
             
             cell.bannerView.titleLabel.text = source.name
             cell.bannerView.subtitleLabel.text = source.sourceURL.host ?? source.sourceURL.absoluteString
-            cell.bannerView.iconImageView.image = UIImage(named: "DefaultSourceIcon")
+            cell.bannerView.iconImageView.image = nil
             
             let tintColor = source.effectiveTintColor ?? AppUI.Colors.primaryPurple
             cell.bannerView.tintColor = tintColor
+            
+            cell.bannerView.button.removeTarget(self, action: nil, for: .primaryActionTriggered)
             
             switch Section.allCases[indexPath.section]
             {
@@ -164,61 +149,27 @@ private extension SourcesViewController
                 cell.bannerView.button.isHidden = (source.identifier == Source.altStoreIdentifier)
                 cell.bannerView.button.setTitle("–", for: .normal)
                 cell.bannerView.button.accessibilityLabel = AppStrings.Common.remove
-                
                 cell.bannerView.button.backgroundColor = AppUI.Colors.dangerRed.withAlphaComponent(0.15)
                 cell.bannerView.button.setTitleColor(AppUI.Colors.dangerRed, for: .normal)
                 cell.bannerView.button.layer.cornerRadius = 14
-                
-                cell.buttonActionHandler = { [weak self] (sender) in
-                    self?.confirmRemove(source)
-                }
+                cell.bannerView.button.addTarget(self, action: #selector(SourcesViewController.handleSourceActionButton(_:)), for: .primaryActionTriggered)
                 
             case .recommendedSources:
                 cell.bannerView.button.isHidden = false
                 cell.bannerView.button.setTitle("+", for: .normal)
                 cell.bannerView.button.accessibilityLabel = AppStrings.Common.add
-                
                 cell.bannerView.button.backgroundColor = AppUI.Colors.primaryPurple.withAlphaComponent(0.15)
                 cell.bannerView.button.setTitleColor(AppUI.Colors.primaryPurple, for: .normal)
                 cell.bannerView.button.layer.cornerRadius = 14
-                
-                cell.buttonActionHandler = { [weak self] (sender) in
-                    self?.addSource(at: source.sourceURL, indexPath: indexPath)
-                }
+                cell.bannerView.button.addTarget(self, action: #selector(SourcesViewController.handleSourceActionButton(_:)), for: .primaryActionTriggered)
             }
             
-            if self.addingSourceIndexPath == indexPath
-            {
-                cell.bannerView.isIndicatingActivity = true
-            }
-            else
-            {
-                cell.bannerView.isIndicatingActivity = false
-            }
-            
+            cell.bannerView.button.isIndicatingActivity = (self.addingSourceIndexPath == indexPath)
             cell.layoutIfNeeded()
         }
-        dataSource.prefetchHandler = { (source, indexPath, completionHandler) in
-            return RSTAsyncBlockOperation() { (operation) in
-                source.managedObjectContext?.perform {
-                    guard let imageURL = source.effectiveIconURL else { return completionHandler(nil, nil) }
-                    
-                    ImageLoader.shared.loadImage(with: imageURL) { (result) in
-                        guard !operation.isCancelled else {
-                            operation.finish()
-                            return
-                        }
-                        
-                        switch result
-                        {
-                        case .success(let image): completionHandler(image, nil)
-                        case .failure(let error): completionHandler(nil, error)
-                        }
-                        
-                        operation.finish()
-                    }
-                }
-            }
+        dataSource.prefetchHandler = { (source, indexPath) in
+            guard let imageURL = source.effectiveIconURL else { return nil }
+            return try await ImagePipeline.shared.image(for: imageURL)
         }
         dataSource.prefetchCompletionHandler = { (cell, image, indexPath, error) in
             let cell = cell as! AppBannerCollectionViewCell
@@ -226,35 +177,45 @@ private extension SourcesViewController
             {
                 cell.bannerView.iconImageView.image = image
             }
-            
-            if let error = error
-            {
-                Logger.main.error("Failed to load source icon. \(error.localizedDescription, privacy: .public)")
-            }
         }
         
         return dataSource
     }
     
-    func makeExistingSourcesDataSource() -> RSTFetchedResultsCollectionViewPrefetchingDataSource<Source, UIImage>
+    func makeExistingSourcesDataSource() -> FetchedResultsCollectionViewPrefetchingDataSource<Source, UIImage>
     {
-        let fetchRequest = Source.fetchRequest() as! NSFetchRequest<Source>
+        let fetchRequest = Source.fetchRequest() as NSFetchRequest<Source>
         fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \Source.name, ascending: true)]
         fetchRequest.returnsObjectsAsFaults = false
         
-        let dataSource = RSTFetchedResultsCollectionViewPrefetchingDataSource<Source, UIImage>(fetchRequest: fetchRequest, managedObjectContext: DatabaseManager.shared.viewContext)
+        let dataSource = FetchedResultsCollectionViewPrefetchingDataSource<Source, UIImage>(fetchRequest: fetchRequest, managedObjectContext: DatabaseManager.shared.viewContext)
         return dataSource
     }
     
-    func makeRecommendedSourcesDataSource() -> RSTArrayCollectionViewPrefetchingDataSource<Source, UIImage>
+    func makeRecommendedSourcesDataSource() -> ArrayCollectionViewPrefetchingDataSource<Source, UIImage>
     {
-        let dataSource = RSTArrayCollectionViewPrefetchingDataSource<Source, UIImage>(items: [])
+        let dataSource = ArrayCollectionViewPrefetchingDataSource<Source, UIImage>(items: [])
         return dataSource
     }
 }
 
 private extension SourcesViewController
 {
+    @objc func handleSourceActionButton(_ sender: UIButton)
+    {
+        let point = self.collectionView.convert(sender.center, from: sender.superview)
+        guard let indexPath = self.collectionView.indexPathForItem(at: point) else { return }
+        let source = self.dataSource.item(at: indexPath)
+        
+        switch Section.allCases[indexPath.section]
+        {
+        case .existingSources:
+            self.confirmRemove(source)
+        case .recommendedSources:
+            self.addSource(at: source.sourceURL, indexPath: indexPath)
+        }
+    }
+    
     @objc func promptToAddSource()
     {
         let alertController = UIAlertController(title: AppStrings.Sources.addSource, message: AppStrings.Sources.addSourceDescription, preferredStyle: .alert)
@@ -289,54 +250,18 @@ private extension SourcesViewController
         
         if let indexPath = indexPath, let cell = self.collectionView.cellForItem(at: indexPath) as? AppBannerCollectionViewCell
         {
-            cell.bannerView.isIndicatingActivity = true
+            cell.bannerView.button.isIndicatingActivity = true
         }
         
-        AppManager.shared.fetchSource(sourceURL: sourceURL) { (result) in
-            switch result
-            {
-            case .failure(let error):
-                DispatchQueue.main.async {
+        AppManager.shared.addSource(sourceURL: sourceURL) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                switch result
+                {
+                case .failure(let error):
                     self.finishAddingSource(with: .failure(error))
-                }
-                
-            case .success((let source, let context)):
-                context.perform {
-                    func addSource()
-                    {
-                        do
-                        {
-                            try context.save()
-                            
-                            DispatchQueue.main.async {
-                                self.finishAddingSource(with: .success(()))
-                                
-                                NotificationCenter.default.post(name: AppManager.didAddSourceNotification, object: self, userInfo: [AppManager.sourceNotificationKey: source])
-                            }
-                        }
-                        catch
-                        {
-                            DispatchQueue.main.async {
-                                self.finishAddingSource(with: .failure(error))
-                            }
-                        }
-                    }
-                    
-                    let warningAlert = UIAlertController(title: AppStrings.Sources.untrustedSourceTitle, message: AppStrings.Sources.untrustedSourceMessage, preferredStyle: .alert)
-                    warningAlert.addAction(UIAlertAction(title: AppStrings.Common.cancel, style: .cancel) { _ in
-                        DispatchQueue.main.async {
-                            self.finishAddingSource(with: .success(()))
-                        }
-                    })
-                    warningAlert.addAction(UIAlertAction(title: AppStrings.Sources.addSource, style: .default) { _ in
-                        context.perform {
-                            addSource()
-                        }
-                    })
-                    
-                    DispatchQueue.main.async {
-                        self.present(warningAlert, animated: true)
-                    }
+                case .success:
+                    self.finishAddingSource(with: .success(()))
                 }
             }
         }
@@ -349,7 +274,7 @@ private extension SourcesViewController
         
         if let indexPath = previousIndexPath, let cell = self.collectionView.cellForItem(at: indexPath) as? AppBannerCollectionViewCell
         {
-            cell.bannerView.isIndicatingActivity = false
+            cell.bannerView.button.isIndicatingActivity = false
         }
         
         switch result
@@ -383,9 +308,7 @@ private extension SourcesViewController
     
     func remove(_ source: Source)
     {
-        let sourceID = source.identifier
-        
-        AppManager.shared.removeSource(withIdentifier: sourceID) { (result) in
+        AppManager.shared.remove(source) { (result) in
             DispatchQueue.main.async {
                 switch result
                 {
@@ -403,32 +326,7 @@ private extension SourcesViewController
     func fetchRecommendedSources()
     {
         guard !self.isFetchingRecommendedSources else { return }
-        self.isFetchingRecommendedSources = true
-        self.fetchError = nil
-        
-        let context = DatabaseManager.shared.persistentContainer.newBackgroundContext()
-        
-        // Không bắt buộc gọi từ xa nếu chưa cấu hình recommendedSourcesURL
         self.isFetchingRecommendedSources = false
-        _ = context
-    }
-    
-    func updateRecommendedSources(_ sources: [Source])
-    {
-        DatabaseManager.shared.viewContext.perform {
-            do
-            {
-                let existingSources = try Source.all(in: DatabaseManager.shared.viewContext)
-                let existingIdentifiers = Set(existingSources.map { $0.identifier })
-                
-                let filteredSources = sources.filter { !existingIdentifiers.contains($0.identifier) }
-                self.recommendedSourcesDataSource.setItems(filteredSources)
-            }
-            catch
-            {
-                Logger.main.error("Failed to filter recommended sources. \(error.localizedDescription, privacy: .public)")
-            }
-        }
     }
     
     @objc func didAddSource(_ notification: Notification)
@@ -449,28 +347,5 @@ private extension SourcesViewController
     func makeNewsViewController(_ coder: NSCoder) -> UIViewController?
     {
         return NewsViewController(coder: coder)
-    }
-}
-
-extension SourcesViewController
-{
-    override func collectionView(_ collectionView: UICollectionView, viewForSupplementaryElementOfKind kind: String, at indexPath: IndexPath) -> UICollectionReusableView
-    {
-        let headerView = collectionView.dequeueReusableSupplementaryView(ofKind: kind, withReuseIdentifier: "Header", for: indexPath) as! CollectionSectionHeaderView
-        headerView.textLabel.text = AppStrings.Sources.recommendedSources
-        headerView.textLabel.textColor = AppUI.Colors.textPrimary
-        headerView.textLabel.font = .systemFont(ofSize: 18, weight: .bold)
-        headerView.actionButton.isHidden = true
-        return headerView
-    }
-    
-    override func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath)
-    {
-        let source = self.dataSource.item(at: indexPath)
-        
-        let sourceDetailsViewController = SourceDetailsViewController(source: source)
-        let navigationController = UINavigationController(rootViewController: sourceDetailsViewController)
-        navigationController.applyCSSNavigationBar()
-        self.present(navigationController, animated: true)
     }
 }

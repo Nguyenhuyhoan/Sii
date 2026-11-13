@@ -43,7 +43,7 @@ public struct AppUI {
         public static var primaryPurple: UIColor {
             return ThemeManager.shared.accentColor
         }
-        public static let secondaryBlue = UIColor(red: 116/255, green: 185/255, blue: 255/255, alpha: 1.0)     // #74b9ff
+        public static let secondaryBlue = UIColor(red: 116/255, green: 185/255, blue: 255/255, alpha: 1.0) // #74b9ff
         
         public static let gradientStart = UIColor(red: 108/255, green: 92/255, blue: 231/255, alpha: 0.12)
         public static let gradientEnd = UIColor(red: 116/255, green: 185/255, blue: 255/255, alpha: 0.12)
@@ -57,25 +57,34 @@ public struct AppUI {
         public static let cardSubtleBackground = UIColor { traitCollection in
             return traitCollection.userInterfaceStyle == .dark
                 ? UIColor(red: 38/255, green: 40/255, blue: 52/255, alpha: 1.0)
-                : UIColor(red: 248/255, green: 249/255, blue: 255/255, alpha: 1.0) // #f8f9ff
+                : UIColor(red: 248/255, green: 249/255, blue: 255/255, alpha: 1.0)
         }
         
         public static let textPrimary = UIColor { traitCollection in
             return traitCollection.userInterfaceStyle == .dark
                 ? UIColor(red: 245/255, green: 246/255, blue: 250/255, alpha: 1.0)
-                : UIColor(red: 45/255, green: 52/255, blue: 54/255, alpha: 1.0)     // #2d3436
+                : UIColor(red: 45/255, green: 52/255, blue: 54/255, alpha: 1.0)
         }
         
         public static let textSecondary = UIColor { traitCollection in
             return traitCollection.userInterfaceStyle == .dark
                 ? UIColor(red: 164/255, green: 176/255, blue: 190/255, alpha: 1.0)
-                : UIColor(red: 99/255, green: 110/255, blue: 114/255, alpha: 1.0)   // #636e72
+                : UIColor(red: 99/255, green: 110/255, blue: 114/255, alpha: 1.0)
         }
         
         public static let borderPurple = UIColor(red: 108/255, green: 92/255, blue: 231/255, alpha: 0.15)
-        public static let dangerRed = UIColor(red: 255/255, green: 71/255, blue: 87/255, alpha: 1.0)       // #ff4757
-        public static let successGreen = UIColor(red: 46/255, green: 213/255, blue: 115/255, alpha: 1.0)   // #2ed573
-        public static let warningOrange = UIColor(red: 255/255, green: 165/255, blue: 2/255, alpha: 1.0)   // #ffa502
+        public static let dangerRed = UIColor(red: 255/255, green: 71/255, blue: 87/255, alpha: 1.0)
+        public static let successGreen = UIColor(red: 46/255, green: 213/255, blue: 115/255, alpha: 1.0)
+        public static let warningOrange = UIColor(red: 255/255, green: 165/255, blue: 2/255, alpha: 1.0)
+        
+        // Aliases tương thích với BrowseViewController & MyAppsViewController
+        public static var blue: UIColor { primaryPurple }
+        public static var dark: UIColor { textPrimary }
+        public static var white: UIColor { cardBackground }
+        public static var border: UIColor { borderPurple }
+        public static var green: UIColor { successGreen }
+        public static var red: UIColor { dangerRed }
+        public static var gray: UIColor { textSecondary }
     }
     
     public struct Layout {
@@ -83,6 +92,7 @@ public struct AppUI {
         public static let cardCornerRadius: CGFloat = 18.0
         public static let buttonCornerRadius: CGFloat = 14.0
         public static let badgeCornerRadius: CGFloat = 10.0
+        public static var radius: CGFloat { cardCornerRadius }
     }
 }
 
@@ -122,6 +132,10 @@ public extension UIView {
         }
     }
     
+    func updateCSSBodyGradientFrame() {
+        updateCSSGradientFrame()
+    }
+    
     func applyCSSCardStyle(cornerRadius: CGFloat = AppUI.Layout.cardCornerRadius) {
         self.backgroundColor = AppUI.Colors.cardBackground
         self.layer.cornerRadius = cornerRadius
@@ -136,6 +150,14 @@ public extension UIView {
         self.layer.masksToBounds = false
     }
     
+    func applyCSSBannerShadow() {
+        self.layer.cornerCurve = .continuous
+        self.layer.shadowColor = AppUI.Colors.primaryPurple.cgColor
+        self.layer.shadowOffset = CGSize(width: 0, height: 6)
+        self.layer.shadowRadius = 14
+        self.layer.shadowOpacity = 0.1
+    }
+    
     func applyCSSPillButtonStyle() {
         self.layer.cornerRadius = AppUI.Layout.buttonCornerRadius
         self.layer.cornerCurve = .continuous
@@ -143,6 +165,47 @@ public extension UIView {
         self.layer.shadowOffset = CGSize(width: 0, height: 4)
         self.layer.shadowRadius = 10
         self.layer.shadowOpacity = 0.25
+    }
+}
+
+public extension UILabel {
+    func applySectionTitle(text: String) {
+        self.text = text
+        self.font = UIFont.systemFont(ofSize: 20, weight: .bold)
+        self.textColor = AppUI.Colors.textPrimary
+    }
+}
+
+public extension UIViewController {
+    func applyCSSNavigationBar(tintColor: UIColor = AppUI.Colors.primaryPurple, transparentEdge: Bool = true) {
+        guard let navBar = self.navigationController?.navigationBar else { return }
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithDefaultBackground()
+        appearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterial)
+        appearance.backgroundColor = AppUI.Colors.cardBackground.withAlphaComponent(0.82)
+        appearance.shadowColor = AppUI.Colors.borderPurple
+        
+        appearance.titleTextAttributes = [
+            .foregroundColor: AppUI.Colors.textPrimary,
+            .font: UIFont.systemFont(ofSize: 17, weight: .bold)
+        ]
+        appearance.largeTitleTextAttributes = [
+            .foregroundColor: AppUI.Colors.textPrimary,
+            .font: UIFont.systemFont(ofSize: 32, weight: .heavy)
+        ]
+        
+        navBar.standardAppearance = appearance
+        if transparentEdge {
+            let edgeAppearance = UINavigationBarAppearance()
+            edgeAppearance.configureWithTransparentBackground()
+            edgeAppearance.titleTextAttributes = appearance.titleTextAttributes
+            edgeAppearance.largeTitleTextAttributes = appearance.largeTitleTextAttributes
+            navBar.scrollEdgeAppearance = edgeAppearance
+        } else {
+            navBar.scrollEdgeAppearance = appearance
+        }
+        navBar.compactAppearance = appearance
+        navBar.tintColor = tintColor
     }
 }
 
@@ -256,166 +319,6 @@ public struct PresetThemeColor: Identifiable {
         self.id = hex
         self.name = name
         self.hex = hex
-    }
-}
-
-// MARK: - SwiftUI UserCustomizationsView
-public struct UserCustomizationsView: View {
-    @ObservedObject private var themeManager = ThemeManager.shared
-    @State private var selectedColor: Color = ThemeManager.shared.swiftUIAccentColor
-    @State private var showingResetConfirmation = false
-    @State private var showingCacheClearedAlert = false
-    
-    private let presetColors: [PresetThemeColor] = [
-        PresetThemeColor(name: "Tím SideStore", hex: "#6C5CE7"),
-        PresetThemeColor(name: "Xanh Dương", hex: "#0984E3"),
-        PresetThemeColor(name: "Xanh Ngọc", hex: "#00CEC9"),
-        PresetThemeColor(name: "Xanh Lá", hex: "#2ED573"),
-        PresetThemeColor(name: "Cam", hex: "#FFA502"),
-        PresetThemeColor(name: "Đỏ Hồng", hex: "#FF4757"),
-        PresetThemeColor(name: "Hồng Tím", hex: "#E84393")
-    ]
-    
-    public init() {}
-    
-    public var body: some View {
-        ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(AppUI.Colors.primaryPurple).opacity(0.14),
-                    Color(AppUI.Colors.secondaryBlue).opacity(0.14)
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-            
-            ScrollView {
-                VStack(spacing: 20) {
-                    // 1. Chế độ hiển thị (Sáng / Tối / Hệ thống)
-                    CSSSectionCard(title: AppStrings.Settings.appearanceModeTitle, icon: "circle.lefthalf.filled") {
-                        Picker(AppStrings.Settings.appearanceModeTitle, selection: $themeManager.appearanceMode) {
-                            ForEach(AppearanceMode.allCases) { mode in
-                                Text(mode.title).tag(mode)
-                            }
-                        }
-                        .pickerStyle(SegmentedPickerStyle())
-                    }
-                    
-                    // 2. Màu sắc chủ đề
-                    CSSSectionCard(title: AppStrings.Settings.themeSectionHeader, icon: "paintpalette.fill") {
-                        VStack(spacing: 16) {
-                            Toggle(AppStrings.Settings.useCustomAccentColor, isOn: $themeManager.useCustomAccentColor)
-                                .tint(themeManager.swiftUIAccentColor)
-                            
-                            if themeManager.useCustomAccentColor {
-                                Divider()
-                                
-                                ColorPicker(AppStrings.Settings.accentColorTitle, selection: $selectedColor, supportsOpacity: false)
-                                    .onChange(of: selectedColor) { newColor in
-                                        if let hex = UIColor(newColor).toHex() {
-                                            themeManager.customAccentColorHex = hex
-                                        }
-                                    }
-                                
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: 12) {
-                                        ForEach(presetColors) { preset in
-                                            PresetColorCircleButton(
-                                                preset: preset,
-                                                isSelected: themeManager.customAccentColorHex.uppercased() == preset.hex.uppercased()
-                                            ) {
-                                                themeManager.customAccentColorHex = preset.hex
-                                                if let uiColor = UIColor(hex: preset.hex) {
-                                                    selectedColor = Color(uiColor)
-                                                }
-                                            }
-                                        }
-                                    }
-                                    .padding(.vertical, 4)
-                                }
-                            }
-                        }
-                    }
-                    
-                    // 3. Quản lý bộ nhớ đệm
-                    CSSSectionCard(title: AppStrings.Settings.cacheSectionHeader, icon: "internaldrive.fill") {
-                        VStack(spacing: 12) {
-                            Button(action: clearImageAndAppCache) {
-                                HStack {
-                                    Image(systemName: "trash.fill")
-                                    Text(AppStrings.Settings.clearAppCache)
-                                        .fontWeight(.semibold)
-                                    Spacer()
-                                }
-                                .foregroundColor(Color(AppUI.Colors.primaryPurple))
-                                .padding(.vertical, 10)
-                                .padding(.horizontal, 14)
-                                .background(Color(AppUI.Colors.primaryPurple).opacity(0.1))
-                                .cornerRadius(12)
-                            }
-                            
-                            Button(action: { showingResetConfirmation = true }) {
-                                HStack {
-                                    Image(systemName: "arrow.counterclockwise")
-                                    Text(AppStrings.Settings.resetCustomizations)
-                                        .fontWeight(.semibold)
-                                    Spacer()
-                                }
-                                .foregroundColor(Color(AppUI.Colors.dangerRed))
-                                .padding(.vertical, 10)
-                                .padding(.horizontal, 14)
-                                .background(Color(AppUI.Colors.dangerRed).opacity(0.1))
-                                .cornerRadius(12)
-                            }
-                        }
-                    }
-                }
-                .padding(16)
-            }
-        }
-        .navigationTitle(AppStrings.Settings.customizationsTitle)
-        .onAppear {
-            selectedColor = themeManager.swiftUIAccentColor
-        }
-        .alert(AppStrings.Settings.resetCustomizations, isPresented: $showingResetConfirmation) {
-            Button(AppStrings.Common.cancel, role: .cancel) {}
-            Button(AppStrings.Common.reset, role: .destructive) {
-                themeManager.resetToDefaults()
-                selectedColor = themeManager.swiftUIAccentColor
-            }
-        }
-        .alert(AppStrings.Common.success, isPresented: $showingCacheClearedAlert) {
-            Button(AppStrings.Common.ok, role: .cancel) {}
-        } message: {
-            Text(AppStrings.Settings.cacheClearedMessage)
-        }
-    }
-    
-    private func clearImageAndAppCache() {
-        URLCache.shared.removeAllCachedResponses()
-        showingCacheClearedAlert = true
-    }
-}
-
-// MARK: - Subview cho nút chọn màu Preset (Tách riêng để tránh lỗi Type-Inference của SwiftUI)
-private struct PresetColorCircleButton: View {
-    let preset: PresetThemeColor
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            Circle()
-                .fill(Color(UIColor(hex: preset.hex) ?? ThemeManager.defaultAccentColor))
-                .frame(width: 36, height: 36)
-                .overlay(
-                    Circle()
-                        .stroke(Color.white, lineWidth: isSelected ? 3 : 0)
-                )
-                .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
-        }
-        .accessibilityLabel(Text(preset.name))
     }
 }
 

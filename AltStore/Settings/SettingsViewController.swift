@@ -279,8 +279,8 @@ final class SettingsViewController: UITableViewController
         self.title = "Cài đặt"
         self.navigationItem.title = "Cài đặt"
         #if !os(tvOS)
-        // Thu gọn thanh tiêu đề lớn để khung SideStore nằm sát ngay phía trên
-        self.navigationItem.largeTitleDisplayMode = UINavigationItem.LargeTitleDisplayMode.inline
+        // Thu gọn thanh tiêu đề lớn để khung SideStore nằm sát ngay phía trên (Dùng .never tương thích mọi bản iOS)
+        self.navigationItem.largeTitleDisplayMode = .never
         #endif
         
         let nib = UINib(nibName: "SettingsHeaderFooterView", bundle: nil)
@@ -348,7 +348,7 @@ final class SettingsViewController: UITableViewController
             appearance.titleTextAttributes = [.foregroundColor: CSSTheme.blue]
             appearance.largeTitleTextAttributes = [.foregroundColor: CSSTheme.blue]
             
-            controller.navigationItem.largeTitleDisplayMode = UINavigationItem.LargeTitleDisplayMode.inline
+            controller.navigationItem.largeTitleDisplayMode = .never
             controller.navigationItem.standardAppearance = appearance
             controller.navigationItem.scrollEdgeAppearance = appearance
             #endif
@@ -394,6 +394,11 @@ private extension SettingsViewController {
         self.navigationController?.navigationBar.scrollEdgeAppearance = navAppearance
         self.navigationController?.navigationBar.compactAppearance = navAppearance
         self.navigationController?.navigationBar.tintColor = CSSTheme.blue
+        
+        if let tabAppearance = self.tabBarController?.tabBar.standardAppearance {
+            tabAppearance.stackedLayoutAppearance.normal.badgeBackgroundColor = CSSTheme.blue
+            self.navigationController?.tabBarItem.scrollEdgeAppearance = tabAppearance
+        }
         #endif
         
         // 4. Làm đẹp các công tắc UISwitch (Đổ bóng Neon)

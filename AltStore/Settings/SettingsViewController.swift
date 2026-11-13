@@ -92,12 +92,7 @@ extension SettingsViewController
         case disableAppLimit
         
         static var allCases: [AppRefreshRow] {
-            var c: [AppRefreshRow] = [.backgroundRefresh, .noIdleTimeout, .addToSiri]
-            if UserDefaults.standard.isCowExploitSupported || !ProcessInfo().sparseRestorePatched
-            {
-                c.append(.disableAppLimit)
-            }
-            return c
+            return []
         }
     }
 
@@ -115,6 +110,11 @@ extension SettingsViewController
         case errorLog
         case storageExplorer
         case clearCache
+        
+        // Xoá Kiểm tra tình trạng hệ thống (healthCheck)
+        static var allCases: [TechyThingsRow] {
+            return [.errorLog, .storageExplorer, .clearCache]
+        }
     }
 
     fileprivate enum AdvancedSettingsRow: Int, CaseIterable
@@ -132,16 +132,14 @@ extension SettingsViewController
         case backupAndRestore
         case userCustomizations
         
+        // Xoá Gửi phản hồi, Quản lý tệp ghép đôi, Network Discovery, Developer Portal Services, Profiles Management
         static var allCases: [AdvancedSettingsRow] {
-            var rows: [AdvancedSettingsRow] = [.sendFeedback, .refreshAttempts, .refreshSideJITServer, .pairingFileManagement]
+            var rows: [AdvancedSettingsRow] = [.refreshAttempts, .refreshSideJITServer]
             if !UserDefaults.standard.useOnDeviceAnisette {
                 rows.append(.anisetteServers)
             }
             rows.append(contentsOf: [
                 .connectionConfig,
-                .networkDiscovery,
-                .developerServices,
-                .profileManagement,
                 .certificateManagement,
                 .backupAndRestore,
                 .userCustomizations
@@ -230,15 +228,22 @@ final class SettingsViewController: UITableViewController
         let channel = UserDefaults.standard.betaUdpatesTrack ?? UserDefaults.defaultBetaUpdatesTrack
         let displayTitle = translateStaticText(channel)
         
-        if #available(iOS 15.0, tvOS 15.0, *), var config = betaTrackPopupButton.configuration {
-            var attrTitle = AttributedString(displayTitle)
-            attrTitle.font = UIFont.systemFont(ofSize: 13, weight: .bold)
-            attrTitle.foregroundColor = CSSTheme.blue
-            config.attributedTitle = attrTitle
-            betaTrackPopupButton.configuration = config
-        } else {
-            betaTrackPopupButton.setTitle(displayTitle, for: .normal)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 11, weight: .semibold),
+            .foregroundColor: UIColor.black
+        ]
+        let attrTitle = NSAttributedString(string: displayTitle, attributes: attributes)
+        
+        if #available(iOS 15.0, tvOS 15.0, *) {
+            betaTrackPopupButton.configuration = nil
         }
+        
+        betaTrackPopupButton.setAttributedTitle(attrTitle, for: .normal)
+        betaTrackPopupButton.setAttributedTitle(attrTitle, for: .disabled)
+        betaTrackPopupButton.setAttributedTitle(attrTitle, for: .highlighted)
+        betaTrackPopupButton.setAttributedTitle(attrTitle, for: .selected)
+        betaTrackPopupButton.setTitleColor(.black, for: .normal)
+        betaTrackPopupButton.setTitleColor(.black, for: .disabled)
         betaTrackPopupButton.sizeToFit()
     }
 
@@ -275,9 +280,23 @@ final class SettingsViewController: UITableViewController
         updateReleaseChannelButtonTitle()
     }
 
+    // Tắt cứng toàn bộ tính năng Làm mới ứng dụng (Background Refresh, Idle Timeout, App Limit)
+    private func forceDisableAppRefreshSettings() {
+        UserDefaults.standard.isBackgroundRefreshEnabled = false
+        UserDefaults.standard.isIdleTimeoutDisableEnabled = false
+        UserDefaults.standard.isAppLimitDisabled = false
+        
+        self.backgroundRefreshSwitch?.isOn = false
+        self.noIdleTimeoutSwitch?.isOn = false
+        self.disableAppLimitSwitch?.isOn = false
+    }
+
     override func viewDidLoad()
     {
         super.viewDidLoad()
+        
+        // Tắt cứng LÀM MỚI ỨNG DỤNG
+        self.forceDisableAppRefreshSettings()
         
         // Xóa bỏ tiêu đề "Cài đặt" và ẩn hoàn toàn thanh điều hướng
         self.title = nil
@@ -336,6 +355,7 @@ final class SettingsViewController: UITableViewController
         super.viewWillAppear(animated)
         // Đảm bảo ẩn thanh màu trắng và chữ Cài đặt ở trên cùng để tràn viền toàn màn hình
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
+        self.forceDisableAppRefreshSettings()
         self.update()
     }
 
@@ -436,7 +456,10 @@ private extension SettingsViewController {
         // 2. Tạo khối .hero Banner nằm sát phía trên
         setupCSSHeroBanner()
         
-        // 3. Cấu hình TabBar đồng bộ màu
+        // 3. Tạo Footer hiển thị phiên bản (Vì đã xoá ô "How it works" trong section instructions)
+        setupVersionTableFooterView()
+        
+        // 4. Cấu hình TabBar đồng bộ màu
         #if !os(tvOS)
         if let tabAppearance = self.tabBarController?.tabBar.standardAppearance {
             tabAppearance.stackedLayoutAppearance.normal.badgeBackgroundColor = CSSTheme.blue
@@ -444,7 +467,7 @@ private extension SettingsViewController {
         }
         #endif
         
-        // 4. Làm đẹp các công tắc UISwitch (Đổ bóng Neon)
+        // 5. Làm đẹp các công tắc UISwitch (Đổ bóng Neon)
         let switches = [
             self.backgroundRefreshSwitch, self.noIdleTimeoutSwitch, self.disableAppLimitSwitch,
             self.betaUpdatesSwitch, self.verboseOperationsLoggingSwitch, self.altSignVerboseLoggingSwitch,
@@ -462,74 +485,51 @@ private extension SettingsViewController {
             sw.layer.shadowOpacity = 0.28
         }
         
-        // 5. Nút chọn kênh Beta (`nightly`...) vừa vặn và đẹp mắt
-        styleBetaTrackPopupButton()
-        
-        // 6. Các nút Mạng xã hội (Chuẩn 4 màu của .tab-button[data-tab="1..4"] trong CSS)
-        let socialButtons = [
-            (self.mastodonButton, CSSTheme.magenta),
-            (self.threadsButton, CSSTheme.purple),
-            (self.twitterButton, CSSTheme.blue),
-            (self.githubButton, CSSTheme.green)
-        ]
-        
-        for (button, color) in socialButtons {
-            guard let btn = button else { continue }
-            var image = btn.image(for: .normal)
-            if #available(iOS 15.0, tvOS 15.0, *) {
-                image = btn.configuration?.background.image ?? image
-                btn.configuration = nil
-            }
-            btn.setImage(image?.withRenderingMode(.alwaysTemplate), for: .normal)
-            btn.tintColor = color
-            btn.imageView?.contentMode = .scaleAspectFit
-            
-            btn.backgroundColor = CSSTheme.white
-            btn.layer.cornerRadius = CSSTheme.cornerRadius
-            btn.layer.borderWidth = 2.0
-            btn.layer.borderColor = CSSTheme.border.cgColor
-            btn.layer.shadowColor = color.cgColor
-            btn.layer.shadowOffset = CGSize(width: 0, height: 6)
-            btn.layer.shadowRadius = 12
-            btn.layer.shadowOpacity = 0.28
-            
-            btn.addTarget(self, action: #selector(animateButtonPress(_:)), for: .touchDown)
-            btn.addTarget(self, action: #selector(animateButtonRelease(_:)), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        // 6. Cố định màu chữ đen cho Beta Track Label & thu nhỏ nút chọn kênh Beta
+        if let betaLabel = self.betaTrackLabel {
+            betaLabel.isEnabled = true
+            betaLabel.textColor = .black
+            betaLabel.alpha = 1.0
         }
+        styleBetaTrackPopupButton()
     }
 
-    // Chỉnh khung chứa chữ `nightly` của Beta Updates Track vừa vặn, bo tròn dạng viên thuốc tuyệt đẹp
+    // Chỉnh khung chứa chữ `Hằng đêm (Nightly)` nhỏ gọn hơn, chữ nhỏ hơn và cố định màu đen rõ nét kể cả khi bật hay tắt
     private func styleBetaTrackPopupButton() {
         guard let btn = self.betaTrackPopupButton else { return }
         
         if #available(iOS 15.0, tvOS 15.0, *) {
-            var config = UIButton.Configuration.filled()
-            config.baseBackgroundColor = CSSTheme.light
-            config.baseForegroundColor = CSSTheme.blue
-            config.cornerStyle = .capsule
-            config.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 14, bottom: 6, trailing: 12)
-            
-            let chevronConfig = UIImage.SymbolConfiguration(pointSize: 10, weight: .bold)
-            config.image = UIImage(systemName: "chevron.up.chevron.down", withConfiguration: chevronConfig)
-            config.imagePlacement = .trailing
-            config.imagePadding = 6
-            
-            config.background.strokeColor = CSSTheme.blue.withAlphaComponent(0.35)
-            config.background.strokeWidth = 1.2
-            
-            btn.configuration = config
-        } else {
-            btn.backgroundColor = CSSTheme.light
-            btn.setTitleColor(CSSTheme.blue, for: .normal)
-            btn.layer.cornerRadius = 14
-            btn.layer.borderWidth = 1.2
-            btn.layer.borderColor = CSSTheme.blue.withAlphaComponent(0.35).cgColor
+            btn.configuration = nil
         }
         
-        btn.layer.shadowColor = CSSTheme.purple.cgColor
-        btn.layer.shadowOffset = CGSize(width: 0, height: 3)
-        btn.layer.shadowRadius = 6
-        btn.layer.shadowOpacity = 0.18
+        btn.backgroundColor = CSSTheme.light
+        btn.tintColor = .black
+        btn.setTitleColor(.black, for: .normal)
+        btn.setTitleColor(.black, for: .disabled)
+        btn.setTitleColor(.black, for: .highlighted)
+        btn.setTitleColor(.black, for: .selected)
+        btn.titleLabel?.font = UIFont.systemFont(ofSize: 11, weight: .semibold)
+        
+        let chevronConfig = UIImage.SymbolConfiguration(pointSize: 9, weight: .bold)
+        let chevronImage = UIImage(systemName: "chevron.up.chevron.down", withConfiguration: chevronConfig)?
+            .withTintColor(.black, renderingMode: .alwaysOriginal)
+        btn.setImage(chevronImage, for: .normal)
+        btn.setImage(chevronImage, for: .disabled)
+        btn.setImage(chevronImage, for: .highlighted)
+        
+        btn.semanticContentAttribute = .forceRightToLeft
+        btn.contentEdgeInsets = UIEdgeInsets(top: 3, left: 8, bottom: 3, right: 8)
+        btn.imageEdgeInsets = UIEdgeInsets(top: 0, left: 4, bottom: 0, right: -2)
+        
+        btn.layer.cornerRadius = 9
+        btn.layer.borderWidth = 1.0
+        btn.layer.borderColor = UIColor.black.withAlphaComponent(0.22).cgColor
+        btn.layer.shadowColor = UIColor.black.cgColor
+        btn.layer.shadowOffset = CGSize(width: 0, height: 1)
+        btn.layer.shadowRadius = 2
+        btn.layer.shadowOpacity = 0.08
+        btn.alpha = 1.0
+        
         btn.setContentHuggingPriority(.required, for: .horizontal)
         btn.setContentCompressionResistancePriority(.required, for: .horizontal)
     }
@@ -603,6 +603,31 @@ private extension SettingsViewController {
         self.tableView.tableHeaderView = headerContainer
     }
 
+    // Hiển thị thông tin Phiên bản gọn đẹp ở chân trang sau khi ẩn section How it works
+    private func setupVersionTableFooterView() {
+        let footerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 64))
+        footerContainer.backgroundColor = .clear
+        
+        let vLabel = UILabel()
+        vLabel.tag = 7771
+        vLabel.translatesAutoresizingMaskIntoConstraints = false
+        vLabel.attributedText = getVersionAttributedString()
+        vLabel.numberOfLines = 0
+        vLabel.textAlignment = .center
+        vLabel.isUserInteractionEnabled = true
+        vLabel.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(copyVersionLabelTapped)))
+        
+        footerContainer.addSubview(vLabel)
+        NSLayoutConstraint.activate([
+            vLabel.centerXAnchor.constraint(equalTo: footerContainer.centerXAnchor),
+            vLabel.centerYAnchor.constraint(equalTo: footerContainer.centerYAnchor),
+            vLabel.leadingAnchor.constraint(equalTo: footerContainer.leadingAnchor, constant: 16),
+            vLabel.trailingAnchor.constraint(equalTo: footerContainer.trailingAnchor, constant: -16)
+        ])
+        
+        self.tableView.tableFooterView = footerContainer
+    }
+
     // Bóc tách lớp nền của InsetGroupTableViewCell để ép nhận diện CSS Card
     private func styleInnerCardOfCell(_ cell: UITableViewCell, at indexPath: IndexPath, totalRows: Int) {
         cell.backgroundColor = .clear
@@ -671,34 +696,11 @@ private extension SettingsViewController {
             "Organization": "Tổ chức",
             "Unknown": "Không xác định",
             
-            // Ủng hộ & Hiển thị
-            "Become a Patron": "Trở thành Nhà tài trợ (Patreon)",
-            "Patreon": "Patreon",
-            "App Icon": "Biểu tượng ứng dụng",
-            
-            // Làm mới ứng dụng
-            "Background Refresh": "Làm mới trong nền",
-            "Disable Idle Timeout": "Tắt tự động khóa màn hình",
-            "No Idle Timeout": "Không tự tắt màn hình khi bận",
-            "Add \"Refresh All Apps\" to Siri": "Thêm \"Làm mới mọi ứng dụng\" vào Siri",
-            "Add to Siri": "Thêm phím tắt vào Siri",
-            "Disable 3-App Limit": "Tắt giới hạn 3 ứng dụng",
-            "Disable App Limit": "Tắt giới hạn số lượng ứng dụng",
-            
             // Công cụ kỹ thuật
-            "Health Check": "Kiểm tra tình trạng hệ thống",
             "Error Log": "Nhật ký lỗi",
             "View Error Log": "Xem nhật ký lỗi",
             "Storage Explorer": "Trình quản lý dung lượng",
             "Clear Cache": "Xóa bộ nhớ đệm (Cache)",
-            
-            // Đội ngũ phát triển (Credits)
-            "Developer": "Nhà phát triển",
-            "Developers": "Nhà phát triển",
-            "Operations": "Vận hành hệ thống",
-            "Designer": "Thiết kế giao diện",
-            "Software Licenses": "Giấy phép phần mềm",
-            "SideStore Team": "Đội ngũ SideStore",
             
             // Thử nghiệm Beta
             "Beta Updates": "Cập nhật phiên bản Beta",
@@ -714,18 +716,15 @@ private extension SettingsViewController {
             "stable": "Ổn định (Stable)",
             
             // Cài đặt nâng cao
-            "Send Feedback": "Gửi phản hồi & Góp ý",
-            "Refresh Attempts": "Lịch sử các lần làm mới",
+            "View Refresh Attempts": "Xem lịch sử làm mới",
+            "Refresh Attempts": "Xem lịch sử làm mới",
             "Refresh SideJITServer": "Làm mới máy chủ SideJITServer",
             "SideJITServer": "Cấu hình SideJITServer",
-            "Pairing File Management": "Quản lý tệp ghép đôi (Pairing File)",
             "Anisette Servers": "Máy chủ Anisette",
             "Connection Configuration": "Cấu hình kết nối mạng",
             "Connection Config": "Cấu hình kết nối mạng",
-            "Network Discovery": "Dò tìm thiết bị trong mạng",
-            "Developer Services": "Dịch vụ nhà phát triển",
-            "Profile Management": "Quản lý hồ sơ cấu hình (Profile)",
             "Certificate Management": "Quản lý chứng chỉ (Certificate)",
+            "Certificates Management": "Quản lý chứng chỉ (Certificate)",
             "Backup & Restore": "Sao lưu & Khôi phục",
             "Backup and Restore": "Sao lưu & Khôi phục",
             "User Customizations": "Tùy chỉnh của người dùng",
@@ -738,9 +737,7 @@ private extension SettingsViewController {
             "Minimuxer Verbose Logging": "Ghi nhật ký Minimuxer chi tiết",
             "Rotate Logs on Startup": "Xoay vòng nhật ký khi khởi động",
             "Disable Response Caching": "Tắt lưu đệm phản hồi mạng",
-            "Recreate Database on Next Start": "Tạo lại cơ sở dữ liệu ở lần mở tới",
-            "Instructions": "Hướng dẫn sử dụng",
-            "Setup Instructions": "Hướng dẫn cài đặt"
+            "Recreate Database on Next Start": "Tạo lại cơ sở dữ liệu ở lần mở tới"
         ]
         
         return dictionary[trimmed] ?? text
@@ -749,6 +746,11 @@ private extension SettingsViewController {
     private func translateAndStyleLabelsInside(view: UIView, section: Section, row: Int) {
         for subview in view.subviews {
             if let label = subview as? UILabel {
+                // Bỏ qua các label nằm bên trong UIButton để tránh ghi đè style của nút chọn kênh Beta
+                if subview.superview is UIButton {
+                    continue
+                }
+                
                 // Dịch văn bản sang tiếng Việt nếu khớp từ điển
                 if let currentText = label.text, !currentText.isEmpty {
                     label.text = translateStaticText(currentText)
@@ -763,13 +765,19 @@ private extension SettingsViewController {
                 } else if section == .signIn {
                     label.textColor = CSSTheme.blue
                     label.font = UIFont.systemFont(ofSize: 17, weight: .bold)
-                } else if section == .techyThings && row == TechyThingsRow.clearCache.rawValue {
+                } else if section == .betaTesting {
+                    // Cố định màu chữ đen tuyền và luôn bật rõ nét cho mục THỬ NGHIỆM BETA
+                    label.isEnabled = true
+                    label.textColor = .black
+                    label.alpha = 1.0
+                    label.font = UIFont.systemFont(ofSize: 16, weight: .medium)
+                } else if section == .techyThings && TechyThingsRow.allCases.indices.contains(row) && TechyThingsRow.allCases[row] == .clearCache {
                     label.textColor = CSSTheme.magenta
                     label.font = UIFont.systemFont(ofSize: 16, weight: .bold)
                 } else if label.textColor == .systemRed {
                     label.textColor = CSSTheme.magenta
                 } else {
-                    label.textColor = CSSTheme.dark
+                    label.textColor = .black
                     if label.font.pointSize >= 16 {
                         label.font = UIFont.systemFont(ofSize: 16, weight: .medium)
                     }
@@ -799,18 +807,6 @@ private extension SettingsViewController {
                     cell.isHidden = !self.isAccountDetailsExpanded
                 }
             }
-        }
-    }
-
-    @objc private func animateButtonPress(_ sender: UIButton) {
-        UIView.animate(withDuration: 0.15, delay: 0, options: .curveEaseInOut) {
-            sender.transform = CGAffineTransform(scaleX: 0.92, y: 0.92)
-        }
-    }
-
-    @objc private func animateButtonRelease(_ sender: UIButton) {
-        UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.5, initialSpringVelocity: 0.5, options: .curveEaseOut) {
-            sender.transform = .identity
         }
     }
 }
@@ -873,9 +869,19 @@ private extension SettingsViewController
             .font: UIFont.systemFont(ofSize: 15, weight: .bold),
             .foregroundColor: CSSTheme.green
         ]))
-        self.versionLabel.attributedText = attributed
+        
+        self.versionLabel?.attributedText = attributed
+        if let footerLabel = self.tableView.tableFooterView?.viewWithTag(7771) as? UILabel {
+            footerLabel.attributedText = attributed
+        }
+        
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.versionLabel.attributedText = self?.getVersionAttributedString()
+            guard let self = self else { return }
+            let normalAttr = self.getVersionAttributedString()
+            self.versionLabel?.attributedText = normalAttr
+            if let footerLabel = self.tableView.tableFooterView?.viewWithTag(7771) as? UILabel {
+                footerLabel.attributedText = normalAttr
+            }
         }
     }
 
@@ -907,12 +913,18 @@ private extension SettingsViewController
             self.tableView.reloadData()
         }
         
-        self.backgroundRefreshSwitch.isOn = UserDefaults.standard.isBackgroundRefreshEnabled
-        self.noIdleTimeoutSwitch.isOn = UserDefaults.standard.isIdleTimeoutDisableEnabled
-        self.disableAppLimitSwitch.isOn = UserDefaults.standard.isAppLimitDisabled
+        // Đảm bảo LÀM MỚI ỨNG DỤNG luôn tắt cứng
+        self.forceDisableAppRefreshSettings()
         
         self.betaUpdatesSwitch.isOn = UserDefaults.standard.isBetaUpdatesEnabled
+        // Giữ chữ và nút chọn kênh Beta luôn hiển thị màu đen cố định, không bị mờ
+        self.betaTrackLabel.isEnabled = true
+        self.betaTrackLabel.textColor = .black
+        self.betaTrackLabel.alpha = 1.0
         self.betaTrackPopupButton.isEnabled = UserDefaults.standard.isBetaUpdatesEnabled
+        self.betaTrackPopupButton.alpha = 1.0
+        self.styleBetaTrackPopupButton()
+        self.updateReleaseChannelButtonTitle()
         
         self.disableResponseCachingSwitch?.isOn = UserDefaults.standard.responseCachingDisabled
         self.verboseOperationsLoggingSwitch?.isOn = UserDefaults.standard.isVerboseOperationsLoggingEnabled
@@ -1009,13 +1021,6 @@ private extension SettingsViewController
                 settingsHeaderFooterView.secondaryLabel.text = "Đăng nhập bằng ID Apple của bạn để tải xuống và làm mới ứng dụng từ SideStore."
             }
             
-        case .patreon:
-            if isHeader {
-                settingsHeaderFooterView.primaryLabel.text = "ỦNG HỘ CHÚNG TÔI"
-            } else {
-                settingsHeaderFooterView.secondaryLabel.text = "Ủng hộ đội ngũ SideStore bằng cách theo dõi các trang mạng xã hội hoặc trở thành nhà tài trợ!"
-            }
-            
         case .account:
             settingsHeaderFooterView.primaryLabel.text = "TÀI KHOẢN"
             
@@ -1058,32 +1063,12 @@ private extension SettingsViewController
                 toggleBtn.heightAnchor.constraint(equalToConstant: 24)
             ])
             
-        case .appRefresh:
-            if isHeader {
-                settingsHeaderFooterView.primaryLabel.text = "LÀM MỚI ỨNG DỤNG"
-            } else {
-                settingsHeaderFooterView.secondaryLabel.text = "Bật 'Làm mới trong nền' để tự động gia hạn ứng dụng khi có kết nối Wi-Fi.\n\nBật 'Tắt tự động khóa màn hình' để giữ thiết bị luôn sáng trong suốt quá trình cài đặt hoặc làm mới ứng dụng."
-            }
-            
-        case .display:
-            if isHeader {
-                settingsHeaderFooterView.primaryLabel.text = "GIAO DIỆN HIỂN THỊ"
-            } else {
-                settingsHeaderFooterView.secondaryLabel.text = "Cá nhân hóa trải nghiệm SideStore của bạn bằng cách chọn biểu tượng ứng dụng thay thế."
-            }
-            
-        case .instructions:
-            break
-            
         case .techyThings:
             if isHeader {
                 settingsHeaderFooterView.primaryLabel.text = "CÔNG CỤ KỸ THUẬT"
             } else {
                 settingsHeaderFooterView.secondaryLabel.text = "Giải phóng dung lượng bộ nhớ bằng cách xóa các dữ liệu không cần thiết như tệp tạm thời và bản sao lưu của ứng dụng đã gỡ."
             }
-            
-        case .credits:
-            settingsHeaderFooterView.primaryLabel.text = "ĐỘI NGŨ PHÁT TRIỂN"
             
         case .advancedSettings:
             settingsHeaderFooterView.primaryLabel.text = "CÀI ĐẶT NÂNG CAO"
@@ -1097,6 +1082,9 @@ private extension SettingsViewController
             
         case .diagnostics:
             settingsHeaderFooterView.primaryLabel.text = "CHẨN ĐOÁN HỆ THỐNG"
+            
+        case .patreon, .display, .appRefresh, .instructions, .credits:
+            break
         }
     }
 
@@ -1115,9 +1103,15 @@ private extension SettingsViewController
         return size.height + (isHeader ? 4 : 0)
     }
 
+    // Ẩn hoàn toàn: ỦNG HỘ CHÚNG TÔI, GIAO DIỆN HIỂN THỊ, LÀM MỚI ỨNG DỤNG, How it works, ĐỘI NGŨ PHÁT TRIỂN
     private func isSectionHidden(_ section: Section) -> Bool
     {
-        return false
+        switch section {
+        case .patreon, .display, .appRefresh, .instructions, .credits:
+            return true
+        default:
+            return false
+        }
     }
 }
 
@@ -1183,14 +1177,20 @@ private extension SettingsViewController
         self.present(alertController, animated: true, completion: nil)
     }
 
+    // Khóa cứng trạng thái tắt cho 3 IBAction của LÀM MỚI ỨNG DỤNG
     @IBAction private func toggleDisableAppLimit(_ sender: UISwitch) {
-        if UserDefaults.standard.isCowExploitSupported || !ProcessInfo().sparseRestorePatched {
-            UserDefaults.standard.isAppLimitDisabled = sender.isOn
-            if UserDefaults.standard.activeAppsLimit != nil
-            {
-                UserDefaults.standard.activeAppsLimit = InstalledApp.freeAccountActiveAppsLimit
-            }
-        }
+        sender.setOn(false, animated: false)
+        UserDefaults.standard.isAppLimitDisabled = false
+    }
+
+    @IBAction private func toggleIsBackgroundRefreshEnabled(_ sender: UISwitch) {
+        sender.setOn(false, animated: false)
+        UserDefaults.standard.isBackgroundRefreshEnabled = false
+    }
+
+    @IBAction private func toggleNoIdleTimeoutEnabled(_ sender: UISwitch) {
+        sender.setOn(false, animated: false)
+        UserDefaults.standard.isIdleTimeoutDisableEnabled = false
     }
 
     @IBAction private func toggleVerboseOperationsLogging(_ sender: UISwitch) {
@@ -1238,33 +1238,22 @@ private extension SettingsViewController
     }
 
     @IBAction private func toggleEnableBetaUpdates(_ sender: UISwitch) {
-        betaTrackLabel.isEnabled = sender.isOn
-        betaTrackPopupButton.isEnabled = sender.isOn
         UserDefaults.standard.isBetaUpdatesEnabled = sender.isOn
-    }
-
-    @IBAction private func toggleIsBackgroundRefreshEnabled(_ sender: UISwitch) {
-        UserDefaults.standard.isBackgroundRefreshEnabled = sender.isOn
-    }
-
-    @IBAction private func toggleNoIdleTimeoutEnabled(_ sender: UISwitch) {
-        UserDefaults.standard.isIdleTimeoutDisableEnabled = sender.isOn
+        
+        // Giữ màu chữ đen cố định hoàn toàn, không bị mờ hay đổi màu khi bật/tắt
+        betaTrackLabel.isEnabled = true
+        betaTrackLabel.textColor = .black
+        betaTrackLabel.alpha = 1.0
+        
+        betaTrackPopupButton.isEnabled = sender.isOn
+        betaTrackPopupButton.alpha = 1.0
+        styleBetaTrackPopupButton()
+        updateReleaseChannelButtonTitle()
     }
 
     @IBAction private func toggleDisableResponseCaching(_ sender: UISwitch) {
         UserDefaults.standard.responseCachingDisabled = sender.isOn
     }
-
-    #if !os(tvOS)
-    private func addRefreshAppsShortcut()
-    {
-        guard let shortcut = INShortcut(intent: INInteraction.refreshAllApps().intent) else { return }
-        let viewController = INUIAddVoiceShortcutViewController(shortcut: shortcut)
-        viewController.delegate = self
-        viewController.modalPresentationStyle = .formSheet
-        self.present(viewController, animated: true, completion: nil)
-    }
-    #endif
 
     private func clearCache()
     {
@@ -1357,6 +1346,7 @@ private extension SettingsViewController
         UIApplication.shared.open(safariURL, options: [:])
     }
 
+    // Giữ nguyên các @IBAction kết nối với Storyboard để không bao giờ gây crash khi nạp Nib
     @IBAction private func followAltStoreMastodon() { self.openMastodon(username: "@sidestoreio@fosstodon.org") }
     @IBAction private func followAltStoreThreads() { self.openThreads(username: "sidestore.io") }
     @IBAction private func followAltStoreTwitter() { self.openTwitter(username: "sidestoreio") }
@@ -1367,11 +1357,7 @@ private extension SettingsViewController
 {
     @objc private func openPatreonSettings(_ notification: Notification)
     {
-        guard self.presentedViewController == nil else { return }
-        UIView.performWithoutAnimation {
-            self.navigationController?.popViewController(animated: false)
-            self.performSegue(withIdentifier: "showPatreon", sender: nil)
-        }
+        // Đã xoá ỦNG HỘ CHÚNG TÔI
     }
 
     @objc private func openErrorLog(_: Notification) {
@@ -1397,6 +1383,10 @@ extension SettingsViewController
     override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat
     {
         let section = Section.allCases[indexPath.section]
+        if isSectionHidden(section) {
+            return 0.0
+        }
+        
         if section == .account {
             // Nếu đang thu gọn khung Tài khoản, cho chiều cao 3 dòng Tên/Email/Loại về 0
             if indexPath.row < 3 && !self.isAccountDetailsExpanded {
@@ -1408,7 +1398,10 @@ extension SettingsViewController
         }
         
         let effectiveIndexPath: IndexPath
-        if section == .advancedSettings {
+        if section == .techyThings {
+            let row = TechyThingsRow.allCases[indexPath.row]
+            effectiveIndexPath = IndexPath(row: row.rawValue, section: indexPath.section)
+        } else if section == .advancedSettings {
             let row = AdvancedSettingsRow.allCases[indexPath.row]
             effectiveIndexPath = IndexPath(row: row.rawValue, section: indexPath.section)
         } else {
@@ -1443,26 +1436,30 @@ extension SettingsViewController
             }
         }
         
-        // Không đóng khung phần chữ version và dải nút mạng xã hội
-        if section == .instructions || (section == .patreon && indexPath.row > 0) {
-            cell.backgroundColor = .clear
-            cell.contentView.backgroundColor = .clear
-            cell.subviews.forEach { if $0 !== cell.contentView { $0.backgroundColor = .clear } }
-            translateAndStyleLabelsInside(view: cell.contentView, section: section, row: indexPath.row)
-            return
+        // Đảm bảo THỬ NGHIỆM BETA luôn giữ chữ màu đen rõ nét khi hiển thị
+        if section == .betaTesting {
+            self.betaTrackLabel?.isEnabled = true
+            self.betaTrackLabel?.textColor = .black
+            self.betaTrackLabel?.alpha = 1.0
+            self.styleBetaTrackPopupButton()
+            self.updateReleaseChannelButtonTitle()
         }
         
-        // Áp dụng cấu trúc Card CSS & Việt hóa cho tất cả các dòng còn lại
+        // Áp dụng cấu trúc Card CSS & Việt hóa cho tất cả các dòng
         self.styleInnerCardOfCell(cell, at: indexPath, totalRows: totalRows)
     }
 
     override func tableView(_ tableView: UITableView, indentationLevelForRowAt indexPath: IndexPath) -> Int
     {
-        if Section.allCases[indexPath.section] == .account && indexPath.row == 3 {
+        let section = Section.allCases[indexPath.section]
+        if section == .account && indexPath.row == 3 {
             return 0
         }
         let effectiveIndexPath: IndexPath
-        if Section.allCases[indexPath.section] == .advancedSettings {
+        if section == .techyThings {
+            let row = TechyThingsRow.allCases[indexPath.row]
+            effectiveIndexPath = IndexPath(row: row.rawValue, section: indexPath.section)
+        } else if section == .advancedSettings {
             let row = AdvancedSettingsRow.allCases[indexPath.row]
             effectiveIndexPath = IndexPath(row: row.rawValue, section: indexPath.section)
         } else {
@@ -1479,7 +1476,7 @@ extension SettingsViewController
         case _ where isSectionHidden(section): return 0
         case .signIn: return (self.activeTeam == nil) ? 1 : 0
         case .account: return (self.activeTeam == nil) ? 0 : (self.accountStatus == .completed ? 3 : 4)
-        case .appRefresh: return AppRefreshRow.allCases.count
+        case .techyThings: return TechyThingsRow.allCases.count
         case .advancedSettings: return AdvancedSettingsRow.allCases.count
         default: return super.tableView(tableView, numberOfRowsInSection: section.rawValue)
         }
@@ -1487,7 +1484,8 @@ extension SettingsViewController
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell
     {
-        if Section.allCases[indexPath.section] == .account && indexPath.row == 3 {
+        let section = Section.allCases[indexPath.section]
+        if section == .account && indexPath.row == 3 {
             let cell = tableView.dequeueReusableCell(withIdentifier: AccountVerificationRow.reuseIdentifier) as? AccountVerificationRow
                 ?? AccountVerificationRow()
             cell.configure(with: self.accountStatus)
@@ -1496,7 +1494,10 @@ extension SettingsViewController
         }
         
         let effectiveIndexPath: IndexPath
-        if Section.allCases[indexPath.section] == .advancedSettings {
+        if section == .techyThings {
+            let row = TechyThingsRow.allCases[indexPath.row]
+            effectiveIndexPath = IndexPath(row: row.rawValue, section: indexPath.section)
+        } else if section == .advancedSettings {
             let row = AdvancedSettingsRow.allCases[indexPath.row]
             effectiveIndexPath = IndexPath(row: row.rawValue, section: indexPath.section)
         } else {
@@ -1504,29 +1505,25 @@ extension SettingsViewController
         }
         let cell = super.tableView(tableView, cellForRowAt: effectiveIndexPath)
         
-        if Section.allCases[indexPath.section] == .account {
-            if indexPath.row == 2 {
-                if let insetCell = cell as? InsetGroupTableViewCell {
-                    insetCell.style = (self.accountStatus == .completed) ? .bottom : .middle
-                }
+        if section == .account && indexPath.row == 2 {
+            if let insetCell = cell as? InsetGroupTableViewCell {
+                insetCell.style = (self.accountStatus == .completed) ? .bottom : .middle
             }
         }
         
-        if AppRefreshRow.allCases.count == 1
-        {
-            if let cell = cell as? InsetGroupTableViewCell,
-               indexPath.section == Section.appRefresh.rawValue,
-               indexPath.row == AppRefreshRow.backgroundRefresh.rawValue
-            {
-                cell.style = .single
+        // Cập nhật lại bo góc (top/middle/bottom) cho InsetGroupTableViewCell sau khi xoá bớt dòng ở TechyThings & AdvancedSettings
+        if (section == .techyThings || section == .advancedSettings),
+           let insetCell = cell as? InsetGroupTableViewCell {
+            let total = self.tableView(tableView, numberOfRowsInSection: indexPath.section)
+            if total == 1 {
+                insetCell.style = .single
+            } else if indexPath.row == 0 {
+                insetCell.style = .top
+            } else if indexPath.row == total - 1 {
+                insetCell.style = .bottom
+            } else {
+                insetCell.style = .middle
             }
-        }
-        
-        if let cell = cell as? InsetGroupTableViewCell,
-           indexPath.section == Section.appRefresh.rawValue,
-           indexPath.row == AppRefreshRow.allCases.count-1
-        {
-            cell.setValue(3, forKey: "style")
         }
         
         return cell
@@ -1540,12 +1537,13 @@ extension SettingsViewController
         case _ where isSectionHidden(section): return nil
         case .signIn where self.activeTeam != nil: return nil
         case .account where self.activeTeam == nil: return nil
-        case .signIn, .account, .patreon, .display, .appRefresh, .techyThings, .credits, .advancedSettings, .betaTesting, .diagnostics:
+        case .signIn, .account, .techyThings, .advancedSettings, .betaTesting, .diagnostics:
             let headerView = tableView.dequeueReusableHeaderFooterView(withIdentifier: "HeaderFooterView") as! SettingsHeaderFooterView
             self.prepare(headerView, for: section, isHeader: true)
             return headerView
             
-        case .instructions: return nil
+        case .patreon, .display, .appRefresh, .instructions, .credits:
+            return nil
         }
     }
 
@@ -1556,12 +1554,13 @@ extension SettingsViewController
         {
         case _ where isSectionHidden(section): return nil
         case .signIn where self.activeTeam != nil: return nil
-        case .signIn, .patreon, .display, .appRefresh, .techyThings, .betaTesting:
+        case .signIn, .techyThings, .betaTesting:
             let footerView = tableView.dequeueReusableHeaderFooterView(withIdentifier: "HeaderFooterView") as! SettingsHeaderFooterView
             self.prepare(footerView, for: section, isHeader: false)
             return footerView
             
-        case .account, .credits, .advancedSettings, .instructions, .diagnostics: return nil
+        case .account, .patreon, .display, .appRefresh, .credits, .advancedSettings, .instructions, .diagnostics:
+            return nil
         }
     }
 
@@ -1570,12 +1569,13 @@ extension SettingsViewController
         let section = Section.allCases[section]
         switch section
         {
-        case _ where isSectionHidden(section): return 1.0
-        case .signIn where self.activeTeam != nil: return 1.0
-        case .account where self.activeTeam == nil: return 1.0
-        case .signIn, .account, .patreon, .display, .appRefresh, .techyThings, .credits, .advancedSettings, .betaTesting, .diagnostics:
+        case _ where isSectionHidden(section): return 0.01
+        case .signIn where self.activeTeam != nil: return 0.01
+        case .account where self.activeTeam == nil: return 0.01
+        case .signIn, .account, .techyThings, .advancedSettings, .betaTesting, .diagnostics:
             return self.preferredHeight(for: self.prototypeHeaderFooterView, in: section, isHeader: true)
-        case .instructions: return 0.0
+        case .patreon, .display, .appRefresh, .instructions, .credits:
+            return 0.01
         }
     }
 
@@ -1584,12 +1584,13 @@ extension SettingsViewController
         let section = Section.allCases[section]
         switch section
         {
-        case _ where isSectionHidden(section): return 1.0
-        case .signIn where self.activeTeam != nil: return 1.0
-        case .account where self.activeTeam == nil: return 1.0
-        case .signIn, .patreon, .display, .appRefresh, .techyThings, .betaTesting:
+        case _ where isSectionHidden(section): return 0.01
+        case .signIn where self.activeTeam != nil: return 0.01
+        case .account where self.activeTeam == nil: return 0.01
+        case .signIn, .techyThings, .betaTesting:
             return self.preferredHeight(for: self.prototypeHeaderFooterView, in: section, isHeader: false)
-        case .account, .credits, .advancedSettings, .instructions, .diagnostics: return 0.0
+        case .account, .patreon, .display, .appRefresh, .credits, .advancedSettings, .instructions, .diagnostics:
+            return 0.01
         }
     }
 }
@@ -1618,27 +1619,12 @@ extension SettingsViewController
                 tableView.deselectRow(at: indexPath, animated: true)
                 self.resolvePendingAccountActions()
             }
-        case .appRefresh:
-            let row = AppRefreshRow.allCases[indexPath.row]
-            switch row
-            {
-            case .backgroundRefresh, .noIdleTimeout, .disableAppLimit: break
-            case .addToSiri:
-                #if !os(tvOS)
-                self.addRefreshAppsShortcut()
-                #endif
-            }
             
         case .techyThings:
             let row = TechyThingsRow.allCases[indexPath.row]
             switch row
             {
-            case .healthCheck:
-                let healthCheckView = HealthCheckView()
-                let vc = UIHostingController(rootView: healthCheckView)
-                vc.title = nil
-                navigationController?.pushViewController(vc, animated: true)
-                
+            case .healthCheck: break
             case .errorLog: break
             case .storageExplorer:
                 StorageExplorerView.clearCache()
@@ -1663,62 +1649,12 @@ extension SettingsViewController
             case .clearCache: self.clearCache()
             }
             
-        case .credits:
-            let row = CreditsRow.allCases[indexPath.row]
-            switch row
-            {
-            case .developer, .operations: self.openTwitter(username: "sidestoreio")
-            case .designer: self.openTwitter(username: "lit_ritt")
-            case .softwareLicenses: break
-            }
-            if let selectedIndexPath = self.tableView.indexPathForSelectedRow {
-                self.tableView.deselectRow(at: selectedIndexPath, animated: true)
-            }
-            
         case .advancedSettings:
             let row = AdvancedSettingsRow.allCases[indexPath.row]
             switch row
             {
-            case .sendFeedback:
-                let alertController = UIAlertController(title: "Gửi phản hồi", message: "Chọn phương thức bạn muốn gửi phản hồi:", preferredStyle: .actionSheet)
-                alertController.addAction(UIAlertAction(title: "GitHub", style: .default) { _ in
-                    self.openWebURL(AppConstants.URLs.sideStoreIssues, preferredTintColor: CSSTheme.blue)
-                })
-                alertController.addAction(UIAlertAction(title: "Discord", style: .default) { _ in
-                    self.openWebURL(AppConstants.URLs.sideStoreDiscord, preferredTintColor: CSSTheme.purple)
-                })
-                #if !os(tvOS)
-                alertController.addAction(UIAlertAction(title: "Gửi Email", style: .default) { _ in
-                    if MFMailComposeViewController.canSendMail() {
-                        let mailViewController = MFMailComposeViewController()
-                        mailViewController.mailComposeDelegate = self
-                        mailViewController.setToRecipients(["support@sidestore.io"])
-                        if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
-                            mailViewController.setSubject("Phản hồi SideStore Beta \(version)")
-                        } else {
-                            mailViewController.setSubject("Phản hồi SideStore Beta")
-                        }
-                        self.present(mailViewController, animated: true, completion: nil)
-                    } else {
-                        let toastView = ToastView(text: "Không thể gửi Email trên thiết bị này", detailText: nil)
-                        toastView.show(in: self)
-                    }
-                })
-                #endif
-                alertController.addAction(UIAlertAction(title: "Hủy", style: .cancel, handler: nil))
-                if let popoverController = alertController.popoverPresentationController {
-                    popoverController.sourceView = self.view
-                    popoverController.sourceRect = self.view.bounds
-                }
-                self.present(alertController, animated: true, completion: nil)
-                
             case .refreshSideJITServer:
                 let vc = UIHostingController(rootView: SideJITServerConfigView())
-                vc.title = nil
-                self.navigationController?.pushViewController(vc, animated: true)
-                
-            case .pairingFileManagement:
-                let vc = UIHostingController(rootView: PairingFileManagementView())
                 vc.title = nil
                 self.navigationController?.pushViewController(vc, animated: true)
                 
@@ -1739,21 +1675,6 @@ extension SettingsViewController
                 vc.title = nil
                 navigationController?.pushViewController(vc, animated: true)
                 
-            case .networkDiscovery:
-                let vc = UIHostingController(rootView: BonjourDiscoveryView())
-                vc.title = nil
-                self.prepare(for: UIStoryboardSegue(identifier: "diagnostics", source: self, destination: vc), sender: nil)
-                
-            case .developerServices:
-                let vc = UIHostingController(rootView: DeveloperServicesView(presentingViewController: self))
-                vc.title = nil
-                self.prepare(for: UIStoryboardSegue(identifier: "developerServices", source: self, destination: vc), sender: nil)
-                
-            case .profileManagement:
-                let vc = UIHostingController(rootView: ProfileManagementView(presentingViewController: self))
-                vc.title = nil
-                self.prepare(for: UIStoryboardSegue(identifier: "profileManagement", source: self, destination: vc), sender: nil)
-                
             case .certificateManagement:
                 let vc = UIHostingController(rootView: CertificatesView(presentingViewController: self))
                 vc.title = nil
@@ -1769,7 +1690,8 @@ extension SettingsViewController
                 vc.title = nil
                 self.prepare(for: UIStoryboardSegue(identifier: "diagnostics", source: self, destination: vc), sender: nil)
                 
-            case .refreshAttempts: break
+            case .refreshAttempts, .sendFeedback, .pairingFileManagement, .networkDiscovery, .developerServices, .profileManagement:
+                break
             }
             
         case .diagnostics:
@@ -1785,7 +1707,8 @@ extension SettingsViewController
                 self.prepare(for: UIStoryboardSegue(identifier: "diagnostics", source: self, destination: hostingController), sender: nil)
             }
             
-        case .patreon, .display, .instructions, .betaTesting: break
+        case .patreon, .display, .appRefresh, .instructions, .credits, .betaTesting:
+            break
         }
         
         tableView.deselectRow(at: indexPath, animated: true)

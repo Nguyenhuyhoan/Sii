@@ -261,18 +261,20 @@ private extension BrowseViewController {
         cell.layer.shadowRadius = 16
         cell.layer.shadowOpacity = 0.22
         
-        // Đổ bóng phát sáng cho nút Tải/Mở (PillButton)
-        let btn = cell.bannerView.button
-        btn.layer.shadowColor = tintColor.cgColor
-        btn.layer.shadowOffset = CGSize(width: 0, height: 4)
-        btn.layer.shadowRadius = 8
-        btn.layer.shadowOpacity = 0.35
-        
-        // Gắn hiệu ứng nhún khi bấm vào nút Tải/Mở
-        btn.removeTarget(self, action: #selector(animatePillButtonPress(_:)), for: .touchDown)
-        btn.removeTarget(self, action: #selector(animatePillButtonRelease(_:)), for: [.touchUpInside, .touchUpOutside, .touchCancel])
-        btn.addTarget(self, action: #selector(animatePillButtonPress(_:)), for: .touchDown)
-        btn.addTarget(self, action: #selector(animatePillButtonRelease(_:)), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        // Đổ bóng phát sáng và gắn hiệu ứng nhún cho nút Tải/Mở (PillButton)
+        // ĐÃ SỬA: Dùng `if let btn` để mở gói Optional an toàn
+        if let btn = cell.bannerView.button {
+            btn.layer.shadowColor = tintColor.cgColor
+            btn.layer.shadowOffset = CGSize(width: 0, height: 4)
+            btn.layer.shadowRadius = 8
+            btn.layer.shadowOpacity = 0.35
+            
+            // Gắn hiệu ứng nhún khi bấm vào nút Tải/Mở
+            btn.removeTarget(self, action: #selector(animatePillButtonPress(_:)), for: .touchDown)
+            btn.removeTarget(self, action: #selector(animatePillButtonRelease(_:)), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+            btn.addTarget(self, action: #selector(animatePillButtonPress(_:)), for: .touchDown)
+            btn.addTarget(self, action: #selector(animatePillButtonRelease(_:)), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        }
     }
     
     @objc func animatePillButtonPress(_ sender: UIButton) {
@@ -372,9 +374,9 @@ private extension BrowseViewController
             cell.bannerView.iconImageView.image = nil
             cell.bannerView.iconImageView.isIndicatingActivity = true
             
-            cell.bannerView.button.addTarget(self, action: #selector(BrowseViewController.performAppAction(_:)), for: .primaryActionTriggered)
-            cell.bannerView.button.activityIndicatorView.style = .medium
-            cell.bannerView.button.activityIndicatorView.color = .white
+            cell.bannerView.button?.addTarget(self, action: #selector(BrowseViewController.performAppAction(_:)), for: .primaryActionTriggered)
+            cell.bannerView.button?.activityIndicatorView.style = .medium
+            cell.bannerView.button?.activityIndicatorView.color = .white
             
             let tintColor = app.tintColor ?? BrowseCSSTheme.blue
             cell.tintColor = tintColor

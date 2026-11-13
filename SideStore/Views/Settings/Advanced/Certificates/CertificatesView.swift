@@ -1,3 +1,4 @@
+
 //
 //  CertificatesView.swift
 //  SideStore
@@ -9,6 +10,53 @@
 import SwiftUI
 import SideSign
 import UniformTypeIdentifiers
+
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ VỚI SETTINGSVIEWCONTROLLER)
+private enum CertCSSTheme {
+    static let white = Color.white
+    static let light = Color(red: 248/255, green: 249/255, blue: 250/255) // #f8f9fa
+    static let border = Color(red: 233/255, green: 236/255, blue: 239/255) // #e9ecef
+    static let blue = Color(red: 0/255, green: 123/255, blue: 255/255) // #007bff
+    static let purple = Color(red: 111/255, green: 66/255, blue: 193/255) // #6f42c1
+    static let green = Color(red: 40/255, green: 167/255, blue: 69/255) // #28a745
+    static let magenta = Color(red: 255/255, green: 0/255, blue: 255/255) // #ff00ff
+    static let dark = Color(red: 52/255, green: 58/255, blue: 64/255) // #343a40
+
+    // Gradient Background (#f3e0ff -> #e0f7ff)
+    static let bgGradient = LinearGradient(
+        gradient: Gradient(colors: [
+            Color(red: 243/255, green: 224/255, blue: 255/255),
+            Color(red: 224/255, green: 247/255, blue: 255/255)
+        ]),
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    // Hero Gradient (rgba(0,123,255,.92) -> rgba(111,66,193,.88))
+    static let heroGradient = LinearGradient(
+        gradient: Gradient(colors: [
+            Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.92),
+            Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.88)
+        ]),
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    static let cornerRadius: CGFloat = 15.0
+}
+
+// MARK: - 🛠 MODIFIER ẨN NỀN MẶC ĐỊNH CỦA LIST / FORM TRONG SWIFTUI
+private struct ClearListBackgroundModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 16.0, tvOS 16.0, *) {
+            content.scrollContentBackground(.hidden)
+        } else {
+            content.onAppear {
+                UITableView.appearance().backgroundColor = .clear
+            }
+        }
+    }
+}
 
 struct CertificatesView: View {
     weak var presentingViewController: UIViewController?
@@ -46,80 +94,112 @@ struct CertificatesView: View {
     @State private var certificateToClearKeyFor: ALTX509Certificate? = nil
     
     var body: some View {
-        ZStack {
-            List {
-                ActiveCertSectionView(
-                    viewModel: viewModel,
-                    hasCopiedActiveSerial: $hasCopiedActiveSerial,
-                    onDeactivate: { showDeactivateConfirmation = true }
-                )
-                CertificatesListView(
-                    viewModel: viewModel,
-                    onRowTap:     { pushDetailView(for: $0) },
-                    onRevoke:     { presentRevokeAlert(for: $0) },
-                    onExportP12:  { cert in
-                        certificateToExport = cert
-                        exportPasswordInput = ""
-                        showExportPasswordPrompt = true
-                    },
-                    onClearKey:   { cert in
-                        certificateToClearKeyFor = cert
-                        showClearKeyConfirmation = true
-                    },
-                    onAddKeyBin:  { cert in
-                        importPrivateKeyAction(for: cert)
-                    },
-                    onAddKeyText: { cert in
-                        keyTextImportItem = KeyTextImportItem(id: cert.serialNumber, cert: cert)
-                    },
-                    onDelete: { certificateToDelete = $0; showDeleteConfirmation = true }
-                )
-            }
-            .refreshable {
-                await withCheckedContinuation { continuation in
-                    viewModel.loadCertificates(presentingViewController: presentingViewController, isPullToRefresh: true) {
-                        continuation.resume()
+        ZStack(alignment: .top) {
+            // 1. Lớp nền Gradient CSS cố định toàn màn hình (Không bao giờ bị trắng khi cuộn)
+            CertCSSTheme.bgGradient
+                .ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // 2. Thanh công cụ nổi thông minh (Nằm cùng hàng với nút Back nổi của SettingsViewController)
+                topFloatingActionToolbar
+                
+                // 3. Danh sách Chứng chỉ
+                List {
+                    // Khối Hero Banner chuẩn CSS
+                    Section {
+                        heroBannerSection
+                    }
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 8, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    #if !os(tvOS)
+                    .listRowSeparator(.hidden)
+                    #endif
+                    
+                    // Chứng chỉ đang hoạt động
+                    ActiveCertSectionView(
+                        viewModel: viewModel,
+                        hasCopiedActiveSerial: $hasCopiedActiveSerial,
+                        onDeactivate: { showDeactivateConfirmation = true }
+                    )
+                    
+                    // Danh sách tất cả chứng chỉ
+                    CertificatesListView(
+                        viewModel: viewModel,
+                        onRowTap:     { pushDetailView(for: $0) },
+                        onRevoke:     { presentRevokeAlert(for: $0) },
+                        onExportP12:  { cert in
+                            certificateToExport = cert
+                            exportPasswordInput = ""
+                            showExportPasswordPrompt = true
+                        },
+                        onClearKey:   { cert in
+                            certificateToClearKeyFor = cert
+                            showClearKeyConfirmation = true
+                        },
+                        onAddKeyBin:  { cert in
+                            importPrivateKeyAction(for: cert)
+                        },
+                        onAddKeyText: { cert in
+                            keyTextImportItem = KeyTextImportItem(id: cert.serialNumber, cert: cert)
+                        },
+                        onDelete: { certificateToDelete = $0; showDeleteConfirmation = true }
+                    )
+                }
+                #if !os(tvOS)
+                .listStyle(.insetGrouped)
+                #endif
+                .modifier(ClearListBackgroundModifier())
+                .refreshable {
+                    await withCheckedContinuation { continuation in
+                        viewModel.loadCertificates(presentingViewController: presentingViewController, isPullToRefresh: true) {
+                            continuation.resume()
+                        }
                     }
                 }
-            }
-            .navigationTitle("Certificates")
-            .toolbar {
-                ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    SwiftUI.Button {
-                        viewModel.isGlobalHideActive.toggle()
-                    } label: {
-                        Image(systemName: viewModel.isGlobalHideActive ? "eye.slash" : "eye")
-                    }
-                    .accessibilityLabel("Toggle Hide Sensitive Information")
-                    
-                    SwiftUI.Button {
-                        showCreateSheet = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityLabel("Create Certificate")
-                    .disabled(viewModel.team == nil)
-                    
-                    SwiftUI.Button {
-                        importCertificatesAction()
-                    } label: {
-                        Image(systemName: "square.and.arrow.down")
-                    }
-                    .accessibilityLabel("Import Certificates")
-                }
-            }
-            .onAppear {
-                guard !hasInitialLoaded else { return }
-                hasInitialLoaded = true
-                viewModel.loadCertificates(presentingViewController: nil)
             }
             
             if viewModel.isLoading { LoadingOverlay() }
         }
-        .alert("Error", isPresented: $viewModel.showErrorAlert) {
-            SwiftUI.Button("OK", role: .cancel) { viewModel.errorMessage = nil }
+        .preferredColorScheme(.light)
+        .navigationTitle("")
+        #if !os(tvOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar {
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                SwiftUI.Button {
+                    viewModel.isGlobalHideActive.toggle()
+                } label: {
+                    Image(systemName: viewModel.isGlobalHideActive ? "eye.slash" : "eye")
+                }
+                .accessibilityLabel("Ẩn/Hiện thông tin nhạy cảm")
+                
+                SwiftUI.Button {
+                    showCreateSheet = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("Tạo chứng chỉ mới")
+                .disabled(viewModel.team == nil)
+                
+                SwiftUI.Button {
+                    importCertificatesAction()
+                } label: {
+                    Image(systemName: "square.and.arrow.down")
+                }
+                .accessibilityLabel("Nhập chứng chỉ")
+            }
+        }
+        .onAppear {
+            guard !hasInitialLoaded else { return }
+            hasInitialLoaded = true
+            viewModel.loadCertificates(presentingViewController: nil)
+        }
+        // MARK: - HỘP THOẠI CẢNH BÁO & THÔNG BÁO (ĐÃ VIỆT HÓA)
+        .alert("Đã xảy ra lỗi", isPresented: $viewModel.showErrorAlert) {
+            SwiftUI.Button("Đóng", role: .cancel) { viewModel.errorMessage = nil }
         } message: {
-            Text(viewModel.errorMessage ?? "An unknown error occurred.")
+            Text(viewModel.errorMessage ?? "Đã xảy ra lỗi không xác định.")
         }
         .sheet(isPresented: $showCreateSheet) {
             CreateCertificateSheetView(
@@ -128,40 +208,40 @@ struct CertificatesView: View {
                 isPresented: $showCreateSheet
             )
         }
-        .alert("Deactivate Certificate", isPresented: $showDeactivateConfirmation) {
-            SwiftUI.Button("Deactivate", role: .destructive) { viewModel.deactivateActiveCertificate() }
-            SwiftUI.Button("Cancel", role: .cancel) {}
+        .alert("Hủy kích hoạt chứng chỉ", isPresented: $showDeactivateConfirmation) {
+            SwiftUI.Button("Hủy kích hoạt", role: .destructive) { viewModel.deactivateActiveCertificate() }
+            SwiftUI.Button("Hủy", role: .cancel) {}
         } message: {
-            Text("Are you sure you want to deactivate the active signing certificate locally?")
+            Text("Bạn có chắc chắn muốn hủy kích hoạt chứng chỉ ký ứng dụng đang dùng trên thiết bị này không?")
         }
-        .alert("Delete Certificate", isPresented: $showDeleteConfirmation) {
-            SwiftUI.Button("Delete", role: .destructive) {
+        .alert("Xóa chứng chỉ", isPresented: $showDeleteConfirmation) {
+            SwiftUI.Button("Xóa", role: .destructive) {
                 if let cert = certificateToDelete { viewModel.deleteCertificate(cert) }
             }
-            SwiftUI.Button("Cancel", role: .cancel) {}
+            SwiftUI.Button("Hủy", role: .cancel) {}
         } message: {
-            Text("Are you sure you want to delete this certificate locally? This will remove it from the cached local store.")
+            Text("Bạn có chắc chắn muốn xóa chứng chỉ này khỏi bộ nhớ cục bộ của thiết bị không?")
         }
-        .alert("Import Certificate Password", isPresented: $viewModel.showPasswordPromptForImport) {
-            SecureField("Password", text: $viewModel.importPasswordInput)
-            SwiftUI.Button("Import") { viewModel.submitImportPassword() }
-            SwiftUI.Button("Cancel", role: .cancel) { viewModel.cancelImport() }
+        .alert("Mật khẩu giải mã chứng chỉ", isPresented: $viewModel.showPasswordPromptForImport) {
+            SecureField("Nhập mật khẩu...", text: $viewModel.importPasswordInput)
+            SwiftUI.Button("Nhập") { viewModel.submitImportPassword() }
+            SwiftUI.Button("Hủy", role: .cancel) { viewModel.cancelImport() }
         } message: {
-            Text("Enter the password to decrypt the imported certificate file.\n\nFile: \(viewModel.currentImportFilename)")
+            Text("Vui lòng nhập mật khẩu để giải mã tệp chứng chỉ.\n\nTệp: \(viewModel.currentImportFilename)")
         }
-        .alert("Success", isPresented: $viewModel.showAlert) {
+        .alert("Thành công", isPresented: $viewModel.showAlert) {
             SwiftUI.Button("OK", role: .cancel) { viewModel.alertMessage = nil }
         } message: {
             Text(viewModel.alertMessage ?? "")
         }
-        .alert("Import Summary", isPresented: $viewModel.showImportSummary) {
+        .alert("Kết quả nhập chứng chỉ", isPresented: $viewModel.showImportSummary) {
             if viewModel.importFailedCount > 0 {
-                SwiftUI.Button("Show Failed") {
+                SwiftUI.Button("Xem chi tiết lỗi") {
                     DispatchQueue.main.async {
                         viewModel.showFailuresAlert = true
                     }
                 }
-                SwiftUI.Button("OK", role: .cancel) {}
+                SwiftUI.Button("Đóng", role: .cancel) {}
             } else {
                 SwiftUI.Button("OK", role: .cancel) {}
             }
@@ -170,48 +250,56 @@ struct CertificatesView: View {
         }
         .sheet(isPresented: $viewModel.showFailuresAlert) {
             NavigationView {
-                List {
-                    ForEach(viewModel.failedImportsList, id: \.self) { failure in
-                        Text(failure)
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundColor(.red)
+                ZStack {
+                    CertCSSTheme.bgGradient.ignoresSafeArea()
+                    List {
+                        ForEach(viewModel.failedImportsList, id: \.self) { failure in
+                            Text(failure)
+                                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                .foregroundColor(CertCSSTheme.magenta)
+                                .padding(.vertical, 4)
+                        }
                     }
+                    .modifier(ClearListBackgroundModifier())
                 }
-                .navigationTitle("Import Failures")
+                .navigationTitle("Danh sách lỗi khi nhập")
                 #if !os(tvOS)
                 .navigationBarTitleDisplayMode(.inline)
                 #endif
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        SwiftUI.Button("Done") {
+                        SwiftUI.Button("Xong") {
                             viewModel.showFailuresAlert = false
                         }
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundColor(CertCSSTheme.blue)
                     }
                 }
             }
+            .preferredColorScheme(.light)
         }
-        .alert("Export Certificate Password", isPresented: $showExportPasswordPrompt) {
-            SecureField("Password", text: $exportPasswordInput)
-            SwiftUI.Button("Export") {
+        .alert("Đặt mật khẩu xuất chứng chỉ", isPresented: $showExportPasswordPrompt) {
+            SecureField("Nhập mật khẩu bảo vệ...", text: $exportPasswordInput)
+            SwiftUI.Button("Xuất (.p12)") {
                 if let cert = certificateToExport, let signable = viewModel.getSignableCertificate(for: cert.serialNumber) {
                     CertificateExporter.shareP12(signable, password: exportPasswordInput, onShare: { viewModel.shareURL = $0 }) { viewModel.errorMessage = $0 }
                 }
             }
-            SwiftUI.Button("Cancel", role: .cancel) {}
+            SwiftUI.Button("Hủy", role: .cancel) {}
         } message: {
-            Text("Set a password to encrypt the exported .p12 certificate file.")
+            Text("Thiết lập mật khẩu để mã hóa và bảo vệ tệp chứng chỉ .p12 khi xuất ra ngoài.")
         }
-        .alert("Clear Private Key", isPresented: $showClearKeyConfirmation) {
+        .alert("Xóa khóa riêng tư (Private Key)", isPresented: $showClearKeyConfirmation) {
             if let cert = certificateToClearKeyFor {
-                SwiftUI.Button("Clear Key", role: .destructive) {
+                SwiftUI.Button("Xóa khóa", role: .destructive) {
                     viewModel.clearPrivateKey(for: cert)
                     certificateToClearKeyFor = nil
                 }
             }
-            SwiftUI.Button("Cancel", role: .cancel) { certificateToClearKeyFor = nil }
+            SwiftUI.Button("Hủy", role: .cancel) { certificateToClearKeyFor = nil }
         } message: {
             if let cert = certificateToClearKeyFor {
-                Text("This will clear the locally stored private key of this certificate.\n\nName: \(cert.name)\nS/N: \(cert.serialNumber)")
+                Text("Thao tác này sẽ xóa khóa riêng tư (Private Key) đang lưu trên máy của chứng chỉ này.\n\nTên: \(cert.name)\nSố Sê-ri: \(cert.serialNumber)")
             }
         }
         #if !os(tvOS)
@@ -232,13 +320,13 @@ struct CertificatesView: View {
                         do {
                             viewModel.importPrivateKey(data: try Data(contentsOf: url), for: cert)
                         } catch {
-                            viewModel.errorMessage = "Failed to read private key: " + error.localizedDescription
+                            viewModel.errorMessage = "Không thể đọc tệp khóa riêng tư: " + error.localizedDescription
                         }
                     }
                 }
             case .failure(let error):
-                let type = fileImportMode == .certificate ? "files" : "private key"
-                viewModel.errorMessage = "Failed to select \(type): " + error.localizedDescription
+                let type = fileImportMode == .certificate ? "tệp chứng chỉ" : "khóa riêng tư"
+                viewModel.errorMessage = "Không thể chọn \(type): " + error.localizedDescription
             }
         }
         #endif
@@ -264,6 +352,150 @@ struct CertificatesView: View {
         }
     }
     
+    // MARK: - 🧭 THANH CÔNG CỤ NỔI THÔNG MINH (TƯƠNG THÍCH VỚI NÚT BACK NỔI CỦA SETTINGSVIEWCONTROLLER)
+    private var topFloatingActionToolbar: some View {
+        HStack(spacing: 10) {
+            // Chừa khoảng trống bên trái (54pt) cho nút Back nổi (34x34 tại x:16) của SettingsViewController
+            Spacer()
+                .frame(width: 54)
+            
+            Spacer()
+            
+            // Nút Ẩn/Hiện thông tin nhạy cảm
+            SwiftUI.Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    viewModel.isGlobalHideActive.toggle()
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: viewModel.isGlobalHideActive ? "eye.slash.fill" : "eye.fill")
+                        .font(.system(size: 13, weight: .bold))
+                    Text(viewModel.isGlobalHideActive ? "Đang ẩn" : "Hiển thị")
+                        .font(.system(size: 12, weight: .bold))
+                }
+                .foregroundColor(viewModel.isGlobalHideActive ? CertCSSTheme.purple : CertCSSTheme.blue)
+                .padding(.horizontal, 12)
+                .frame(height: 34)
+                .background(CertCSSTheme.white.opacity(0.92))
+                .cornerRadius(17)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 17)
+                        .stroke(CertCSSTheme.border, lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.12), radius: 5, x: 0, y: 2)
+            }
+            .buttonStyle(.plain)
+            
+            // Nút Tạo chứng chỉ mới (+)
+            SwiftUI.Button {
+                showCreateSheet = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(viewModel.team == nil ? Color.gray.opacity(0.5) : CertCSSTheme.blue)
+                    .frame(width: 34, height: 34)
+                    .background(CertCSSTheme.white.opacity(0.92))
+                    .cornerRadius(17)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 17)
+                            .stroke(CertCSSTheme.border, lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.12), radius: 5, x: 0, y: 2)
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.team == nil)
+            
+            // Nút Nhập chứng chỉ từ tệp (.p12 / .cer / .pem)
+            SwiftUI.Button {
+                importCertificatesAction()
+            } label: {
+                Image(systemName: "square.and.arrow.down")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(CertCSSTheme.purple)
+                    .frame(width: 34, height: 34)
+                    .background(CertCSSTheme.white.opacity(0.92))
+                    .cornerRadius(17)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 17)
+                            .stroke(CertCSSTheme.border, lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.12), radius: 5, x: 0, y: 2)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+        .padding(.bottom, 6)
+    }
+    
+    // MARK: - 🌈 KHỐI HERO BANNER CHUẨN CSS THEME
+    private var heroBannerSection: some View {
+        VStack(spacing: 6) {
+            Text("Quản Lý Chứng Chỉ")
+                .font(.system(size: 23, weight: .heavy))
+                .foregroundColor(CertCSSTheme.white)
+                .shadow(color: Color.black.opacity(0.3), radius: 4, x: 1, y: 2)
+            
+            Text("Tạo mới, nhập tệp .p12 và quản lý chứng chỉ ký ứng dụng của bạn")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(CertCSSTheme.white.opacity(0.95))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 10)
+            
+            // Hàng nút thao tác nhanh trực관 ngay trên Banner
+            HStack(spacing: 10) {
+                SwiftUI.Button {
+                    showCreateSheet = true
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 13, weight: .bold))
+                        Text("Tạo mới")
+                            .font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundColor(CertCSSTheme.blue)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(CertCSSTheme.white)
+                    .cornerRadius(12)
+                    .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.team == nil)
+                .opacity(viewModel.team == nil ? 0.55 : 1.0)
+                
+                SwiftUI.Button {
+                    importCertificatesAction()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "square.and.arrow.down.fill")
+                            .font(.system(size: 13, weight: .bold))
+                        Text("Nhập tệp")
+                            .font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundColor(CertCSSTheme.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(CertCSSTheme.white.opacity(0.22))
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(CertCSSTheme.white.opacity(0.45), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .padding(.horizontal, 12)
+        .background(CertCSSTheme.heroGradient)
+        .cornerRadius(CertCSSTheme.cornerRadius)
+        .shadow(color: CertCSSTheme.blue.opacity(0.25), radius: 14, x: 0, y: 6)
+    }
+    
+    // MARK: - CÁC HÀM ĐIỀU HƯỚNG & XỬ LÝ SỰ KIỆN GỐC
     private func pushDetailView(for cert: ALTX509Certificate) {
         let metadata = DeveloperPortalMetadata(
             identifier: cert.identifier,
@@ -287,7 +519,10 @@ struct CertificatesView: View {
             serialNumDecimal: cert.serialNumDecimal
         )
         let detailVC = UIHostingController(rootView: CertificateDetailView(certificate: cert, portalMetadata: metadata, viewModel: viewModel))
+        detailVC.title = nil
+        detailVC.navigationItem.title = nil
         #if !os(tvOS)
+        detailVC.navigationItem.largeTitleDisplayMode = .never
         let appearance = UINavigationBarAppearance()
         appearance.configureWithDefaultBackground()
         detailVC.navigationItem.scrollEdgeAppearance = appearance
@@ -300,15 +535,15 @@ struct CertificatesView: View {
         let contentVC = RevokeAlertViewController()
         
         let alertController = UIAlertController(
-            title: NSLocalizedString("Revoke Certificate", comment: ""),
-            message: NSLocalizedString("Are you sure you want to revoke this certificate? This will permanently delete the certificate on Apple's servers.", comment: ""),
+            title: "Thu hồi chứng chỉ",
+            message: "Bạn có chắc chắn muốn thu hồi chứng chỉ này không? Thao tác này sẽ xóa vĩnh viễn chứng chỉ trên máy chủ của Apple.",
             preferredStyle: .alert
         )
         
         alertController.setValue(contentVC, forKey: "contentViewController")
         
-        let cancelAction = UIAlertAction(title: NSLocalizedString("Cancel", comment: ""), style: .cancel, handler: nil)
-        let revokeAction = UIAlertAction(title: NSLocalizedString("Revoke", comment: ""), style: .destructive) { _ in
+        let cancelAction = UIAlertAction(title: "Hủy", style: .cancel, handler: nil)
+        let revokeAction = UIAlertAction(title: "Thu hồi", style: .destructive) { _ in
             let keepLocal = contentVC.isKeepLocalChecked
             viewModel.revokeCertificate(cert, keepLocal: keepLocal, presentingViewController: presentingViewController)
         }
@@ -328,7 +563,7 @@ struct CertificatesView: View {
         guard let topVC = presentingViewController ?? UIApplication.shared.topViewController() else { return }
         TVWebFileTransferManager.shared.startImport(
             acceptedExtensions: ["der", "key", "pem", "p12"],
-            title: "Import Private Key (.der/.pem)",
+            title: "Nhập khóa riêng tư (.der/.pem)",
             presentingVC: topVC
         ) { fileURL in
             guard let fileURL = fileURL else { return }
@@ -336,7 +571,7 @@ struct CertificatesView: View {
                 let data = try Data(contentsOf: fileURL)
                 viewModel.importPrivateKey(data: data, for: cert)
             } catch {
-                viewModel.errorMessage = "Failed to read private key: " + error.localizedDescription
+                viewModel.errorMessage = "Không thể đọc khóa riêng tư: " + error.localizedDescription
             }
             certificateToAddKeyFor = nil
         }
@@ -351,7 +586,7 @@ struct CertificatesView: View {
         guard let topVC = presentingViewController ?? UIApplication.shared.topViewController() else { return }
         TVWebFileTransferManager.shared.startImport(
             acceptedExtensions: ["p12", "der", "pem", "cer", "crt"],
-            title: "Import Certificates",
+            title: "Nhập chứng chỉ",
             presentingVC: topVC
         ) { fileURL in
             guard let fileURL = fileURL else { return }
@@ -361,22 +596,33 @@ struct CertificatesView: View {
     }
 }
 
+// MARK: - ⏳ HIỆU ỨNG ĐANG TẢI (LOADING OVERLAY CHUẨN CSS)
 private struct LoadingOverlay: View {
     var body: some View {
         ZStack {
-            Color.black.opacity(0.2).ignoresSafeArea()
-            ProgressView()
-                .padding(20)
-                #if !os(tvOS)
-                .background(Color(.secondarySystemBackground))
-                #else
-                .background(Color.white.opacity(0.1))
-                #endif
-                .cornerRadius(10)
+            Color.black.opacity(0.22).ignoresSafeArea()
+            VStack(spacing: 12) {
+                ProgressView()
+                    .tint(CertCSSTheme.blue)
+                    .scaleEffect(1.2)
+                Text("Đang xử lý...")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(CertCSSTheme.blue)
+            }
+            .padding(.horizontal, 26)
+            .padding(.vertical, 20)
+            .background(CertCSSTheme.white)
+            .cornerRadius(CertCSSTheme.cornerRadius)
+            .overlay(
+                RoundedRectangle(cornerRadius: CertCSSTheme.cornerRadius)
+                    .stroke(CertCSSTheme.border, lineWidth: 1)
+            )
+            .shadow(color: CertCSSTheme.blue.opacity(0.22), radius: 14, x: 0, y: 6)
         }
     }
 }
 
+// MARK: - ➕ MÀN HÌNH TẠO CHỨNG CHỈ MỚI (ĐỒNG BỘ CSS THEME & VIỆT HÓA)
 private struct CreateCertificateSheetView: View {
     @ObservedObject var viewModel: CertificatesViewModel
     var presentingViewController: UIViewController?
@@ -395,31 +641,84 @@ private struct CreateCertificateSheetView: View {
 
     var body: some View {
         NavigationView {
-            Form {
-                Section(
-                    header: Text("Certificate Information"),
-                    footer: Text(isPaidWarningVisible
-                        ? "This certificate type requires a paid Apple Developer account."
-                        : "Select the certificate type and machine name. This registers the certificate on Apple's servers and saves the private key locally.")
-                ) {
-                    Picker("Certificate Type", selection: $selectedCertificateType) {
-                        ForEach(viewModel.availableCertificateTypes, id: \.rawValue) { certType in
-                            Text(certType.displayName).tag(certType)
+            ZStack {
+                CertCSSTheme.bgGradient
+                    .ignoresSafeArea()
+                
+                Form {
+                    // Banner tiêu đề nhỏ trong Sheet
+                    Section {
+                        VStack(spacing: 4) {
+                            Text("Khởi Tạo Chứng Chỉ Mới")
+                                .font(.system(size: 19, weight: .heavy))
+                                .foregroundColor(CertCSSTheme.white)
+                            Text("Đăng ký chứng chỉ trực tiếp với máy chủ Apple và lưu khóa riêng tư trên máy")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(CertCSSTheme.white.opacity(0.92))
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .padding(.horizontal, 12)
+                        .background(CertCSSTheme.heroGradient)
+                        .cornerRadius(CertCSSTheme.cornerRadius)
+                        .shadow(color: CertCSSTheme.blue.opacity(0.22), radius: 10, x: 0, y: 4)
+                    }
+                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 6, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    
+                    Section(
+                        header: VStack(alignment: .leading, spacing: 3) {
+                            Text("THÔNG TIN CHỨNG CHỈ")
+                                .font(.system(size: 13, weight: .heavy))
+                                .foregroundColor(CertCSSTheme.blue)
+                            RoundedRectangle(cornerRadius: 1.5)
+                                .fill(CertCSSTheme.blue)
+                                .frame(width: 34, height: 3)
+                        },
+                        footer: Text(isPaidWarningVisible
+                            ? "⚠️ Loại chứng chỉ này yêu cầu Tài khoản Nhà phát triển Apple trả phí (Paid Developer Account)."
+                            : "Chọn loại chứng chỉ và đặt tên thiết bị dễ nhớ để quản lý.")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(isPaidWarningVisible ? CertCSSTheme.magenta : CertCSSTheme.dark.opacity(0.8))
+                            .padding(.top, 4)
+                    ) {
+                        Picker("Loại chứng chỉ", selection: $selectedCertificateType) {
+                            ForEach(viewModel.availableCertificateTypes, id: \.rawValue) { certType in
+                                Text(certType.displayName).tag(certType)
+                            }
+                        }
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.black)
+
+                        HStack {
+                            Text("Tên thiết bị")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(CertCSSTheme.blue)
+                            Spacer()
+                            TextField("Nhập tên thiết bị...", text: $machineName)
+                                .multilineTextAlignment(.trailing)
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundColor(CertCSSTheme.purple)
                         }
                     }
-
-                    TextField("Machine Name", text: $machineName)
                 }
+                .modifier(ClearListBackgroundModifier())
             }
-            .navigationTitle("New Certificate")
+            .navigationTitle("Tạo chứng chỉ mới")
+            #if !os(tvOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    SwiftUI.Button("Cancel") {
+                    SwiftUI.Button("Hủy") {
                         isPresented = false
                     }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(CertCSSTheme.magenta)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    SwiftUI.Button("Create") {
+                    SwiftUI.Button("Tạo ngay") {
                         let name = machineName.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !name.isEmpty else { return }
                         isPresented = false
@@ -429,9 +728,12 @@ private struct CreateCertificateSheetView: View {
                             presentingViewController: presentingViewController
                         )
                     }
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(canCreate ? CertCSSTheme.blue : Color.gray)
                     .disabled(!canCreate)
                 }
             }
         }
+        .preferredColorScheme(.light)
     }
 }

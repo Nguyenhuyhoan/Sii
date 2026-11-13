@@ -65,7 +65,6 @@ struct UserCustomizationsView: View {
     @State private var useOnDeviceAnisette: Bool = UserDefaults.standard.useOnDeviceAnisette
     @State private var showAnisetteRestartConfirmation: Bool = false
     @State private var customizeInfoPlist: Bool = UserDefaults.standard.customizeInfoPlist
-    @State private var preferSheetForInfoPlistCustomization: Bool = UserDefaults.standard.preferSheetForInfoPlistCustomization
     @State private var customizeAppId: Bool = UserDefaults.standard.customizeAppId
     @State private var customizeAppIcon: Bool = UserDefaults.standard.customizeAppIcon
     @State private var customizeAppExtensions: AppExtensionCustomization = UserDefaults.standard.customizeAppExtensions
@@ -74,12 +73,8 @@ struct UserCustomizationsView: View {
     @State private var isClearCustomizationsOnUninstallEnabled: Bool = UserDefaults.standard.isClearCustomizationsOnUninstallEnabled
     @State private var isAutoLaunchAppAfterInstallEnabled: Bool = UserDefaults.standard.isAutoLaunchAppAfterInstallEnabled
     @State private var autoFixAppGroupIDs: Bool = UserDefaults.standard.autoFixAppGroupIDs
-    @State private var preferResignedIPA: Bool = UserDefaults.standard.preferResignedIPA
-    @State private var pendingPreferIPAOngoing: Bool = false
-    @State private var showPreferIPAToggleAlert: Bool = false
     @State private var pendingBackendOption: GatewayBackend? = nil
     @State private var showBackendRestartConfirmation: Bool = false
-    @State private var skipNonCopyableFiles: Bool = UserDefaults.standard.skipNonCopyableBackupFiles
     @State private var appVerificationDisabled: Bool = UserDefaults.standard.appVerificationDisabled
     @State private var isBundleIDVerificationEnabled: Bool = UserDefaults.standard.isBundleIDVerificationEnabled
     @State private var isiOSVersionVerificationEnabled: Bool = UserDefaults.standard.isiOSVersionVerificationEnabled
@@ -88,14 +83,6 @@ struct UserCustomizationsView: View {
     @State private var isCellularRefreshEnabled: Bool = UserDefaults.standard.isCellularRefreshEnabled
     @State private var turnOnDataShortcutName: String = UserDefaults.standard.turnOnDataShortcutName
     @State private var turnOffDataShortcutName: String = UserDefaults.standard.turnOffDataShortcutName
-    @State private var turnOnBaseDelayText: String = {
-        let delay = CellularRefreshManager.shared.turnOnDataBaseDelayOverride ?? AppConstants.Shortcuts.defaultTurnOnDataBaseDelay
-        return String(delay)
-    }()
-    @State private var turnOffBaseDelayText: String = {
-        let delay = CellularRefreshManager.shared.turnOffDataBaseDelayOverride ?? AppConstants.Shortcuts.defaultTurnOffDataBaseDelay
-        return String(delay)
-    }()
 
     @State private var isFreeAccount: Bool = false
     @State private var animateHero: Bool = false
@@ -311,21 +298,6 @@ struct UserCustomizationsView: View {
         } message: {
             Text("Thay đổi nhân kết nối Minimuxer yêu cầu khởi động lại SideStore. Nếu nhấn Huỷ, thay đổi sẽ không được lưu.")
         }
-        .alert(pendingPreferIPAOngoing ? "Ưu tiên tệp IPA đã ký lại" : "Ưu tiên Gói ứng dụng", isPresented: $showPreferIPAToggleAlert) {
-            SwiftUI.Button("Chuyển đổi") {
-                preferResignedIPA = pendingPreferIPAOngoing
-                UserDefaults.standard.preferResignedIPA = pendingPreferIPAOngoing
-            }
-            SwiftUI.Button("Huỷ", role: .cancel) {
-                pendingPreferIPAOngoing = preferResignedIPA
-            }
-        } message: {
-            if pendingPreferIPAOngoing {
-                Text("Chuyển sang tệp IPA đã ký lại giúp ưu tiên tốc độ cài đặt (nhanh hơn ~40%) bằng cách đóng gói tệp IPA không nén để truyền tải nhanh, nhưng sẽ tạm thời tốn thêm dung lượng bộ nhớ trong lúc đóng gói.")
-            } else {
-                Text("Chuyển sang Gói ứng dụng giúp tiết kiệm dung lượng bộ nhớ bằng cách truyền trực tiếp thư mục ứng dụng mà không tạo tệp IPA tạm thời, nhưng tốc độ truyền tải sẽ chậm hơn đáng kể.")
-            }
-        }
         .alert(
             editDialog?.title ?? "",
             isPresented: Binding<Bool>(
@@ -433,54 +405,6 @@ struct UserCustomizationsView: View {
         .frame(minHeight: 52)
     }
 
-    private func textFieldRow(
-        title: String,
-        subtitle: String? = nil,
-        placeholder: String,
-        value: String,
-        unit: String? = nil,
-        onTap: @escaping () -> Void
-    ) -> some View {
-        SwiftUI.Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 8) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(CustomizationsCSSTheme.darkText)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let subtitle = subtitle {
-                        Text(subtitle)
-                            .font(.system(size: 12.5, weight: .regular))
-                            .foregroundColor(CustomizationsCSSTheme.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-
-                HStack {
-                    Text(value.isEmpty ? placeholder : (unit != nil ? "\(value) \(unit!)" : value))
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(value.isEmpty ? CustomizationsCSSTheme.secondaryText.opacity(0.6) : CustomizationsCSSTheme.blue)
-                    Spacer()
-                    Image(systemName: "pencil.line")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(CustomizationsCSSTheme.purple.opacity(0.8))
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(CustomizationsCSSTheme.light)
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule()
-                        .stroke(CustomizationsCSSTheme.blue.opacity(0.35), lineWidth: 1.2)
-                )
-                .shadow(color: CustomizationsCSSTheme.purple.opacity(0.12), radius: 5, x: 0, y: 2)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 11)
-        }
-        .buttonStyle(CustomizationsBounceButtonStyle())
-    }
-
     // MARK: - 📶 LÀM MỚI QUA MẠNG DI ĐỘNG (4G/5G)
     @ViewBuilder
     private var cellularRefreshShortcutsSection: some View {
@@ -502,71 +426,83 @@ struct UserCustomizationsView: View {
 
                 divider
 
-                textFieldRow(
-                    title: "Tên phím tắt Bật dữ liệu di động",
-                    subtitle: "Tên của phím tắt thiết lập trong ứng dụng Phím tắt của hệ thống",
-                    placeholder: AppConstants.Shortcuts.defaultTurnOnDataShortcutName,
-                    value: turnOnDataShortcutName,
-                    onTap: openTurnOnShortcutDialog
-                )
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("2 phím tắt cần thiết để làm mới ứng dụng qua 4G:")
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .foregroundColor(CustomizationsCSSTheme.darkText)
 
-                divider
+                    HStack(spacing: 10) {
+                        shortcutBadgeButton(
+                            label: "Bật 4G",
+                            shortcutName: turnOnDataShortcutName.isEmpty ? AppConstants.Shortcuts.defaultTurnOnDataShortcutName : turnOnDataShortcutName,
+                            icon: "antenna.radiowaves.left.and.right",
+                            action: openTurnOnShortcutDialog
+                        )
 
-                textFieldRow(
-                    title: "Tên phím tắt Tắt dữ liệu di động",
-                    subtitle: "Tên của phím tắt thiết lập trong ứng dụng Phím tắt của hệ thống",
-                    placeholder: AppConstants.Shortcuts.defaultTurnOffDataShortcutName,
-                    value: turnOffDataShortcutName,
-                    onTap: openTurnOffShortcutDialog
-                )
-
-                divider
-
-                textFieldRow(
-                    title: "Độ trễ cơ bản khi Bật mạng di động",
-                    subtitle: "Thời gian chờ cơ bản sau khi bật dữ liệu di động (giây, ≥ 0)",
-                    placeholder: String(AppConstants.Shortcuts.defaultTurnOnDataBaseDelay),
-                    value: turnOnBaseDelayText,
-                    unit: "giây",
-                    onTap: openTurnOnBaseDelayDialog
-                )
-
-                divider
-
-                textFieldRow(
-                    title: "Độ trễ cơ bản khi Tắt mạng di động",
-                    subtitle: "Thời gian chờ cơ bản sau khi tắt dữ liệu di động (giây, ≥ 0)",
-                    placeholder: String(AppConstants.Shortcuts.defaultTurnOffDataBaseDelay),
-                    value: turnOffBaseDelayText,
-                    unit: "giây",
-                    onTap: openTurnOffBaseDelayDialog
-                )
-
-                divider
-
-                SwiftUI.Button(action: resetCellularDefaults) {
-                    HStack {
-                        Spacer()
-                        Image(systemName: "arrow.counterclockwise")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(CustomizationsCSSTheme.magenta)
-                        Text("Khôi phục về Mặc định")
-                            .font(.system(size: 15.5, weight: .bold))
-                            .foregroundColor(CustomizationsCSSTheme.magenta)
-                        Spacer()
+                        shortcutBadgeButton(
+                            label: "Tắt 4G",
+                            shortcutName: turnOffDataShortcutName.isEmpty ? AppConstants.Shortcuts.defaultTurnOffDataShortcutName : turnOffDataShortcutName,
+                            icon: "antenna.radiowaves.left.and.right.slash",
+                            action: openTurnOffShortcutDialog
+                        )
                     }
-                    .padding(.vertical, 13)
                 }
-                .buttonStyle(CustomizationsBounceButtonStyle())
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
         }
+    }
+
+    private func shortcutBadgeButton(
+        label: String,
+        shortcutName: String,
+        icon: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        SwiftUI.Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(CustomizationsCSSTheme.blue)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(CustomizationsCSSTheme.secondaryText)
+                        .lineLimit(1)
+
+                    Text(shortcutName)
+                        .font(.system(size: 13.5, weight: .bold))
+                        .foregroundColor(CustomizationsCSSTheme.blue)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+
+                Spacer(minLength: 2)
+
+                Image(systemName: "pencil")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(CustomizationsCSSTheme.purple.opacity(0.75))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(CustomizationsCSSTheme.light)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(CustomizationsCSSTheme.blue.opacity(0.32), lineWidth: 1.1)
+            )
+            .shadow(color: CustomizationsCSSTheme.purple.opacity(0.08), radius: 4, x: 0, y: 2)
+        }
+        .buttonStyle(CustomizationsBounceButtonStyle())
     }
 
     private func openTurnOnShortcutDialog() {
         editingValueText = turnOnDataShortcutName
         editDialog = EditDialogState(
             title: "Tên phím tắt Bật mạng di động",
-            message: "Nhập tên chính xác của phím tắt trong ứng dụng Phím tắt trên thiết bị của bạn",
+            message: "Nhập tên chính xác của phím tắt Bật 4G trong ứng dụng Phím tắt (mặc định: TurnOnData)",
             placeholder: AppConstants.Shortcuts.defaultTurnOnDataShortcutName,
             keyboardType: .default,
             onSave: { newValue in
@@ -583,7 +519,7 @@ struct UserCustomizationsView: View {
         editingValueText = turnOffDataShortcutName
         editDialog = EditDialogState(
             title: "Tên phím tắt Tắt mạng di động",
-            message: "Nhập tên chính xác của phím tắt trong ứng dụng Phím tắt trên thiết bị của bạn",
+            message: "Nhập tên chính xác của phím tắt Tắt 4G trong ứng dụng Phím tắt (mặc định: TurnOffData)",
             placeholder: AppConstants.Shortcuts.defaultTurnOffDataShortcutName,
             keyboardType: .default,
             onSave: { newValue in
@@ -594,54 +530,6 @@ struct UserCustomizationsView: View {
                 CellularRefreshManager.shared.setTurnOffDataShortcutName(sanitized)
             }
         )
-    }
-
-    private func openTurnOnBaseDelayDialog() {
-        editingValueText = turnOnBaseDelayText
-        editDialog = EditDialogState(
-            title: "Độ trễ cơ bản khi Bật mạng di động",
-            message: "Thời gian chờ cơ bản sau khi bật dữ liệu di động (tính bằng giây, ≥ 0)",
-            placeholder: String(AppConstants.Shortcuts.defaultTurnOnDataBaseDelay),
-            keyboardType: .decimalPad,
-            onSave: { newValue in
-                let filtered = newValue.filter { "0123456789.".contains($0) }
-                if let delay = Double(filtered), delay >= 0 {
-                    turnOnBaseDelayText = String(delay)
-                    CellularRefreshManager.shared.setTurnOnDataBaseDelayOverride(delay)
-                } else {
-                    turnOnBaseDelayText = String(AppConstants.Shortcuts.defaultTurnOnDataBaseDelay)
-                    CellularRefreshManager.shared.setTurnOnDataBaseDelayOverride(nil)
-                }
-            }
-        )
-    }
-
-    private func openTurnOffBaseDelayDialog() {
-        editingValueText = turnOffBaseDelayText
-        editDialog = EditDialogState(
-            title: "Độ trễ cơ bản khi Tắt mạng di động",
-            message: "Thời gian chờ cơ bản sau khi tắt dữ liệu di động (tính bằng giây, ≥ 0)",
-            placeholder: String(AppConstants.Shortcuts.defaultTurnOffDataBaseDelay),
-            keyboardType: .decimalPad,
-            onSave: { newValue in
-                let filtered = newValue.filter { "0123456789.".contains($0) }
-                if let delay = Double(filtered), delay >= 0 {
-                    turnOffBaseDelayText = String(delay)
-                    CellularRefreshManager.shared.setTurnOffDataBaseDelayOverride(delay)
-                } else {
-                    turnOffBaseDelayText = String(AppConstants.Shortcuts.defaultTurnOffDataBaseDelay)
-                    CellularRefreshManager.shared.setTurnOffDataBaseDelayOverride(nil)
-                }
-            }
-        )
-    }
-
-    private func resetCellularDefaults() {
-        CellularRefreshManager.shared.resetToDefaults()
-        turnOnDataShortcutName = AppConstants.Shortcuts.defaultTurnOnDataShortcutName
-        turnOffDataShortcutName = AppConstants.Shortcuts.defaultTurnOffDataShortcutName
-        turnOnBaseDelayText = String(AppConstants.Shortcuts.defaultTurnOnDataBaseDelay)
-        turnOffBaseDelayText = String(AppConstants.Shortcuts.defaultTurnOffDataBaseDelay)
     }
 
     // MARK: - ⚙️ CÀI ĐẶT CHUNG
@@ -673,12 +561,16 @@ struct UserCustomizationsView: View {
                 
                 divider
                 
-                // Nút chọn Tiện ích mở rộng dạng Viên thuốc (Capsule) chuẩn nút Beta ở Tab Cài đặt
-                HStack {
+                // Nút chọn Tiện ích mở rộng dạng Viên thuốc (Capsule) mở rộng chứa trọn 1 hàng tiếng Việt
+                HStack(spacing: 10) {
                     Text("Tùy chỉnh Tiện ích mở rộng")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.system(size: 15.5, weight: .medium))
                         .foregroundColor(CustomizationsCSSTheme.darkText)
-                    Spacer()
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 6)
+
                     Menu {
                         ForEach(AppExtensionCustomization.allCases) { option in
                             SwiftUI.Button {
@@ -699,16 +591,20 @@ struct UserCustomizationsView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .frame(minHeight: 52)
+                .frame(minHeight: 54)
                 
                 divider
                 
-                // Nút chọn Chế độ nhập tệp mặc định dạng Viên thuốc (Capsule)
-                HStack {
+                // Nút chọn Chế độ nhập tệp mặc định dạng Viên thuốc (Capsule) mở rộng chứa trọn 1 hàng tiếng Việt
+                HStack(spacing: 10) {
                     Text("Chế độ nhập tệp mặc định")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.system(size: 15.5, weight: .medium))
                         .foregroundColor(CustomizationsCSSTheme.darkText)
-                    Spacer()
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 6)
+
                     Menu {
                         ForEach(AppImportSourceMode.allCases) { option in
                             SwiftUI.Button {
@@ -729,7 +625,7 @@ struct UserCustomizationsView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .frame(minHeight: 52)
+                .frame(minHeight: 54)
                 
                 divider
 
@@ -802,62 +698,27 @@ struct UserCustomizationsView: View {
                         }
                     )
                 )
-
-                divider
-                
-                toggleRow(
-                    title: "Ưu tiên tệp IPA đã ký lại",
-                    subtitle: "Ưu tiên tốc độ cài đặt (tệp IPA) so với tiết kiệm bộ nhớ (Gói ứng dụng)",
-                    isOn: Binding(
-                        get: { preferResignedIPA },
-                        set: { newValue in
-                            pendingPreferIPAOngoing = newValue
-                            showPreferIPAToggleAlert = true
-                        }
-                    )
-                )
-                
-                divider
-                
-                toggleRow(title: "Bỏ qua các tệp sao lưu không thể sao chép", isOn: Binding(
-                    get: { skipNonCopyableFiles },
-                    set: { newValue in
-                        skipNonCopyableFiles = newValue
-                        UserDefaults.standard.skipNonCopyableBackupFiles = newValue
-                    }
-                ))
-                
-                divider
-                
-                toggleRow(
-                    title: "Ưu tiên mở bảng trượt cho Info.plist",
-                    subtitle: "Sử dụng giao diện bảng trượt lớn thay vì hộp thoại nhỏ khi chỉnh sửa Info.plist",
-                    isOn: Binding(
-                        get: { preferSheetForInfoPlistCustomization },
-                        set: { newValue in
-                            preferSheetForInfoPlistCustomization = newValue
-                            UserDefaults.standard.preferSheetForInfoPlistCustomization = newValue
-                        }
-                    )
-                )
-                .disabled(!customizeInfoPlist)
-                .opacity(!customizeInfoPlist ? 0.45 : 1.0)
             }
         }
     }
 
-    // Nhãn nút chọn kiểu viên thuốc giống hệt `betaTrackPopupButton` trong SettingsViewController
+    // Nhãn nút chọn kiểu viên thuốc tự động mở rộng chiều ngang để chứa trọn chữ tiếng Việt trên 1 hàng duy nhất
     private func capsuleMenuButtonLabel(text: String) -> some View {
         HStack(spacing: 6) {
             Text(text)
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(size: 13.5, weight: .bold))
                 .foregroundColor(CustomizationsCSSTheme.blue)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+
             Image(systemName: "chevron.up.chevron.down")
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(size: 10.5, weight: .bold))
                 .foregroundColor(CustomizationsCSSTheme.blue)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 15)
+        .padding(.vertical, 8)
+        .frame(minWidth: 148)
+        .fixedSize(horizontal: true, vertical: false)
         .background(CustomizationsCSSTheme.light)
         .clipShape(Capsule())
         .overlay(
@@ -878,16 +739,22 @@ struct UserCustomizationsView: View {
     private func localizedOptionTitle(_ rawTitle: String) -> String {
         let trimmed = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let dictionary: [String: String] = [
-            // AppExtensionCustomization
-            "Ask": "Hỏi mỗi lần",
+            // AppExtensionCustomization & AppImportSourceMode
+            "Prompt User": "Hỏi người dùng",
+            "prompt user": "Hỏi người dùng",
+            "Use Main Profile": "Dùng hồ sơ chính",
+            "use main profile": "Dùng hồ sơ chính",
+            "Ask": "Hỏi người dùng",
             "Always Ask": "Luôn hỏi",
-            "Prompt": "Hỏi mỗi lần",
+            "Prompt": "Hỏi người dùng",
             "Keep": "Giữ nguyên",
             "Keep All": "Giữ tất cả",
             "Keep Extensions": "Giữ tiện ích",
             "Remove": "Xoá bỏ",
             "Remove All": "Xoá tất cả",
             "Remove Extensions": "Xoá tiện ích",
+            "Register New": "Đăng ký hồ sơ mới",
+            "Create Separate Profiles": "Tạo hồ sơ riêng",
             "Default": "Mặc định",
             "Automatic": "Tự động",
             "None": "Không dùng",
@@ -902,9 +769,19 @@ struct UserCustomizationsView: View {
             "URL": "Liên kết URL",
             "Web URL": "Liên kết mạng",
             "Link": "Liên kết",
-            "Both": "Hỏi khi nhập"
+            "Both": "Hỏi người dùng"
         ]
-        return dictionary[trimmed] ?? rawTitle
+        if let exactMatch = dictionary[trimmed] {
+            return exactMatch
+        }
+        let lowercased = trimmed.lowercased()
+        if lowercased == "prompt user" {
+            return "Hỏi người dùng"
+        }
+        if lowercased == "use main profile" {
+            return "Dùng hồ sơ chính"
+        }
+        return rawTitle
     }
 
     private func localizedBackendTitle(_ rawTitle: String) -> String {

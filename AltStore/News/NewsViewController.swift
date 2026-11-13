@@ -21,45 +21,130 @@ enum CheckItemVisualState: Equatable {
     case failedError    // Màu Đỏ (Red): Lỗi thật sự hoặc chưa có tệp
 }
 
-// MARK: - 🎨 BỘ GIAO DIỆN CSS THEME (ĐỒNG BỘ TOÀN HỆ THỐNG)
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI TAB CÀI ĐẶT)
 private enum CSSTheme {
+    // UIKit Colors (Dùng cho ViewController & Lớp nền Gradient cố định)
+    static let uiWhite = UIColor.white
+    static let uiBorder = UIColor(red: 233/255, green: 236/255, blue: 239/255, alpha: 1.0) // #e9ecef
+    static let uiBlue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0)     // #007bff
+    static let bgGradientStartCG = UIColor(red: 243/255, green: 224/255, blue: 255/255, alpha: 1.0).cgColor
+    static let bgGradientEndCG = UIColor(red: 224/255, green: 247/255, blue: 255/255, alpha: 1.0).cgColor
+
+    // SwiftUI Colors
     static let primary = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255)      // #007bff (--primary-blue)
     static let secondary = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)   // #6f42c1 (--primary-purple)
     static let darkAccent = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)  // #6f42c1
     static let green = SwiftUI.Color(red: 40/255, green: 167/255, blue: 69/255)        // #28a745 (--primary-green)
     static let red = SwiftUI.Color(red: 220/255, green: 53/255, blue: 69/255)          // #dc3545 (--primary-red)
+    static let magenta = SwiftUI.Color(red: 255/255, green: 0/255, blue: 255/255)      // #ff00ff
     static let darkText = SwiftUI.Color(red: 52/255, green: 58/255, blue: 64/255)      // #343a40 (--dark-text)
-    
+
     /// Màu trung tính để nhắc "Nhấn vào đây để kiểm tra"
     static let neutralInspect = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)
-    
-    // Nền Gradient (#f3e0ff -> #e0f7ff)
+
+    // Nền Gradient (#f3e0ff -> #e0f7ff) chéo từ góc trên trái xuống góc dưới phải giống hệt Settings
     static let bgGradientStart = SwiftUI.Color(red: 243/255, green: 224/255, blue: 255/255)
     static let bgGradientEnd = SwiftUI.Color(red: 224/255, green: 247/255, blue: 255/255)
-    
+
     static var pageBackgroundGradient: LinearGradient {
         LinearGradient(
             colors: [bgGradientStart, bgGradientEnd],
-            startPoint: .leading,
-            endPoint: .trailing
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
         )
     }
-    
+
+    // Hero Gradient (rgba(0,123,255,.92) -> rgba(111,66,193,.88)) giống hệt Settings
+    static let heroStart = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.92)
+    static let heroEnd = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.88)
+
+    static var heroGradient: LinearGradient {
+        LinearGradient(
+            colors: [heroStart, heroEnd],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    static let cornerRadius: CGFloat = 15.0
     static let pageBackground = SwiftUI.Color(red: 243/255, green: 224/255, blue: 255/255)
     static let cardBackground = SwiftUI.Color.white
-    static let cardHeaderBackground = SwiftUI.Color(red: 248/255, green: 249/255, blue: 250/255).opacity(0.92)
+    static let cardHeaderBackground = SwiftUI.Color(red: 248/255, green: 249/255, blue: 250/255).opacity(0.95)
     static let innerRowBackground = SwiftUI.Color(red: 248/255, green: 249/255, blue: 250/255) // #f8f9fa
     static let border = SwiftUI.Color(red: 233/255, green: 236/255, blue: 239/255)             // #e9ecef
     static let innerBorder = SwiftUI.Color(red: 233/255, green: 236/255, blue: 239/255)        // #e9ecef
-    static let shadow = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.12)
+    static let shadow = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.08)
 }
 
-// MARK: - Hiệu ứng nhấn nút thu nhỏ (Giống .btn:active transform: scale(0.95) trong CSS)
+// MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH (KHÔNG BỊ TRẮNG KHI CUỘN)
+private final class CSSGradientBackgroundView: UIView {
+    override class var layerClass: AnyClass {
+        return CAGradientLayer.self
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupGradient()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupGradient()
+    }
+
+    private func setupGradient() {
+        guard let gradientLayer = self.layer as? CAGradientLayer else { return }
+        gradientLayer.colors = [CSSTheme.bgGradientStartCG, CSSTheme.bgGradientEndCG]
+        gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+        gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+    }
+}
+
+// MARK: - Hiệu ứng nhấn nút thu nhỏ & nảy lò xo (Đồng bộ với Settings)
 private struct CSSBounceButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some SwiftUI.View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-            .animation(.spring(response: 0.28, dampingFraction: 0.65), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .offset(x: configuration.isPressed ? 3 : 0, y: configuration.isPressed ? -1 : 0)
+            .animation(.spring(response: 0.28, dampingFraction: 0.62), value: configuration.isPressed)
+    }
+}
+
+// MARK: - 🌟 HERO BANNER ĐẦU TRANG (BẮT CHƯỚC Y HỆT TAB CÀI ĐẶT)
+private struct CSSHeroBannerView: SwiftUI.View {
+    let title: String
+    let subtitle: String
+    @State private var isAppeared = false
+
+    var body: some SwiftUI.View {
+        VStack(spacing: 4) {
+            SwiftUI.Text(title)
+                .font(.system(size: 25, weight: .heavy))
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+                .shadow(color: .black.opacity(0.35), radius: 4, x: 1, y: 2)
+
+            SwiftUI.Text(subtitle)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.white.opacity(0.95))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .padding(.horizontal, 12)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
+                .fill(CSSTheme.heroGradient)
+        )
+        .shadow(color: CSSTheme.primary.opacity(0.25), radius: 16, x: 0, y: 6)
+        .opacity(isAppeared ? 1 : 0)
+        .offset(y: isAppeared ? 0 : -10)
+        .onAppear {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.85).delay(0.05)) {
+                isAppeared = true
+            }
+        }
     }
 }
 
@@ -209,6 +294,7 @@ private final class PairingBackgroundKeepAliveManager {
 
 class NewsViewController: UICollectionViewController {
     var source: Source?
+    private var floatingBackButton: UIButton?
 
     #if !os(tvOS)
     override var preferredStatusBarStyle: UIStatusBarStyle {
@@ -232,14 +318,38 @@ class NewsViewController: UICollectionViewController {
         CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
         GuideImageCacheManager.shared.prefetchAllGuideImages()
 
-        self.title = "Check"
+        // 1. Ẩn hoàn toàn tiêu đề và thanh điều hướng giống hệt SettingsViewController
+        self.title = nil
+        self.navigationItem.title = nil
+        self.navigationController?.delegate = self
         self.navigationController?.setNavigationBarHidden(true, animated: false)
-        self.view.backgroundColor = UIColor(CSSTheme.pageBackground)
+        #if !os(tvOS)
+        self.navigationItem.largeTitleDisplayMode = .never
+        self.navigationController?.interactivePopGestureRecognizer?.delegate = self
+        self.navigationController?.interactivePopGestureRecognizer?.isEnabled = true
+        if let tabAppearance = self.tabBarController?.tabBar.standardAppearance {
+            tabAppearance.stackedLayoutAppearance.normal.badgeBackgroundColor = CSSTheme.uiBlue
+            self.navigationController?.tabBarItem.scrollEdgeAppearance = tabAppearance
+        }
+        #endif
 
+        // 2. Đặt lớp nền Gradient cố định toàn màn hình (Không bao giờ bị trắng khi cuộn)
+        let bgView = CSSGradientBackgroundView(frame: view.bounds)
+        bgView.translatesAutoresizingMaskIntoConstraints = false
+        view.insertSubview(bgView, at: 0)
+        NSLayoutConstraint.activate([
+            bgView.topAnchor.constraint(equalTo: view.topAnchor),
+            bgView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            bgView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            bgView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        ])
+
+        self.view.backgroundColor = .clear
         self.collectionView.isHidden = true
         self.collectionView.isScrollEnabled = false
         self.collectionView.contentInsetAdjustmentBehavior = .never
 
+        // 3. Nhúng giao diện SwiftUI tràn viền mượt mà
         let hostingController = UIHostingController(rootView: SystemCheckDashboardView())
         addChild(hostingController)
         hostingController.view.translatesAutoresizingMaskIntoConstraints = false
@@ -259,10 +369,73 @@ class NewsViewController: UICollectionViewController {
         super.viewWillAppear(animated)
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
     }
+}
 
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
-        self.navigationController?.setNavigationBarHidden(false, animated: animated)
+// MARK: - 🧭 QUẢN LÝ ẨN THANH ĐIỀU HƯỚNG & NÚT QUAY LẠI NHỎ CỐ ĐỊNH (ĐỒNG BỘ SETTINGS)
+extension NewsViewController: UINavigationControllerDelegate, UIGestureRecognizerDelegate {
+    func navigationController(_ navigationController: UINavigationController, willShow viewController: UIViewController, animated: Bool) {
+        navigationController.setNavigationBarHidden(true, animated: false)
+        viewController.title = nil
+        viewController.navigationItem.title = nil
+        #if !os(tvOS)
+        viewController.navigationItem.largeTitleDisplayMode = .never
+        #endif
+
+        let isRoot = (viewController === navigationController.viewControllers.first)
+        updateFloatingBackButton(in: navigationController, show: !isRoot)
+    }
+
+    private func updateFloatingBackButton(in nav: UINavigationController, show: Bool) {
+        if self.floatingBackButton == nil {
+            let btn = UIButton(type: .system)
+            btn.translatesAutoresizingMaskIntoConstraints = false
+
+            let config = UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)
+            btn.setImage(UIImage(systemName: "chevron.left", withConfiguration: config), for: .normal)
+            btn.tintColor = CSSTheme.uiBlue
+            btn.backgroundColor = CSSTheme.uiWhite.withAlphaComponent(0.92)
+
+            btn.layer.cornerRadius = 17
+            btn.layer.borderWidth = 1.0
+            btn.layer.borderColor = CSSTheme.uiBorder.cgColor
+            btn.layer.shadowColor = UIColor.black.cgColor
+            btn.layer.shadowOffset = CGSize(width: 0, height: 2)
+            btn.layer.shadowRadius = 6
+            btn.layer.shadowOpacity = 0.15
+
+            btn.addTarget(self, action: #selector(handleFloatingBackTap), for: .touchUpInside)
+            nav.view.addSubview(btn)
+
+            NSLayoutConstraint.activate([
+                btn.leadingAnchor.constraint(equalTo: nav.view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+                btn.topAnchor.constraint(equalTo: nav.view.safeAreaLayoutGuide.topAnchor, constant: 6),
+                btn.widthAnchor.constraint(equalToConstant: 34),
+                btn.heightAnchor.constraint(equalToConstant: 34)
+            ])
+
+            self.floatingBackButton = btn
+        }
+
+        guard let btn = self.floatingBackButton else { return }
+        nav.view.bringSubviewToFront(btn)
+
+        UIView.animate(withDuration: 0.2) {
+            btn.alpha = show ? 1.0 : 0.0
+            btn.isHidden = !show
+        }
+    }
+
+    @objc private func handleFloatingBackTap() {
+        self.navigationController?.popViewController(animated: true)
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        #if !os(tvOS)
+        if gestureRecognizer === self.navigationController?.interactivePopGestureRecognizer {
+            return (self.navigationController?.viewControllers.count ?? 0) > 1
+        }
+        #endif
+        return true
     }
 }
 
@@ -908,6 +1081,13 @@ struct SystemCheckDashboardView: SwiftUI.View {
     var body: some SwiftUI.View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 18) {
+                // Khối Hero Banner đồng bộ 100% với SettingsViewController
+                CSSHeroBannerView(
+                    title: "SideStore",
+                    subtitle: "Kiểm tra kết nối hệ thống, Pairing & tự động làm mới qua 4G"
+                )
+                .padding(.top, 4)
+
                 systemStatusSection
                 serverSection
                 shortcutsSection
@@ -915,10 +1095,9 @@ struct SystemCheckDashboardView: SwiftUI.View {
                 shortcutVideoGuideSection
             }
             .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 32)
+            .padding(.bottom, 50)
         }
-        .background(CSSTheme.pageBackgroundGradient.ignoresSafeArea())
+        .background(SwiftUI.Color.clear)
         .onAppear {
             vm.setViewVisible(true)
         }
@@ -959,10 +1138,11 @@ struct SystemCheckDashboardView: SwiftUI.View {
         }()
 
         return SkySectionCard(
-            title: "Trạng Thái Hệ Thống",
+            title: "TRẠNG THÁI HỆ THỐNG",
             icon: "cpu.fill",
             color: CSSTheme.primary,
-            statusOK: allReady ? true : nil
+            statusOK: allReady ? true : nil,
+            footerText: "Chạm vào từng mục bên trên để kiểm tra chi tiết hoặc cài đặt lại kết nối hệ thống."
         ) {
             CheckItemButton(
                 title: "LocalDevVPN",
@@ -995,9 +1175,10 @@ struct SystemCheckDashboardView: SwiftUI.View {
 
     private var serverSection: some SwiftUI.View {
         SkySectionCard(
-            title: "Máy chủ Anisette",
+            title: "MÁY CHỦ ANISETTE",
             icon: "server.rack",
-            color: CSSTheme.secondary
+            color: CSSTheme.secondary,
+            footerText: "Khuyên tắt 'Use On-Device Anisette' để đăng nhập ID Apple và gia hạn ứng dụng ổn định nhất."
         ) {
             CheckItemButton(
                 title: "Máy chủ Anisette",
@@ -1012,9 +1193,10 @@ struct SystemCheckDashboardView: SwiftUI.View {
 
     private var shortcutsSection: some SwiftUI.View {
         SkySectionCard(
-            title: "Phím Tắt",
+            title: "PHÍM TẮT & LÀM MỚI 4G",
             icon: "bolt.circle.fill",
-            color: CSSTheme.primary
+            color: CSSTheme.primary,
+            footerText: "Bật 'Cellular Refresh' và thêm các phím tắt để tự động gia hạn ứng dụng trực tiếp qua mạng 4G/5G."
         ) {
             CellularRefreshToggleRow(
                 title: "Cellular Refresh (Refresh Qua 4G)",
@@ -1062,7 +1244,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
 
     private var automationGuideSection: some SwiftUI.View {
         SkySectionCard(
-            title: "Hướng Dẫn Tự Động Hóa",
+            title: "HƯỚNG DẪN TỰ ĐỘNG HÓA",
             icon: "bell.badge.fill",
             color: CSSTheme.secondary
         ) {
@@ -1082,9 +1264,9 @@ struct SystemCheckDashboardView: SwiftUI.View {
             }
             .padding(12)
             .background(CSSTheme.innerRowBackground)
-            .cornerRadius(16)
+            .cornerRadius(CSSTheme.cornerRadius)
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
                     .stroke(CSSTheme.innerBorder, lineWidth: 1)
             )
         }
@@ -1092,7 +1274,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
 
     private var shortcutVideoGuideSection: some SwiftUI.View {
         SkySectionCard(
-            title: "Hướng Dẫn Video Phím Tắt",
+            title: "HƯỚNG DẪN VIDEO PHÍM TẮT",
             icon: "play.rectangle.fill",
             color: CSSTheme.primary
         ) {
@@ -1104,16 +1286,16 @@ struct SystemCheckDashboardView: SwiftUI.View {
                         .padding(.top, 2)
 
                     SwiftUI.Text("Nếu phím tắt tải về không tương thích với phiên bản iOS trên máy của bạn, bạn có thể xem video bên dưới để tự tạo phím tắt.")
-                        .font(.system(size: 14.5, weight: .medium, design: .rounded))
+                        .font(.system(size: 14.5, weight: .medium))
                         .foregroundColor(CSSTheme.darkText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(13)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(CSSTheme.innerRowBackground)
-                .cornerRadius(16)
+                .cornerRadius(CSSTheme.cornerRadius)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
                         .stroke(CSSTheme.innerBorder, lineWidth: 1)
                 )
 
@@ -1279,16 +1461,19 @@ struct YouTubeVerticalPlayerWebView: UIViewRepresentable {
     }
 }
 
+// MARK: - 🗂️ CẤU TRÚC SECTION HEADER + CARD CHUẨN SETTINGS VIEW CONTROLLER
 struct SkySectionCard<Content: SwiftUI.View>: SwiftUI.View {
     let title: String
     let icon: String
     let color: SwiftUI.Color
     var statusOK: Bool? = nil
     var trailingView: AnyView? = nil
+    var footerText: String? = nil
     @ViewBuilder let content: Content
 
     var body: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 8) {
+            // Tiêu đề Section bên ngoài Card + Gạch chân màu xanh 38x3pt giống hệt SettingsHeaderFooterView
             SectionHeaderView(
                 title: title,
                 icon: icon,
@@ -1296,26 +1481,31 @@ struct SkySectionCard<Content: SwiftUI.View>: SwiftUI.View {
                 statusOK: statusOK,
                 trailingView: trailingView
             )
-            .padding(.horizontal, 16)
-            .padding(.vertical, 13)
-            .background(CSSTheme.cardHeaderBackground)
+            .padding(.horizontal, 4)
 
-            Rectangle()
-                .fill(CSSTheme.border)
-                .frame(height: 1)
-
-            VStack(alignment: .leading, spacing: 11) {
+            // Khối Card trắng bo góc 15pt, đổ bóng xanh dịu giống hệt styleInnerCardOfCell trong Settings
+            VStack(alignment: .leading, spacing: 10) {
                 content
             }
             .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(CSSTheme.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
+                    .stroke(CSSTheme.border, lineWidth: 1.0)
+            )
+            .shadow(color: CSSTheme.primary.opacity(0.07), radius: 10, x: 0, y: 5)
+
+            // Chú thích chân trang (Footer) giống SettingsHeaderFooterView
+            if let footerText = footerText {
+                SwiftUI.Text(footerText)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundColor(CSSTheme.darkText.opacity(0.78))
+                    .padding(.horizontal, 6)
+                    .padding(.top, 2)
+            }
         }
-        .background(CSSTheme.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(CSSTheme.border, lineWidth: 1.5)
-        )
-        .shadow(color: CSSTheme.shadow, radius: 14, x: 0, y: 8)
     }
 }
 
@@ -1327,44 +1517,38 @@ struct SectionHeaderView: SwiftUI.View {
     var trailingView: AnyView? = nil
 
     var body: some SwiftUI.View {
-        HStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [color, CSSTheme.secondary],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 34, height: 34)
-                    .shadow(color: color.opacity(0.35), radius: 5, x: 0, y: 3)
-
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
                 SwiftUI.Image(systemName: icon)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.white)
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundColor(CSSTheme.primary)
+
+                SwiftUI.Text(title.uppercased())
+                    .font(.system(size: 15, weight: .heavy))
+                    .foregroundColor(CSSTheme.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+
+                if let statusOK = statusOK {
+                    SwiftUI.Image(systemName: statusOK ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(statusOK ? CSSTheme.green : CSSTheme.red)
+                        .animation(.spring(), value: statusOK)
+                }
+
+                Spacer(minLength: 4)
+
+                if let trailingView = trailingView {
+                    trailingView
+                }
             }
 
-            SwiftUI.Text(title)
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .foregroundColor(CSSTheme.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-
-            if let statusOK = statusOK {
-                SwiftUI.Image(systemName: statusOK ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(statusOK ? CSSTheme.green : CSSTheme.red)
-                    .animation(.spring(), value: statusOK)
-            }
-
-            Spacer(minLength: 4)
-
-            if let trailingView = trailingView {
-                trailingView
-            }
+            // Thanh gạch chân màu xanh (.features h2::after) dài 38pt, cao 3pt giống hệt Settings
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(CSSTheme.primary)
+                .frame(width: 38, height: 3)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -1434,20 +1618,20 @@ struct CheckItemButton: SwiftUI.View {
         SwiftUI.Button(action: action) {
             HStack(spacing: 13) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(iconContainerColor)
-                        .frame(width: 46, height: 46)
+                        .frame(width: 44, height: 44)
                     SwiftUI.Image(systemName: icon)
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 19, weight: .semibold))
                         .foregroundColor(iconForegroundColor)
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 3) {
                     SwiftUI.Text(title)
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .font(.system(size: 16, weight: .medium))
                         .foregroundColor(CSSTheme.darkText)
                     SwiftUI.Text(subtitle)
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(subtitleForegroundColor)
                         .lineLimit(1)
                 }
@@ -1455,24 +1639,24 @@ struct CheckItemButton: SwiftUI.View {
                 Spacer()
 
                 SwiftUI.Image(systemName: trailingStatusIconName)
-                    .font(.system(size: 21, weight: .semibold))
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundColor(trailingStatusColor)
                     .animation(.spring(), value: visualState)
 
                 SwiftUI.Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(CSSTheme.secondary.opacity(0.7))
+                    .foregroundColor(CSSTheme.secondary.opacity(0.65))
             }
-            .padding(13)
+            .padding(12)
             .background(CSSTheme.innerRowBackground)
-            .cornerRadius(16)
+            .cornerRadius(CSSTheme.cornerRadius)
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
                     .stroke(
                         visualState == .actionRequired
                         ? CSSTheme.neutralInspect.opacity(0.35)
                         : CSSTheme.innerBorder,
-                        lineWidth: 1.2
+                        lineWidth: 1.0
                     )
             )
         }
@@ -1490,35 +1674,37 @@ struct CellularRefreshToggleRow: SwiftUI.View {
         HStack(spacing: 13) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill((isOn ? CSSTheme.green : SwiftUI.Color.secondary).opacity(0.14))
+                    .fill((isOn ? CSSTheme.primary : SwiftUI.Color.secondary).opacity(0.14))
                     .frame(width: 44, height: 44)
                 SwiftUI.Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(isOn ? CSSTheme.green : .secondary)
+                    .foregroundColor(isOn ? CSSTheme.primary : .secondary)
             }
 
             VStack(alignment: .leading, spacing: 3) {
                 SwiftUI.Text(title)
-                    .font(.system(size: 15.5, weight: .bold, design: .rounded))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundColor(CSSTheme.darkText)
                 SwiftUI.Text(isOn ? onText : offText)
                     .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundColor(isOn ? CSSTheme.green : .secondary)
+                    .foregroundColor(isOn ? CSSTheme.primary : .secondary)
                     .lineLimit(1)
             }
 
             Spacer()
 
+            // Công tắc UISwitch màu xanh có đổ bóng Neon giống hệt SettingsViewController
             Toggle("", isOn: $isOn)
                 .labelsHidden()
-                .tint(CSSTheme.green)
+                .tint(CSSTheme.primary)
+                .shadow(color: CSSTheme.primary.opacity(0.28), radius: 6, x: 0, y: 3)
         }
-        .padding(13)
+        .padding(12)
         .background(CSSTheme.innerRowBackground)
-        .cornerRadius(16)
+        .cornerRadius(CSSTheme.cornerRadius)
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(CSSTheme.innerBorder, lineWidth: 1.2)
+            RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
+                .stroke(CSSTheme.innerBorder, lineWidth: 1.0)
         )
     }
 }
@@ -1539,7 +1725,7 @@ struct ShortcutLinkRow: SwiftUI.View {
             HStack(spacing: 13) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(color.opacity(0.15))
+                        .fill(color.opacity(0.14))
                         .frame(width: 44, height: 44)
                     SwiftUI.Image(systemName: icon)
                         .font(.system(size: 19, weight: .bold))
@@ -1547,32 +1733,34 @@ struct ShortcutLinkRow: SwiftUI.View {
                 }
 
                 SwiftUI.Text(title)
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .font(.system(size: 15.5, weight: .medium))
                     .foregroundColor(CSSTheme.darkText)
+                    .multilineTextAlignment(.leading)
 
                 Spacer()
 
+                // Nút viên thuốc giống styleBetaTrackPopupButton / nút hành động của Settings
                 SwiftUI.Text(buttonTitle)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
+                    .font(.system(size: 13, weight: .bold))
+                    .padding(.horizontal, 15)
+                    .padding(.vertical, 7)
                     .background(
                         LinearGradient(
-                            colors: [color, color.opacity(0.8)],
+                            colors: [color, color.opacity(0.82)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .foregroundColor(.white)
                     .clipShape(Capsule())
-                    .shadow(color: color.opacity(0.35), radius: 5, x: 0, y: 3)
+                    .shadow(color: color.opacity(0.28), radius: 5, x: 0, y: 3)
             }
-            .padding(13)
+            .padding(12)
             .background(CSSTheme.innerRowBackground)
-            .cornerRadius(16)
+            .cornerRadius(CSSTheme.cornerRadius)
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(CSSTheme.innerBorder, lineWidth: 1.2)
+                RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
+                    .stroke(CSSTheme.innerBorder, lineWidth: 1.0)
             )
         }
         .buttonStyle(CSSBounceButtonStyle())
@@ -1592,7 +1780,7 @@ struct RemoteGuideImageView: SwiftUI.View {
     var body: some SwiftUI.View {
         VStack(alignment: .leading, spacing: 8) {
             SwiftUI.Text(caption)
-                .font(.system(size: 13.5, weight: .semibold, design: .rounded))
+                .font(.system(size: 13.5, weight: .semibold))
                 .foregroundColor(CSSTheme.darkText)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -1669,7 +1857,7 @@ struct PairingGuideSheetView: SwiftUI.View {
     var body: some SwiftUI.View {
         NavigationView {
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 18) {
                     statusHeaderCard
                     verificationAdviceCard
 
@@ -1684,9 +1872,9 @@ struct PairingGuideSheetView: SwiftUI.View {
                         }
                         .padding(12)
                         .background((vm.isPairingOK ? CSSTheme.green : CSSTheme.primary).opacity(0.12))
-                        .cornerRadius(14)
+                        .cornerRadius(CSSTheme.cornerRadius)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 14)
+                            RoundedRectangle(cornerRadius: CSSTheme.cornerRadius)
                                 .stroke(CSSTheme.border, lineWidth: 1)
                         )
                     }
@@ -1838,12 +2026,12 @@ struct PairingGuideSheetView: SwiftUI.View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 SwiftUI.Text(headerTitle)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundColor(CSSTheme.darkText)
 
                 if state != .actionRequired && !vm.pairingProtocol.isEmpty {
                     SwiftUI.Text(vm.pairingProtocol)
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1852,12 +2040,12 @@ struct PairingGuideSheetView: SwiftUI.View {
         }
         .padding(14)
         .background(CSSTheme.cardBackground)
-        .cornerRadius(18)
+        .cornerRadius(CSSTheme.cornerRadius)
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
                 .stroke(badgeColor.opacity(0.35), lineWidth: 1.5)
         )
-        .shadow(color: CSSTheme.shadow, radius: 10, x: 0, y: 5)
+        .shadow(color: CSSTheme.primary.opacity(0.07), radius: 10, x: 0, y: 5)
     }
 
     private var verificationAdviceCard: some SwiftUI.View {
@@ -1867,7 +2055,7 @@ struct PairingGuideSheetView: SwiftUI.View {
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(CSSTheme.primary)
                 SwiftUI.Text("3 Bước Kiểm Tra Pairing Chính Xác:")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundColor(CSSTheme.darkText)
             }
 
@@ -1892,7 +2080,7 @@ struct PairingGuideSheetView: SwiftUI.View {
             }
 
             SwiftUI.Text("Xong 3 bước trên, nhìn lên mục Đang Chờ Xác Minh Pairing ở phía trên sẽ tự động hiện Tích Xanh báo đang hoạt động tốt hoặc Tích Đỏ đã bị lỗi / cần cài lại.")
-                .font(.system(size: 13.5, weight: .bold, design: .rounded))
+                .font(.system(size: 13.5, weight: .bold))
                 .foregroundColor(CSSTheme.neutralInspect)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(12)
@@ -1907,17 +2095,17 @@ struct PairingGuideSheetView: SwiftUI.View {
         }
         .padding(16)
         .background(CSSTheme.cardBackground)
-        .cornerRadius(18)
+        .cornerRadius(CSSTheme.cornerRadius)
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(CSSTheme.border, lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
+                .stroke(CSSTheme.border, lineWidth: 1.0)
         )
-        .shadow(color: CSSTheme.shadow, radius: 10, x: 0, y: 5)
+        .shadow(color: CSSTheme.primary.opacity(0.07), radius: 10, x: 0, y: 5)
     }
 
     private var ios27DirectPairingCard: some SwiftUI.View {
         SkySectionCard(
-            title: "Phần 1: Dành Cho iOS 27",
+            title: "PHẦN 1: DÀNH CHO IOS 27",
             icon: "iphone.radiowaves.left.and.right",
             color: CSSTheme.primary
         ) {
@@ -2077,7 +2265,7 @@ struct PairingGuideSheetView: SwiftUI.View {
 
     private var pcPairingGuideCard: some SwiftUI.View {
         SkySectionCard(
-            title: "Phần 2: Dưới iOS 27 (PC / Mac)",
+            title: "PHẦN 2: DƯỚI IOS 27 (PC / MAC)",
             icon: "laptopcomputer.and.iphone",
             color: CSSTheme.secondary
         ) {
@@ -2199,7 +2387,7 @@ struct VpnDetailSheetView: SwiftUI.View {
     var body: some SwiftUI.View {
         NavigationView {
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 18) {
                     HStack(spacing: 12) {
                         ZStack {
                             Circle()
@@ -2223,15 +2411,15 @@ struct VpnDetailSheetView: SwiftUI.View {
                     }
                     .padding(14)
                     .background(CSSTheme.cardBackground)
-                    .cornerRadius(18)
+                    .cornerRadius(CSSTheme.cornerRadius)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(CSSTheme.border, lineWidth: 1.5)
+                        RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
+                            .stroke(CSSTheme.border, lineWidth: 1.0)
                     )
-                    .shadow(color: CSSTheme.shadow, radius: 10, x: 0, y: 5)
+                    .shadow(color: CSSTheme.primary.opacity(0.07), radius: 10, x: 0, y: 5)
 
                     SkySectionCard(
-                        title: "Thông Số Kết Nối Hiện Tại",
+                        title: "THÔNG SỐ KẾT NỐI HIỆN TẠI",
                         icon: "network",
                         color: CSSTheme.primary
                     ) {
@@ -2242,7 +2430,7 @@ struct VpnDetailSheetView: SwiftUI.View {
                             Spacer()
                             SwiftUI.Text(vm.tunnelIP)
                                 .font(.system(.subheadline, design: .monospaced).bold())
-                                .foregroundColor(CSSTheme.darkText)
+                                .foregroundColor(CSSTheme.primary)
                         }
                         Divider()
                         HStack {
@@ -2252,12 +2440,12 @@ struct VpnDetailSheetView: SwiftUI.View {
                             Spacer()
                             SwiftUI.Text(vm.deviceIP)
                                 .font(.system(.subheadline, design: .monospaced).bold())
-                                .foregroundColor(CSSTheme.darkText)
+                                .foregroundColor(CSSTheme.secondary)
                         }
                     }
 
                     SkySectionCard(
-                        title: "Cấu hình khuyên dùng iOS 27",
+                        title: "CẤU HÌNH KHUYÊN DÙNG IOS 27",
                         icon: "lightbulb.fill",
                         color: CSSTheme.secondary
                     ) {
@@ -2357,7 +2545,7 @@ struct CellularDetailSheetView: SwiftUI.View {
     var body: some SwiftUI.View {
         NavigationView {
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 18) {
                     HStack(spacing: 12) {
                         ZStack {
                             Circle()
@@ -2381,15 +2569,15 @@ struct CellularDetailSheetView: SwiftUI.View {
                     }
                     .padding(14)
                     .background(CSSTheme.cardBackground)
-                    .cornerRadius(18)
+                    .cornerRadius(CSSTheme.cornerRadius)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(CSSTheme.border, lineWidth: 1.5)
+                        RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
+                            .stroke(CSSTheme.border, lineWidth: 1.0)
                     )
-                    .shadow(color: CSSTheme.shadow, radius: 10, x: 0, y: 5)
+                    .shadow(color: CSSTheme.primary.opacity(0.07), radius: 10, x: 0, y: 5)
 
                     SkySectionCard(
-                        title: "Cài & Gia hạn App qua 4G + VPN",
+                        title: "CÀI & GIA HẠN APP QUA 4G + VPN",
                         icon: "antenna.radiowaves.left.and.right.circle.fill",
                         color: CSSTheme.primary
                     ) {
@@ -2483,7 +2671,7 @@ struct AnisetteDetailSheetView: SwiftUI.View {
     var body: some SwiftUI.View {
         NavigationView {
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 18) {
                     HStack(spacing: 12) {
                         ZStack {
                             Circle()
@@ -2507,15 +2695,15 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                     }
                     .padding(14)
                     .background(CSSTheme.cardBackground)
-                    .cornerRadius(18)
+                    .cornerRadius(CSSTheme.cornerRadius)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(CSSTheme.border, lineWidth: 1.5)
+                        RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
+                            .stroke(CSSTheme.border, lineWidth: 1.0)
                     )
-                    .shadow(color: CSSTheme.shadow, radius: 10, x: 0, y: 5)
+                    .shadow(color: CSSTheme.primary.opacity(0.07), radius: 10, x: 0, y: 5)
 
                     SkySectionCard(
-                        title: "Chế độ xác thực Anisette",
+                        title: "CHẾ ĐỘ XÁC THỰC ANISETTE",
                         icon: "switch.2",
                         color: CSSTheme.primary
                     ) {
@@ -2564,7 +2752,7 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                     }
 
                     SkySectionCard(
-                        title: "Chọn Máy chủ Anisette",
+                        title: "CHỌN MÁY CHỦ ANISETTE",
                         icon: "server.rack",
                         color: CSSTheme.secondary,
                         trailingView: listVM.isLoading ? AnyView(ProgressView().tint(CSSTheme.primary)) : nil

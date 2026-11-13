@@ -1,4 +1,3 @@
-
 //
 //  SourcesViewController.swift
 //  AltStore
@@ -7,40 +6,72 @@
 //  Copyright © 2020 Riley Testut. All rights reserved.
 //
 
-import UIKit
+@preconcurrency import UIKit
 import CoreData
-import Nuke
+@preconcurrency import Nuke
 
 class SourcesViewController: UICollectionViewController
 {
+    var deepLinkSourceURL: URL? {
+        didSet {
+            guard let deepLinkSourceURL = self.deepLinkSourceURL, self.isViewLoaded else { return }
+            self.addSource(with: deepLinkSourceURL)
+        }
+    }
+    
     private lazy var dataSource = self.makeDataSource()
+    private lazy var placeholderView = PlaceholderView(frame: .zero)
     
     override func viewDidLoad()
     {
         super.viewDidLoad()
         
-        self.collectionView.backgroundColor = .altBackground
+        self.title = AppStrings.Sources.title
+        self.applyCSSNavigationBar(tintColor: AppUI.Colors.blue, transparentEdge: true)
+        
+        self.view.backgroundColor = .clear
+        self.view.applyCSSBodyGradient()
+        self.collectionView.backgroundColor = .clear
         
         let layout = self.makeLayout()
         self.collectionView.collectionViewLayout = layout
         
-        self.collectionView.register(SourceCollectionViewCell.self, forCellWithReuseIdentifier: CellContentGenericCellIdentifier)
-        self.collectionView.register(CollectionSectionHeaderView.self, forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader, withReuseIdentifier: "HeaderView")
+        self.collectionView.register(AppBannerCollectionViewCell.self, forCellWithReuseIdentifier: CellContentGenericCellIdentifier)
+        
+        self.placeholderView.textLabel.text = AppStrings.Sources.noSources
+        self.placeholderView.detailTextLabel.text = AppStrings.Sources.YouHaveNotAddedAnySources
+        self.dataSource.placeholderView = self.placeholderView
         
         self.collectionView.dataSource = self.dataSource
         self.collectionView.prefetchDataSource = self.dataSource
+        self.dataSource.contentView = self.collectionView
         
-        self.navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(SourcesViewController.addSource))
+        self.navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(SourcesViewController.addSourceButtonTapped))
         
         let exportBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "square.and.arrow.up"), style: .plain, target: self, action: #selector(SourcesViewController.exportSources))
         self.navigationItem.leftBarButtonItem = exportBarButtonItem
     }
     
+    override func viewDidLayoutSubviews()
+    {
+        super.viewDidLayoutSubviews()
+        self.view.updateCSSBodyGradientFrame()
+    }
+    
     override func viewWillAppear(_ animated: Bool)
     {
         super.viewWillAppear(animated)
-        
         self.fetchSources()
+    }
+    
+    override func viewDidAppear(_ animated: Bool)
+    {
+        super.viewDidAppear(animated)
+        
+        if let deepLinkSourceURL = self.deepLinkSourceURL {
+            self.deepLinkSourceURL = nil
+            self.addSource(with: deepLinkSourceURL)
+        }
     }
 }
 
@@ -48,18 +79,17 @@ private extension SourcesViewController
 {
     func makeLayout() -> UICollectionViewCompositionalLayout
     {
-        let itemSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1.0), heightDimension: .estimated(100))
+        let itemSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1.0), heightDimension: .estimated(88))
         let item = NSCollectionLayoutItem(layoutSize: itemSize)
         
-        let groupSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1.0), heightDimension: .estimated(100))
+        let groupSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1.0), heightDimension: .estimated(88))
         let group = NSCollectionLayoutGroup.horizontal(layoutSize: groupSize, subitems: [item])
         
         let section = NSCollectionLayoutSection(group: group)
         section.interGroupSpacing = 12
         section.contentInsets = NSDirectionalEdgeInsets(top: 15, leading: 15, bottom: 20, trailing: 15)
         
-        let layout = UICollectionViewCompositionalLayout(section: section)
-        return layout
+        return UICollectionViewCompositionalLayout(section: section)
     }
     
     func makeDataSource() -> FetchedResultsCollectionViewPrefetchingDataSource<Source, UIImage>
@@ -72,45 +102,36 @@ private extension SourcesViewController
         let dataSource = FetchedResultsCollectionViewPrefetchingDataSource<Source, UIImage>(fetchedResultsController: fetchedResultsController)
         dataSource.cellIdentifierHandler = { _ in CellContentGenericCellIdentifier }
         dataSource.cellConfigurationHandler = { (cell, source, indexPath) in
-            let cell = cell as! SourceCollectionViewCell
-            cell.nameLabel.text = source.name
-            cell.subtitleLabel.text = source.sourceURL.absoluteString
-            
-            cell.iconImageView.image = nil
-            cell.iconImageView.isHidden = false
-            
-            let isAltStoreSource = (source.identifier == Source.altStoreIdentifier)
-            cell.deleteButton.isHidden = isAltStoreSource
-            cell.deleteButton.tag = indexPath.item
-            cell.deleteButton.addTarget(self, action: #selector(SourcesViewController.removeSource(_:)), for: .touchUpInside)
+            let cell = cell as! AppBannerCollectionViewCell
+            cell.bannerView.titleLabel.text = source.name
+            cell.bannerView.subtitleLabel.text = source.sourceURL.absoluteString
+            cell.bannerView.iconImageView.image = nil
+            cell.bannerView.iconImageView.isIndicatingActivity = true
+            cell.bannerView.button.isHidden = true
+            cell.bannerView.applyCSSBannerShadow()
         }
         dataSource.prefetchHandler = { (source, _) in
             guard let iconURL = source.effectiveIconURL else { return nil }
             return try await ImagePipeline.shared.image(for: iconURL)
         }
         dataSource.prefetchCompletionHandler = { (cell, image, indexPath, error) in
-            let cell = cell as! SourceCollectionViewCell
-            cell.iconImageView.image = image ?? UIImage(named: "DefaultAppIcon")
+            let cell = cell as! AppBannerCollectionViewCell
+            cell.bannerView.iconImageView.isIndicatingActivity = false
+            cell.bannerView.iconImageView.image = image ?? UIImage(named: "DefaultAppIcon")
         }
-        
-        let placeholderView = PlaceholderView.instantiate(with: PlaceholderView.nib!)
-        placeholderView.textLabel.text = AppStrings.Sources.noSources
-        placeholderView.detailTextLabel.text = AppStrings.Sources.YouHaveNotAddedAnySources
-        dataSource.placeholderView = placeholderView
         
         return dataSource
     }
     
     func fetchSources()
     {
-        AppManager.shared.updateAllSources { (result) in
+        AppManager.shared.updateAllSources { [weak self] (result) in
             DispatchQueue.main.async {
+                guard let self = self else { return }
                 switch result
                 {
                 case .failure(let error):
-                    let toastView = ToastView(error: error)
-                    toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
-                    
+                    ToastView(error: error).show(in: self)
                 case .success:
                     self.collectionView.reloadData()
                 }
@@ -118,7 +139,7 @@ private extension SourcesViewController
         }
     }
     
-    @objc func addSource()
+    @objc func addSourceButtonTapped()
     {
         let alertController = UIAlertController(title: AppStrings.Sources.addSourceTitle, message: AppStrings.Sources.addSourceMessage, preferredStyle: .alert)
         alertController.addTextField { (textField) in
@@ -140,6 +161,11 @@ private extension SourcesViewController
         self.present(alertController, animated: true, completion: nil)
     }
     
+    func addSource(with url: URL)
+    {
+        self.addSources(from: url.absoluteString)
+    }
+    
     func addSources(from input: String)
     {
         let urls = input.components(separatedBy: .whitespacesAndNewlines)
@@ -152,45 +178,43 @@ private extension SourcesViewController
             return
         }
         
-        Task {
-            for url in urls {
-                do {
-                    let source = try await AppManager.shared.addSource(sourceURL: url)
-                    try await source.managedObjectContext?.perform {
-                        try source.managedObjectContext?.save()
-                    }
-                } catch {
-                    await MainActor.run {
-                        let toastView = ToastView(error: error)
-                        toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
+        for url in urls {
+            AppManager.shared.addSource(sourceURL: url, presentingViewController: self) { [weak self] result in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    switch result {
+                    case .failure(let error):
+                        ToastView(error: error).show(in: self)
+                    case .success:
+                        self.fetchSources()
                     }
                 }
-            }
-            
-            await MainActor.run {
-                self.fetchSources()
             }
         }
     }
     
-    @objc func removeSource(_ sender: UIButton)
+    func confirmRemoveSource(_ source: Source, sourceView: UIView? = nil)
     {
-        let indexPath = IndexPath(item: sender.tag, section: 0)
-        let source = self.dataSource.item(at: indexPath)
-        
         let alertController = UIAlertController(
             title: String(format: AppStrings.Sources.removeSourceConfirmTitle, source.name),
             message: AppStrings.Sources.removeSourceConfirmMessage,
             preferredStyle: .actionSheet
         )
-        alertController.popoverPresentationController?.sourceView = sender
-        alertController.popoverPresentationController?.sourceRect = sender.bounds
-        alertController.addAction(UIAlertAction(title: AppStrings.Common.remove, style: .destructive) { _ in
-            AppManager.shared.remove(source) { result in
+        if let sourceView = sourceView {
+            alertController.popoverPresentationController?.sourceView = sourceView
+            alertController.popoverPresentationController?.sourceRect = sourceView.bounds
+        } else {
+            alertController.popoverPresentationController?.sourceView = self.view
+            alertController.popoverPresentationController?.sourceRect = CGRect(x: self.view.bounds.midX, y: self.view.bounds.midY, width: 0, height: 0)
+        }
+        
+        alertController.addAction(UIAlertAction(title: AppStrings.Common.remove, style: .destructive) { [weak self] _ in
+            guard let self = self else { return }
+            AppManager.shared.remove(source, presentingViewController: self) { [weak self] result in
                 DispatchQueue.main.async {
+                    guard let self = self else { return }
                     if case .failure(let error) = result {
-                        let toastView = ToastView(error: error)
-                        toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
+                        ToastView(error: error).show(in: self)
                     }
                 }
             }
@@ -213,17 +237,28 @@ private extension SourcesViewController
             text: AppStrings.Sources.copiedToClipboardTitle,
             detailText: AppStrings.Sources.copiedToClipboardMessage(count: sources.count)
         )
-        toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
+        toastView.show(in: self)
     }
 }
 
 extension SourcesViewController
 {
+    override func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath)
+    {
+        let source = self.dataSource.item(at: indexPath)
+        guard let browseVC = self.storyboard?.instantiateViewController(identifier: "browseViewController", creator: { coder in
+            return BrowseViewController(source: source, coder: coder)
+        }) else { return }
+        
+        self.navigationController?.pushViewController(browseVC, animated: true)
+    }
+
+    #if !os(tvOS)
     override func collectionView(_ collectionView: UICollectionView, contextMenuConfigurationForItemAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration?
     {
         let source = self.dataSource.item(at: indexPath)
         
-        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
             let copyAction = UIAction(title: AppStrings.Sources.copyURL, image: UIImage(systemName: "doc.on.doc")) { _ in
                 UIPasteboard.general.url = source.sourceURL
             }
@@ -231,16 +266,8 @@ extension SourcesViewController
             var actions = [copyAction]
             
             if source.identifier != Source.altStoreIdentifier {
-                let deleteAction = UIAction(title: AppStrings.Common.remove, image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
-                    guard let self = self else { return }
-                    AppManager.shared.remove(source) { result in
-                        DispatchQueue.main.async {
-                            if case .failure(let error) = result {
-                                let toastView = ToastView(error: error)
-                                toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
-                            }
-                        }
-                    }
+                let deleteAction = UIAction(title: AppStrings.Common.remove, image: UIImage(systemName: "trash"), attributes: .destructive) { _ in
+                    self?.confirmRemoveSource(source, sourceView: collectionView.cellForItem(at: indexPath))
                 }
                 actions.append(deleteAction)
             }
@@ -248,4 +275,5 @@ extension SourcesViewController
             return UIMenu(title: source.name, children: actions)
         }
     }
+    #endif
 }

@@ -1,252 +1,251 @@
+
 //
 //  SourcesViewController.swift
 //  AltStore
 //
-//  Created by Riley Testut on 3/23/20.
+//  Created by Riley Testut on 1/31/20.
 //  Copyright © 2020 Riley Testut. All rights reserved.
 //
 
 import UIKit
-import SwiftUI
 import CoreData
-import Combine
 import Nuke
 
-final class SourcesViewController: UICollectionViewController {
-    private lazy var dataSource = makeDataSource()
-    private lazy var placeholderView = PlaceholderView(frame: .zero)
-
-    private var cancellables = Set<AnyCancellable>()
-    private var prototypeCell: SourceCollectionViewCell!
-    private var cachedItemSizes = [String: CGSize]()
-
-    override func viewDidLoad() {
+class SourcesViewController: UICollectionViewController
+{
+    private lazy var dataSource = self.makeDataSource()
+    
+    override func viewDidLoad()
+    {
         super.viewDidLoad()
-
-        // Đồng bộ thanh Navigation Bar kính mờ (.site-header) và nền Gradient từ ThemeManager
-        applyCSSNavigationBar(tintColor: AppUI.Colors.blue, transparentEdge: true)
-        view.backgroundColor = .clear
-        view.applyCSSBodyGradient()
-
-        prototypeCell = SourceCollectionViewCell.instantiate()
-        prototypeCell.contentView.translatesAutoresizingMaskIntoConstraints = false
-
-        collectionView.backgroundColor = .clear
-        collectionView.alwaysBounceVertical = true
-        collectionView.register(SourceCollectionViewCell.nib, forCellWithReuseIdentifier: RSTCellContentGenericCellIdentifier)
-        collectionView.dataSource = dataSource
-        collectionView.prefetchDataSource = dataSource
-
-        let refreshControl = UIRefreshControl(frame: .zero, primaryAction: UIAction { [weak self] _ in
-            self?.updateSources()
-        })
-        refreshControl.tintColor = AppUI.Colors.blue
-        collectionView.refreshControl = refreshControl
-
-        // Khung PlaceholderView chuẩn thẻ CSS từ ThemeManager
-        placeholderView.textLabel.applySectionTitle(text: AppStrings.Sources.noSources)
-        placeholderView.textLabel.isHidden = false
-        placeholderView.detailTextLabel.text = AppStrings.Sources.YouHaveNotAddedAnySources
-        placeholderView.detailTextLabel.textColor = AppUI.Colors.dark
-        placeholderView.detailTextLabel.isHidden = false
-        placeholderView.activityIndicatorView.stopAnimating()
-
-        // Nút bấm chuẩn CSS (.btn) có đổ bóng xanh và hiệu ứng nhún từ ThemeManager
-        let button = UIButton(type: .system, primaryAction: UIAction { [weak self] _ in
-            self?.showAddSourceView()
-        })
-        button.applyCSSButton(
-            title: AppStrings.Sources.viewRecommendedSources,
-            style: .primaryBlue,
-            fontSize: 16,
-            contentInsets: NSDirectionalEdgeInsets(top: 12, leading: 22, bottom: 12, trailing: 22)
-        )
-
-        placeholderView.stackView.spacing = 20
-        placeholderView.stackView.addArrangedSubview(button)
-        placeholderView.stackView.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 24, leading: 24, bottom: 24, trailing: 24)
-        placeholderView.stackView.isLayoutMarginsRelativeArrangement = true
-        placeholderView.stackView.applyCSSCardStyle()
-
-        preparePipeline()
+        
+        self.collectionView.backgroundColor = .altBackground
+        
+        let layout = self.makeLayout()
+        self.collectionView.collectionViewLayout = layout
+        
+        self.collectionView.register(SourceCollectionViewCell.self, forCellWithReuseIdentifier: CellContentGenericCellIdentifier)
+        self.collectionView.register(CollectionSectionHeaderView.self, forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader, withReuseIdentifier: "HeaderView")
+        
+        self.collectionView.dataSource = self.dataSource
+        self.collectionView.prefetchDataSource = self.dataSource
+        
+        self.navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(SourcesViewController.addSource))
+        
+        let exportBarButtonItem = UIBarButtonItem(image: UIImage(systemName: "square.and.arrow.up"), style: .plain, target: self, action: #selector(SourcesViewController.exportSources))
+        self.navigationItem.leftBarButtonItem = exportBarButtonItem
     }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        view.updateCSSBodyGradientFrame()
-    }
-
-    override func viewWillAppear(_ animated: Bool) {
+    
+    override func viewWillAppear(_ animated: Bool)
+    {
         super.viewWillAppear(animated)
-        update()
-    }
-
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        if dataSource.itemCount == 0 {
-            updateSources()
-        }
+        
+        self.fetchSources()
     }
 }
 
-private extension SourcesViewController {
-    func preparePipeline() {
-        AppManager.shared.$updateSourcesResult
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.update() }
-            .store(in: &cancellables)
+private extension SourcesViewController
+{
+    func makeLayout() -> UICollectionViewCompositionalLayout
+    {
+        let itemSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1.0), heightDimension: .estimated(100))
+        let item = NSCollectionLayoutItem(layoutSize: itemSize)
+        
+        let groupSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1.0), heightDimension: .estimated(100))
+        let group = NSCollectionLayoutGroup.horizontal(layoutSize: groupSize, subitems: [item])
+        
+        let section = NSCollectionLayoutSection(group: group)
+        section.interGroupSpacing = 12
+        section.contentInsets = NSDirectionalEdgeInsets(top: 15, leading: 15, bottom: 20, trailing: 15)
+        
+        let layout = UICollectionViewCompositionalLayout(section: section)
+        return layout
     }
-
-    func makeDataSource() -> RSTFetchedResultsCollectionViewPrefetchingDataSource<Source, UIImage> {
+    
+    func makeDataSource() -> FetchedResultsCollectionViewPrefetchingDataSource<Source, UIImage>
+    {
         let fetchRequest = Source.fetchRequest() as NSFetchRequest<Source>
         fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \Source.name, ascending: true)]
-        fetchRequest.returnsObjectsAsFaults = false
-
-        let dataSource = RSTFetchedResultsCollectionViewPrefetchingDataSource<Source, UIImage>(fetchRequest: fetchRequest, managedObjectContext: DatabaseManager.shared.viewContext)
-        dataSource.placeholderView = placeholderView
-        dataSource.cellConfigurationHandler = { [weak self] (cell, source, _) in
-            guard let self else { return }
+        
+        let fetchedResultsController = NSFetchedResultsController(fetchRequest: fetchRequest, managedObjectContext: DatabaseManager.shared.viewContext, sectionNameKeyPath: nil, cacheName: nil)
+        
+        let dataSource = FetchedResultsCollectionViewPrefetchingDataSource<Source, UIImage>(fetchedResultsController: fetchedResultsController)
+        dataSource.cellIdentifierHandler = { _ in CellContentGenericCellIdentifier }
+        dataSource.cellConfigurationHandler = { (cell, source, indexPath) in
             let cell = cell as! SourceCollectionViewCell
-            cell.backgroundColor = .clear
-            cell.contentView.backgroundColor = .clear
-            cell.layoutMargins.left = self.view.layoutMargins.left
-            cell.layoutMargins.right = self.view.layoutMargins.right
-
-            cell.configure(for: source)
-            cell.bannerView.applyCSSBannerShadow()
-
-            cell.bannerView.iconImageView.image = nil
-            cell.bannerView.iconImageView.isIndicatingActivity = true
-            cell.bannerView.button.isHidden = true
-            cell.tintColor = source.effectiveTintColor ?? AppUI.Colors.blue
+            cell.nameLabel.text = source.name
+            cell.subtitleLabel.text = source.sourceURL.absoluteString
+            
+            cell.iconImageView.image = nil
+            cell.iconImageView.isHidden = false
+            
+            let isAltStoreSource = (source.identifier == Source.altStoreIdentifier)
+            cell.deleteButton.isHidden = isAltStoreSource
+            cell.deleteButton.tag = indexPath.item
+            cell.deleteButton.addTarget(self, action: #selector(SourcesViewController.removeSource(_:)), for: .touchUpInside)
         }
-        dataSource.prefetchHandler = { (source, _, completionHandler) in
+        dataSource.prefetchHandler = { (source, _) in
             guard let iconURL = source.effectiveIconURL else { return nil }
-            return RSTAsyncBlockOperation { operation in
-                ImagePipeline.shared.loadImage(with: iconURL, progress: nil) { result in
-                    guard !operation.isCancelled else { return operation.finish() }
-                    switch result {
-                    case .success(let response): completionHandler(response.image, nil)
-                    case .failure(let error): completionHandler(nil, error)
-                    }
-                    operation.finish()
+            return try await ImagePipeline.shared.image(for: iconURL)
+        }
+        dataSource.prefetchCompletionHandler = { (cell, image, indexPath, error) in
+            let cell = cell as! SourceCollectionViewCell
+            cell.iconImageView.image = image ?? UIImage(named: "DefaultAppIcon")
+        }
+        
+        let placeholderView = PlaceholderView.instantiate(with: PlaceholderView.nib!)
+        placeholderView.textLabel.text = AppStrings.Sources.noSources
+        placeholderView.detailTextLabel.text = AppStrings.Sources.YouHaveNotAddedAnySources
+        dataSource.placeholderView = placeholderView
+        
+        return dataSource
+    }
+    
+    func fetchSources()
+    {
+        AppManager.shared.updateAllSources { (result) in
+            DispatchQueue.main.async {
+                switch result
+                {
+                case .failure(let error):
+                    let toastView = ToastView(error: error)
+                    toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
+                    
+                case .success:
+                    self.collectionView.reloadData()
                 }
             }
         }
-        dataSource.prefetchCompletionHandler = { (cell, image, _, error) in
-            let cell = cell as! SourceCollectionViewCell
-            cell.bannerView.iconImageView.isIndicatingActivity = false
-            cell.bannerView.iconImageView.image = image
-            if let error { print("Error loading image:", error) }
+    }
+    
+    @objc func addSource()
+    {
+        let alertController = UIAlertController(title: AppStrings.Sources.addSourceTitle, message: AppStrings.Sources.addSourceMessage, preferredStyle: .alert)
+        alertController.addTextField { (textField) in
+            textField.placeholder = "https://example.com/apps.json"
+            textField.keyboardType = .URL
+            textField.autocapitalizationType = .none
+            textField.autocorrectionType = .no
         }
-        return dataSource
+        alertController.addAction(.cancel)
+        
+        let addAction = UIAlertAction(title: AppStrings.Common.add, style: .default) { [weak self] _ in
+            guard let text = alertController.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !text.isEmpty else { return }
+            
+            self?.addSources(from: text)
+        }
+        alertController.addAction(addAction)
+        
+        self.present(alertController, animated: true, completion: nil)
     }
-
-    func update() {
-        cachedItemSizes = [:]
-        collectionView.collectionViewLayout.invalidateLayout()
-    }
-
-    func updateSources() {
-        AppManager.shared.updateAllSources { [weak self] result in
-            guard let self else { return }
-            self.collectionView.refreshControl?.endRefreshing()
-            if case .failure(let error) = result {
-                ToastView(error: error, opensLog: true).show(in: self)
+    
+    func addSources(from input: String)
+    {
+        let urls = input.components(separatedBy: .whitespacesAndNewlines)
+            .compactMap { URL(string: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        
+        guard !urls.isEmpty else {
+            let alert = UIAlertController(title: AppStrings.Error.invalidURLTitle, message: AppStrings.Error.invalidURLMessage, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: systemLocalizedString("OK"), style: .default))
+            self.present(alert, animated: true)
+            return
+        }
+        
+        Task {
+            for url in urls {
+                do {
+                    let source = try await AppManager.shared.addSource(sourceURL: url)
+                    try await source.managedObjectContext?.perform {
+                        try source.managedObjectContext?.save()
+                    }
+                } catch {
+                    await MainActor.run {
+                        let toastView = ToastView(error: error)
+                        toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
+                    }
+                }
             }
-            self.update()
+            
+            await MainActor.run {
+                self.fetchSources()
+            }
         }
     }
-
-    @IBAction func showAddSourceView() {
-        let addSourceView = AddSourceView { [weak self] in
-            self?.dismiss(animated: true)
-        }
-        let hostingController = UIHostingController(rootView: addSourceView)
-        present(hostingController, animated: true)
-    }
-
-    @IBAction func copySourcesToClipboard(_ sender: UIBarButtonItem) {
-        let sourceURLs = dataSource.items.map { $0.sourceURL.absoluteString }
-        guard !sourceURLs.isEmpty else { return }
-
-        UIPasteboard.general.string = sourceURLs.joined(separator: "\n")
-
-        let alert = UIAlertController(
-            title: AppStrings.Sources.copiedToClipboardTitle,
-            message: AppStrings.Sources.copiedToClipboardMessage(count: sourceURLs.count),
-            preferredStyle: .alert
+    
+    @objc func removeSource(_ sender: UIButton)
+    {
+        let indexPath = IndexPath(item: sender.tag, section: 0)
+        let source = self.dataSource.item(at: indexPath)
+        
+        let alertController = UIAlertController(
+            title: String(format: AppStrings.Sources.removeSourceConfirmTitle, source.name),
+            message: AppStrings.Sources.removeSourceConfirmMessage,
+            preferredStyle: .actionSheet
         )
-        alert.addAction(UIAlertAction(title: RSTSystemLocalizedString("OK"), style: .default))
-        present(alert, animated: true)
+        alertController.popoverPresentationController?.sourceView = sender
+        alertController.popoverPresentationController?.sourceRect = sender.bounds
+        alertController.addAction(UIAlertAction(title: AppStrings.Common.remove, style: .destructive) { _ in
+            AppManager.shared.remove(source) { result in
+                DispatchQueue.main.async {
+                    if case .failure(let error) = result {
+                        let toastView = ToastView(error: error)
+                        toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
+                    }
+                }
+            }
+        })
+        alertController.addAction(.cancel)
+        self.present(alertController, animated: true)
+    }
+    
+    @objc func exportSources()
+    {
+        let sources = self.dataSource.fetchedResultsController.fetchedObjects ?? []
+        let urls = sources
+            .filter { $0.identifier != Source.altStoreIdentifier }
+            .map { $0.sourceURL.absoluteString }
+            .joined(separator: "\n")
+        
+        UIPasteboard.general.string = urls
+        
+        let toastView = ToastView(
+            text: AppStrings.Sources.copiedToClipboardTitle,
+            detailText: AppStrings.Sources.copiedToClipboardMessage(count: sources.count)
+        )
+        toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
     }
 }
 
-extension SourcesViewController: UICollectionViewDelegateFlowLayout {
-    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
-        let source = dataSource.item(at: indexPath)
-        if let previousSize = cachedItemSizes[source.identifier] { return previousSize }
-
-        dataSource.cellConfigurationHandler(prototypeCell, source, indexPath)
-        let horizontalInsets = view.layoutMargins.left + view.layoutMargins.right
-        let widthConstraint = prototypeCell.contentView.widthAnchor.constraint(equalToConstant: collectionView.bounds.width - horizontalInsets)
-        widthConstraint.isActive = true
-        defer { widthConstraint.isActive = false }
-
-        prototypeCell.frame.size.width = widthConstraint.constant
-        prototypeCell.layoutIfNeeded()
-
-        let itemSize = prototypeCell.contentView.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
-        cachedItemSizes[source.identifier] = itemSize
-        return itemSize
-    }
-
-    override func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        let source = dataSource.item(at: indexPath)
-        let sourceDetailsView = SourceDetailsView(source: source)
-        let hostingController = UIHostingController(rootView: sourceDetailsView)
-        navigationController?.pushViewController(hostingController, animated: true)
-    }
-
-    override func collectionView(_ collectionView: UICollectionView, contextMenuConfigurationForItemAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
-        let source = dataSource.item(at: indexPath)
-        return UIContextMenuConfiguration(identifier: indexPath as NSIndexPath, previewProvider: {
-            UIHostingController(rootView: SourceDetailsView(source: source))
-        }) { [weak self] _ in
+extension SourcesViewController
+{
+    override func collectionView(_ collectionView: UICollectionView, contextMenuConfigurationForItemAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration?
+    {
+        let source = self.dataSource.item(at: indexPath)
+        
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
             let copyAction = UIAction(title: AppStrings.Sources.copyURL, image: UIImage(systemName: "doc.on.doc")) { _ in
                 UIPasteboard.general.url = source.sourceURL
             }
-            guard source.identifier != Source.altStoreIdentifier else {
-                return UIMenu(title: "", children: [copyAction])
-            }
-            let removeAction = UIAction(title: AppStrings.Common.remove(), image: UIImage(systemName: "trash"), attributes: [.destructive]) { _ in
-                self?.remove(source)
-            }
-            return UIMenu(title: "", children: [copyAction, removeAction])
-        }
-    }
-
-    override func collectionView(_ collectionView: UICollectionView, willPerformPreviewActionForMenuWith configuration: UIContextMenuConfiguration, animator: UIContextMenuInteractionCommitAnimating) {
-        guard let indexPath = configuration.identifier as? IndexPath else { return }
-        let source = dataSource.item(at: indexPath)
-        animator.addCompletion {
-            let hostingController = UIHostingController(rootView: SourceDetailsView(source: source))
-            self.navigationController?.pushViewController(hostingController, animated: true)
-        }
-    }
-
-    private func remove(_ source: Source) {
-        AppManager.shared.remove(source, presentingViewController: self) { [weak self] result in
-            guard let self else { return }
-            DispatchQueue.main.async {
-                switch result {
-                case .failure(OperationError.cancelled): break
-                case .failure(let error):
-                    ToastView(error: error, opensLog: true).show(in: self)
-                case .success:
-                    self.update()
+            
+            var actions = [copyAction]
+            
+            if source.identifier != Source.altStoreIdentifier {
+                let deleteAction = UIAction(title: AppStrings.Common.remove, image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
+                    guard let self = self else { return }
+                    AppManager.shared.remove(source) { result in
+                        DispatchQueue.main.async {
+                            if case .failure(let error) = result {
+                                let toastView = ToastView(error: error)
+                                toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
+                            }
+                        }
+                    }
                 }
+                actions.append(deleteAction)
             }
+            
+            return UIMenu(title: source.name, children: actions)
         }
     }
 }

@@ -21,7 +21,7 @@ import SemanticVersion
 import SideSign
 import UniformTypeIdentifiers
 
-// MARK: - 🎨 BỘ GIAO DIỆN CSS THEME
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME
 private struct CSSTheme {
     static let white = UIColor.white
     static let light = UIColor(red: 248/255, green: 249/255, blue: 250/255, alpha: 1.0) // #f8f9fa
@@ -32,9 +32,13 @@ private struct CSSTheme {
     static let magenta = UIColor(red: 255/255, green: 0/255, blue: 255/255, alpha: 1.0) // #ff00ff
     static let dark = UIColor(red: 52/255, green: 58/255, blue: 64/255, alpha: 1.0) // #343a40
     
-    // Gradient Background Colors (#f3e0ff -> #e0f7ff)
+    // Gradient Background (#f3e0ff -> #e0f7ff)
     static let bgGradientStart = UIColor(red: 243/255, green: 224/255, blue: 255/255, alpha: 1.0).cgColor
     static let bgGradientEnd = UIColor(red: 224/255, green: 247/255, blue: 255/255, alpha: 1.0).cgColor
+    
+    // Hero Gradient (rgba(0,123,255,.85) -> rgba(111,66,193,.75))
+    static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.9).cgColor
+    static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.85).cgColor
     
     static let cornerRadius: CGFloat = 15.0
 }
@@ -141,6 +145,7 @@ final class SettingsViewController: UITableViewController
     private var accountVerificationTask: Task<Void, Never>?
     
     private var prototypeHeaderFooterView: SettingsHeaderFooterView!
+    private var heroGradientLayer: CAGradientLayer?
     
     @IBOutlet private var betaTrackLabel: UILabel!
     @IBOutlet private var betaTrackPopupButton: UIButton!
@@ -171,7 +176,6 @@ final class SettingsViewController: UITableViewController
     @IBOutlet private var recreateDatabaseSwitch: UISwitch!
     
     #if !os(tvOS)
-    // Đổi sang darkContent vì nền Gradient mới có tông màu sáng
     override var preferredStatusBarStyle: UIStatusBarStyle {
         return .darkContent
     }
@@ -246,10 +250,10 @@ final class SettingsViewController: UITableViewController
         self.versionLabel.lineBreakMode = .byWordWrapping
         self.versionLabel.setNeedsUpdateConstraints()
         
-        self.tableView.contentInset.bottom = 40
+        self.tableView.contentInset.bottom = 50
         
-        // ✨ ÁP DỤNG GIAO DIỆN CSS MỚI ✨
-        self.applyBeautifulCSSTheme()
+        // ✨ KÍCH HOẠT GIAO DIỆN WEB CSS ✨
+        self.applySmartWebCSSTheme()
         
         self.update()
         configureReleaseChannelButton()
@@ -257,10 +261,13 @@ final class SettingsViewController: UITableViewController
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        // Cập nhật kích thước nền Gradient khi xoay màn hình
         if let bgView = self.tableView.backgroundView,
            let gradientLayer = bgView.layer.sublayers?.first as? CAGradientLayer {
             gradientLayer.frame = self.tableView.bounds
+        }
+        if let heroHeader = self.tableView.tableHeaderView,
+           let heroCard = heroHeader.subviews.first {
+            self.heroGradientLayer?.frame = heroCard.bounds
         }
     }
     
@@ -301,11 +308,11 @@ final class SettingsViewController: UITableViewController
     }
 }
 
-// MARK: - ✨ HÀM CẤU HÌNH GIAO DIỆN CSS
+// MARK: - ✨ HỆ THỐNG RENDER CSS THÔNG MINH
 private extension SettingsViewController {
     
-    func applyBeautifulCSSTheme() {
-        // 1. Tạo nền Gradient (linear-gradient(to right, #f3e0ff, #e0f7ff))
+    func applySmartWebCSSTheme() {
+        // 1. Nền Body: linear-gradient(to right, #f3e0ff, #e0f7ff)
         let bgView = UIView(frame: self.tableView.bounds)
         let gradientLayer = CAGradientLayer()
         gradientLayer.frame = self.tableView.bounds
@@ -316,14 +323,18 @@ private extension SettingsViewController {
         
         self.tableView.backgroundView = bgView
         self.tableView.backgroundColor = .clear
-        self.tableView.separatorColor = CSSTheme.border
+        self.tableView.separatorStyle = .none // Tắt vạch kẻ mặc định xấu xí của iOS
         
-        // 2. Navigation Bar hiệu ứng kính mờ (backdrop-filter: blur(20px))
+        // 2. Tạo khối .hero Banner ở đầu trang cài đặt
+        setupCSSHeroBanner()
+        
+        // 3. Thanh điều hướng kính mờ (.site-header / nav)
         #if !os(tvOS)
         let navAppearance = UINavigationBarAppearance()
         navAppearance.configureWithTransparentBackground()
-        navAppearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterialLight)
-        navAppearance.backgroundColor = CSSTheme.white.withAlphaComponent(0.75)
+        navAppearance.backgroundEffect = UIBlurEffect(style: .systemThinMaterialLight)
+        navAppearance.backgroundColor = CSSTheme.white.withAlphaComponent(0.8)
+        navAppearance.shadowColor = CSSTheme.magenta.withAlphaComponent(0.15)
         navAppearance.titleTextAttributes = [
             .foregroundColor: CSSTheme.blue,
             .font: UIFont.systemFont(ofSize: 18, weight: .bold)
@@ -335,21 +346,10 @@ private extension SettingsViewController {
         
         self.navigationController?.navigationBar.standardAppearance = navAppearance
         self.navigationController?.navigationBar.scrollEdgeAppearance = navAppearance
-        self.navigationController?.navigationBar.tintColor = CSSTheme.purple
-        
-        if let tabAppearance = self.tabBarController?.tabBar.standardAppearance {
-            tabAppearance.configureWithTransparentBackground()
-            tabAppearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterialLight)
-            tabAppearance.backgroundColor = CSSTheme.white.withAlphaComponent(0.85)
-            tabAppearance.stackedLayoutAppearance.normal.badgeBackgroundColor = CSSTheme.purple
-            self.tabBarController?.tabBar.standardAppearance = tabAppearance
-            if #available(iOS 15.0, *) {
-                self.tabBarController?.tabBar.scrollEdgeAppearance = tabAppearance
-            }
-        }
+        self.navigationController?.navigationBar.tintColor = CSSTheme.blue
         #endif
         
-        // 3. Làm đẹp các công tắc UISwitch (Màu tím + Đổ bóng Glow)
+        // 4. Làm đẹp các công tắc UISwitch (Đổ bóng Neon)
         let switches = [
             self.backgroundRefreshSwitch, self.noIdleTimeoutSwitch, self.disableAppLimitSwitch,
             self.betaUpdatesSwitch, self.verboseOperationsLoggingSwitch, self.altSignVerboseLoggingSwitch,
@@ -359,15 +359,15 @@ private extension SettingsViewController {
         
         for sw in switches {
             guard let sw = sw else { continue }
-            sw.onTintColor = CSSTheme.purple
+            sw.onTintColor = CSSTheme.blue
             sw.thumbTintColor = CSSTheme.white
-            sw.layer.shadowColor = CSSTheme.purple.cgColor
-            sw.layer.shadowOffset = CGSize(width: 0, height: 3)
-            sw.layer.shadowRadius = 6
-            sw.layer.shadowOpacity = 0.25
+            sw.layer.shadowColor = CSSTheme.blue.cgColor
+            sw.layer.shadowOffset = CGSize(width: 0, height: 4)
+            sw.layer.shadowRadius = 8
+            sw.layer.shadowOpacity = 0.3
         }
         
-        // 4. Làm đẹp nút chọn kênh Beta (Giống .lang-btn trong CSS)
+        // 5. Nút chọn kênh Beta (Chuẩn class .lang-btn trong CSS)
         if let btn = self.betaTrackPopupButton {
             btn.backgroundColor = CSSTheme.white
             btn.setTitleColor(CSSTheme.blue, for: .normal)
@@ -375,19 +375,20 @@ private extension SettingsViewController {
             btn.layer.cornerRadius = 10
             btn.layer.borderWidth = 1.5
             btn.layer.borderColor = CSSTheme.border.cgColor
+            // box-shadow: 0 10px 20px rgba(255,0,255,.25)
             btn.layer.shadowColor = CSSTheme.magenta.cgColor
-            btn.layer.shadowOffset = CGSize(width: 0, height: 4)
-            btn.layer.shadowRadius = 8
-            btn.layer.shadowOpacity = 0.2
-            btn.contentEdgeInsets = UIEdgeInsets(top: 6, left: 12, bottom: 6, right: 12)
+            btn.layer.shadowOffset = CGSize(width: 0, height: 6)
+            btn.layer.shadowRadius = 12
+            btn.layer.shadowOpacity = 0.28
+            btn.contentEdgeInsets = UIEdgeInsets(top: 8, left: 16, bottom: 8, right: 16)
         }
         
-        // 5. Làm đẹp các nút Mạng xã hội (Giống .tab-button trong CSS)
+        // 6. Các nút Mạng xã hội (Chuẩn 4 màu của .tab-button[data-tab="1..4"] trong CSS)
         let socialButtons = [
-            (self.mastodonButton, CSSTheme.purple),
-            (self.threadsButton, CSSTheme.dark),
-            (self.twitterButton, CSSTheme.blue),
-            (self.githubButton, CSSTheme.green)
+            (self.mastodonButton, CSSTheme.magenta), // data-tab="1": #f0f
+            (self.threadsButton, CSSTheme.purple),   // data-tab="2": --purple
+            (self.twitterButton, CSSTheme.blue),     // data-tab="3": --blue
+            (self.githubButton, CSSTheme.green)      // data-tab="4": --green
         ]
         
         for (button, color) in socialButtons {
@@ -398,18 +399,166 @@ private extension SettingsViewController {
             btn.tintColor = color
             btn.imageView?.contentMode = .scaleAspectFit
             
-            btn.backgroundColor = CSSTheme.white.withAlphaComponent(0.95)
+            btn.backgroundColor = CSSTheme.white
             btn.layer.cornerRadius = CSSTheme.cornerRadius
-            btn.layer.borderWidth = 1.5
+            btn.layer.borderWidth = 2.0
             btn.layer.borderColor = CSSTheme.border.cgColor
             btn.layer.shadowColor = color.cgColor
-            btn.layer.shadowOffset = CGSize(width: 0, height: 6)
-            btn.layer.shadowRadius = 12
-            btn.layer.shadowOpacity = 0.25
+            btn.layer.shadowOffset = CGSize(width: 0, height: 8)
+            btn.layer.shadowRadius = 14
+            btn.layer.shadowOpacity = 0.3
             
-            // Thêm hiệu ứng nhún khi bấm
             btn.addTarget(self, action: #selector(animateButtonPress(_:)), for: .touchDown)
             btn.addTarget(self, action: #selector(animateButtonRelease(_:)), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        }
+    }
+    
+    // Tạo khối .hero giống hệt trên Web CSS
+    func setupCSSHeroBanner() {
+        let headerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 145))
+        headerContainer.backgroundColor = .clear
+        
+        let heroCard = UIView()
+        heroCard.translatesAutoresizingMaskIntoConstraints = false
+        heroCard.layer.cornerRadius = CSSTheme.cornerRadius
+        heroCard.layer.masksToBounds = false
+        heroCard.layer.shadowColor = CSSTheme.blue.cgColor
+        heroCard.layer.shadowOffset = CGSize(width: 0, height: 8)
+        heroCard.layer.shadowRadius = 20
+        heroCard.layer.shadowOpacity = 0.25
+        
+        let gradient = CAGradientLayer()
+        gradient.colors = [CSSTheme.heroStart, CSSTheme.heroEnd]
+        gradient.startPoint = CGPoint(x: 0, y: 0)
+        gradient.endPoint = CGPoint(x: 1, y: 1)
+        gradient.cornerRadius = CSSTheme.cornerRadius
+        heroCard.layer.insertSublayer(gradient, at: 0)
+        self.heroGradientLayer = gradient
+        
+        let titleLabel = UILabel()
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.text = "SideStore"
+        titleLabel.font = UIFont.systemFont(ofSize: 28, weight: .heavy)
+        titleLabel.textColor = CSSTheme.white
+        titleLabel.textAlignment = .center
+        titleLabel.layer.shadowColor = UIColor.black.cgColor
+        titleLabel.layer.shadowOffset = CGSize(width: 1, height: 2)
+        titleLabel.layer.shadowRadius = 4
+        titleLabel.layer.shadowOpacity = 0.35
+        
+        let subLabel = UILabel()
+        subLabel.translatesAutoresizingMaskIntoConstraints = false
+        subLabel.text = "Customize & manage your sideloading experience"
+        subLabel.font = UIFont.systemFont(ofSize: 14, weight: .medium)
+        subLabel.textColor = CSSTheme.white.withAlphaComponent(0.95)
+        subLabel.textAlignment = .center
+        
+        heroCard.addSubview(titleLabel)
+        heroCard.addSubview(subLabel)
+        headerContainer.addSubview(heroCard)
+        
+        NSLayoutConstraint.activate([
+            heroCard.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor, constant: 16),
+            heroCard.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -16),
+            heroCard.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 12),
+            heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -12),
+            
+            titleLabel.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
+            titleLabel.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor, constant: -12),
+            
+            subLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 6),
+            subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
+            subLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12)
+        ])
+        
+        // Hiệu ứng Fade-in & Slide-in như @keyframes trong CSS
+        heroCard.alpha = 0
+        heroCard.transform = CGAffineTransform(translationX: 0, y: -15)
+        UIView.animate(withDuration: 0.7, delay: 0.1, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.5, options: .curveEaseOut) {
+            heroCard.alpha = 1
+            heroCard.transform = .identity
+        }
+        
+        self.tableView.tableHeaderView = headerContainer
+    }
+    
+    // Bóc tách lớp nền của InsetGroupTableViewCell để ép nhận diện CSS Card
+    func styleInnerCardOfCell(_ cell: UITableViewCell, at indexPath: IndexPath, totalRows: Int) {
+        cell.backgroundColor = .clear
+        cell.contentView.backgroundColor = .clear
+        
+        // Tìm view nền thực sự bên trong InsetGroupTableViewCell của SideStore
+        let targetCardView: UIView = cell.subviews.first(where: {
+            $0 !== cell.contentView && $0.frame.width > 100 && !($0 is UIButton)
+        }) ?? cell.contentView
+        
+        targetCardView.backgroundColor = CSSTheme.white
+        
+        // Bo góc thông minh: Dòng đầu bo trên, dòng cuối bo dưới, 1 dòng thì bo cả 4 góc
+        var corners: CACornerMask = []
+        if totalRows == 1 {
+            corners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        } else if indexPath.row == 0 {
+            corners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        } else if indexPath.row == totalRows - 1 {
+            corners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        }
+        
+        targetCardView.layer.cornerRadius = corners.isEmpty ? 0 : CSSTheme.cornerRadius
+        targetCardView.layer.maskedCorners = corners
+        
+        // Đổ bóng chuẩn --shadow: 0 8px 20px rgba(0,0,0,.1)
+        cell.layer.masksToBounds = false
+        cell.layer.shadowColor = CSSTheme.blue.cgColor
+        cell.layer.shadowOffset = CGSize(width: 0, height: 6)
+        cell.layer.shadowRadius = 12
+        cell.layer.shadowOpacity = 0.08
+        
+        // Thêm vạch kẻ mảnh (#e9ecef) giữa các dòng trong cùng 1 Card
+        let sepTag = 8888
+        cell.contentView.viewWithTag(sepTag)?.removeFromSuperview()
+        if indexPath.row < totalRows - 1 {
+            let sep = UIView()
+            sep.tag = sepTag
+            sep.backgroundColor = CSSTheme.border
+            sep.translatesAutoresizingMaskIntoConstraints = false
+            cell.contentView.addSubview(sep)
+            NSLayoutConstraint.activate([
+                sep.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 20),
+                sep.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -20),
+                sep.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor),
+                sep.heightAnchor.constraint(equalToConstant: 1.0)
+            ])
+        }
+        
+        // Đổi màu chữ và biến các dòng bấm được thành dạng Nút (.btn)
+        styleLabelsInside(view: cell.contentView, section: Section.allCases[indexPath.section], row: indexPath.row)
+    }
+    
+    func styleLabelsInside(view: UIView, section: Section, row: Int) {
+        for subview in view.subviews {
+            if let label = subview as? UILabel {
+                if label == self.accountEmailLabel || label == self.accountTypeLabel {
+                    label.textColor = CSSTheme.purple
+                    label.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
+                } else if section == .signIn {
+                    // Biến nút Sign In thành .btn-primary
+                    label.textColor = CSSTheme.blue
+                    label.font = UIFont.systemFont(ofSize: 17, weight: .bold)
+                } else if section == .techyThings && row == TechyThingsRow.clearCache.rawValue {
+                    // Nút Clear Cache nổi bật với màu hồng tím (#f0f)
+                    label.textColor = CSSTheme.magenta
+                    label.font = UIFont.systemFont(ofSize: 16, weight: .bold)
+                } else if label.textColor == .systemRed {
+                    label.textColor = CSSTheme.magenta
+                } else {
+                    label.textColor = CSSTheme.dark
+                    if label.font.pointSize >= 16 {
+                        label.font = UIFont.systemFont(ofSize: 16, weight: .medium)
+                    }
+                }
+            }
+            styleLabelsInside(view: subview, section: section, row: row)
         }
     }
     
@@ -434,15 +583,15 @@ private extension SettingsViewController
         
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .center
-        paragraphStyle.lineSpacing = 4
+        paragraphStyle.lineSpacing = 5
         
         let fullString = NSMutableAttributedString()
         
         let appVersionAttr = NSAttributedString(
             string: appVersion,
             attributes: [
-                .font: UIFont.systemFont(ofSize: 14, weight: .semibold),
-                .foregroundColor: CSSTheme.dark.withAlphaComponent(0.8),
+                .font: UIFont.systemFont(ofSize: 14, weight: .bold),
+                .foregroundColor: CSSTheme.blue,
                 .paragraphStyle: paragraphStyle
             ]
         )
@@ -450,8 +599,8 @@ private extension SettingsViewController
         let iosVersionAttr = NSAttributedString(
             string: "\n" + iosVersion,
             attributes: [
-                .font: UIFont.systemFont(ofSize: 12, weight: .medium),
-                .foregroundColor: CSSTheme.purple.withAlphaComponent(0.7),
+                .font: UIFont.systemFont(ofSize: 12, weight: .semibold),
+                .foregroundColor: CSSTheme.purple.withAlphaComponent(0.8),
                 .paragraphStyle: paragraphStyle
             ]
         )
@@ -474,13 +623,13 @@ private extension SettingsViewController
         let attributed = NSMutableAttributedString(
             string: "Copied! ",
             attributes: [
-                .font: UIFont.systemFont(ofSize: 14, weight: .bold),
+                .font: UIFont.systemFont(ofSize: 15, weight: .bold),
                 .foregroundColor: CSSTheme.blue,
                 .paragraphStyle: paragraphStyle
             ]
         )
         attributed.append(NSAttributedString(string: "✓", attributes: [
-            .font: UIFont.systemFont(ofSize: 14, weight: .bold),
+            .font: UIFont.systemFont(ofSize: 15, weight: .bold),
             .foregroundColor: CSSTheme.green
         ]))
         self.versionLabel.attributedText = attributed
@@ -581,12 +730,31 @@ private extension SettingsViewController
         settingsHeaderFooterView.secondaryLabel.isHidden = isHeader
         settingsHeaderFooterView.button.isHidden = true
         
-        // Áp dụng màu chữ Header/Footer theo CSS (.features h2)
+        // ✨ Làm đẹp Tiêu đề chuẩn .features h2 và ::after trong CSS ✨
         settingsHeaderFooterView.primaryLabel.textColor = CSSTheme.blue
-        settingsHeaderFooterView.primaryLabel.font = UIFont.systemFont(ofSize: 15, weight: .bold)
+        settingsHeaderFooterView.primaryLabel.font = UIFont.systemFont(ofSize: 16, weight: .heavy)
         settingsHeaderFooterView.secondaryLabel.textColor = CSSTheme.dark.withAlphaComponent(0.75)
+        settingsHeaderFooterView.secondaryLabel.font = UIFont.systemFont(ofSize: 13, weight: .regular)
         
-        settingsHeaderFooterView.layoutMargins.bottom = isHeader ? 0 : 8
+        // Vẽ thanh gạch chân màu xanh (.features h2::after) dưới mỗi tiêu đề
+        let underlineTag = 9991
+        settingsHeaderFooterView.contentView.viewWithTag(underlineTag)?.removeFromSuperview()
+        if isHeader {
+            let underline = UIView()
+            underline.tag = underlineTag
+            underline.backgroundColor = CSSTheme.blue
+            underline.layer.cornerRadius = 1.5
+            underline.translatesAutoresizingMaskIntoConstraints = false
+            settingsHeaderFooterView.contentView.addSubview(underline)
+            NSLayoutConstraint.activate([
+                underline.leadingAnchor.constraint(equalTo: settingsHeaderFooterView.primaryLabel.leadingAnchor),
+                underline.topAnchor.constraint(equalTo: settingsHeaderFooterView.primaryLabel.bottomAnchor, constant: 3),
+                underline.widthAnchor.constraint(equalToConstant: 42),
+                underline.heightAnchor.constraint(equalToConstant: 3)
+            ])
+        }
+        
+        settingsHeaderFooterView.layoutMargins.bottom = isHeader ? 8 : 10
         
         switch section
         {
@@ -606,10 +774,20 @@ private extension SettingsViewController
             
         case .account:
             settingsHeaderFooterView.primaryLabel.text = NSLocalizedString("ACCOUNT", comment: "")
-            settingsHeaderFooterView.button.setTitle(NSLocalizedString("SIGN OUT", comment: ""), for: .normal)
-            settingsHeaderFooterView.button.setTitleColor(CSSTheme.magenta, for: .normal)
-            settingsHeaderFooterView.button.addTarget(self, action: #selector(SettingsViewController.signOut(_:)), for: .primaryActionTriggered)
-            settingsHeaderFooterView.button.isHidden = false
+            
+            // Biến nút SIGN OUT thành nút .btn-secondary nổi bật
+            let btn = settingsHeaderFooterView.button!
+            btn.setTitle(NSLocalizedString("  SIGN OUT  ", comment: ""), for: .normal)
+            btn.setTitleColor(CSSTheme.white, for: .normal)
+            btn.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .bold)
+            btn.backgroundColor = CSSTheme.magenta
+            btn.layer.cornerRadius = 10
+            btn.layer.shadowColor = CSSTheme.magenta.cgColor
+            btn.layer.shadowOffset = CGSize(width: 0, height: 4)
+            btn.layer.shadowRadius = 8
+            btn.layer.shadowOpacity = 0.35
+            btn.addTarget(self, action: #selector(SettingsViewController.signOut(_:)), for: .primaryActionTriggered)
+            btn.isHidden = false
             
         case .appRefresh:
             if isHeader {
@@ -668,7 +846,7 @@ private extension SettingsViewController
         self.prepare(settingsHeaderFooterView, for: section, isHeader: isHeader)
         
         let size = settingsHeaderFooterView.contentView.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
-        return size.height
+        return size.height + (isHeader ? 6 : 0)
     }
     
     private func isSectionHidden(_ section: Section) -> Bool
@@ -965,10 +1143,11 @@ extension SettingsViewController
         return super.tableView(tableView, heightForRowAt: effectiveIndexPath)
     }
     
-    // ✨ ÁP DỤNG CARD STYLE (BO GÓC + ĐỔ BÓNG) CHO TỪNG DÒNG CELL ✨
+    // ✨ CAN THIỆP SÂU VÀO TỪNG CELL ĐỂ ÁP DỤNG CARD THEME ✨
     override func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath)
     {
         let section = Section.allCases[indexPath.section]
+        let totalRows = self.tableView(tableView, numberOfRowsInSection: indexPath.section)
         
         if section == .account {
             if indexPath.row == 2, let insetCell = cell as? InsetGroupTableViewCell {
@@ -982,37 +1161,16 @@ extension SettingsViewController
             }
         }
         
-        // Không đóng khung các dòng chỉ chứa thông tin version hoặc icon mạng xã hội
-        if section == .instructions || section == .patreon {
+        // Không đóng khung phần chữ version và dải nút mạng xã hội
+        if section == .instructions || (section == .patreon && indexPath.row > 0) {
             cell.backgroundColor = .clear
             cell.contentView.backgroundColor = .clear
+            cell.subviews.forEach { if $0 !== cell.contentView { $0.backgroundColor = .clear } }
             return
         }
         
-        // Style giống .tab-container trong CSS (Nền trắng mờ, bo góc 15px, đổ bóng nhẹ)
-        cell.backgroundColor = CSSTheme.white.withAlphaComponent(0.88)
-        cell.layer.masksToBounds = false
-        cell.layer.shadowColor = UIColor.black.cgColor
-        cell.layer.shadowOffset = CGSize(width: 0, height: 4)
-        cell.layer.shadowRadius = 10
-        cell.layer.shadowOpacity = 0.04
-        
-        // Đổi màu chữ bên trong Cell sang màu Dark/Blue của CSS
-        cell.contentView.subviews.forEach { view in
-            if let label = view as? UILabel {
-                if label == self.accountEmailLabel || label == self.accountTypeLabel {
-                    label.textColor = CSSTheme.purple
-                } else {
-                    label.textColor = CSSTheme.dark
-                }
-            }
-        }
-        
-        // Hiệu ứng hover khi chạm vào dòng (background: rgba(0, 123, 255, 0.08))
-        let selectedBg = UIView()
-        selectedBg.backgroundColor = CSSTheme.blue.withAlphaComponent(0.1)
-        selectedBg.layer.cornerRadius = CSSTheme.cornerRadius
-        cell.selectedBackgroundView = selectedBg
+        // Áp dụng cấu trúc Card CSS cho tất cả các dòng còn lại
+        self.styleInnerCardOfCell(cell, at: indexPath, totalRows: totalRows)
     }
     
     override func tableView(_ tableView: UITableView, indentationLevelForRowAt indexPath: IndexPath) -> Int
@@ -1157,12 +1315,12 @@ extension SettingsViewController
 {
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath)
     {
-        // ✨ Hiệu ứng nhún (Spring Bounce Animation) khi chạm vào bất kỳ dòng nào ✨
+        // ✨ Hiệu ứng nhún và trượt nhẹ sang phải 4px giống `nav a:hover { transform: translateX(6px); }` ✨
         if let cell = tableView.cellForRow(at: indexPath) {
             UIView.animate(withDuration: 0.12, animations: {
-                cell.transform = CGAffineTransform(scaleX: 0.96, y: 0.96)
+                cell.transform = CGAffineTransform(translationX: 5, y: -2).scaledBy(x: 0.98, y: 0.98)
             }) { _ in
-                UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.5, initialSpringVelocity: 0.5, options: .curveEaseOut, animations: {
+                UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.5, initialSpringVelocity: 0.5, options: .curveEaseOut, animations: {
                     cell.transform = .identity
                 }, completion: nil)
             }

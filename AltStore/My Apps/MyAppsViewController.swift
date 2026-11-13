@@ -36,15 +36,15 @@ private struct CSSTheme {
     static let magenta = UIColor(red: 255/255, green: 0/255, blue: 255/255, alpha: 1.0) // #ff00ff
     static let textPrimary = UIColor(red: 24/255, green: 28/255, blue: 36/255, alpha: 1.0) // #181c24
     static let textSecondary = UIColor(red: 92/255, green: 102/255, blue: 117/255, alpha: 1.0) // #5c6675
-
+    
     // Gradient Background (#f3e0ff -> #e0f7ff)
     static let bgGradientStart = UIColor(red: 243/255, green: 224/255, blue: 255/255, alpha: 1.0).cgColor
     static let bgGradientEnd = UIColor(red: 224/255, green: 247/255, blue: 255/255, alpha: 1.0).cgColor
-
+    
     // Hero Gradient (rgba(0,123,255,.92) -> rgba(111,66,193,.88))
     static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.92).cgColor
     static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.88).cgColor
-
+    
     static let cornerRadius: CGFloat = 16.0
 }
 
@@ -53,17 +53,17 @@ private final class MyAppsGradientBackgroundView: UIView {
     override class var layerClass: AnyClass {
         return CAGradientLayer.self
     }
-
+    
     override init(frame: CGRect) {
         super.init(frame: frame)
         setupGradient()
     }
-
+    
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         setupGradient()
     }
-
+    
     private func setupGradient() {
         self.overrideUserInterfaceStyle = .light
         guard let gradientLayer = self.layer as? CAGradientLayer else { return }
@@ -283,7 +283,7 @@ class MyAppsViewController: UICollectionViewController
             self.heroGradientLayer?.frame = heroCard.bounds
         }
     }
-
+    
     override func viewDidAppear(_ animated: Bool)
     {
         super.viewDidAppear(animated)
@@ -300,7 +300,7 @@ class MyAppsViewController: UICollectionViewController
     {
         super.viewWillDisappear(animated)
     }
-
+    
     private func updateStatusDot(isReady: Bool)
     {
         DispatchQueue.main.async { [weak self] in
@@ -385,7 +385,7 @@ extension MyAppsViewController: UINavigationControllerDelegate, UIGestureRecogni
         let isRoot = (viewController === navigationController.viewControllers.first)
         updateFloatingBackButton(in: navigationController, show: !isRoot)
     }
-
+    
     private func updateFloatingBackButton(in nav: UINavigationController, show: Bool) {
         if self.floatingBackButton == nil {
             let btn = UIButton(type: .system)
@@ -425,11 +425,11 @@ extension MyAppsViewController: UINavigationControllerDelegate, UIGestureRecogni
             btn.isHidden = !show
         }
     }
-
+    
     @objc private func handleFloatingBackTap() {
         self.navigationController?.popViewController(animated: true)
     }
-
+    
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         #if !os(tvOS)
         if gestureRecognizer === self.navigationController?.interactivePopGestureRecognizer {
@@ -442,7 +442,7 @@ extension MyAppsViewController: UINavigationControllerDelegate, UIGestureRecogni
 
 // MARK: - ✨ HỆ THỐNG RENDER CSS THÔNG MINH & VIỆT HÓA TOÀN DIỆN (CỐ ĐỊNH NỀN SÁNG TRẮNG)
 private extension MyAppsViewController {
-
+    
     func applySmartWebCSSTheme() {
         // 1. Nền Gradient cố định toàn màn hình
         let bgView = MyAppsGradientBackgroundView(frame: UIScreen.main.bounds)
@@ -466,7 +466,7 @@ private extension MyAppsViewController {
         #endif
         self.navigationController?.tabBarItem.title = "Ứng dụng"
     }
-
+    
     func setupCSSHeroBanner() {
         let headerContainer = UIView(frame: CGRect(x: 0, y: -self.heroTopSpace, width: self.collectionView.bounds.width, height: self.heroTopSpace))
         headerContainer.backgroundColor = .clear
@@ -625,7 +625,7 @@ private extension MyAppsViewController {
             heroCard.transform = .identity
         }
     }
-
+    
     func setSideloadingActivity(_ isIndicating: Bool) {
         self.navigationItem.leftBarButtonItem?.isIndicatingActivity = isIndicating
         guard let btn = self.heroSideloadButton, let spinner = self.heroSideloadSpinner else { return }
@@ -642,19 +642,19 @@ private extension MyAppsViewController {
             btn.isUserInteractionEnabled = true
         }
     }
-
+    
     @objc func handleHeroSideloadButtonTap(_ sender: UIButton) {
         animateButtonBounce(sender)
         let barButton = self.navigationItem.leftBarButtonItem ?? UIBarButtonItem()
         self.sideloadApp(barButton)
     }
-
+    
     @objc func handleHeroRefreshAllTap(_ sender: UIButton) {
         animateButtonBounce(sender)
         let barButton = self.navigationItem.rightBarButtonItem ?? UIBarButtonItem()
         self.refreshAllApps(barButton)
     }
-
+    
     func animateButtonBounce(_ sender: UIView) {
         UIView.animate(withDuration: 0.12, animations: {
             sender.transform = CGAffineTransform(scaleX: 0.92, y: 0.92)
@@ -664,7 +664,7 @@ private extension MyAppsViewController {
             }
         }
     }
-
+    
     // Dịch tự động các chuỗi thời gian hết hạn của nút ứng dụng sang tiếng Việt
     func translateDynamicAppText(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -706,7 +706,7 @@ private extension MyAppsViewController {
         result = result.replacingOccurrences(of: "minute", with: "phút")
         return result
     }
-
+    
     // Triệt tiêu hoàn toàn mọi lớp nền tối/blur của hệ thống hoặc của AppBannerView và cố định nền sáng trắng
     func applyWhiteCardAndBlackText(in rootView: UIView) {
         rootView.overrideUserInterfaceStyle = .light
@@ -733,7 +733,7 @@ private extension MyAppsViewController {
             if let label = subview as? UILabel {
                 label.textColor = CSSTheme.textPrimary
             } else if let textView = subview as? UITextView {
-                textView.textColor = CSSTheme.textPrimary
+                textView.textColor = CSSTheme.textSecondary
                 textView.backgroundColor = .clear
             } else if let button = subview as? UIButton {
                 let titleText = (button.title(for: .normal) ?? "").uppercased()
@@ -757,7 +757,7 @@ private extension MyAppsViewController {
             applyWhiteCardAndBlackText(in: subview)
         }
     }
-
+    
     // Làm đẹp từng thẻ Ứng dụng: Cố định nền trắng sáng gốc, bo góc mượt, bóng đổ xanh dịu và tinh chỉnh chữ/icon
     func styleAppCardCell(_ cell: UICollectionViewCell) {
         cell.overrideUserInterfaceStyle = .light
@@ -845,11 +845,17 @@ private extension MyAppsViewController {
             banner.iconImageView.layer.borderWidth = 0.8
             banner.iconImageView.layer.borderColor = CSSTheme.border.cgColor
             
-            updateCell.versionDescriptionTextView.textView.textColor = CSSTheme.textSecondary
+            // Duyệt an toàn qua subviews của CollapsingTextView để đổi màu UITextView mà không đụng phải hàm delegate textView(...)
+            for subview in updateCell.versionDescriptionTextView.subviews {
+                if let innerTextView = subview as? UITextView {
+                    innerTextView.textColor = CSSTheme.textSecondary
+                    innerTextView.backgroundColor = .clear
+                }
+            }
             updateCell.versionDescriptionTextView.toggleButton.setTitleColor(CSSTheme.blue, for: .normal)
         }
     }
-
+    
     // Gắn thanh gạch chân màu xanh (.features h2::after) dưới tiêu đề các mục giống Tab Cài đặt
     func styleSectionHeader(_ headerView: InstalledAppsCollectionHeaderView) {
         headerView.overrideUserInterfaceStyle = .light
@@ -1875,7 +1881,7 @@ private extension MyAppsViewController
 
         self.present(alertController, animated: true)
     }
-    
+
     func deactivate(_ installedApp: InstalledApp, completionHandler: ((Result<InstalledApp, Error>) -> Void)? = nil)
     {
         guard installedApp.isActive else { return }
@@ -2257,7 +2263,7 @@ private extension MyAppsViewController
             self.resign(installedApp, alternateIconMode: .remove)
         }
     }
-    
+
     func enableJIT(for installedApp: InstalledApp) {
         AppManager.shared.enableJIT(for: installedApp) { result in
             DispatchQueue.main.async {
@@ -2295,7 +2301,7 @@ private extension MyAppsViewController
         
         self.presentImportDialog(for: url)
     }
-
+    
     private func presentImportDialog(for url: URL)
     {
         InstallAppDialog.present(
@@ -2427,7 +2433,7 @@ extension MyAppsViewController
         // Đảm bảo mỗi khi cell hiển thị trên màn hình (kể cả khi cuộn nhanh hoặc tái sử dụng), nền luôn được khóa trắng sáng
         self.styleAppCardCell(cell)
     }
-
+    
     override func collectionView(_ collectionView: UICollectionView, viewForSupplementaryElementOfKind kind: String, at indexPath: IndexPath) -> UICollectionReusableView
     {
         let section = Section(rawValue: indexPath.section)!

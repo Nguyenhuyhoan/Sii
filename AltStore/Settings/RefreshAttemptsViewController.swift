@@ -33,7 +33,7 @@ private struct CSSTheme {
     static let cornerRadius: CGFloat = 15.0
 }
 
-// MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH (KHÔNG BỊ TRẮNG KHI CUỘN)
+// MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH (KHÔNG BỊ TRẮNG HAY ĐEN KHI CUỘN/XOÁ)
 private final class CSSGradientBackgroundView: UIView {
     override class var layerClass: AnyClass {
         return CAGradientLayer.self
@@ -50,6 +50,7 @@ private final class CSSGradientBackgroundView: UIView {
     }
 
     private func setupGradient() {
+        self.isUserInteractionEnabled = false
         guard let gradientLayer = self.layer as? CAGradientLayer else { return }
         gradientLayer.colors = [CSSTheme.bgGradientStart, CSSTheme.bgGradientEnd]
         gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
@@ -163,6 +164,11 @@ final class RefreshAttemptsViewController: UITableViewController
     {
         super.viewDidLoad()
 
+        // Khóa cứng giao diện Light Mode để hệ thống không bao giờ đưa về nền đen
+        self.overrideUserInterfaceStyle = .light
+        self.view.overrideUserInterfaceStyle = .light
+        self.tableView.overrideUserInterfaceStyle = .light
+
         // Ẩn tiêu đề mặc định để đồng bộ giao diện tràn viền của Settings
         self.title = nil
         self.navigationItem.title = nil
@@ -186,6 +192,7 @@ final class RefreshAttemptsViewController: UITableViewController
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
+        self.enforceBrightGradientBackground()
         self.setupFloatingClearAllButton(show: true)
         self.updateClearAllButtonState()
     }
@@ -201,6 +208,7 @@ final class RefreshAttemptsViewController: UITableViewController
            let heroCard = heroHeader.subviews.first {
             self.heroGradientLayer?.frame = heroCard.bounds
         }
+        self.enforceBrightGradientBackground()
     }
 
     deinit {
@@ -212,15 +220,90 @@ final class RefreshAttemptsViewController: UITableViewController
 private extension RefreshAttemptsViewController
 {
     func applySmartWebCSSTheme() {
-        // 1. Nền Gradient cố định
-        let bgView = CSSGradientBackgroundView(frame: UIScreen.main.bounds)
-        bgView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        self.tableView.backgroundView = bgView
-        self.tableView.backgroundColor = .clear
+        // 1. Khóa nền Gradient sáng cố định trong mọi trạng thái
+        self.enforceBrightGradientBackground()
         self.tableView.separatorStyle = .none
 
         // 2. Tạo khối Hero Banner phía trên
         setupCSSHeroBanner()
+    }
+
+    /// Đảm bảo nền sáng Gradient luôn hiển thị 100%, kể cả khi xoá hết dữ liệu và PlaceholderView xuất hiện
+    func enforceBrightGradientBackground() {
+        let fallbackBrightColor = UIColor(red: 235/255, green: 238/255, blue: 255/255, alpha: 1.0)
+        self.view.backgroundColor = fallbackBrightColor
+        self.tableView.backgroundColor = fallbackBrightColor
+
+        if let placeholder = self.tableView.backgroundView, !(placeholder is CSSGradientBackgroundView) {
+            placeholder.overrideUserInterfaceStyle = .light
+            placeholder.backgroundColor = .clear
+
+            let bgTag = 992211
+            if let existingGradient = placeholder.viewWithTag(bgTag) {
+                existingGradient.frame = placeholder.bounds
+                placeholder.sendSubviewToBack(existingGradient)
+            } else {
+                let gradientBg = CSSGradientBackgroundView(frame: placeholder.bounds)
+                gradientBg.tag = bgTag
+                gradientBg.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                placeholder.insertSubview(gradientBg, at: 0)
+            }
+        } else if self.tableView.backgroundView == nil {
+            let bgView = CSSGradientBackgroundView(frame: UIScreen.main.bounds)
+            bgView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            self.tableView.backgroundView = bgView
+        }
+    }
+
+    /// Trang trí giao diện Placeholder (khi xóa hết lịch sử) nổi bật và hài hòa trên nền sáng CSS
+    func styleBrightPlaceholderView(_ placeholderView: PlaceholderView) {
+        placeholderView.overrideUserInterfaceStyle = .light
+        placeholderView.backgroundColor = .clear
+
+        // Chèn lớp nền Gradient sáng vào tầng đáy của PlaceholderView
+        let bgTag = 992211
+        if placeholderView.viewWithTag(bgTag) == nil {
+            let gradientBg = CSSGradientBackgroundView(frame: UIScreen.main.bounds)
+            gradientBg.tag = bgTag
+            gradientBg.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            placeholderView.insertSubview(gradientBg, at: 0)
+        }
+
+        // Chỉnh màu chữ và kiểu dáng rõ nét trên nền sáng
+        placeholderView.textLabel.text = "✓ Chưa Có Lịch Sử Làm Mới"
+        placeholderView.textLabel.textColor = CSSTheme.blue
+        placeholderView.textLabel.font = UIFont.systemFont(ofSize: 19, weight: .heavy)
+
+        placeholderView.detailTextLabel.text = "Lịch sử làm mới hiện đang trống.\nKhi bạn sử dụng SideStore, hệ thống sẽ tự động ghi lại chi tiết các lần gia hạn ứng dụng tại đây."
+        placeholderView.detailTextLabel.textColor = CSSTheme.dark.withAlphaComponent(0.85)
+        placeholderView.detailTextLabel.font = UIFont.systemFont(ofSize: 14, weight: .medium)
+
+        // Tạo khung Card trắng bán trong suốt phía sau chữ để cụm thông báo nổi bật, sang trọng
+        if let stackView = placeholderView.textLabel.superview {
+            let cardTag = 992233
+            if placeholderView.viewWithTag(cardTag) == nil {
+                let cardBg = UIView()
+                cardBg.tag = cardTag
+                cardBg.translatesAutoresizingMaskIntoConstraints = false
+                cardBg.backgroundColor = CSSTheme.white.withAlphaComponent(0.88)
+                cardBg.layer.cornerRadius = CSSTheme.cornerRadius + 3
+                cardBg.layer.borderWidth = 1.0
+                cardBg.layer.borderColor = CSSTheme.white.cgColor
+                cardBg.layer.shadowColor = CSSTheme.blue.cgColor
+                cardBg.layer.shadowOffset = CGSize(width: 0, height: 6)
+                cardBg.layer.shadowRadius = 16
+                cardBg.layer.shadowOpacity = 0.12
+                cardBg.isUserInteractionEnabled = false
+
+                placeholderView.insertSubview(cardBg, belowSubview: stackView)
+                NSLayoutConstraint.activate([
+                    cardBg.leadingAnchor.constraint(equalTo: stackView.leadingAnchor, constant: -20),
+                    cardBg.trailingAnchor.constraint(equalTo: stackView.trailingAnchor, constant: 20),
+                    cardBg.topAnchor.constraint(equalTo: stackView.topAnchor, constant: -24),
+                    cardBg.bottomAnchor.constraint(equalTo: stackView.bottomAnchor, constant: 24)
+                ])
+            }
+        }
     }
 
     func setupCSSHeroBanner() {
@@ -385,6 +468,7 @@ private extension RefreshAttemptsViewController
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 self.tableView.reloadData()
+                self.enforceBrightGradientBackground()
                 self.updateClearAllButtonState()
 
                 let toast = ToastView(text: "Đã xoá toàn bộ lịch sử làm mới", detailText: nil)
@@ -428,10 +512,7 @@ private extension RefreshAttemptsViewController
         }
 
         let placeholderView = PlaceholderView()
-        placeholderView.textLabel.text = "Chưa có lịch sử làm mới"
-        placeholderView.detailTextLabel.text = "Khi bạn sử dụng SideStore thường xuyên, hệ thống sẽ ghi lại nhật ký các lần làm mới ứng dụng tại đây."
-        placeholderView.textLabel.textColor = CSSTheme.blue
-        placeholderView.detailTextLabel.textColor = CSSTheme.dark.withAlphaComponent(0.75)
+        self.styleBrightPlaceholderView(placeholderView)
         dataSource.placeholderView = placeholderView
 
         return dataSource

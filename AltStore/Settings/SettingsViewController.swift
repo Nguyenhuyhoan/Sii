@@ -45,7 +45,7 @@ private struct CSSTheme {
 
 extension SettingsViewController
 {
-    private enum Section: Int, CaseIterable
+    fileprivate enum Section: Int, CaseIterable
     {
         case signIn
         case account
@@ -60,7 +60,7 @@ extension SettingsViewController
         case diagnostics
     }
     
-    private enum AppRefreshRow: Int, CaseIterable
+    fileprivate enum AppRefreshRow: Int, CaseIterable
     {
         case backgroundRefresh
         case noIdleTimeout
@@ -77,7 +77,7 @@ extension SettingsViewController
         }
     }
     
-    private enum CreditsRow: Int, CaseIterable
+    fileprivate enum CreditsRow: Int, CaseIterable
     {
         case developer
         case operations
@@ -85,7 +85,7 @@ extension SettingsViewController
         case softwareLicenses
     }
     
-    private enum TechyThingsRow: Int, CaseIterable
+    fileprivate enum TechyThingsRow: Int, CaseIterable
     {
         case healthCheck
         case errorLog
@@ -93,7 +93,7 @@ extension SettingsViewController
         case clearCache
     }
     
-    private enum AdvancedSettingsRow: Int, CaseIterable
+    fileprivate enum AdvancedSettingsRow: Int, CaseIterable
     {
         case sendFeedback
         case refreshAttempts
@@ -126,12 +126,12 @@ extension SettingsViewController
         }
     }
     
-    private enum BetaTestingRow: Int, CaseIterable {
+    fileprivate enum BetaTestingRow: Int, CaseIterable {
         case betaUpdates
         case betaTrack
     }
     
-    private enum DiagnosticsRow: Int, CaseIterable
+    fileprivate enum DiagnosticsRow: Int, CaseIterable
     {
         case developerOptions
         case experimentalFeatures
@@ -311,7 +311,7 @@ final class SettingsViewController: UITableViewController
 // MARK: - ✨ HỆ THỐNG RENDER CSS THÔNG MINH
 private extension SettingsViewController {
     
-    func applySmartWebCSSTheme() {
+    private func applySmartWebCSSTheme() {
         // 1. Nền Body: linear-gradient(to right, #f3e0ff, #e0f7ff)
         let bgView = UIView(frame: self.tableView.bounds)
         let gradientLayer = CAGradientLayer()
@@ -414,7 +414,7 @@ private extension SettingsViewController {
     }
     
     // Tạo khối .hero giống hệt trên Web CSS
-    func setupCSSHeroBanner() {
+    private func setupCSSHeroBanner() {
         let headerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 145))
         headerContainer.backgroundColor = .clear
         
@@ -483,7 +483,7 @@ private extension SettingsViewController {
     }
     
     // Bóc tách lớp nền của InsetGroupTableViewCell để ép nhận diện CSS Card
-    func styleInnerCardOfCell(_ cell: UITableViewCell, at indexPath: IndexPath, totalRows: Int) {
+    private func styleInnerCardOfCell(_ cell: UITableViewCell, at indexPath: IndexPath, totalRows: Int) {
         cell.backgroundColor = .clear
         cell.contentView.backgroundColor = .clear
         
@@ -535,7 +535,7 @@ private extension SettingsViewController {
         styleLabelsInside(view: cell.contentView, section: Section.allCases[indexPath.section], row: indexPath.row)
     }
     
-    func styleLabelsInside(view: UIView, section: Section, row: Int) {
+    private func styleLabelsInside(view: UIView, section: Section, row: Int) {
         for subview in view.subviews {
             if let label = subview as? UILabel {
                 if label == self.accountEmailLabel || label == self.accountTypeLabel {
@@ -562,13 +562,13 @@ private extension SettingsViewController {
         }
     }
     
-    @objc func animateButtonPress(_ sender: UIButton) {
+    @objc private func animateButtonPress(_ sender: UIButton) {
         UIView.animate(withDuration: 0.15, delay: 0, options: .curveEaseInOut) {
             sender.transform = CGAffineTransform(scaleX: 0.92, y: 0.92)
         }
     }
     
-    @objc func animateButtonRelease(_ sender: UIButton) {
+    @objc private func animateButtonRelease(_ sender: UIButton) {
         UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.5, initialSpringVelocity: 0.5, options: .curveEaseOut) {
             sender.transform = .identity
         }
@@ -638,7 +638,7 @@ private extension SettingsViewController
         }
     }
     
-    func update()
+    private func update()
     {
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -857,7 +857,7 @@ private extension SettingsViewController
 
 private extension SettingsViewController
 {
-    func signIn()
+    private func signIn()
     {
         debugLog("[SettingsVC] signIn() invoked by user action")
         Task { @MainActor [weak self] in
@@ -878,7 +878,7 @@ private extension SettingsViewController
         }
     }
     
-    @objc func signOut(_ sender: UIBarButtonItem)
+    @objc private func signOut(_ sender: UIBarButtonItem)
     {
         debugLog("[SettingsVC] signOut() invoked by user action")
         let contentVC = SignOutAlertViewController()
@@ -917,7 +917,7 @@ private extension SettingsViewController
         self.present(alertController, animated: true, completion: nil)
     }
     
-    @IBAction func toggleDisableAppLimit(_ sender: UISwitch) {
+    @IBAction private func toggleDisableAppLimit(_ sender: UISwitch) {
         if UserDefaults.standard.isCowExploitSupported || !ProcessInfo().sparseRestorePatched {
             UserDefaults.standard.isAppLimitDisabled = sender.isOn
             if UserDefaults.standard.activeAppsLimit != nil
@@ -927,28 +927,28 @@ private extension SettingsViewController
         }
     }
     
-    @IBAction func toggleVerboseOperationsLogging(_ sender: UISwitch) {
+    @IBAction private func toggleVerboseOperationsLogging(_ sender: UISwitch) {
         UserDefaults.standard.isVerboseOperationsLoggingEnabled = sender.isOn
     }
     
-    @IBAction func toggleAltSignVerboseLogging(_ sender: UISwitch) {
+    @IBAction private func toggleAltSignVerboseLogging(_ sender: UISwitch) {
         UserDefaults.standard.isAltSignVerboseLoggingEnabled = sender.isOn
         AltSign.setLogging(sender.isOn)
     }
     
-    @IBAction func toggleMinimuxerVerboseLogging(_ sender: UISwitch) {
+    @IBAction private func toggleMinimuxerVerboseLogging(_ sender: UISwitch) {
         UserDefaults.standard.isMinimuxerVerboseLoggingEnabled = sender.isOn
         minimuxerSetLogging(sender.isOn)
     }
     
-    @IBAction func toggleRotateLogsOnStartup(_ sender: UISwitch) {
+    @IBAction private func toggleRotateLogsOnStartup(_ sender: UISwitch) {
         UserDefaults.standard.isRotateLogsOnStartupEnabled = sender.isOn
         let suffixFormat: SuffixFormat = sender.isOn ? .timestamp : .none
         let appDelegate = UIApplication.shared.delegate as! AppDelegate
         appDelegate.consoleLog.updateConfiguration(baseName: "console", suffixFormat: suffixFormat, policy: .immediate)
     }
     
-    @IBAction func toggleRecreateDatabaseSwitch(_ sender: UISwitch) {
+    @IBAction private func toggleRecreateDatabaseSwitch(_ sender: UISwitch) {
         UserDefaults.standard.recreateDatabaseOnNextStart = sender.isOn
         guard sender.isOn else { return }
         
@@ -971,26 +971,26 @@ private extension SettingsViewController
         }
     }
     
-    @IBAction func toggleEnableBetaUpdates(_ sender: UISwitch) {
+    @IBAction private func toggleEnableBetaUpdates(_ sender: UISwitch) {
         betaTrackLabel.isEnabled = sender.isOn
         betaTrackPopupButton.isEnabled = sender.isOn
         UserDefaults.standard.isBetaUpdatesEnabled = sender.isOn
     }
     
-    @IBAction func toggleIsBackgroundRefreshEnabled(_ sender: UISwitch) {
+    @IBAction private func toggleIsBackgroundRefreshEnabled(_ sender: UISwitch) {
         UserDefaults.standard.isBackgroundRefreshEnabled = sender.isOn
     }
     
-    @IBAction func toggleNoIdleTimeoutEnabled(_ sender: UISwitch) {
+    @IBAction private func toggleNoIdleTimeoutEnabled(_ sender: UISwitch) {
         UserDefaults.standard.isIdleTimeoutDisableEnabled = sender.isOn
     }
     
-    @IBAction func toggleDisableResponseCaching(_ sender: UISwitch) {
+    @IBAction private func toggleDisableResponseCaching(_ sender: UISwitch) {
         UserDefaults.standard.responseCachingDisabled = sender.isOn
     }
     
     #if !os(tvOS)
-    func addRefreshAppsShortcut()
+    private func addRefreshAppsShortcut()
     {
         guard let shortcut = INShortcut(intent: INInteraction.refreshAllApps().intent) else { return }
         let viewController = INUIAddVoiceShortcutViewController(shortcut: shortcut)
@@ -1000,7 +1000,7 @@ private extension SettingsViewController
     }
     #endif
     
-    func clearCache()
+    private func clearCache()
     {
         let makeCacheTitle: (String) -> String = { sizeString in
             String(format: NSLocalizedString("Are you sure you want to clear SideStore's cache?\n\nCache Size: %@", comment: ""), sizeString)
@@ -1040,7 +1040,7 @@ private extension SettingsViewController
         }
     }
     
-    @IBAction func handleDebugModeGesture(_ gestureRecognizer: UISwipeGestureRecognizer)
+    @IBAction private func handleDebugModeGesture(_ gestureRecognizer: UISwipeGestureRecognizer)
     {
         self.debugGestureCounter += 1
         self.debugGestureTimer?.invalidate()
@@ -1059,7 +1059,7 @@ private extension SettingsViewController
         }
     }
     
-    func openTwitter(username: String)
+    private func openTwitter(username: String)
     {
         let twitterAppURL = URL(string: "twitter://user?screen_name=" + username)!
         UIApplication.shared.open(twitterAppURL, options: [:]) { (success) in
@@ -1074,7 +1074,7 @@ private extension SettingsViewController
         }
     }
     
-    func openMastodon(username: String)
+    private func openMastodon(username: String)
     {
         let components = username.split(separator: "@")
         guard components.count == 2 else { return }
@@ -1085,21 +1085,21 @@ private extension SettingsViewController
         UIApplication.shared.open(mastodonURL, options: [:])
     }
     
-    func openThreads(username: String)
+    private func openThreads(username: String)
     {
         let safariURL = URL(string: "https://www.threads.net/@" + username)!
         UIApplication.shared.open(safariURL, options: [:])
     }
     
-    @IBAction func followAltStoreMastodon() { self.openMastodon(username: "@sidestoreio@fosstodon.org") }
-    @IBAction func followAltStoreThreads() { self.openThreads(username: "sidestore.io") }
-    @IBAction func followAltStoreTwitter() { self.openTwitter(username: "sidestoreio") }
-    @IBAction func followAltStoreGitHub() { UIApplication.shared.open(AppConstants.URLs.sideStoreGitHub, options: [:]) }
+    @IBAction private func followAltStoreMastodon() { self.openMastodon(username: "@sidestoreio@fosstodon.org") }
+    @IBAction private func followAltStoreThreads() { self.openThreads(username: "sidestore.io") }
+    @IBAction private func followAltStoreTwitter() { self.openTwitter(username: "sidestoreio") }
+    @IBAction private func followAltStoreGitHub() { UIApplication.shared.open(AppConstants.URLs.sideStoreGitHub, options: [:]) }
 }
 
 private extension SettingsViewController
 {
-    @objc func openPatreonSettings(_ notification: Notification)
+    @objc private func openPatreonSettings(_ notification: Notification)
     {
         guard self.presentedViewController == nil else { return }
         UIView.performWithoutAnimation {
@@ -1108,7 +1108,7 @@ private extension SettingsViewController
         }
     }
     
-    @objc func openErrorLog(_: Notification) {
+    @objc private func openErrorLog(_: Notification) {
         guard self.presentedViewController == nil else { return }
         self.navigationController?.popViewController(animated: false)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
@@ -1229,7 +1229,7 @@ extension SettingsViewController
             }
         }
         
-        if AppRefreshRow.AllCases().count == 1
+        if AppRefreshRow.allCases.count == 1
         {
             if let cell = cell as? InsetGroupTableViewCell,
                indexPath.section == Section.appRefresh.rawValue,

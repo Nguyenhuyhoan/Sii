@@ -694,37 +694,72 @@ private extension MyAppsViewController {
         return result
     }
 
-    // Làm đẹp từng thẻ Ứng dụng theo phong cách Card CSS
+    // Chỉnh toàn bộ nền khung thành trắng tinh và chữ màu đen giống khung dưới CÔNG CỤ KỸ THUẬT của SettingsViewController
+    func applyWhiteCardAndBlackText(in rootView: UIView) {
+        for subview in rootView.subviews {
+            if let effectView = subview as? UIVisualEffectView {
+                effectView.effect = nil
+                effectView.backgroundColor = .clear
+                effectView.contentView.backgroundColor = .clear
+            } else if let label = subview as? UILabel {
+                label.textColor = .black
+            } else if let textView = subview as? UITextView {
+                textView.textColor = .black
+            } else if let button = subview as? UIButton {
+                button.setTitleColor(.black, for: .normal)
+                button.setTitleColor(.black, for: .highlighted)
+                button.setTitleColor(.black, for: .selected)
+                button.titleLabel?.textColor = .black
+                if button is PillButton {
+                    button.backgroundColor = CSSTheme.light
+                    button.layer.borderWidth = 1.0
+                    button.layer.borderColor = CSSTheme.border.cgColor
+                }
+            }
+            applyWhiteCardAndBlackText(in: subview)
+        }
+    }
+
+    // Làm đẹp từng thẻ Ứng dụng giống hệt khung màu trắng dưới CÔNG CỤ KỸ THUẬT của SettingsViewController
     func styleAppCardCell(_ cell: UICollectionViewCell) {
+        cell.backgroundColor = .clear
+        cell.contentView.backgroundColor = .clear
+        
+        // Đổ bóng xanh dịu giống hệt styleInnerCardOfCell trong SettingsViewController
         cell.layer.masksToBounds = false
         cell.layer.shadowColor = CSSTheme.blue.cgColor
         cell.layer.shadowOffset = CGSize(width: 0, height: 5)
-        cell.layer.shadowRadius = 12
-        cell.layer.shadowOpacity = 0.10
+        cell.layer.shadowRadius = 10
+        cell.layer.shadowOpacity = 0.07
         
         if let appCell = cell as? InstalledAppCollectionViewCell {
+            appCell.bannerView.backgroundColor = CSSTheme.white
             appCell.bannerView.layer.cornerRadius = CSSTheme.cornerRadius
-            appCell.bannerView.layer.borderWidth = 1.0
-            appCell.bannerView.layer.borderColor = CSSTheme.border.cgColor
+            appCell.bannerView.layer.masksToBounds = true
+            appCell.bannerView.layer.borderWidth = 0.0
+            
             if let btnTitle = appCell.bannerView.button.title(for: .normal) {
                 appCell.bannerView.button.setTitle(translateDynamicAppText(btnTitle), for: .normal)
             }
+            applyWhiteCardAndBlackText(in: appCell.bannerView)
+            
         } else if let updateCell = cell as? UpdateCollectionViewCell {
+            updateCell.contentView.backgroundColor = CSSTheme.white
+            updateCell.contentView.layer.cornerRadius = CSSTheme.cornerRadius
+            updateCell.contentView.layer.masksToBounds = true
+            
+            updateCell.bannerView.backgroundColor = CSSTheme.white
             updateCell.bannerView.layer.cornerRadius = CSSTheme.cornerRadius
+            updateCell.bannerView.layer.masksToBounds = true
+            updateCell.bannerView.layer.borderWidth = 0.0
+            
             if let btnTitle = updateCell.bannerView.button.title(for: .normal) {
                 updateCell.bannerView.button.setTitle(translateDynamicAppText(btnTitle), for: .normal)
             }
             if let toggleTitle = updateCell.versionDescriptionTextView.toggleButton.title(for: .normal) {
                 updateCell.versionDescriptionTextView.toggleButton.setTitle(translateDynamicAppText(toggleTitle), for: .normal)
             }
-        } else if let noUpdatesCell = cell as? NoUpdatesCollectionViewCell {
-            noUpdatesCell.blurView.layer.cornerRadius = CSSTheme.cornerRadius
-            noUpdatesCell.blurView.layer.masksToBounds = true
-            noUpdatesCell.blurView.backgroundColor = CSSTheme.white.withAlphaComponent(0.92)
-            noUpdatesCell.blurView.layer.borderWidth = 1.2
-            noUpdatesCell.blurView.layer.borderColor = CSSTheme.border.cgColor
-            noUpdatesCell.textLabel.textColor = CSSTheme.purple
-            noUpdatesCell.textLabel.font = UIFont.systemFont(ofSize: 14, weight: .bold)
+            applyWhiteCardAndBlackText(in: updateCell.contentView)
         }
     }
 
@@ -761,35 +796,14 @@ private extension MyAppsViewController
         return dataSource
     }
     
+    // Đã xóa bỏ hoàn toàn khung "Mọi ứng dụng đều đã được cập nhật mới nhất"
     func makeNoUpdatesDataSource() -> DynamicCollectionViewDataSource<InstalledApp>
     {
         let dynamicDataSource = DynamicCollectionViewDataSource<InstalledApp>()
         dynamicDataSource.numberOfSectionsHandler = { 1 }
-        dynamicDataSource.numberOfItemsHandler = { _ in self.updatesDataSource.itemCount == 0 ? 1 : 0 }
+        dynamicDataSource.numberOfItemsHandler = { _ in 0 }
         dynamicDataSource.cellIdentifierHandler = { _ in "NoUpdatesCell" }
-        dynamicDataSource.dynamicCellConfigurationHandler = { [weak self] (cell, indexPath) in
-            guard let self = self else { return }
-            let cell = cell as! NoUpdatesCollectionViewCell
-            cell.layoutMargins.left = self.view.layoutMargins.left
-            cell.layoutMargins.right = self.view.layoutMargins.right
-            
-            cell.button.addTarget(self, action: #selector(MyAppsViewController.showHiddenUpdatesAlert(_:)), for: .primaryActionTriggered)
-            
-            if !self.unsupportedUpdates.isEmpty
-            {
-                cell.textLabel.text = "Có bản cập nhật không tương thích"
-                cell.button.isHidden = false
-                cell.button.tintColor = CSSTheme.magenta
-            }
-            else
-            {
-                cell.textLabel.text = "✓ Mọi ứng dụng đều đã được cập nhật mới nhất"
-                cell.button.isHidden = true
-            }
-            
-            self.styleAppCardCell(cell)
-        }
-        
+        dynamicDataSource.dynamicCellConfigurationHandler = { _, _ in }
         return dynamicDataSource
     }
     
@@ -811,7 +825,7 @@ private extension MyAppsViewController
             cell.layoutMargins.left = self.view.layoutMargins.left
             cell.layoutMargins.right = self.view.layoutMargins.right
             
-            cell.tintColor = app.tintColor ?? CSSTheme.blue
+            cell.tintColor = .black
             cell.versionDescriptionTextView.maximumNumberOfLines = 3
             cell.versionDescriptionTextView.text = latestSupportedVersion.localizedDescription ?? "Không có mô tả chi tiết cho bản cập nhật này."
             
@@ -900,12 +914,11 @@ private extension MyAppsViewController
         dataSource.cellIdentifierHandler = { _ in "AppCell" }
         dataSource.cellConfigurationHandler = { [weak self] (cell, installedApp, indexPath) in
             guard let self = self else { return }
-            let tintColor = installedApp.storeApp?.tintColor ?? CSSTheme.blue
             
             let cell = cell as! InstalledAppCollectionViewCell
             cell.layoutMargins.left = self.view.layoutMargins.left
             cell.layoutMargins.right = self.view.layoutMargins.right
-            cell.tintColor = tintColor
+            cell.tintColor = .black
             
             cell.deactivateBadge?.isHidden = false
             
@@ -996,12 +1009,11 @@ private extension MyAppsViewController
         dataSource.cellIdentifierHandler = { _ in "AppCell" }
         dataSource.cellConfigurationHandler = { [weak self] (cell, installedApp, indexPath) in
             guard let self = self else { return }
-            let tintColor = installedApp.storeApp?.tintColor ?? CSSTheme.purple
             
             let cell = cell as! InstalledAppCollectionViewCell
             cell.layoutMargins.left = self.view.layoutMargins.left
             cell.layoutMargins.right = self.view.layoutMargins.right
-            cell.tintColor = UIColor.gray
+            cell.tintColor = .black
             
             if cell.bundleIdentifier != installedApp.bundleIdentifier
             {
@@ -1019,7 +1031,7 @@ private extension MyAppsViewController
             cell.bannerView.button.isIndicatingActivity = false
             cell.bannerView.configure(for: installedApp, action: .custom("KÍCH HOẠT"))
             
-            cell.bannerView.button.tintColor = tintColor
+            cell.bannerView.button.tintColor = .black
             cell.bannerView.button.removeTarget(self, action: nil, for: .primaryActionTriggered)
             cell.bannerView.button.addTarget(self, action: #selector(MyAppsViewController.activateApp(_:)), for: .primaryActionTriggered)
             cell.bannerView.button.accessibilityLabel = String(format: "Kích hoạt %@", installedApp.name)
@@ -1092,14 +1104,6 @@ private extension MyAppsViewController
         {
             self.navigationController?.tabBarItem.badgeValue = nil
             UIApplication.shared.applicationIconBadgeNumber = 0
-        }
-        
-        guard self.isViewLoaded && self.view.window != nil else { return }
-        
-        if !self.isCheckingForUpdates && !self.isRefreshingAllApps
-        {
-            let indexPath = IndexPath(row: 0, section: Section.noUpdates.rawValue)
-            self.collectionView.reconfigureItems(at: [indexPath])
         }
     }
     
@@ -2815,8 +2819,7 @@ extension MyAppsViewController: UICollectionViewDelegateFlowLayout
         switch section
         {
         case .noUpdates:
-            let size = CGSize(width: collectionView.bounds.width, height: 46)
-            return size
+            return .zero
             
         case .updates:
             let item = self.dataSource.item(at: indexPath)
@@ -2886,7 +2889,7 @@ extension MyAppsViewController: UICollectionViewDelegateFlowLayout
         let section = Section.allCases[section]
         switch section
         {
-        case .noUpdates where self.updatesDataSource.itemCount != 0: return .zero
+        case .noUpdates: return .zero
         case .updates where self.updatesDataSource.itemCount == 0: return .zero
         default: return UIEdgeInsets(top: 12, left: 0, bottom: 20, right: 0)
         }
@@ -3133,16 +3136,8 @@ extension MyAppsViewController: NSFetchedResultsControllerDelegate
                 let previousUpdateCount = self.collectionView.numberOfItems(inSection: Section.updates.rawValue)
                 let updateCount = Int(self.updatesDataSource.itemCount)
                 
-                if previousUpdateCount == 0 && updateCount > 0
+                if previousUpdateCount > 0 && updateCount == 0
                 {
-                    let change = CellContentChange(type: .delete, currentIndexPath: IndexPath(item: 0, section: Section.noUpdates.rawValue), destinationIndexPath: nil)
-                    self.collectionView.add(change)
-                }
-                else if previousUpdateCount > 0 && updateCount == 0
-                {
-                    let change = CellContentChange(type: .insert, currentIndexPath: nil, destinationIndexPath: IndexPath(item: 0, section: Section.noUpdates.rawValue))
-                    self.collectionView.add(change)
-                    
                     self.updateUnsupportedUpdates()
                 }
             

@@ -1,4 +1,3 @@
-
 //
 //  UserCustomizationsView.swift
 //  SideStore
@@ -7,6 +6,13 @@
 //
 
 import SwiftUI
+import UIKit
+
+private struct PresetColorItem: Identifiable, Hashable {
+    let name: String
+    let hex: String
+    var id: String { hex }
+}
 
 struct UserCustomizationsView: View {
     @AppStorage("hideAppDescriptions") private var hideAppDescriptions = false
@@ -22,14 +28,14 @@ struct UserCustomizationsView: View {
     @State private var isExportingLogs = false
     @State private var logFileURL: URL?
     
-    private let presetColors: [(name: String, hex: String)] = [
-        ("SideStore Purple", "#6552CC"),
-        ("AltStore Teal", "#008080"),
-        ("Ocean Blue", "#007AFF"),
-        ("Emerald Green", "#34C759"),
-        ("Sunset Orange", "#FF9500"),
-        ("Crimson Red", "#FF3B30"),
-        ("Hot Pink", "#FF2D55")
+    private let presetColors: [PresetColorItem] = [
+        PresetColorItem(name: "SideStore Purple", hex: "#6552CC"),
+        PresetColorItem(name: "AltStore Teal", hex: "#008080"),
+        PresetColorItem(name: "Ocean Blue", hex: "#007AFF"),
+        PresetColorItem(name: "Emerald Green", hex: "#34C759"),
+        PresetColorItem(name: "Sunset Orange", hex: "#FF9500"),
+        PresetColorItem(name: "Crimson Red", hex: "#FF3B30"),
+        PresetColorItem(name: "Hot Pink", hex: "#FF2D55")
     ]
     
     var body: some View {
@@ -61,7 +67,7 @@ struct UserCustomizationsView: View {
                         
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {
-                                ForEach(presetColors, id: \.hex) { preset in
+                                ForEach(presetColors) { preset in
                                     Button {
                                         if let color = Color(hex: preset.hex) {
                                             selectedColor = color
@@ -77,7 +83,7 @@ struct UserCustomizationsView: View {
                                                     .stroke(Color.primary, lineWidth: customTintColorHex == preset.hex ? 2 : 0)
                                             )
                                     }
-                                    .accessibilityLabel("\(AppStrings.Customizations.colorDescription) \(preset.name)")
+                                    .accessibilityLabel(Text("\(AppStrings.Customizations.colorDescription) \(preset.name)"))
                                 }
                             }
                             .padding(.vertical, 4)
@@ -125,18 +131,22 @@ struct UserCustomizationsView: View {
                 selectedColor = savedColor
             }
         }
-        .alert(AppStrings.Customizations.clearLogsConfirmationTitle, isPresented: $showingClearLogsAlert) {
-            Button(AppStrings.Common.cancel, role: .cancel) {}
-            Button(AppStrings.Common.delete, role: .destructive) {
-                clearLogs()
-            }
-        } message: {
-            Text(AppStrings.Customizations.clearLogsConfirmationMessage)
+        .alert(isPresented: $showingClearLogsAlert) {
+            Alert(
+                title: Text(AppStrings.Customizations.clearLogsConfirmationTitle),
+                message: Text(AppStrings.Customizations.clearLogsConfirmationMessage),
+                primaryButton: .destructive(Text(AppStrings.Common.delete)) {
+                    clearLogs()
+                },
+                secondaryButton: .cancel(Text(AppStrings.Common.cancel))
+            )
         }
-        .alert(AppStrings.Customizations.cacheClearedTitle, isPresented: $showingCacheClearedAlert) {
-            Button(systemLocalizedString("OK"), role: .cancel) {}
-        } message: {
-            Text(AppStrings.Customizations.cacheClearedMessage)
+        .alert(isPresented: $showingCacheClearedAlert) {
+            Alert(
+                title: Text(AppStrings.Customizations.cacheClearedTitle),
+                message: Text(AppStrings.Customizations.cacheClearedMessage),
+                dismissButton: .default(Text(systemLocalizedString("OK")))
+            )
         }
         .sheet(isPresented: $isExportingLogs) {
             if let logFileURL = logFileURL {
@@ -212,25 +222,5 @@ private extension Color {
         let g = Float(components[1])
         let b = Float(components[2])
         return String(format: "#%02lX%02lX%02lX", lroundf(r * 255), lroundf(g * 255), lroundf(b * 255))
-    }
-}
-
-private extension UIColor {
-    convenience init?(hex: String) {
-        var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        hexSanitized = hexSanitized.replacingOccurrences(of: "#", with: "")
-        
-        var rgb: UInt64 = 0
-        guard Scanner(string: hexSanitized).scanHexInt64(&rgb) else { return nil }
-        
-        let length = hexSanitized.count
-        if length == 6 {
-            let r = CGFloat((rgb & 0xFF0000) >> 16) / 255.0
-            let g = CGFloat((rgb & 0x00FF00) >> 8) / 255.0
-            let b = CGFloat(rgb & 0x0000FF) / 255.0
-            self.init(red: r, green: g, blue: b, alpha: 1.0)
-        } else {
-            return nil
-        }
     }
 }

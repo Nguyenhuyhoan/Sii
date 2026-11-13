@@ -21,16 +21,21 @@ import Nuke
 
 private let maximumCollapsedUpdatesCount = 2
 
-// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ VỚI TAB CÀI ĐẶT)
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ VỚI TAB CÀI ĐẶT & CỐ ĐỊNH NỀN SÁNG)
 private struct CSSTheme {
     static let white = UIColor.white
     static let light = UIColor(red: 248/255, green: 249/255, blue: 250/255, alpha: 1.0) // #f8f9fa
-    static let border = UIColor(red: 233/255, green: 236/255, blue: 239/255, alpha: 1.0) // #e9ecef
+    static let border = UIColor(red: 230/255, green: 235/255, blue: 242/255, alpha: 1.0) // #e6ebf2
     static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0) // #007bff
+    static let pillBg = UIColor(red: 238/255, green: 245/255, blue: 255/255, alpha: 1.0) // #eef5ff
+    static let pillBorder = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.22)
     static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0) // #6f42c1
     static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0) // #28a745
+    static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0) // #dc3545
+    static let redBg = UIColor(red: 255/255, green: 240/255, blue: 242/255, alpha: 1.0)
     static let magenta = UIColor(red: 255/255, green: 0/255, blue: 255/255, alpha: 1.0) // #ff00ff
-    static let dark = UIColor(red: 52/255, green: 58/255, blue: 64/255, alpha: 1.0) // #343a40
+    static let textPrimary = UIColor(red: 24/255, green: 28/255, blue: 36/255, alpha: 1.0) // #181c24
+    static let textSecondary = UIColor(red: 92/255, green: 102/255, blue: 117/255, alpha: 1.0) // #5c6675
 
     // Gradient Background (#f3e0ff -> #e0f7ff)
     static let bgGradientStart = UIColor(red: 243/255, green: 224/255, blue: 255/255, alpha: 1.0).cgColor
@@ -40,10 +45,10 @@ private struct CSSTheme {
     static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.92).cgColor
     static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.88).cgColor
 
-    static let cornerRadius: CGFloat = 15.0
+    static let cornerRadius: CGFloat = 16.0
 }
 
-// MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH (KHÔNG BỊ TRẮNG KHI CUỘN XUỐNG DƯỚI)
+// MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH (KHÔNG BỊ TRẮNG HOẶC ĐEN KHI CUỘN)
 private final class MyAppsGradientBackgroundView: UIView {
     override class var layerClass: AnyClass {
         return CAGradientLayer.self
@@ -60,6 +65,7 @@ private final class MyAppsGradientBackgroundView: UIView {
     }
 
     private func setupGradient() {
+        self.overrideUserInterfaceStyle = .light
         guard let gradientLayer = self.layer as? CAGradientLayer else { return }
         gradientLayer.colors = [CSSTheme.bgGradientStart, CSSTheme.bgGradientEnd]
         gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
@@ -153,6 +159,11 @@ class MyAppsViewController: UICollectionViewController
     {
         super.viewDidLoad()
         
+        // Cố định toàn bộ màn hình ở giao diện Sáng (Light Mode) để không bao giờ bị chuyển sang nền đen
+        self.overrideUserInterfaceStyle = .light
+        self.view.overrideUserInterfaceStyle = .light
+        self.collectionView.overrideUserInterfaceStyle = .light
+        
         // Ẩn hoàn toàn thanh điều hướng trắng ở trên cùng để đồng bộ với Tab Cài đặt
         self.title = nil
         self.navigationItem.title = nil
@@ -180,6 +191,7 @@ class MyAppsViewController: UICollectionViewController
                 
         self.prototypeUpdateCell = UpdateCollectionViewCell.instantiate(with: UpdateCollectionViewCell.nib)
         self.prototypeUpdateCell.contentView.translatesAutoresizingMaskIntoConstraints = false
+        self.prototypeUpdateCell.overrideUserInterfaceStyle = .light
         
         self.collectionView.register(UpdateCollectionViewCell.nib, forCellWithReuseIdentifier: "UpdateCell")
         self.collectionView.register(UpdatesCollectionHeaderView.self, forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader, withReuseIdentifier: "UpdatesHeader")
@@ -428,7 +440,7 @@ extension MyAppsViewController: UINavigationControllerDelegate, UIGestureRecogni
     }
 }
 
-// MARK: - ✨ HỆ THỐNG RENDER CSS THÔNG MINH & VIỆT HÓA TOÀN DIỆN
+// MARK: - ✨ HỆ THỐNG RENDER CSS THÔNG MINH & VIỆT HÓA TOÀN DIỆN (CỐ ĐỊNH NỀN SÁNG TRẮNG)
 private extension MyAppsViewController {
 
     func applySmartWebCSSTheme() {
@@ -459,6 +471,7 @@ private extension MyAppsViewController {
         let headerContainer = UIView(frame: CGRect(x: 0, y: -self.heroTopSpace, width: self.collectionView.bounds.width, height: self.heroTopSpace))
         headerContainer.backgroundColor = .clear
         headerContainer.autoresizingMask = [.flexibleWidth]
+        headerContainer.overrideUserInterfaceStyle = .light
         self.heroContainerView = headerContainer
         
         let heroCard = UIView()
@@ -694,77 +707,152 @@ private extension MyAppsViewController {
         return result
     }
 
-    // Chỉnh toàn bộ nền khung thành trắng tinh và chữ màu đen giống khung dưới CÔNG CỤ KỸ THUẬT của SettingsViewController
+    // Triệt tiêu hoàn toàn mọi lớp nền tối/blur của hệ thống hoặc của AppBannerView và cố định nền sáng trắng
     func applyWhiteCardAndBlackText(in rootView: UIView) {
+        rootView.overrideUserInterfaceStyle = .light
         for subview in rootView.subviews {
+            subview.overrideUserInterfaceStyle = .light
+            
+            // Vô hiệu hóa triệt để UIVisualEffectView (nguyên nhân chính gây ra nền đen khi load icon tối màu hoặc Dark Mode)
             if let effectView = subview as? UIVisualEffectView {
                 effectView.effect = nil
                 effectView.backgroundColor = .clear
                 effectView.contentView.backgroundColor = .clear
-            } else if let label = subview as? UILabel {
-                label.textColor = .black
-            } else if let textView = subview as? UITextView {
-                textView.textColor = .black
-            } else if let button = subview as? UIButton {
-                button.setTitleColor(.black, for: .normal)
-                button.setTitleColor(.black, for: .highlighted)
-                button.setTitleColor(.black, for: .selected)
-                button.titleLabel?.textColor = .black
-                if button is PillButton {
-                    button.backgroundColor = CSSTheme.light
-                    button.layer.borderWidth = 1.0
-                    button.layer.borderColor = CSSTheme.border.cgColor
+                effectView.isHidden = true
+                effectView.alpha = 0
+                continue
+            }
+            
+            // Nếu có view nền phụ bên dưới (không phải nút hay ảnh), ép về trong suốt để lộ nền trắng cố định của thẻ
+            if !(subview is UIControl) && !(subview is UIImageView) && !(subview is UILabel) && !(subview is UITextView) && !(subview is UIStackView) {
+                if subview.backgroundColor != nil && subview.backgroundColor != .clear && subview.backgroundColor != CSSTheme.white {
+                    subview.backgroundColor = .clear
                 }
             }
+            
+            if let label = subview as? UILabel {
+                label.textColor = CSSTheme.textPrimary
+            } else if let textView = subview as? UITextView {
+                textView.textColor = CSSTheme.textPrimary
+                textView.backgroundColor = .clear
+            } else if let button = subview as? UIButton {
+                let titleText = (button.title(for: .normal) ?? "").uppercased()
+                let isWarning = titleText.contains("HẾT HẠN") || titleText.contains("THU HỒI") || titleText.contains("EXPIRED") || titleText.contains("REVOKED")
+                let tint = isWarning ? CSSTheme.red : CSSTheme.blue
+                
+                button.tintColor = tint
+                button.setTitleColor(tint, for: .normal)
+                button.setTitleColor(tint.withAlphaComponent(0.7), for: .highlighted)
+                button.setTitleColor(tint, for: .selected)
+                button.titleLabel?.textColor = tint
+                button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .bold)
+                
+                if button is PillButton {
+                    button.backgroundColor = isWarning ? CSSTheme.redBg : CSSTheme.pillBg
+                    button.layer.borderWidth = 1.0
+                    button.layer.borderColor = isWarning ? CSSTheme.red.withAlphaComponent(0.28).cgColor : CSSTheme.pillBorder.cgColor
+                }
+            }
+            
             applyWhiteCardAndBlackText(in: subview)
         }
     }
 
-    // Làm đẹp từng thẻ Ứng dụng giống hệt khung màu trắng dưới CÔNG CỤ KỸ THUẬT của SettingsViewController
+    // Làm đẹp từng thẻ Ứng dụng: Cố định nền trắng sáng gốc, bo góc mượt, bóng đổ xanh dịu và tinh chỉnh chữ/icon
     func styleAppCardCell(_ cell: UICollectionViewCell) {
+        cell.overrideUserInterfaceStyle = .light
+        cell.contentView.overrideUserInterfaceStyle = .light
         cell.backgroundColor = .clear
         cell.contentView.backgroundColor = .clear
+        cell.backgroundView = nil
+        cell.selectedBackgroundView = nil
         
-        // Đổ bóng xanh dịu giống hệt styleInnerCardOfCell trong SettingsViewController
+        // Đổ bóng xanh dịu hiện đại
         cell.layer.masksToBounds = false
         cell.layer.shadowColor = CSSTheme.blue.cgColor
         cell.layer.shadowOffset = CGSize(width: 0, height: 5)
-        cell.layer.shadowRadius = 10
-        cell.layer.shadowOpacity = 0.07
+        cell.layer.shadowRadius = 12
+        cell.layer.shadowOpacity = 0.08
         
         if let appCell = cell as? InstalledAppCollectionViewCell {
-            appCell.bannerView.backgroundColor = CSSTheme.white
-            appCell.bannerView.layer.cornerRadius = CSSTheme.cornerRadius
-            appCell.bannerView.layer.masksToBounds = true
-            appCell.bannerView.layer.borderWidth = 0.0
+            let banner = appCell.bannerView!
+            banner.overrideUserInterfaceStyle = .light
+            banner.backgroundColor = CSSTheme.white
+            banner.tintColor = CSSTheme.blue
+            banner.layer.cornerRadius = CSSTheme.cornerRadius
+            banner.layer.cornerCurve = .continuous
+            banner.layer.masksToBounds = true
+            banner.layer.borderWidth = 1.0
+            banner.layer.borderColor = CSSTheme.border.cgColor
             
-            if let btnTitle = appCell.bannerView.button.title(for: .normal) {
-                appCell.bannerView.button.setTitle(translateDynamicAppText(btnTitle), for: .normal)
+            if let btnTitle = banner.button.title(for: .normal) {
+                banner.button.setTitle(translateDynamicAppText(btnTitle), for: .normal)
             }
-            applyWhiteCardAndBlackText(in: appCell.bannerView)
+            
+            // Đệ quy dọn sạch mọi lớp nền đen/blur và chuẩn hóa nút bấm
+            applyWhiteCardAndBlackText(in: banner)
+            
+            // Tinh chỉnh phân cấp Typography & Icon sau khi dọn nền
+            banner.titleLabel.textColor = CSSTheme.textPrimary
+            banner.titleLabel.font = UIFont.systemFont(ofSize: 16, weight: .bold)
+            banner.subtitleLabel.textColor = CSSTheme.textSecondary
+            banner.subtitleLabel.font = UIFont.systemFont(ofSize: 13, weight: .medium)
+            banner.buttonLabel.textColor = CSSTheme.textSecondary
+            banner.buttonLabel.font = UIFont.systemFont(ofSize: 10.5, weight: .semibold)
+            
+            banner.iconImageView.backgroundColor = CSSTheme.light
+            banner.iconImageView.layer.cornerRadius = 13.5
+            banner.iconImageView.layer.cornerCurve = .continuous
+            banner.iconImageView.layer.masksToBounds = true
+            banner.iconImageView.layer.borderWidth = 0.8
+            banner.iconImageView.layer.borderColor = CSSTheme.border.cgColor
             
         } else if let updateCell = cell as? UpdateCollectionViewCell {
             updateCell.contentView.backgroundColor = CSSTheme.white
             updateCell.contentView.layer.cornerRadius = CSSTheme.cornerRadius
+            updateCell.contentView.layer.cornerCurve = .continuous
             updateCell.contentView.layer.masksToBounds = true
+            updateCell.contentView.layer.borderWidth = 1.0
+            updateCell.contentView.layer.borderColor = CSSTheme.border.cgColor
             
-            updateCell.bannerView.backgroundColor = CSSTheme.white
-            updateCell.bannerView.layer.cornerRadius = CSSTheme.cornerRadius
-            updateCell.bannerView.layer.masksToBounds = true
-            updateCell.bannerView.layer.borderWidth = 0.0
+            let banner = updateCell.bannerView!
+            banner.overrideUserInterfaceStyle = .light
+            banner.backgroundColor = CSSTheme.white
+            banner.tintColor = CSSTheme.blue
+            banner.layer.cornerRadius = CSSTheme.cornerRadius
+            banner.layer.cornerCurve = .continuous
+            banner.layer.masksToBounds = true
+            banner.layer.borderWidth = 0.0
             
-            if let btnTitle = updateCell.bannerView.button.title(for: .normal) {
-                updateCell.bannerView.button.setTitle(translateDynamicAppText(btnTitle), for: .normal)
+            if let btnTitle = banner.button.title(for: .normal) {
+                banner.button.setTitle(translateDynamicAppText(btnTitle), for: .normal)
             }
             if let toggleTitle = updateCell.versionDescriptionTextView.toggleButton.title(for: .normal) {
                 updateCell.versionDescriptionTextView.toggleButton.setTitle(translateDynamicAppText(toggleTitle), for: .normal)
             }
+            
             applyWhiteCardAndBlackText(in: updateCell.contentView)
+            
+            banner.titleLabel.textColor = CSSTheme.textPrimary
+            banner.titleLabel.font = UIFont.systemFont(ofSize: 16, weight: .bold)
+            banner.subtitleLabel.textColor = CSSTheme.textSecondary
+            banner.subtitleLabel.font = UIFont.systemFont(ofSize: 13, weight: .medium)
+            
+            banner.iconImageView.backgroundColor = CSSTheme.light
+            banner.iconImageView.layer.cornerRadius = 13.5
+            banner.iconImageView.layer.cornerCurve = .continuous
+            banner.iconImageView.layer.masksToBounds = true
+            banner.iconImageView.layer.borderWidth = 0.8
+            banner.iconImageView.layer.borderColor = CSSTheme.border.cgColor
+            
+            updateCell.versionDescriptionTextView.textView.textColor = CSSTheme.textSecondary
+            updateCell.versionDescriptionTextView.toggleButton.setTitleColor(CSSTheme.blue, for: .normal)
         }
     }
 
     // Gắn thanh gạch chân màu xanh (.features h2::after) dưới tiêu đề các mục giống Tab Cài đặt
     func styleSectionHeader(_ headerView: InstalledAppsCollectionHeaderView) {
+        headerView.overrideUserInterfaceStyle = .light
         headerView.textLabel.textColor = CSSTheme.blue
         headerView.textLabel.font = UIFont.systemFont(ofSize: 16, weight: .heavy)
         
@@ -825,7 +913,7 @@ private extension MyAppsViewController
             cell.layoutMargins.left = self.view.layoutMargins.left
             cell.layoutMargins.right = self.view.layoutMargins.right
             
-            cell.tintColor = .black
+            cell.tintColor = CSSTheme.blue
             cell.versionDescriptionTextView.maximumNumberOfLines = 3
             cell.versionDescriptionTextView.text = latestSupportedVersion.localizedDescription ?? "Không có mô tả chi tiết cho bản cập nhật này."
             
@@ -887,10 +975,13 @@ private extension MyAppsViewController
             guard let iconURL = installedApp.storeApp?.iconURL else { return nil }
             return try await ImagePipeline.shared.image(for: iconURL)
         }
-        dataSource.prefetchCompletionHandler = { (cell, image, indexPath, error) in
+        dataSource.prefetchCompletionHandler = { [weak self] (cell, image, indexPath, error) in
             let cell = cell as! UpdateCollectionViewCell
             cell.bannerView.iconImageView.isIndicatingActivity = false
             cell.bannerView.iconImageView.image = image
+            
+            // Ép lại nền trắng sáng ngay sau khi gán ảnh icon để tránh AppBannerView tự đổi màu nền sang đen
+            self?.styleAppCardCell(cell)
             
             if let error = error
             {
@@ -918,7 +1009,7 @@ private extension MyAppsViewController
             let cell = cell as! InstalledAppCollectionViewCell
             cell.layoutMargins.left = self.view.layoutMargins.left
             cell.layoutMargins.right = self.view.layoutMargins.right
-            cell.tintColor = .black
+            cell.tintColor = CSSTheme.blue
             
             cell.deactivateBadge?.isHidden = false
             
@@ -986,10 +1077,13 @@ private extension MyAppsViewController
         dataSource.prefetchHandler = { (item, indexPath) in
             return try await item.loadIcon()
         }
-        dataSource.prefetchCompletionHandler = { (cell, image, indexPath, error) in
+        dataSource.prefetchCompletionHandler = { [weak self] (cell, image, indexPath, error) in
             let cell = cell as! InstalledAppCollectionViewCell
             cell.bannerView.iconImageView.image = image
             cell.bannerView.iconImageView.isIndicatingActivity = false
+            
+            // Khoá cứng nền trắng ngay khi tải xong Icon ứng dụng
+            self?.styleAppCardCell(cell)
         }
         
         return dataSource
@@ -1013,7 +1107,7 @@ private extension MyAppsViewController
             let cell = cell as! InstalledAppCollectionViewCell
             cell.layoutMargins.left = self.view.layoutMargins.left
             cell.layoutMargins.right = self.view.layoutMargins.right
-            cell.tintColor = .black
+            cell.tintColor = CSSTheme.blue
             
             if cell.bundleIdentifier != installedApp.bundleIdentifier
             {
@@ -1031,7 +1125,7 @@ private extension MyAppsViewController
             cell.bannerView.button.isIndicatingActivity = false
             cell.bannerView.configure(for: installedApp, action: .custom("KÍCH HOẠT"))
             
-            cell.bannerView.button.tintColor = .black
+            cell.bannerView.button.tintColor = CSSTheme.blue
             cell.bannerView.button.removeTarget(self, action: nil, for: .primaryActionTriggered)
             cell.bannerView.button.addTarget(self, action: #selector(MyAppsViewController.activateApp(_:)), for: .primaryActionTriggered)
             cell.bannerView.button.accessibilityLabel = String(format: "Kích hoạt %@", installedApp.name)
@@ -1064,10 +1158,13 @@ private extension MyAppsViewController
         dataSource.prefetchHandler = { (item, indexPath) in
             return try await item.loadIcon()
         }
-        dataSource.prefetchCompletionHandler = { (cell, image, indexPath, error) in
+        dataSource.prefetchCompletionHandler = { [weak self] (cell, image, indexPath, error) in
             let cell = cell as! InstalledAppCollectionViewCell
             cell.bannerView.iconImageView.image = image
             cell.bannerView.iconImageView.isIndicatingActivity = false
+            
+            // Khoá cứng nền trắng ngay khi tải xong Icon ứng dụng
+            self?.styleAppCardCell(cell)
         }
         
         return dataSource
@@ -1493,6 +1590,7 @@ private extension MyAppsViewController
         self.dataSource.cellConfigurationHandler(cell, installedApp, indexPath)
         
         cell.bannerView.iconImageView.isIndicatingActivity = false
+        self.styleAppCardCell(cell)
     }
     
     func reconfigureVisibleCells()
@@ -2324,6 +2422,12 @@ private extension MyAppsViewController
 
 extension MyAppsViewController
 {
+    override func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath)
+    {
+        // Đảm bảo mỗi khi cell hiển thị trên màn hình (kể cả khi cuộn nhanh hoặc tái sử dụng), nền luôn được khóa trắng sáng
+        self.styleAppCardCell(cell)
+    }
+
     override func collectionView(_ collectionView: UICollectionView, viewForSupplementaryElementOfKind kind: String, at indexPath: IndexPath) -> UICollectionReusableView
     {
         let section = Section(rawValue: indexPath.section)!
@@ -2335,6 +2439,7 @@ extension MyAppsViewController
             let headerView = collectionView.dequeueReusableSupplementaryView(ofKind: UICollectionView.elementKindSectionHeader, withReuseIdentifier: "UpdatesHeader", for: indexPath) as! UpdatesCollectionHeaderView
             
             UIView.performWithoutAnimation {
+                headerView.overrideUserInterfaceStyle = .light
                 headerView.button.backgroundColor = CSSTheme.blue.withAlphaComponent(0.15)
                 headerView.button.setTitle("▾", for: .normal)
                 headerView.button.titleLabel?.font = UIFont.boldSystemFont(ofSize: 28)
@@ -2380,10 +2485,10 @@ extension MyAppsViewController
                 headerView.button.setTitle("  Làm mới tất cả  ", for: .normal)
                 headerView.button.setTitleColor(CSSTheme.blue, for: .normal)
                 headerView.button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .bold)
-                headerView.button.backgroundColor = CSSTheme.white.withAlphaComponent(0.88)
+                headerView.button.backgroundColor = CSSTheme.white.withAlphaComponent(0.92)
                 headerView.button.layer.cornerRadius = 12
                 headerView.button.layer.borderWidth = 1.0
-                headerView.button.layer.borderColor = CSSTheme.blue.withAlphaComponent(0.3).cgColor
+                headerView.button.layer.borderColor = CSSTheme.blue.withAlphaComponent(0.28).cgColor
                 headerView.button.addTarget(self, action: #selector(MyAppsViewController.refreshAllApps(_:)), for: .primaryActionTriggered)
                 
                 headerView.button.layoutIfNeeded()
@@ -2428,6 +2533,7 @@ extension MyAppsViewController
         case .activeApps, .inactiveApps:
             let footerView = collectionView.dequeueReusableSupplementaryView(ofKind: UICollectionView.elementKindSectionFooter, withReuseIdentifier: "InstalledAppsFooter", for: indexPath) as! InstalledAppsCollectionFooterView
             
+            footerView.overrideUserInterfaceStyle = .light
             footerView.textLabel.textColor = CSSTheme.purple
             footerView.textLabel.font = UIFont.systemFont(ofSize: 14, weight: .bold)
             footerView.button?.tintColor = CSSTheme.blue

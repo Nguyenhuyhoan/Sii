@@ -1,3 +1,4 @@
+
 //
 //  MyAppsViewController.swift
 //  AltStore
@@ -19,6 +20,52 @@ import SemanticVersion
 import Nuke
 
 private let maximumCollapsedUpdatesCount = 2
+
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ VỚI TAB CÀI ĐẶT)
+private struct CSSTheme {
+    static let white = UIColor.white
+    static let light = UIColor(red: 248/255, green: 249/255, blue: 250/255, alpha: 1.0) // #f8f9fa
+    static let border = UIColor(red: 233/255, green: 236/255, blue: 239/255, alpha: 1.0) // #e9ecef
+    static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0) // #007bff
+    static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0) // #6f42c1
+    static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0) // #28a745
+    static let magenta = UIColor(red: 255/255, green: 0/255, blue: 255/255, alpha: 1.0) // #ff00ff
+    static let dark = UIColor(red: 52/255, green: 58/255, blue: 64/255, alpha: 1.0) // #343a40
+
+    // Gradient Background (#f3e0ff -> #e0f7ff)
+    static let bgGradientStart = UIColor(red: 243/255, green: 224/255, blue: 255/255, alpha: 1.0).cgColor
+    static let bgGradientEnd = UIColor(red: 224/255, green: 247/255, blue: 255/255, alpha: 1.0).cgColor
+
+    // Hero Gradient (rgba(0,123,255,.92) -> rgba(111,66,193,.88))
+    static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.92).cgColor
+    static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.88).cgColor
+
+    static let cornerRadius: CGFloat = 15.0
+}
+
+// MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH (KHÔNG BỊ TRẮNG KHI CUỘN XUỐNG DƯỚI)
+private final class MyAppsGradientBackgroundView: UIView {
+    override class var layerClass: AnyClass {
+        return CAGradientLayer.self
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupGradient()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupGradient()
+    }
+
+    private func setupGradient() {
+        guard let gradientLayer = self.layer as? CAGradientLayer else { return }
+        gradientLayer.colors = [CSSTheme.bgGradientStart, CSSTheme.bgGradientEnd]
+        gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+        gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+    }
+}
 
 extension MyAppsViewController
 {
@@ -60,6 +107,16 @@ class MyAppsViewController: UICollectionViewController
     private var previousInactiveAppsCount = 0
     private var statusDotView: UIView?
     
+    // Thành phần giao diện CSS Hero Banner & Nút điều hướng nổi
+    private var heroContainerView: UIView?
+    private var heroCardView: UIView?
+    private var heroGradientLayer: CAGradientLayer?
+    private var heroSideloadButton: UIButton?
+    private var heroSideloadSpinner: UIActivityIndicatorView?
+    private var heroRefreshAllButton: UIButton?
+    private var floatingBackButton: UIButton?
+    private let heroTopSpace: CGFloat = 104.0
+    
     private var _imagePickerInstalledApp: InstalledApp?
     private var _viewDidAppear = false
     private var pendingImportURL: URL?
@@ -70,6 +127,12 @@ class MyAppsViewController: UICollectionViewController
     private var cachedUpdateSizes = [String: CGSize]()
     
     private var activeTeam: ALTTeam?
+    
+    #if !os(tvOS)
+    override var preferredStatusBarStyle: UIStatusBarStyle {
+        return .darkContent
+    }
+    #endif
     
     required init?(coder aDecoder: NSCoder)
     {
@@ -90,7 +153,18 @@ class MyAppsViewController: UICollectionViewController
     {
         super.viewDidLoad()
         
-        // Allows us to intercept delegate callbacks.
+        // Ẩn hoàn toàn thanh điều hướng trắng ở trên cùng để đồng bộ với Tab Cài đặt
+        self.title = nil
+        self.navigationItem.title = nil
+        self.navigationController?.delegate = self
+        self.navigationController?.setNavigationBarHidden(true, animated: false)
+        #if !os(tvOS)
+        self.navigationItem.largeTitleDisplayMode = .never
+        self.navigationController?.interactivePopGestureRecognizer?.delegate = self
+        self.navigationController?.interactivePopGestureRecognizer?.isEnabled = true
+        #endif
+        
+        // Cho phép can thiệp các callback từ FetchedResultsController.
         self.updatesDataSource.fetchedResultsController.delegate = self
         self.activeAppsDataSource.fetchedResultsController.delegate = self
         self.inactiveAppsDataSource.fetchedResultsController.delegate = self
@@ -114,6 +188,7 @@ class MyAppsViewController: UICollectionViewController
         
         #if !os(tvOS)
         let refreshControl = UIRefreshControl()
+        refreshControl.tintColor = CSSTheme.blue
         refreshControl.addTarget(self, action: #selector(MyAppsViewController.checkForUpdates(_:)), for: .primaryActionTriggered)
         self.collectionView.refreshControl = refreshControl
         #endif
@@ -124,16 +199,13 @@ class MyAppsViewController: UICollectionViewController
         self.sideloadingProgressView = UIProgressView(progressViewStyle: .default)
         #endif
         self.sideloadingProgressView.translatesAutoresizingMaskIntoConstraints = false
-        self.sideloadingProgressView.progressTintColor = .altPrimary
+        self.sideloadingProgressView.progressTintColor = CSSTheme.green
+        self.sideloadingProgressView.trackTintColor = UIColor.white.withAlphaComponent(0.25)
         self.sideloadingProgressView.progress = 0
+        self.sideloadingProgressView.isHidden = true
         
-        if let navigationBar = self.navigationController?.navigationBar
-        {
-            navigationBar.addSubview(self.sideloadingProgressView)
-            NSLayoutConstraint.activate([self.sideloadingProgressView.leadingAnchor.constraint(equalTo: navigationBar.leadingAnchor),
-                                         self.sideloadingProgressView.trailingAnchor.constraint(equalTo: navigationBar.trailingAnchor),
-                                         self.sideloadingProgressView.bottomAnchor.constraint(equalTo: navigationBar.bottomAnchor)])
-        }
+        // ✨ KÍCH HOẠT GIAO DIỆN WEB CSS & VIỆT HÓA ✨
+        self.applySmartWebCSSTheme()
         
         #if !os(tvOS)
         self.registerForPreviewing(with: self, sourceView: self.collectionView)
@@ -145,7 +217,7 @@ class MyAppsViewController: UICollectionViewController
             minimuxerStatusCheckTask = Task {
                 let status = await isMinimuxerReady()
                 updateStatusDot(isReady: status.isSuccess)
-                // Listen to subsequent updates reactively
+                // Lắng nghe trạng thái minimuxer theo thời gian thực
                 for await result in minimuxerStatusPublisher.values {
                     guard !Task.isCancelled else { break }
                     updateStatusDot(isReady: result.isSuccess)
@@ -158,9 +230,17 @@ class MyAppsViewController: UICollectionViewController
         }
     }
     
+    override func viewWillAppear(_ animated: Bool)
+    {
+        super.viewWillAppear(animated)
+        self.navigationController?.setNavigationBarHidden(true, animated: animated)
+    }
+    
     override func viewIsAppearing(_ animated: Bool)
     {
         super.viewIsAppearing(animated)
+        
+        self.navigationController?.setNavigationBarHidden(true, animated: false)
         
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -184,6 +264,12 @@ class MyAppsViewController: UICollectionViewController
     override func viewDidLayoutSubviews()
     {
         super.viewDidLayoutSubviews()
+        if let heroContainer = self.heroContainerView {
+            heroContainer.frame = CGRect(x: 0, y: -self.heroTopSpace, width: self.collectionView.bounds.width, height: self.heroTopSpace)
+        }
+        if let heroCard = self.heroCardView {
+            self.heroGradientLayer?.frame = heroCard.bounds
+        }
     }
 
     override func viewDidAppear(_ animated: Bool)
@@ -202,90 +288,42 @@ class MyAppsViewController: UICollectionViewController
     {
         super.viewWillDisappear(animated)
     }
-    
-    private func findView(in view: UIView, where predicate: (UIView) -> Bool) -> UIView? {
-        if predicate(view) {
-            return view
-        }
-        for subview in view.subviews {
-            if let found = findView(in: subview, where: predicate) {
-                return found
-            }
-        }
-        return nil
-    }
 
     private func updateStatusDot(isReady: Bool)
     {
         DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
+            guard let self = self, let dot = self.statusDotView else { return }
             
-            guard let navigationBar = self.navigationController?.navigationBar else { return }
+            let targetColor: UIColor = isReady ? CSSTheme.green : CSSTheme.magenta
             
-            guard let largeTitleView = self.findView(in: navigationBar, where: { NSStringFromClass(type(of: $0)).contains("LargeTitle") }) else {
-                return
-            }
-            
-            let targetColor: UIColor = isReady ? .systemGreen : .systemRed
-            
-            let updateColorClosure: () -> Void = { [weak self] in
-                guard let self = self, let existingDot = self.statusDotView else { return }
-                
-                if existingDot.backgroundColor != targetColor {
-                    UIView.animate(withDuration: 0.25, delay: 0.0, options: [.beginFromCurrentState, .curveEaseInOut]) {
-                        existingDot.backgroundColor = targetColor
-                        existingDot.transform = CGAffineTransform(scaleX: 1.25, y: 1.25)
-                    } completion: { _ in
-                        UIView.animate(withDuration: 0.15, delay: 0.0, options: .curveEaseInOut) {
-                            existingDot.transform = .identity
-                        }
-                    }
-                }
-            }
-            
-            // If the dot is already created and attached to largeTitleView, just update color O(1)
-            if let existingDot = self.statusDotView, existingDot.superview == largeTitleView {
-                updateColorClosure()
-                return
-            }
-            
-            self.statusDotView?.removeFromSuperview()
-            
-            let titleText = NSLocalizedString("My Apps", comment: "")
-            let font = UIFont.systemFont(ofSize: 34, weight: .bold)
-            let textWidth = titleText.size(withAttributes: [.font: font]).width
-            let leftMargin: CGFloat = 20
-            
-            let dot = UIView()
-            dot.translatesAutoresizingMaskIntoConstraints = false
-            dot.layer.cornerRadius = 3.5
-            dot.transform = CGAffineTransform(scaleX: 0.01, y: 0.01)
-            dot.alpha = 0.0
-            largeTitleView.addSubview(dot)
-            self.statusDotView = dot
-            
-            NSLayoutConstraint.activate([
-                dot.leadingAnchor.constraint(equalTo: largeTitleView.leadingAnchor, constant: leftMargin + textWidth - 2),
-                dot.bottomAnchor.constraint(equalTo: largeTitleView.bottomAnchor, constant: -32),
-                dot.widthAnchor.constraint(equalToConstant: 7),
-                dot.heightAnchor.constraint(equalToConstant: 7)
-            ])
-            
-            let animateEntranceClosure: () -> Void = {
+            if dot.alpha == 0.0 {
                 dot.backgroundColor = targetColor
                 UIView.animate(withDuration: 0.35, delay: 0.1, usingSpringWithDamping: 0.6, initialSpringVelocity: 0.8, options: [], animations: {
                     dot.transform = .identity
                     dot.alpha = 1.0
                 }, completion: nil)
+            } else if dot.backgroundColor != targetColor {
+                UIView.animate(withDuration: 0.25, delay: 0.0, options: [.beginFromCurrentState, .curveEaseInOut]) {
+                    dot.backgroundColor = targetColor
+                    dot.transform = CGAffineTransform(scaleX: 1.3, y: 1.3)
+                } completion: { _ in
+                    UIView.animate(withDuration: 0.15, delay: 0.0, options: .curveEaseInOut) {
+                        dot.transform = .identity
+                    }
+                }
             }
-            
-            animateEntranceClosure()
-            return
         }
     }
     
     override func prepare(for segue: UIStoryboardSegue, sender: Any?)
     {
+        let controller = segue.destination
+        controller.title = nil
+        controller.navigationItem.title = nil
+        #if !os(tvOS)
+        controller.navigationItem.largeTitleDisplayMode = .never
+        #endif
+        
         guard let identifier = segue.identifier else { return }
         
         switch identifier
@@ -320,8 +358,398 @@ class MyAppsViewController: UICollectionViewController
     @IBAction func unwindToMyAppsViewController(_ segue: UIStoryboardSegue)
     {
     }
+}
 
+// MARK: - 🧭 QUẢN LÝ ẨN THANH ĐIỀU HƯỚNG & NÚT QUAY LẠI NHỎ CỐ ĐỊNH Ở MỤC CON
+extension MyAppsViewController: UINavigationControllerDelegate, UIGestureRecognizerDelegate {
+    func navigationController(_ navigationController: UINavigationController, willShow viewController: UIViewController, animated: Bool) {
+        navigationController.setNavigationBarHidden(true, animated: false)
+        viewController.title = nil
+        viewController.navigationItem.title = nil
+        #if !os(tvOS)
+        viewController.navigationItem.largeTitleDisplayMode = .never
+        #endif
+        
+        let isRoot = (viewController === navigationController.viewControllers.first)
+        updateFloatingBackButton(in: navigationController, show: !isRoot)
+    }
 
+    private func updateFloatingBackButton(in nav: UINavigationController, show: Bool) {
+        if self.floatingBackButton == nil {
+            let btn = UIButton(type: .system)
+            btn.translatesAutoresizingMaskIntoConstraints = false
+            
+            let config = UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)
+            btn.setImage(UIImage(systemName: "chevron.left", withConfiguration: config), for: .normal)
+            btn.tintColor = CSSTheme.blue
+            btn.backgroundColor = CSSTheme.white.withAlphaComponent(0.92)
+            
+            btn.layer.cornerRadius = 17
+            btn.layer.borderWidth = 1.0
+            btn.layer.borderColor = CSSTheme.border.cgColor
+            btn.layer.shadowColor = UIColor.black.cgColor
+            btn.layer.shadowOffset = CGSize(width: 0, height: 2)
+            btn.layer.shadowRadius = 6
+            btn.layer.shadowOpacity = 0.15
+            
+            btn.addTarget(self, action: #selector(handleFloatingBackTap), for: .touchUpInside)
+            nav.view.addSubview(btn)
+            
+            NSLayoutConstraint.activate([
+                btn.leadingAnchor.constraint(equalTo: nav.view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+                btn.topAnchor.constraint(equalTo: nav.view.safeAreaLayoutGuide.topAnchor, constant: 6),
+                btn.widthAnchor.constraint(equalToConstant: 34),
+                btn.heightAnchor.constraint(equalToConstant: 34)
+            ])
+            
+            self.floatingBackButton = btn
+        }
+        
+        guard let btn = self.floatingBackButton else { return }
+        nav.view.bringSubviewToFront(btn)
+        
+        UIView.animate(withDuration: 0.2) {
+            btn.alpha = show ? 1.0 : 0.0
+            btn.isHidden = !show
+        }
+    }
+
+    @objc private func handleFloatingBackTap() {
+        self.navigationController?.popViewController(animated: true)
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        #if !os(tvOS)
+        if gestureRecognizer === self.navigationController?.interactivePopGestureRecognizer {
+            return (self.navigationController?.viewControllers.count ?? 0) > 1
+        }
+        #endif
+        return true
+    }
+}
+
+// MARK: - ✨ HỆ THỐNG RENDER CSS THÔNG MINH & VIỆT HÓA TOÀN DIỆN
+private extension MyAppsViewController {
+
+    func applySmartWebCSSTheme() {
+        // 1. Nền Gradient cố định toàn màn hình
+        let bgView = MyAppsGradientBackgroundView(frame: UIScreen.main.bounds)
+        bgView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        self.collectionView.backgroundView = bgView
+        self.collectionView.backgroundColor = .clear
+        
+        // 2. Dành không gian phía trên cho khối .hero Banner và dưới đáy cho TabBar
+        self.collectionView.contentInset.top = self.heroTopSpace
+        self.collectionView.contentInset.bottom = 40
+        
+        // 3. Khởi tạo khối .hero Banner kèm nút "+ Cài IPA" và "Làm mới"
+        setupCSSHeroBanner()
+        
+        // 4. Đồng bộ màu Badge trên TabBar
+        #if !os(tvOS)
+        if let tabAppearance = self.tabBarController?.tabBar.standardAppearance {
+            tabAppearance.stackedLayoutAppearance.normal.badgeBackgroundColor = CSSTheme.blue
+            self.navigationController?.tabBarItem.scrollEdgeAppearance = tabAppearance
+        }
+        #endif
+        self.navigationController?.tabBarItem.title = "Ứng dụng"
+    }
+
+    func setupCSSHeroBanner() {
+        let headerContainer = UIView(frame: CGRect(x: 0, y: -self.heroTopSpace, width: self.collectionView.bounds.width, height: self.heroTopSpace))
+        headerContainer.backgroundColor = .clear
+        headerContainer.autoresizingMask = [.flexibleWidth]
+        self.heroContainerView = headerContainer
+        
+        let heroCard = UIView()
+        heroCard.translatesAutoresizingMaskIntoConstraints = false
+        heroCard.layer.cornerRadius = CSSTheme.cornerRadius
+        heroCard.layer.masksToBounds = false
+        heroCard.layer.shadowColor = CSSTheme.blue.cgColor
+        heroCard.layer.shadowOffset = CGSize(width: 0, height: 6)
+        heroCard.layer.shadowRadius = 16
+        heroCard.layer.shadowOpacity = 0.25
+        self.heroCardView = heroCard
+        
+        let gradient = CAGradientLayer()
+        gradient.colors = [CSSTheme.heroStart, CSSTheme.heroEnd]
+        gradient.startPoint = CGPoint(x: 0, y: 0)
+        gradient.endPoint = CGPoint(x: 1, y: 1)
+        gradient.cornerRadius = CSSTheme.cornerRadius
+        heroCard.layer.insertSublayer(gradient, at: 0)
+        self.heroGradientLayer = gradient
+        
+        // Tiêu đề chính + Chấm trạng thái Minimuxer
+        let titleStack = UIStackView()
+        titleStack.translatesAutoresizingMaskIntoConstraints = false
+        titleStack.axis = .horizontal
+        titleStack.alignment = .center
+        titleStack.spacing = 7
+        
+        let titleLabel = UILabel()
+        titleLabel.text = "Ứng dụng của tôi"
+        titleLabel.font = UIFont.systemFont(ofSize: 21, weight: .heavy)
+        titleLabel.textColor = CSSTheme.white
+        titleLabel.layer.shadowColor = UIColor.black.cgColor
+        titleLabel.layer.shadowOffset = CGSize(width: 1, height: 2)
+        titleLabel.layer.shadowRadius = 4
+        titleLabel.layer.shadowOpacity = 0.35
+        
+        let dot = UIView()
+        dot.translatesAutoresizingMaskIntoConstraints = false
+        dot.layer.cornerRadius = 4.5
+        dot.backgroundColor = CSSTheme.green
+        dot.layer.borderWidth = 1.5
+        dot.layer.borderColor = CSSTheme.white.cgColor
+        dot.transform = CGAffineTransform(scaleX: 0.01, y: 0.01)
+        dot.alpha = 0.0
+        self.statusDotView = dot
+        
+        NSLayoutConstraint.activate([
+            dot.widthAnchor.constraint(equalToConstant: 9),
+            dot.heightAnchor.constraint(equalToConstant: 9)
+        ])
+        
+        titleStack.addArrangedSubview(titleLabel)
+        titleStack.addArrangedSubview(dot)
+        
+        // Phụ đề hướng dẫn
+        let subLabel = UILabel()
+        subLabel.translatesAutoresizingMaskIntoConstraints = false
+        subLabel.text = "Quản lý, cài đặt tệp .ipa & gia hạn ứng dụng dễ dàng"
+        subLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .medium)
+        subLabel.textColor = CSSTheme.white.withAlphaComponent(0.95)
+        subLabel.textAlignment = .center
+        subLabel.numberOfLines = 1
+        subLabel.adjustsFontSizeToFitWidth = true
+        
+        // Nút "+ Cài IPA" bên trái Hero Card
+        let addBtn = UIButton(type: .system)
+        addBtn.translatesAutoresizingMaskIntoConstraints = false
+        let plusConfig = UIImage.SymbolConfiguration(pointSize: 12, weight: .bold)
+        addBtn.setImage(UIImage(systemName: "plus.circle.fill", withConfiguration: plusConfig), for: .normal)
+        addBtn.setTitle(" Cài IPA", for: .normal)
+        addBtn.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .bold)
+        addBtn.tintColor = CSSTheme.blue
+        addBtn.setTitleColor(CSSTheme.blue, for: .normal)
+        addBtn.backgroundColor = CSSTheme.white
+        addBtn.layer.cornerRadius = 14
+        addBtn.contentEdgeInsets = UIEdgeInsets(top: 5, left: 10, bottom: 5, right: 11)
+        addBtn.layer.shadowColor = UIColor.black.cgColor
+        addBtn.layer.shadowOffset = CGSize(width: 0, height: 2)
+        addBtn.layer.shadowRadius = 4
+        addBtn.layer.shadowOpacity = 0.18
+        addBtn.addTarget(self, action: #selector(handleHeroSideloadButtonTap(_:)), for: .touchUpInside)
+        self.heroSideloadButton = addBtn
+        
+        let spinner = UIActivityIndicatorView(style: .medium)
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.color = CSSTheme.blue
+        spinner.hidesWhenStopped = true
+        addBtn.addSubview(spinner)
+        self.heroSideloadSpinner = spinner
+        
+        // Nút "Làm mới" nhanh bên phải Hero Card
+        let refreshBtn = UIButton(type: .system)
+        refreshBtn.translatesAutoresizingMaskIntoConstraints = false
+        let refConfig = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
+        refreshBtn.setImage(UIImage(systemName: "arrow.clockwise", withConfiguration: refConfig), for: .normal)
+        refreshBtn.tintColor = CSSTheme.white
+        refreshBtn.backgroundColor = CSSTheme.white.withAlphaComponent(0.22)
+        refreshBtn.layer.cornerRadius = 14
+        refreshBtn.layer.borderWidth = 1.0
+        refreshBtn.layer.borderColor = CSSTheme.white.withAlphaComponent(0.45).cgColor
+        refreshBtn.addTarget(self, action: #selector(handleHeroRefreshAllTap(_:)), for: .touchUpInside)
+        self.heroRefreshAllButton = refreshBtn
+        
+        // Gắn thanh tiến trình cài đặt vào cạnh dưới Hero Card
+        self.sideloadingProgressView.layer.cornerRadius = 2
+        self.sideloadingProgressView.clipsToBounds = true
+        
+        heroCard.addSubview(titleStack)
+        heroCard.addSubview(subLabel)
+        heroCard.addSubview(addBtn)
+        heroCard.addSubview(refreshBtn)
+        heroCard.addSubview(self.sideloadingProgressView)
+        headerContainer.addSubview(heroCard)
+        self.collectionView.addSubview(headerContainer)
+        
+        NSLayoutConstraint.activate([
+            heroCard.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor, constant: 16),
+            heroCard.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -16),
+            heroCard.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 4),
+            heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -6),
+            
+            addBtn.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
+            addBtn.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 12),
+            addBtn.heightAnchor.constraint(equalToConstant: 28),
+            
+            spinner.centerXAnchor.constraint(equalTo: addBtn.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: addBtn.centerYAnchor),
+            
+            refreshBtn.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
+            refreshBtn.centerYAnchor.constraint(equalTo: addBtn.centerYAnchor),
+            refreshBtn.widthAnchor.constraint(equalToConstant: 32),
+            refreshBtn.heightAnchor.constraint(equalToConstant: 28),
+            
+            titleStack.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor, constant: 14),
+            titleStack.centerYAnchor.constraint(equalTo: addBtn.centerYAnchor),
+            
+            subLabel.topAnchor.constraint(equalTo: addBtn.bottomAnchor, constant: 12),
+            subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
+            subLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
+            
+            self.sideloadingProgressView.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
+            self.sideloadingProgressView.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
+            self.sideloadingProgressView.bottomAnchor.constraint(equalTo: heroCard.bottomAnchor, constant: -3),
+            self.sideloadingProgressView.heightAnchor.constraint(equalToConstant: 3)
+        ])
+        
+        heroCard.alpha = 0
+        heroCard.transform = CGAffineTransform(translationX: 0, y: -10)
+        UIView.animate(withDuration: 0.5, delay: 0.05, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.5, options: .curveEaseOut) {
+            heroCard.alpha = 1
+            heroCard.transform = .identity
+        }
+    }
+
+    func setSideloadingActivity(_ isIndicating: Bool) {
+        self.navigationItem.leftBarButtonItem?.isIndicatingActivity = isIndicating
+        guard let btn = self.heroSideloadButton, let spinner = self.heroSideloadSpinner else { return }
+        if isIndicating {
+            btn.setTitle("         ", for: .normal)
+            btn.setImage(nil, for: .normal)
+            spinner.startAnimating()
+            btn.isUserInteractionEnabled = false
+        } else {
+            spinner.stopAnimating()
+            let plusConfig = UIImage.SymbolConfiguration(pointSize: 12, weight: .bold)
+            btn.setImage(UIImage(systemName: "plus.circle.fill", withConfiguration: plusConfig), for: .normal)
+            btn.setTitle(" Cài IPA", for: .normal)
+            btn.isUserInteractionEnabled = true
+        }
+    }
+
+    @objc func handleHeroSideloadButtonTap(_ sender: UIButton) {
+        animateButtonBounce(sender)
+        let barButton = self.navigationItem.leftBarButtonItem ?? UIBarButtonItem()
+        self.sideloadApp(barButton)
+    }
+
+    @objc func handleHeroRefreshAllTap(_ sender: UIButton) {
+        animateButtonBounce(sender)
+        let barButton = self.navigationItem.rightBarButtonItem ?? UIBarButtonItem()
+        self.refreshAllApps(barButton)
+    }
+
+    func animateButtonBounce(_ sender: UIView) {
+        UIView.animate(withDuration: 0.12, animations: {
+            sender.transform = CGAffineTransform(scaleX: 0.92, y: 0.92)
+        }) { _ in
+            UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.5, initialSpringVelocity: 0.5, options: .curveEaseOut) {
+                sender.transform = .identity
+            }
+        }
+    }
+
+    // Dịch tự động các chuỗi thời gian hết hạn của nút ứng dụng sang tiếng Việt
+    func translateDynamicAppText(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return text }
+        
+        let staticMap: [String: String] = [
+            "Expires in": "Hết hạn sau",
+            "Expired": "Đã hết hạn",
+            "EXPIRED": "ĐÃ HẾT HẠN",
+            "Revoked": "Đã thu hồi",
+            "REVOKED": "ĐÃ THU HỒI",
+            "ACTIVATE": "KÍCH HOẠT",
+            "Activate": "Kích hoạt",
+            "UPDATE": "CẬP NHẬT",
+            "Update": "Cập nhật",
+            "OPEN": "MỞ",
+            "Open": "Mở",
+            "MORE": "THÊM",
+            "More": "Xem thêm",
+            "LESS": "THU GỌN",
+            "Less": "Thu gọn"
+        ]
+        if let mapped = staticMap[trimmed] {
+            return mapped
+        }
+        
+        var result = trimmed
+        result = result.replacingOccurrences(of: "DAYS", with: "NGÀY")
+        result = result.replacingOccurrences(of: "DAY", with: "NGÀY")
+        result = result.replacingOccurrences(of: "days", with: "ngày")
+        result = result.replacingOccurrences(of: "day", with: "ngày")
+        result = result.replacingOccurrences(of: "HRS", with: "GIỜ")
+        result = result.replacingOccurrences(of: "HR", with: "GIỜ")
+        result = result.replacingOccurrences(of: "hours", with: "giờ")
+        result = result.replacingOccurrences(of: "hour", with: "giờ")
+        result = result.replacingOccurrences(of: "MINS", with: "PHÚT")
+        result = result.replacingOccurrences(of: "MIN", with: "PHÚT")
+        result = result.replacingOccurrences(of: "minutes", with: "phút")
+        result = result.replacingOccurrences(of: "minute", with: "phút")
+        return result
+    }
+
+    // Làm đẹp từng thẻ Ứng dụng theo phong cách Card CSS
+    func styleAppCardCell(_ cell: UICollectionViewCell) {
+        cell.layer.masksToBounds = false
+        cell.layer.shadowColor = CSSTheme.blue.cgColor
+        cell.layer.shadowOffset = CGSize(width: 0, height: 5)
+        cell.layer.shadowRadius = 12
+        cell.layer.shadowOpacity = 0.10
+        
+        if let appCell = cell as? InstalledAppCollectionViewCell {
+            appCell.bannerView.layer.cornerRadius = CSSTheme.cornerRadius
+            appCell.bannerView.layer.borderWidth = 1.0
+            appCell.bannerView.layer.borderColor = CSSTheme.border.cgColor
+            if let btnTitle = appCell.bannerView.button.title(for: .normal) {
+                appCell.bannerView.button.setTitle(translateDynamicAppText(btnTitle), for: .normal)
+            }
+        } else if let updateCell = cell as? UpdateCollectionViewCell {
+            updateCell.bannerView.layer.cornerRadius = CSSTheme.cornerRadius
+            if let btnTitle = updateCell.bannerView.button.title(for: .normal) {
+                updateCell.bannerView.button.setTitle(translateDynamicAppText(btnTitle), for: .normal)
+            }
+            if let toggleTitle = updateCell.versionDescriptionTextView.toggleButton.title(for: .normal) {
+                updateCell.versionDescriptionTextView.toggleButton.setTitle(translateDynamicAppText(toggleTitle), for: .normal)
+            }
+        } else if let noUpdatesCell = cell as? NoUpdatesCollectionViewCell {
+            noUpdatesCell.blurView.layer.cornerRadius = CSSTheme.cornerRadius
+            noUpdatesCell.blurView.layer.masksToBounds = true
+            noUpdatesCell.blurView.backgroundColor = CSSTheme.white.withAlphaComponent(0.92)
+            noUpdatesCell.blurView.layer.borderWidth = 1.2
+            noUpdatesCell.blurView.layer.borderColor = CSSTheme.border.cgColor
+            noUpdatesCell.textLabel.textColor = CSSTheme.purple
+            noUpdatesCell.textLabel.font = UIFont.systemFont(ofSize: 14, weight: .bold)
+        }
+    }
+
+    // Gắn thanh gạch chân màu xanh (.features h2::after) dưới tiêu đề các mục giống Tab Cài đặt
+    func styleSectionHeader(_ headerView: InstalledAppsCollectionHeaderView) {
+        headerView.textLabel.textColor = CSSTheme.blue
+        headerView.textLabel.font = UIFont.systemFont(ofSize: 16, weight: .heavy)
+        
+        let underlineTag = 9991
+        headerView.viewWithTag(underlineTag)?.removeFromSuperview()
+        
+        let underline = UIView()
+        underline.tag = underlineTag
+        underline.backgroundColor = CSSTheme.blue
+        underline.layer.cornerRadius = 1.5
+        underline.translatesAutoresizingMaskIntoConstraints = false
+        headerView.addSubview(underline)
+        
+        NSLayoutConstraint.activate([
+            underline.leadingAnchor.constraint(equalTo: headerView.textLabel.leadingAnchor),
+            underline.topAnchor.constraint(equalTo: headerView.textLabel.bottomAnchor, constant: 2),
+            underline.widthAnchor.constraint(equalToConstant: 38),
+            underline.heightAnchor.constraint(equalToConstant: 3)
+        ])
+    }
 }
 
 private extension MyAppsViewController
@@ -339,27 +767,27 @@ private extension MyAppsViewController
         dynamicDataSource.numberOfSectionsHandler = { 1 }
         dynamicDataSource.numberOfItemsHandler = { _ in self.updatesDataSource.itemCount == 0 ? 1 : 0 }
         dynamicDataSource.cellIdentifierHandler = { _ in "NoUpdatesCell" }
-        dynamicDataSource.dynamicCellConfigurationHandler = { (cell, indexPath) in
+        dynamicDataSource.dynamicCellConfigurationHandler = { [weak self] (cell, indexPath) in
+            guard let self = self else { return }
             let cell = cell as! NoUpdatesCollectionViewCell
             cell.layoutMargins.left = self.view.layoutMargins.left
             cell.layoutMargins.right = self.view.layoutMargins.right
-            
-            cell.blurView.layer.cornerRadius = 20
-            cell.blurView.layer.masksToBounds = true
-            cell.blurView.backgroundColor = .altPrimary
             
             cell.button.addTarget(self, action: #selector(MyAppsViewController.showHiddenUpdatesAlert(_:)), for: .primaryActionTriggered)
             
             if !self.unsupportedUpdates.isEmpty
             {
-                cell.textLabel.text = NSLocalizedString("Unsupported Updates Available", comment: "")
+                cell.textLabel.text = "Có bản cập nhật không tương thích"
                 cell.button.isHidden = false
+                cell.button.tintColor = CSSTheme.magenta
             }
             else
             {
-                cell.textLabel.text = NSLocalizedString("No Updates Available", comment: "")
+                cell.textLabel.text = "✓ Mọi ứng dụng đều đã được cập nhật mới nhất"
                 cell.button.isHidden = true
             }
+            
+            self.styleAppCardCell(cell)
         }
         
         return dynamicDataSource
@@ -383,9 +811,9 @@ private extension MyAppsViewController
             cell.layoutMargins.left = self.view.layoutMargins.left
             cell.layoutMargins.right = self.view.layoutMargins.right
             
-            cell.tintColor = app.tintColor ?? .altPrimary
+            cell.tintColor = app.tintColor ?? CSSTheme.blue
             cell.versionDescriptionTextView.maximumNumberOfLines = 3
-            cell.versionDescriptionTextView.text = latestSupportedVersion.localizedDescription ?? "nil"
+            cell.versionDescriptionTextView.text = latestSupportedVersion.localizedDescription ?? "Không có mô tả chi tiết cho bản cập nhật này."
             
             if cell.bundleIdentifier != app.bundleIdentifier
             {
@@ -396,24 +824,24 @@ private extension MyAppsViewController
             
             cell.bannerView.button.isIndicatingActivity = false
             cell.bannerView.configure(for: app, action: .update)
+            cell.bannerView.button.setTitle("CẬP NHẬT", for: .normal)
             
             var versionText = latestSupportedVersion.localizedVersion
 
-            // If the app is SideStore itself, remove the build number to save space
+            // Nếu là bản thân SideStore, lược bỏ số build để gọn gàng
             if app.bundleIdentifier == Bundle.Info.appbundleIdentifier,
                let version = SemanticVersion(latestSupportedVersion.version)
             {
-                // leave out the build so that it doesnt take up much space
                 versionText = SemanticVersion(version.major, version.minor, version.patch, version.preRelease).description
             }
             
-            cell.bannerView.subtitleLabel.text = String(format: NSLocalizedString("Version %@", comment: ""), versionText)
+            cell.bannerView.subtitleLabel.text = String(format: "Phiên bản %@", versionText)
 
             let appName: String
             
             if ReleaseTrackType.betaTracks.contains(latestSupportedVersion.channel)
             {
-                appName = String(format: NSLocalizedString("%@ beta", comment: ""), app.name)
+                appName = String(format: "%@ (Thử nghiệm)", app.name)
             }
             else
             {
@@ -421,10 +849,10 @@ private extension MyAppsViewController
             }
             
             let versionDate = Date().relativeDateString(since: latestSupportedVersion.date)
-            cell.bannerView.accessibilityLabel = String(format: NSLocalizedString("%@ %@ update. Released on %@.", comment: ""), appName, latestSupportedVersion.localizedVersion, versionDate)
+            cell.bannerView.accessibilityLabel = String(format: "Bản cập nhật %@ %@. Phát hành vào %@.", appName, latestSupportedVersion.localizedVersion, versionDate)
             
             cell.bannerView.button.addTarget(self, action: #selector(MyAppsViewController.updateApp(_:)), for: .primaryActionTriggered)
-            cell.bannerView.button.accessibilityLabel = String(format: NSLocalizedString("Update %@", comment: ""), installedApp.name)
+            cell.bannerView.button.accessibilityLabel = String(format: "Cập nhật %@", installedApp.name)
             
             if self.expandedAppUpdates.contains(app.bundleIdentifier)
             {
@@ -437,6 +865,7 @@ private extension MyAppsViewController
             
             cell.versionDescriptionTextView.toggleButton.addTarget(self, action: #selector(MyAppsViewController.toggleUpdateCellMode(_:)), for: .primaryActionTriggered)
 
+            self.styleAppCardCell(cell)
             cell.setNeedsLayout()
             cell.layoutIfNeeded()
         }
@@ -469,8 +898,9 @@ private extension MyAppsViewController
         
         let dataSource = FetchedResultsCollectionViewPrefetchingDataSource<InstalledApp, UIImage>(fetchRequest: fetchRequest, managedObjectContext: DatabaseManager.shared.viewContext)
         dataSource.cellIdentifierHandler = { _ in "AppCell" }
-        dataSource.cellConfigurationHandler = { (cell, installedApp, indexPath) in
-            let tintColor = installedApp.storeApp?.tintColor ?? .altPrimary
+        dataSource.cellConfigurationHandler = { [weak self] (cell, installedApp, indexPath) in
+            guard let self = self else { return }
+            let tintColor = installedApp.storeApp?.tintColor ?? CSSTheme.blue
             
             let cell = cell as! InstalledAppCollectionViewCell
             cell.layoutMargins.left = self.view.layoutMargins.left
@@ -495,8 +925,10 @@ private extension MyAppsViewController
             }
             
             cell.bannerView.button.configure(for: installedApp)
+            let rawButtonTitle = cell.bannerView.button.title(for: .normal) ?? ""
+            let translatedButtonTitle = self.translateDynamicAppText(rawButtonTitle)
             cell.bannerView.button.isIndicatingActivity = false
-            cell.bannerView.configure(for: installedApp, action: .custom(cell.bannerView.button.title(for: .normal) ?? ""))
+            cell.bannerView.configure(for: installedApp, action: .custom(translatedButtonTitle))
             
             if cell.bundleIdentifier != installedApp.bundleIdentifier
             {
@@ -508,12 +940,12 @@ private extension MyAppsViewController
             let currentDate = Date()
             let isExpired = currentDate > installedApp.expirationDate
             cell.bannerView.buttonLabel.isHidden = isExpired || installedApp.certificateStatus == .revoked
-            cell.bannerView.buttonLabel.text = NSLocalizedString("Expires in", comment: "")
+            cell.bannerView.buttonLabel.text = "Hết hạn sau"
             
             cell.bannerView.button.removeTarget(self, action: nil, for: .primaryActionTriggered)
             cell.bannerView.button.addTarget(self, action: #selector(MyAppsViewController.refreshApp(_:)), for: .primaryActionTriggered)
             
-            cell.bannerView.button.accessibilityLabel = String(format: NSLocalizedString("Refresh %@", comment: ""), installedApp.name)
+            cell.bannerView.button.accessibilityLabel = String(format: "Làm mới %@", installedApp.name)
             
             if let storeApp = installedApp.storeApp, storeApp.isPledgeRequired, !storeApp.isPledged
             {
@@ -526,6 +958,7 @@ private extension MyAppsViewController
                 cell.bannerView.button.alpha = 1.0
             }
             
+            self.styleAppCardCell(cell)
             cell.layoutIfNeeded()
             
             if let progress = AppManager.shared.refreshProgress(for: installedApp), progress.fractionCompleted < 1.0
@@ -561,8 +994,9 @@ private extension MyAppsViewController
         
         let dataSource = FetchedResultsCollectionViewPrefetchingDataSource<InstalledApp, UIImage>(fetchRequest: fetchRequest, managedObjectContext: DatabaseManager.shared.viewContext)
         dataSource.cellIdentifierHandler = { _ in "AppCell" }
-        dataSource.cellConfigurationHandler = { (cell, installedApp, indexPath) in
-            let tintColor = installedApp.storeApp?.tintColor ?? .altPrimary
+        dataSource.cellConfigurationHandler = { [weak self] (cell, installedApp, indexPath) in
+            guard let self = self else { return }
+            let tintColor = installedApp.storeApp?.tintColor ?? CSSTheme.purple
             
             let cell = cell as! InstalledAppCollectionViewCell
             cell.layoutMargins.left = self.view.layoutMargins.left
@@ -583,12 +1017,12 @@ private extension MyAppsViewController
             cell.deactivateBadge?.transform = CGAffineTransform.identity.scaledBy(x: 0.5, y: 0.5)
             
             cell.bannerView.button.isIndicatingActivity = false
-            cell.bannerView.configure(for: installedApp, action: .custom(NSLocalizedString("ACTIVATE", comment: "")))
+            cell.bannerView.configure(for: installedApp, action: .custom("KÍCH HOẠT"))
             
             cell.bannerView.button.tintColor = tintColor
             cell.bannerView.button.removeTarget(self, action: nil, for: .primaryActionTriggered)
             cell.bannerView.button.addTarget(self, action: #selector(MyAppsViewController.activateApp(_:)), for: .primaryActionTriggered)
-            cell.bannerView.button.accessibilityLabel = String(format: NSLocalizedString("Activate %@", comment: ""), installedApp.name)
+            cell.bannerView.button.accessibilityLabel = String(format: "Kích hoạt %@", installedApp.name)
             
             if let storeApp = installedApp.storeApp, storeApp.isPledgeRequired, !storeApp.isPledged
             {
@@ -601,10 +1035,9 @@ private extension MyAppsViewController
                 cell.bannerView.button.alpha = 1.0
             }
             
-            // Make sure refresh button is correct size.
+            self.styleAppCardCell(cell)
             cell.layoutIfNeeded()
             
-            // Ensure no leftover progress from active apps cell reuse.
             cell.bannerView.button.progress = nil
             
             if let progress = AppManager.shared.refreshProgress(for: installedApp), progress.fractionCompleted < 1.0
@@ -661,7 +1094,6 @@ private extension MyAppsViewController
             UIApplication.shared.applicationIconBadgeNumber = 0
         }
         
-        // Reloading collection view when not visible can mess with cell margins.
         guard self.isViewLoaded && self.view.window != nil else { return }
         
         if !self.isCheckingForUpdates && !self.isRefreshingAllApps
@@ -673,10 +1105,6 @@ private extension MyAppsViewController
     
     func updateUnsupportedUpdates()
     {
-        // TIL includesPendingChanges does not apply to relationships, so we NEED to fetch InstalledApp to check isActive.
-        // let fetchRequest = StoreApp.fetchRequest()
-        // fetchRequest.includesPendingChanges = true // isActive might not be persisted to disk
-        
         let predicate = NSPredicate(format: "%K == YES AND %K != nil", #keyPath(InstalledApp.isActive), #keyPath(InstalledApp.storeApp))
         let activeSourceApps = InstalledApp.all(satisfying: predicate, in: DatabaseManager.shared.viewContext)
                     
@@ -685,7 +1113,6 @@ private extension MyAppsViewController
             return storeApp
         }
         
-        // Keep StoreApp, not AppVersion, to prevent us accidentally holding onto AppVersions that may be deleted.
         self.unsupportedUpdates = Set(unsupportedUpdates)
     }
     
@@ -736,11 +1163,11 @@ private extension MyAppsViewController
                     
                     if failures.count == 1
                     {
-                        localizedText = NSLocalizedString("Failed to refresh 1 app.", comment: "")
+                        localizedText = "Không thể làm mới 1 ứng dụng."
                     }
                     else
                     {
-                        localizedText = String(format: NSLocalizedString("Failed to refresh %@ apps.", comment: ""), NSNumber(value: failures.count))
+                        localizedText = String(format: "Không thể làm mới %@ ứng dụng.", NSNumber(value: failures.count))
                     }
                     
                     let error = failures.first?.value as NSError?
@@ -812,24 +1239,19 @@ private extension MyAppsViewController
         
         let cell = self.collectionView.cellForItem(at: indexPath) as? UpdateCollectionViewCell
         
-        // Toggle the state
         if self.expandedAppUpdates.contains(installedApp.bundleIdentifier)
         {
             self.expandedAppUpdates.remove(installedApp.bundleIdentifier)
-            // Set collapsed mode on the cell
             cell?.mode = .collapsed
         }
         else
         {
             self.expandedAppUpdates.insert(installedApp.bundleIdentifier)
-            // Set expanded mode on the cell
             cell?.mode = .expanded
         }
         
-        // Clear cached size so it's recalculated
         self.cachedUpdateSizes[installedApp.bundleIdentifier] = nil
         
-        // Animate the change smoothly with a duration
         UIView.animate(withDuration: 0.25) {
             self.collectionView.performBatchUpdates({
                 self.collectionView.collectionViewLayout.invalidateLayout()
@@ -856,12 +1278,10 @@ private extension MyAppsViewController
                 if let altstoreApp = InstalledApp.fetchAltStore(in: DatabaseManager.shared.viewContext),
                    let storeApp = altstoreApp.storeApp, storeApp.isPledgeRequired && !storeApp.isPledged
                 {
-                    // Assume the reason there are no apps is because we are no longer pledged to AltStore beta.
                     error = OperationError.pledgeInactive(appName: altstoreApp.name)
                 }
                 else
                 {
-                    // Otherwise, fall back to generic noInstalledApps.
                     error = OperationError.noInstalledApps
                 }
                 
@@ -873,7 +1293,7 @@ private extension MyAppsViewController
             self.isRefreshingAllApps = true
             if let activeAppsHeader = self.collectionView.supplementaryView(forElementKind: UICollectionView.elementKindSectionHeader, at: IndexPath(item: 0, section: Section.activeApps.rawValue)) as? InstalledAppsCollectionHeaderView {
                 activeAppsHeader.button.isIndicatingActivity = true
-                activeAppsHeader.button.accessibilityLabel = NSLocalizedString("Refreshing", comment: "")
+                activeAppsHeader.button.accessibilityLabel = "Đang làm mới"
             }
             self.reconfigureVisibleCells()
             
@@ -926,7 +1346,6 @@ private extension MyAppsViewController
                     
                 case .success:
                     debugLog("Updated app: \(installedApp.bundleIdentifier)")
-                    // No need to reload, since the the update cell is gone now.
                 }
                 
                 self.update()
@@ -971,7 +1390,7 @@ private extension MyAppsViewController
     {
         TVWebFileTransferManager.shared.startImport(
             acceptedExtensions: ["ipa"],
-            title: "Sideload IPA",
+            title: "Cài đặt tệp IPA",
             presentingVC: self
         ) { [weak self] fileURL in
             guard let fileURL = fileURL, let self else { return }
@@ -987,11 +1406,11 @@ private extension MyAppsViewController
     func sideloadApp(at url: URL, completion: @escaping (Result<Void, Error>) -> Void)
     {
         self.pendingImportURL = nil
-        self.navigationItem.leftBarButtonItem?.isIndicatingActivity = true
+        self.setSideloadingActivity(true)
         
         let group = AppManager.shared.install(.url(url), presentingViewController: self) { [weak self] result in
             Task { @MainActor in
-                self?.navigationItem.leftBarButtonItem?.isIndicatingActivity = false
+                self?.setSideloadingActivity(false)
                 self?.sideloadingProgressView.observedProgress = nil
                 self?.sideloadingProgressView.setHidden(true, animated: true)
                 
@@ -1044,20 +1463,20 @@ private extension MyAppsViewController
         
         if UserDefaults.standard.activeAppLimitIncludesExtensions
         {
-            message = NSLocalizedString("Non-developer Apple IDs are limited to 3 apps and app extensions. Inactive apps don't count towards your total, but cannot be opened until activated.", comment: "")
+            message = "Tài khoản ID Apple miễn phí chỉ được phép kích hoạt tối đa 3 ứng dụng và tiện ích mở rộng (App Extensions) cùng lúc. Các ứng dụng không hoạt động sẽ không tính vào giới hạn này, nhưng bạn cần kích hoạt lại chúng khi muốn mở."
         }
         else
         {
-            message = NSLocalizedString("Non-developer Apple IDs are limited to 3 apps. Inactive apps are backed up and uninstalled so they don't count towards your total, but will be reinstalled with all their data when activated again.", comment: "")
+            message = "Tài khoản ID Apple miễn phí chỉ được phép kích hoạt tối đa 3 ứng dụng cùng lúc. Các ứng dụng không hoạt động sẽ được tự động sao lưu dữ liệu và tạm gỡ khỏi màn hình chính để nhường chỗ, và sẽ được cài đặt lại nguyên vẹn dữ liệu khi bạn kích hoạt lại."
             
             if UserDefaults.standard.isAppLimitDisabled
             {
                 message += "\n\n"
-                message += NSLocalizedString("If you're using the MacDirtyCow exploit to remove the 3-app limit, you can install up to 10 apps and app extensions instead.", comment: "")
+                message += "Nếu bạn đang bật tính năng mở khóa giới hạn 3 ứng dụng (MacDirtyCow / SparseRestore), bạn có thể kích hoạt tối đa lên đến 10 ứng dụng và tiện ích mở rộng."
             }
         }
                 
-        let alertController = UIAlertController(title: NSLocalizedString("What are inactive apps?", comment: ""), message: message, preferredStyle: .alert)
+        let alertController = UIAlertController(title: "Ứng dụng không hoạt động là gì?", message: message, preferredStyle: .alert)
         alertController.addAction(.ok)
         self.present(alertController, animated: true, completion: nil)
     }
@@ -1093,8 +1512,8 @@ private extension MyAppsViewController
         
         let sortedHiddenUpdates = self.unsupportedUpdates.sorted(by: { $0.name.localizedStandardCompare($1.name) == .orderedAscending })
         
-        let title = sortedHiddenUpdates.count == 1 ? NSLocalizedString("Unsupported Update Available", comment: "") : String(format: NSLocalizedString("%@ Unsupported Updates Available", comment: ""), sortedHiddenUpdates.count as NSNumber)
-        var message = String(format: NSLocalizedString("These updates don't support iOS %@. Please update your device to the latest iOS version to install them.", comment: ""), ProcessInfo.processInfo.operatingSystemVersion.stringValue)
+        let title = sortedHiddenUpdates.count == 1 ? "Có 1 bản cập nhật không tương thích" : String(format: "Có %@ bản cập nhật không tương thích", sortedHiddenUpdates.count as NSNumber)
+        var message = String(format: "Các bản cập nhật dưới đây không hỗ trợ phiên bản iOS %@. Vui lòng cập nhật thiết bị lên phiên bản iOS phù hợp để cài đặt chúng.", ProcessInfo.processInfo.operatingSystemVersion.stringValue)
         message += "\n"
         
         for storeApp in sortedHiddenUpdates
@@ -1107,11 +1526,11 @@ private extension MyAppsViewController
                 var osVersion: String? = nil
                 if let minOSVersion = appVersion.minOSVersion, !ProcessInfo.processInfo.isOperatingSystemAtLeast(minOSVersion)
                 {
-                    osVersion = String(format: NSLocalizedString("iOS %@ or later", comment: ""), minOSVersion.stringValue)
+                    osVersion = String(format: "Yêu cầu iOS %@ trở lên", minOSVersion.stringValue)
                 }
                 else if let maxOSVersion = appVersion.maxOSVersion, ProcessInfo.processInfo.operatingSystemVersion > maxOSVersion
                 {
-                    osVersion = String(format: NSLocalizedString("iOS %@ or earlier", comment: ""), maxOSVersion.stringValue)
+                    osVersion = String(format: "Yêu cầu iOS %@ trở xuống", maxOSVersion.stringValue)
                 }
                 
                 if let osVersion
@@ -1120,7 +1539,7 @@ private extension MyAppsViewController
                 }
             }
             
-            message += "\n" + title
+            message += "\n• " + title
         }
         
         let alertController = UIAlertController(title: title, message: message, preferredStyle: .alert)
@@ -1148,7 +1567,6 @@ private extension MyAppsViewController
             guard previousProgress == nil else { return }
             
             self.refresh([installedApp]) { (results) in
-                // If an error occured, reload the section so the progress bar is no longer visible.
                 if results.values.contains(where: { $0.error != nil })
                 {
                     DispatchQueue.main.async {
@@ -1273,7 +1691,7 @@ private extension MyAppsViewController
                 }
                 catch is CancellationError
                 {
-                    // Ignore
+                    // Bỏ qua khi người dùng hủy
                 }
                 catch
                 {
@@ -1317,21 +1735,20 @@ private extension MyAppsViewController
 
         if UserDefaults.standard.activeAppLimitIncludesExtensions {
             if installedApp.appExtensions.isEmpty {
-                title = NSLocalizedString("Cannot Activate More than 3 Apps", comment: "")
-                message = NSLocalizedString("Non-developer Apple IDs are limited to 3 active apps and app extensions. Please choose an app to deactivate.", comment: "")
+                title = "Không thể kích hoạt quá 3 ứng dụng"
+                message = "Tài khoản ID Apple miễn phí bị giới hạn tối đa 3 ứng dụng và tiện ích mở rộng hoạt động cùng lúc. Vui lòng chọn một ứng dụng bên dưới để tạm ngưng kích hoạt."
             } else {
-                title = NSLocalizedString("Cannot Activate More than 3 Apps and App Extensions", comment: "")
+                title = "Vượt quá giới hạn 3 ứng dụng & tiện ích"
                 let extCount = installedApp.appExtensions.count
-                let extText = extCount == 1 ? NSLocalizedString("app extension", comment: "") : NSLocalizedString("app extensions", comment: "")
-                message = String(format: NSLocalizedString("Non-developer Apple IDs are limited to 3 active apps and app extensions, and \"%@\" contains %@ %@. Please choose an app to deactivate.", comment: ""), installedApp.name, NSNumber(value: extCount), extText)
+                message = String(format: "Tài khoản ID Apple miễn phí chỉ cho phép tối đa 3 ứng dụng và tiện ích mở rộng hoạt động, trong khi \"%@\" bao gồm thêm %@ tiện ích mở rộng. Vui lòng chọn ứng dụng để tạm ngưng kích hoạt.", installedApp.name, NSNumber(value: extCount))
             }
         } else {
-            title = NSLocalizedString("Cannot Activate More than 3 Apps", comment: "")
-            message = NSLocalizedString("Non-developer Apple IDs are limited to 3 active apps. Please choose an app to deactivate.", comment: "")
+            title = "Không thể kích hoạt quá 3 ứng dụng"
+            message = "Tài khoản ID Apple miễn phí bị giới hạn tối đa 3 ứng dụng hoạt động cùng lúc. Vui lòng chọn một ứng dụng bên dưới để tạm ngưng kích hoạt."
         }
 
         let alertController = UIAlertController(title: title, message: message, preferredStyle: .alert)
-        alertController.addAction(UIAlertAction(title: UIAlertAction.cancel.title, style: UIAlertAction.cancel.style) { _ in
+        alertController.addAction(UIAlertAction(title: "Hủy", style: .cancel) { _ in
             completion(.failure(OperationError.cancelled))
         })
 
@@ -1372,7 +1789,7 @@ private extension MyAppsViewController
                 }
                 catch is CancellationError
                 {
-                    // Ignore
+                    // Bỏ qua
                 }
                 catch
                 {
@@ -1393,9 +1810,9 @@ private extension MyAppsViewController
         guard installedApp.isActive else { return }
         
         let appName = installedApp.name
-        let title = String(format: NSLocalizedString("Delete “%@”?", comment: ""), appName)
+        let title = String(format: "Xóa ứng dụng “%@”?", appName)
         
-        let message = String(format: NSLocalizedString("This will remove “%@” from SideStore and erase any backup data for this app.", comment: ""), appName)
+        let message = String(format: "Thao tác này sẽ gỡ “%@” khỏi SideStore và xóa toàn bộ dữ liệu sao lưu của ứng dụng này.", appName)
         
         let contentVC = DeleteAppAlertViewController()
         
@@ -1407,10 +1824,10 @@ private extension MyAppsViewController
         
         alertController.setValue(contentVC, forKey: "contentViewController")
         
-        let cancelAction = UIAlertAction(title: NSLocalizedString("Cancel", comment: ""), style: .cancel, handler: nil)
+        let cancelAction = UIAlertAction(title: "Hủy", style: .cancel, handler: nil)
         
         let actionTitleForState: (Bool) -> String = { isChecked in
-            isChecked ? NSLocalizedString("Delete", comment: "") : NSLocalizedString("Remove", comment: "")
+            isChecked ? "Xóa hoàn toàn" : "Gỡ khỏi danh sách"
         }
         
         let confirmAction = UIAlertAction(title: actionTitleForState(contentVC.isChecked), style: .destructive) { [weak self] _ in
@@ -1429,7 +1846,7 @@ private extension MyAppsViewController
                         }
                         catch is CancellationError
                         {
-                            // Ignore
+                            // Bỏ qua
                         }
                         catch
                         {
@@ -1474,21 +1891,21 @@ private extension MyAppsViewController
     
     func remove(_ installedApp: InstalledApp)
     {
-        let title = String(format: NSLocalizedString("Remove “%@” from SideStore?", comment: ""), installedApp.name)
+        let title = String(format: "Gỡ “%@” khỏi SideStore?", installedApp.name)
         let message: String
         
         if UserDefaults.standard.isLegacyDeactivationSupported
         {
-            message = NSLocalizedString("You must also delete it from the home screen to fully uninstall the app.", comment: "")
+            message = "Bạn cũng cần xóa biểu tượng ứng dụng trên Màn hình chính để gỡ cài đặt hoàn toàn."
         }
         else
         {
-            message = NSLocalizedString("This will also erase any backup data for this app.", comment: "")
+            message = "Thao tác này cũng sẽ xóa toàn bộ dữ liệu sao lưu của ứng dụng này."
         }
 
         let alertController = UIAlertController(title: title, message: message, preferredStyle: .alert)
-        alertController.addAction(.cancel)
-        alertController.addAction(UIAlertAction(title: NSLocalizedString("Remove", comment: ""), style: .destructive, handler: { (action) in
+        alertController.addAction(UIAlertAction(title: "Hủy", style: .cancel))
+        alertController.addAction(UIAlertAction(title: "Gỡ bỏ", style: .destructive, handler: { (action) in
             AppManager.shared.removeDeactivatedApp(installedApp) { (result) in
                 switch result
                 {
@@ -1508,13 +1925,13 @@ private extension MyAppsViewController
     {
         debugLog("[UI] User clicked 'Back Up' for app: \(installedApp.bundleIdentifier)")
         Task { @MainActor in
-            let title = NSLocalizedString("Start Backup?", comment: "")
-            let message = NSLocalizedString("This will replace any previous backups. Please leave SideStore open until the backup is complete.", comment: "")
+            let title = "Bắt đầu sao lưu?"
+            let message = "Thao tác này sẽ ghi đè lên bản sao lưu trước đó. Vui lòng giữ SideStore luôn mở cho đến khi quá trình sao lưu hoàn tất."
 
             let alertController = UIAlertController(title: title, message: message, preferredStyle: .actionSheet)
-            alertController.addAction(.cancel)
+            alertController.addAction(UIAlertAction(title: "Hủy", style: .cancel))
             
-            let actionTitle = String(format: NSLocalizedString("Back Up %@", comment: ""), installedApp.name)
+            let actionTitle = String(format: "Sao lưu %@", installedApp.name)
             alertController.addAction(UIAlertAction(title: actionTitle, style: .default, handler: { (action) in
                 debugLog("[UI] User confirmed backup dialog for app: \(installedApp.bundleIdentifier). Triggering AppManager.shared.backup.")
                 AppManager.shared.backup(installedApp, presentingViewController: self) { (result) in
@@ -1559,8 +1976,8 @@ private extension MyAppsViewController
                 toast = ToastView(error: error, opensLog: false)
                 break
             case .success:
-                toast = ToastView(text: "Import Backup successful for \(installedApp.name)",
-                                  detailText: "Use 'Restore Backup' option to restore data from this imported backup")
+                toast = ToastView(text: "Đã nhập bản sao lưu cho \(installedApp.name)",
+                                  detailText: "Sử dụng tùy chọn 'Khôi phục bản sao lưu' để nạp dữ liệu vừa nhập vào ứng dụng.")
             }
             DispatchQueue.main.async {
                 toast.show(in: self)
@@ -1579,29 +1996,22 @@ private extension MyAppsViewController
         let backupURL = FileManager.default.backupDirectoryURL(for: installedApp)!
         let backupBakURL = ImportExport.getPreviousBackupURL(backupURL)
         
-        // backupBakURL is expected to exist at this point, this needs to be ensured by caller logic
-        // or invoke this action only when backupBakURL exists
-        
-        // delete the current backup
         if(FileManager.default.fileExists(atPath: backupURL.path)){
             try! FileManager.default.removeItem(at: backupURL)
         }
         
-        // restore the previously saved backup as current backup
-        // (don't delete the N-1 backup yet so copy instead of move)
         try! FileManager.default.copyItem(at: backupBakURL, to: backupURL)
         
-        //perform restore of data from the backup
         restore(installedApp)
     }
     
     func restore(_ installedApp: InstalledApp)
     {
         Task { @MainActor in
-            let message = String(format: NSLocalizedString("This will replace all data you currently have in %@.", comment: ""), installedApp.name)
-            let alertController = UIAlertController(title: NSLocalizedString("Are you sure you want to restore this backup?", comment: ""), message: message, preferredStyle: .actionSheet)
-            alertController.addAction(.cancel)
-            alertController.addAction(UIAlertAction(title: NSLocalizedString("Restore Backup", comment: ""), style: .destructive, handler: { (action) in
+            let message = String(format: "Thao tác này sẽ thay thế toàn bộ dữ liệu hiện tại trong ứng dụng %@.", installedApp.name)
+            let alertController = UIAlertController(title: "Bạn có chắc chắn muốn khôi phục bản sao lưu này không?", message: message, preferredStyle: .actionSheet)
+            alertController.addAction(UIAlertAction(title: "Hủy", style: .cancel))
+            alertController.addAction(UIAlertAction(title: "Khôi phục bản sao lưu", style: .destructive, handler: { (action) in
                 AppManager.shared.restore(installedApp, presentingViewController: self) { (result) in
                     do
                     {
@@ -1654,25 +2064,21 @@ private extension MyAppsViewController
         }
         
         let documentPicker = UIDocumentPickerViewController(forExporting: [exportURL], asCopy: true)
-        
-        // Don't set delegate to avoid conflicting with import callbacks.
-        // documentPicker.delegate = self
-        
         self.present(documentPicker, animated: true, completion: nil)
         #else
-        TVWebFileTransferManager.shared.startExport(fileURL: backupURL, title: "Export App Backup", presentingVC: self)
+        TVWebFileTransferManager.shared.startExport(fileURL: backupURL, title: "Xuất bản sao lưu ứng dụng", presentingVC: self)
         #endif
     }
     
     func deleteBackup(for installedApp: InstalledApp)
     {
         let alertController = UIAlertController(
-            title: String(format: NSLocalizedString("Delete Backup for “%@”?", comment: ""), installedApp.name),
-            message: NSLocalizedString("Are you sure you want to delete the backup for this app? This action cannot be undone.", comment: ""),
+            title: String(format: "Xóa bản sao lưu của “%@”?", installedApp.name),
+            message: "Bạn có chắc chắn muốn xóa bản sao lưu của ứng dụng này không? Hành động này không thể hoàn tác.",
             preferredStyle: .alert
         )
-        alertController.addAction(UIAlertAction(title: UIAlertAction.cancel.title, style: UIAlertAction.cancel.style))
-        alertController.addAction(UIAlertAction(title: NSLocalizedString("Delete Backup", comment: ""), style: .destructive) { [weak self] _ in
+        alertController.addAction(UIAlertAction(title: "Hủy", style: .cancel))
+        alertController.addAction(UIAlertAction(title: "Xóa bản sao lưu", style: .destructive) { [weak self] _ in
             guard let self = self else { return }
             do
             {
@@ -1707,7 +2113,7 @@ private extension MyAppsViewController
         #else
         TVWebFileTransferManager.shared.startImport(
             acceptedExtensions: ["png", "jpg", "jpeg"],
-            title: "Upload Custom App Icon",
+            title: "Tải lên biểu tượng ứng dụng tùy chỉnh",
             presentingVC: self
         ) { [weak self] fileURL in
             guard let self = self, let fileURL = fileURL else { return }
@@ -1722,7 +2128,6 @@ private extension MyAppsViewController
     
     func changeIcon(for installedApp: InstalledApp, to image: UIImage?)
     {
-        // Remove previous icon from cache.
         self.activeAppsDataSource.prefetchItemCache.removeObject(forKey: installedApp)
         self.inactiveAppsDataSource.prefetchItemCache.removeObject(forKey: installedApp)
         
@@ -1777,12 +2182,10 @@ private extension MyAppsViewController
     
     @objc func importApp(_ notification: Notification)
     {
-        // Make sure left UIBarButtonItem has been set.
         self.loadViewIfNeeded()
         
         guard let url = notification.userInfo?[AppDelegate.importAppDeepLinkURLKey] as? URL else { return }
         
-        // If view is not yet attached to the active window hierarchy, queue it for viewDidAppear
         guard self.view.window != nil && self._viewDidAppear else {
             self.pendingImportURL = url
             return
@@ -1825,14 +2228,10 @@ private extension MyAppsViewController
         Task.detached {
             do
             {
-                // async-let so the for-loop below runs first, ensuring we catch didFetchSourceNotification.
                 async let result = try await AppManager.shared.fetchSources()
                                 
-                // .map { $0.name } to avoid "non-sendable type 'Notification?' cannot cross actor boundary" warning.
                 for await _ in NotificationCenter.default.notifications(named: AppManager.didFetchSourceNotification).map({ $0.name })
                 {
-                    // Wait until _after_ didFetchSourceNotification
-                    // to prevent incorrect update() animations.
                     break
                 }
                 
@@ -1882,7 +2281,7 @@ private extension MyAppsViewController
             {
                 debugLog("\(error)")
                 await MainActor.run {
-                    let toastView = ToastView(error: error.withLocalizedTitle(NSLocalizedString("Unable to Check for Updates", comment: "")))
+                    let toastView = ToastView(error: error.withLocalizedTitle("Không thể kiểm tra cập nhật"))
                     toastView.addTarget(nil, action: #selector(TabBarController.presentSources), for: .touchUpInside)
                     toastView.show(in: self)
                 }
@@ -1890,11 +2289,7 @@ private extension MyAppsViewController
             
             await MainActor.run {
                 self.isCheckingForUpdates = false
-                
-                // Call update() _after_ setting isCheckingForUpdates to false so it will actually update collection view,
-                // but _before_ calling sender.endRefreshing() to avoid weird animation.
                 self.update()
-                
                 completion?()
             }
         }
@@ -1904,7 +2299,6 @@ private extension MyAppsViewController
     {
         guard let altStoreApp = InstalledApp.fetchAltStore(in: DatabaseManager.shared.viewContext) else { return }
         
-        // Remove previous icon from cache.
         self.activeAppsDataSource.prefetchItemCache.removeObject(forKey: altStoreApp)
         self.inactiveAppsDataSource.prefetchItemCache.removeObject(forKey: altStoreApp)
         
@@ -1937,10 +2331,10 @@ extension MyAppsViewController
             let headerView = collectionView.dequeueReusableSupplementaryView(ofKind: UICollectionView.elementKindSectionHeader, withReuseIdentifier: "UpdatesHeader", for: indexPath) as! UpdatesCollectionHeaderView
             
             UIView.performWithoutAnimation {
-                headerView.button.backgroundColor = UIColor.altPrimary.withAlphaComponent(0.15)
+                headerView.button.backgroundColor = CSSTheme.blue.withAlphaComponent(0.15)
                 headerView.button.setTitle("▾", for: .normal)
                 headerView.button.titleLabel?.font = UIFont.boldSystemFont(ofSize: 28)
-                headerView.button.setTitleColor(.altPrimary, for: .normal)
+                headerView.button.setTitleColor(CSSTheme.blue, for: .normal)
                 headerView.button.addTarget(self, action: #selector(MyAppsViewController.toggleAppUpdates), for: .primaryActionTriggered)
                 
                 if self.isUpdateSectionCollapsed
@@ -1968,16 +2362,24 @@ extension MyAppsViewController
                 
                 if UserDefaults.standard.activeAppsLimit == nil || UserDefaults.standard.isAppLimitDisabled
                 {
-                    headerView.textLabel.text = NSLocalizedString("Installed", comment: "")
+                    headerView.textLabel.text = "ĐÃ CÀI ĐẶT"
                 }
                 else
                 {
-                    headerView.textLabel.text = NSLocalizedString("Active", comment: "")
+                    headerView.textLabel.text = "ĐANG HOẠT ĐỘNG"
                 }
                 
+                self.styleSectionHeader(headerView)
+                
                 headerView.button.isIndicatingActivity = false
-                headerView.button.activityIndicatorView.color = .altPrimary
-                headerView.button.setTitle(NSLocalizedString("Refresh All", comment: ""), for: .normal)
+                headerView.button.activityIndicatorView.color = CSSTheme.blue
+                headerView.button.setTitle("  Làm mới tất cả  ", for: .normal)
+                headerView.button.setTitleColor(CSSTheme.blue, for: .normal)
+                headerView.button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .bold)
+                headerView.button.backgroundColor = CSSTheme.white.withAlphaComponent(0.88)
+                headerView.button.layer.cornerRadius = 12
+                headerView.button.layer.borderWidth = 1.0
+                headerView.button.layer.borderColor = CSSTheme.blue.withAlphaComponent(0.3).cgColor
                 headerView.button.addTarget(self, action: #selector(MyAppsViewController.refreshAllApps(_:)), for: .primaryActionTriggered)
                 
                 headerView.button.layoutIfNeeded()
@@ -1985,7 +2387,7 @@ extension MyAppsViewController
                 if self.isRefreshingAllApps
                 {
                     headerView.button.isIndicatingActivity = true
-                    headerView.button.accessibilityLabel = NSLocalizedString("Refreshing", comment: "")
+                    headerView.button.accessibilityLabel = "Đang làm mới"
                     headerView.button.accessibilityTraits.remove(.notEnabled)
                 }
                 else
@@ -2004,9 +2406,14 @@ extension MyAppsViewController
                 headerView.layoutMargins.left = self.view.layoutMargins.left
                 headerView.layoutMargins.right = self.view.layoutMargins.right
                 
-                headerView.textLabel.text = NSLocalizedString("Inactive", comment: "")
+                headerView.textLabel.text = "KHÔNG HOẠT ĐỘNG"
+                self.styleSectionHeader(headerView)
+                
                 headerView.button.setTitle(nil, for: .normal)
-                headerView.button.setImage(UIImage(systemName: "questionmark.circle"), for: .normal)
+                headerView.button.setImage(UIImage(systemName: "questionmark.circle.fill"), for: .normal)
+                headerView.button.tintColor = CSSTheme.purple
+                headerView.button.backgroundColor = .clear
+                headerView.button.layer.borderWidth = 0
                 headerView.button.addTarget(self, action: #selector(MyAppsViewController.presentInactiveAppsAlert), for: .primaryActionTriggered)
                 
                 headerView.isHidden = (self.inactiveAppsDataSource.itemCount == 0)
@@ -2016,6 +2423,10 @@ extension MyAppsViewController
             
         case .activeApps, .inactiveApps:
             let footerView = collectionView.dequeueReusableSupplementaryView(ofKind: UICollectionView.elementKindSectionFooter, withReuseIdentifier: "InstalledAppsFooter", for: indexPath) as! InstalledAppsCollectionFooterView
+            
+            footerView.textLabel.textColor = CSSTheme.purple
+            footerView.textLabel.font = UIFont.systemFont(ofSize: 14, weight: .bold)
+            footerView.button?.tintColor = CSSTheme.blue
             
             guard let team = self.activeTeam else { return footerView }
             switch team.type
@@ -2027,15 +2438,7 @@ extension MyAppsViewController
                 let maximumAppIDCount = 10
                 let remainingAppIDs = maximumAppIDCount - registeredAppIDs
                 
-                if remainingAppIDs == 1
-                {
-                    footerView.textLabel.text = String(format: NSLocalizedString("1 App ID Remaining", comment: ""))
-                }
-                else
-                {
-                    footerView.textLabel.text = String(format: NSLocalizedString("%@ App IDs Remaining", comment: ""), NSNumber(value: remainingAppIDs))
-                }
-                
+                footerView.textLabel.text = String(format: "Còn lại %@ App ID khả dụng", NSNumber(value: remainingAppIDs))
                 footerView.textLabel.isHidden = remainingAppIDs < 0
                 
             case .individual, .organization, .unknown: footerView.textLabel.isHidden = true
@@ -2048,6 +2451,16 @@ extension MyAppsViewController
     
     override func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath)
     {
+        if let cell = collectionView.cellForItem(at: indexPath) {
+            UIView.animate(withDuration: 0.12, animations: {
+                cell.transform = CGAffineTransform(scaleX: 0.97, y: 0.97)
+            }) { _ in
+                UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.5, initialSpringVelocity: 0.5, options: .curveEaseOut) {
+                    cell.transform = .identity
+                }
+            }
+        }
+        
         let section = Section.allCases[indexPath.section]
         switch section
         {
@@ -2066,99 +2479,99 @@ extension MyAppsViewController
     {
         var actions = [UIMenuElement]()
         
-        let openAction = UIAction(title: NSLocalizedString("Open", comment: ""), image: UIImage(systemName: "arrow.up.forward.app")) { (action) in
+        let openAction = UIAction(title: "Mở ứng dụng", image: UIImage(systemName: "arrow.up.forward.app")) { (action) in
             self.open(installedApp)
         }
         
         let openMenu = UIMenu(title: "", options: .displayInline, children: [openAction])
         
-        let refreshAction = UIAction(title: NSLocalizedString("Refresh", comment: ""), image: UIImage(systemName: "arrow.clockwise")) { (action) in
+        let refreshAction = UIAction(title: "Làm mới (Gia hạn)", image: UIImage(systemName: "arrow.clockwise")) { (action) in
             self.refresh(installedApp)
         }
         
-        let resignAction = UIAction(title: NSLocalizedString("Resign", comment: ""), image: UIImage(systemName: "signature")) { (action) in
+        let resignAction = UIAction(title: "Ký lại chứng chỉ", image: UIImage(systemName: "signature")) { (action) in
             self.resign(installedApp)
         }
         
-        let reinstallFromCacheAction = UIAction(title: NSLocalizedString("From Cache", comment: ""), image: UIImage(systemName: "signature")) { (action) in
+        let reinstallFromCacheAction = UIAction(title: "Từ bộ nhớ đệm (Cache)", image: UIImage(systemName: "signature")) { (action) in
             self.reinstallFromCache(installedApp)
         }
         
         var reinstallSubmenuActions: [UIMenuElement] = [reinstallFromCacheAction]
         if let storeApp = installedApp.storeApp
         {
-            let reinstallFromSourceAction = UIAction(title: NSLocalizedString("From Source", comment: ""), image: UIImage(systemName: "icloud.and.arrow.down")) { [weak self] (action) in
+            let reinstallFromSourceAction = UIAction(title: "Tải lại từ Nguồn", image: UIImage(systemName: "icloud.and.arrow.down")) { [weak self] (action) in
                 self?.reinstallFromSource(storeApp)
             }
             reinstallSubmenuActions.append(reinstallFromSourceAction)
         }
-        let reinstallMenu = UIMenu(title: NSLocalizedString("Reinstall", comment: ""), image: UIImage(systemName: "arrow.triangle.2.circlepath"), children: reinstallSubmenuActions)
+        let reinstallMenu = UIMenu(title: "Cài đặt lại", image: UIImage(systemName: "arrow.triangle.2.circlepath"), children: reinstallSubmenuActions)
         
-        let activateAction = UIAction(title: NSLocalizedString("Activate", comment: ""), image: UIImage(systemName: "checkmark.circle")) { (action) in
+        let activateAction = UIAction(title: "Kích hoạt", image: UIImage(systemName: "checkmark.circle")) { (action) in
             self.activate(installedApp)
         }
         
-        let deactivateAction = UIAction(title: NSLocalizedString("Deactivate", comment: ""), image: UIImage(systemName: "xmark.circle"), attributes: .destructive) { (action) in
+        let deactivateAction = UIAction(title: "Hủy kích hoạt", image: UIImage(systemName: "xmark.circle"), attributes: .destructive) { (action) in
             self.deactivate(installedApp)
         }
         
-        let deleteAppAction = UIAction(title: NSLocalizedString("Delete App", comment: ""), image: UIImage(systemName: "trash"), attributes: .destructive) { (action) in
+        let deleteAppAction = UIAction(title: "Xóa ứng dụng", image: UIImage(systemName: "trash"), attributes: .destructive) { (action) in
             self.deleteApp(installedApp)
         }
         
-        let removeAction = UIAction(title: NSLocalizedString("Remove", comment: ""), image: UIImage(systemName: "trash"), attributes: .destructive) { (action) in
+        let removeAction = UIAction(title: "Gỡ khỏi danh sách", image: UIImage(systemName: "trash"), attributes: .destructive) { (action) in
             self.remove(installedApp)
         }
         
-        let jitAction = UIAction(title: NSLocalizedString("Enable JIT", comment: ""), image: UIImage(systemName: "bolt")) { (action) in
+        let jitAction = UIAction(title: "Bật tăng tốc JIT", image: UIImage(systemName: "bolt")) { (action) in
             self.enableJIT(for: installedApp)
         }
         
-        let backupAction = UIAction(title: NSLocalizedString("Create Backup", comment: ""), image: UIImage(systemName: "doc.on.doc")) { (action) in
+        let backupAction = UIAction(title: "Tạo bản sao lưu", image: UIImage(systemName: "doc.on.doc")) { (action) in
             self.backup(installedApp)
         }
         
-        let exportRawBackupAction = UIAction(title: NSLocalizedString("Export (Raw)", comment: ""), image: UIImage(systemName: "folder")) { (action) in
+        let exportRawBackupAction = UIAction(title: "Xuất thư mục gốc (Raw)", image: UIImage(systemName: "folder")) { (action) in
             self.exportBackup(for: installedApp, asZip: false)
         }
         
-        let exportZipBackupAction = UIAction(title: NSLocalizedString("Export (ZIP)", comment: ""), image: UIImage(systemName: "doc.zipper") ?? UIImage(systemName: "archivebox")) { (action) in
+        let exportZipBackupAction = UIAction(title: "Xuất tệp nén (ZIP)", image: UIImage(systemName: "doc.zipper") ?? UIImage(systemName: "archivebox")) { (action) in
             self.exportBackup(for: installedApp, asZip: true)
         }
         
-        let exportBackupMenu = UIMenu(title: NSLocalizedString("Export Backup", comment: ""), image: UIImage(systemName: "arrow.up.doc"), children: [exportRawBackupAction, exportZipBackupAction])
+        let exportBackupMenu = UIMenu(title: "Xuất bản sao lưu", image: UIImage(systemName: "arrow.up.doc"), children: [exportRawBackupAction, exportZipBackupAction])
         
-        let importRawBackupAction = UIAction(title: NSLocalizedString("Import (Raw)", comment: ""), image: UIImage(systemName: "folder")) { (action) in
+        let importRawBackupAction = UIAction(title: "Nhập thư mục gốc (Raw)", image: UIImage(systemName: "folder")) { (action) in
             self.importBackup(for: installedApp, isZip: false)
         }
         
-        let importZipBackupAction = UIAction(title: NSLocalizedString("Import (ZIP)", comment: ""), image: UIImage(systemName: "doc.zipper") ?? UIImage(systemName: "archivebox")) { (action) in
+        let importZipBackupAction = UIAction(title: "Nhập tệp nén (ZIP)", image: UIImage(systemName: "doc.zipper") ?? UIImage(systemName: "archivebox")) { (action) in
             self.importBackup(for: installedApp, isZip: true)
         }
         
-        let importBackupMenu = UIMenu(title: NSLocalizedString("Import Backup", comment: ""), image: UIImage(systemName: "arrow.down.doc"), children: [importRawBackupAction, importZipBackupAction])
+        let importBackupMenu = UIMenu(title: "Nhập bản sao lưu", image: UIImage(systemName: "arrow.down.doc"), children: [importRawBackupAction, importZipBackupAction])
         
-        let restoreBackupAction = UIAction(title: NSLocalizedString("Restore Backup", comment: "Restores the last or current backup of this app"), image: UIImage(systemName: "arrow.down.doc")) { (action) in
+        let restoreBackupAction = UIAction(title: "Khôi phục bản sao lưu", image: UIImage(systemName: "arrow.down.doc")) { (action) in
             self.restore(installedApp)
         }
 
-        let restorePreviousBackupAction = UIAction(title: NSLocalizedString("Restore Previous Backup", comment: "Restores the backup saved before the current backup was created."), image: UIImage(systemName: "arrow.down.doc")) { (action) in
+        let restorePreviousBackupAction = UIAction(title: "Khôi phục bản sao lưu liền trước", image: UIImage(systemName: "arrow.down.doc")) { (action) in
             self.restorePreviousBackup(for: installedApp)
         }
         
-        let deleteBackupAction = UIAction(title: NSLocalizedString("Delete Backup", comment: ""), image: UIImage(systemName: "trash"), attributes: .destructive) { (action) in
+        let deleteBackupAction = UIAction(title: "Xóa bản sao lưu", image: UIImage(systemName: "trash"), attributes: .destructive) { (action) in
             self.deleteBackup(for: installedApp)
         }
         
-        let chooseIconAction = UIAction(title: NSLocalizedString("Photos", comment: ""), image: UIImage(systemName: "photo")) { (action) in
+        let chooseIconAction = UIAction(title: "Chọn từ Thư viện ảnh", image: UIImage(systemName: "photo")) { (action) in
             self.chooseIcon(for: installedApp)
         }
         
-        let removeIconAction = UIAction(title: NSLocalizedString("Remove Icon", comment: ""), image: UIImage(systemName: "trash"), attributes: [.destructive]) { (action) in
+        let removeIconAction = UIAction(title: "Khôi phục biểu tượng gốc", image: UIImage(systemName: "trash"), attributes: [.destructive]) { (action) in
             self.changeIcon(for: installedApp, to: nil)
         }
         
-        let infoAction = UIAction(title: NSLocalizedString("Info", comment: ""), image: UIImage(systemName: "info.circle")) { [weak self] (action) in
+        let infoAction = UIAction(title: "Thông tin chi tiết", image: UIImage(systemName: "info.circle")) { [weak self] (action) in
             self?.showAppInfo(installedApp)
         }
         
@@ -2168,7 +2581,7 @@ extension MyAppsViewController
             changeIconActions.append(removeIconAction)
         }
         
-        let changeIconMenu = UIMenu(title: NSLocalizedString("Change Icon", comment: ""), image: UIImage(systemName: "photo"), children: changeIconActions)
+        let changeIconMenu = UIMenu(title: "Đổi biểu tượng (Icon)", image: UIImage(systemName: "photo"), children: changeIconActions)
         
         var backupSubmenuActions = [UIMenuElement]()
         
@@ -2178,10 +2591,6 @@ extension MyAppsViewController
         }
         else if UTType(installedApp.installedAppUTI) != nil, !UserDefaults.standard.isLegacyDeactivationSupported
         {
-            // Allow backing up inactive apps if they are still installed,
-            // but on an iOS version that no longer supports legacy deactivation.
-            // This handles edge case where you can't install more apps until you
-            // delete some, but can't activate inactive apps again to back them up first.
             backupSubmenuActions.append(backupAction)
         }
                 
@@ -2218,22 +2627,20 @@ extension MyAppsViewController
         
         if installedApp.isActive
         {
-            // import backup into shared backups dir is allowed
             backupSubmenuActions.append(importBackupMenu)
         }
         
-        // have an option to restore the n-1 backup
         if FileManager.default.fileExists(atPath: getPreviousBackupURL(installedApp).path){
             backupSubmenuActions.append(restorePreviousBackupAction)
         }
         
-        let backupMenu = UIMenu(title: NSLocalizedString("Backup", comment: ""), image: UIImage(systemName: "archivebox"), children: backupSubmenuActions)
+        let backupMenu = UIMenu(title: "Sao lưu & Khôi phục", image: UIImage(systemName: "archivebox"), children: backupSubmenuActions)
         
-        let setProfileAction = UIAction(title: NSLocalizedString("Change Provisioning Profile", comment: ""), image: UIImage(systemName: "doc.badge.gearshape")) { [weak self] _ in
+        let setProfileAction = UIAction(title: "Đổi hồ sơ cấu hình (Profile)", image: UIImage(systemName: "doc.badge.gearshape")) { [weak self] _ in
             self?.presentSetProfileAlert(for: installedApp)
         }
         
-        let resetProfileAction = UIAction(title: NSLocalizedString("Reset Provisioning Profile", comment: ""), image: UIImage(systemName: "arrow.counterclockwise")) { [weak self] _ in
+        let resetProfileAction = UIAction(title: "Đặt lại hồ sơ mặc định", image: UIImage(systemName: "arrow.counterclockwise")) { [weak self] _ in
             self?.resetProfile(for: installedApp)
         }
         
@@ -2241,7 +2648,7 @@ extension MyAppsViewController
         if ProfileManager.shared.getAssignedProfile(for: installedApp.bundleIdentifier) != nil || installedApp.certificateSerialNumber != nil {
             profileSubmenuActions.append(resetProfileAction)
         }
-        let profileMenu = UIMenu(title: NSLocalizedString("Provisioning Profile", comment: ""), image: UIImage(systemName: "doc.plaintext"), children: profileSubmenuActions)
+        let profileMenu = UIMenu(title: "Hồ sơ cấu hình (Profile)", image: UIImage(systemName: "doc.plaintext"), children: profileSubmenuActions)
         
         if installedApp.resignedBundleIdentifier.isAltStoreAppID
         {
@@ -2295,13 +2702,10 @@ extension MyAppsViewController
             
             if (UserDefaults.standard.legacySideloadedApps ?? []).contains(installedApp.bundleIdentifier)
             {
-                // Legacy sideloaded app, so can't detect if it's deleted.
                 actions.append(removeAction)
             }
             else if !UserDefaults.standard.isLegacyDeactivationSupported && !installedApp.isActive
             {
-                // Inactive apps are actually deleted, so we need another way
-                // for user to remove them from AltStore.
                 actions.append(removeAction)
             }
             
@@ -2310,7 +2714,6 @@ extension MyAppsViewController
         
         actions.append(infoAction)
         
-        // Change the order of entries to make changes to how the context menu is displayed
         let orderedActions = [
             openMenu,
             refreshAction,
@@ -2327,8 +2730,6 @@ extension MyAppsViewController
             removeAction,
         ]
         
-        // remove non-selected actions from the all-actions ordered list
-        // this way the declaration of the action in the above code doesn't determine the context menu order
         actions = orderedActions.filter{ action in actions.contains(action)}
         
         var title: String?
@@ -2414,7 +2815,7 @@ extension MyAppsViewController: UICollectionViewDelegateFlowLayout
         switch section
         {
         case .noUpdates:
-            let size = CGSize(width: collectionView.bounds.width, height: 44)
+            let size = CGSize(width: collectionView.bounds.width, height: 46)
             return size
             
         case .updates:
@@ -2425,14 +2826,13 @@ extension MyAppsViewController: UICollectionViewDelegateFlowLayout
                 return previousHeight
             }
             
-            // Manually change cell's width to prevent conflicting with UIView-Encapsulated-Layout-Width constraints.
             self.prototypeUpdateCell.frame.size.width = collectionView.bounds.width
             
             self.dataSource.cellConfigurationHandler(self.prototypeUpdateCell, item, indexPath)
             
             let size = self.prototypeUpdateCell.systemLayoutSizeFitting(CGSize(width: collectionView.frame.width, height: UIView.layoutFittingCompressedSize.height),
-                                                                        withHorizontalFittingPriority: .required, // Width is fixed
-                                                                        verticalFittingPriority: .fittingSizeLevel) // Height can be as large as needed
+                                                                        withHorizontalFittingPriority: .required,
+                                                                        verticalFittingPriority: .fittingSizeLevel)
             
             self.cachedUpdateSizes[item.bundleIdentifier] = size
             return size
@@ -2449,12 +2849,12 @@ extension MyAppsViewController: UICollectionViewDelegateFlowLayout
         {
         case .noUpdates: return .zero
         case .updates:
-            let height: CGFloat = (self.updatesDataSource.fetchedResultsController.fetchedObjects?.count ?? 0 > maximumCollapsedUpdatesCount) ? 26 : 0
+            let height: CGFloat = (self.updatesDataSource.fetchedResultsController.fetchedObjects?.count ?? 0 > maximumCollapsedUpdatesCount) ? 28 : 0
             return CGSize(width: collectionView.bounds.width, height: height)
             
-        case .activeApps: return CGSize(width: collectionView.bounds.width, height: 29)
+        case .activeApps: return CGSize(width: collectionView.bounds.width, height: 34)
         case .inactiveApps where self.inactiveAppsDataSource.itemCount == 0: return .zero
-        case .inactiveApps: return CGSize(width: collectionView.bounds.width, height: 29)
+        case .inactiveApps: return CGSize(width: collectionView.bounds.width, height: 34)
         }
     }
     
@@ -2465,17 +2865,6 @@ extension MyAppsViewController: UICollectionViewDelegateFlowLayout
         func appIDsFooterSize() -> CGSize
         {
             guard let _ = self.activeTeam else { return .zero }
-            
-            // let indexPath = IndexPath(row: 0, section: section.rawValue)
-            // let footerView = self.collectionView(collectionView, viewForSupplementaryElementOfKind: UICollectionView.elementKindSectionFooter, at: indexPath) as! InstalledAppsCollectionFooterView
-                        
-            // let size = footerView.systemLayoutSizeFitting(CGSize(width: collectionView.frame.width, height: UIView.layoutFittingExpandedSize.height),
-            //                                               withHorizontalFittingPriority: .required,
-            //                                               verticalFittingPriority: .fittingSizeLevel)
-            // return size
-
-            // NOTE: double dequeue of cell has been discontinued
-            // TODO: Using harcoded value until this is fixed
             return CGSize(width: collectionView.bounds.width, height: 60.5)
         }
         
@@ -2530,7 +2919,6 @@ extension MyAppsViewController: UICollectionViewDragDelegate
         
         if let indexPath = previousDestinationIndexPath
         {
-            // Access cell directly to prevent UI glitches due to race conditions when refreshing
             self.updateCell(at: indexPath)
         }
     }
@@ -2551,7 +2939,6 @@ extension MyAppsViewController: UICollectionViewDropDelegate
             let installedApp = session.items.first?.localObject as? InstalledApp
         else { return UICollectionViewDropProposal(operation: .cancel) }
         
-        // Retrieve header attributes for location calculations.
         guard
             let activeAppsHeaderAttributes = collectionView.layoutAttributesForSupplementaryElement(ofKind: UICollectionView.elementKindSectionHeader, at: IndexPath(item: 0, section: Section.activeApps.rawValue)),
             let inactiveAppsHeaderAttributes = collectionView.layoutAttributesForSupplementaryElement(ofKind: UICollectionView.elementKindSectionHeader, at: IndexPath(item: 0, section: Section.inactiveApps.rawValue))
@@ -2561,8 +2948,6 @@ extension MyAppsViewController: UICollectionViewDropDelegate
         
         defer
         {
-            // Animate selection changes.
-            
             if dropDestinationIndexPath != self.dropDestinationIndexPath
             {
                 let previousIndexPath = self.dropDestinationIndexPath
@@ -2573,7 +2958,6 @@ extension MyAppsViewController: UICollectionViewDropDelegate
                 let propertyAnimator = UIViewPropertyAnimator(springTimingParameters: UISpringTimingParameters()) {
                     for indexPath in indexPaths
                     {
-                        // Access cell directly so we can animate it correctly.
                         self.updateCell(at: indexPath)
                     }
                 }
@@ -2585,16 +2969,12 @@ extension MyAppsViewController: UICollectionViewDropDelegate
         
         if installedApp.isActive
         {
-            // Deactivating
-            
             if point.y > inactiveAppsHeaderAttributes.frame.minY
             {
-                // Inactive apps section.
                 return UICollectionViewDropProposal(operation: .copy, intent: .insertAtDestinationIndexPath)
             }
             else if point.y > activeAppsHeaderAttributes.frame.minY
             {
-                // Active apps section.
                 return UICollectionViewDropProposal(operation: .move, intent: .insertAtDestinationIndexPath)
             }
             else
@@ -2604,15 +2984,11 @@ extension MyAppsViewController: UICollectionViewDropDelegate
         }
         else
         {
-            // Activating
-            
             guard point.y > activeAppsHeaderAttributes.frame.minY else {
-                // Above active apps section.
                 return UICollectionViewDropProposal(operation: .cancel)
             }
             
             guard point.y < inactiveAppsHeaderAttributes.frame.minY else {
-                // Inactive apps section.
                 return UICollectionViewDropProposal(operation: .move, intent: .insertAtDestinationIndexPath)
             }
             
@@ -2621,26 +2997,19 @@ extension MyAppsViewController: UICollectionViewDropDelegate
             
             if installedApp.requiredActiveSlots <= availableActiveApps
             {
-                // Enough active app slots, so no need to deactivate app first.
                 return UICollectionViewDropProposal(operation: .copy, intent: .insertAtDestinationIndexPath)
             }
             else
             {
-                // Not enough active app slots, so we need to deactivate an app.
-                
-                // Provided destinationIndexPath is inaccurate.
                 guard let indexPath = collectionView.indexPathForItem(at: point), indexPath.section == Section.activeApps.rawValue else {
-                    // Invalid destination index path.
                     return UICollectionViewDropProposal(operation: .cancel)
                 }
                 
                 let installedApp = self.dataSource.item(at: indexPath)
                 guard installedApp.bundleIdentifier != StoreApp.altstoreAppID else {
-                    // Can't deactivate AltStore.
                     return UICollectionViewDropProposal(operation: .forbidden, intent: .insertIntoDestinationIndexPath)
                 }
                 
-                // This app can be deactivated!
                 dropDestinationIndexPath = indexPath
                 return UICollectionViewDropProposal(operation: .move, intent: .insertIntoDestinationIndexPath)
             }
@@ -2700,11 +3069,6 @@ extension MyAppsViewController: NSFetchedResultsControllerDelegate
             {
             case self.activeAppsDataSource: self.didChangeActiveApps = false
             case self.updatesDataSource where !_viewDidAppear:
-                // Responding to NSFetchedResultsController updates before the collection view has
-                // been shown may throw exceptions because the collection view cannot accurately
-                // count the number of items before the update. However, if we manually call
-                // performBatchUpdates _before_ responding to updates, the collection view can get
-                // an accurate pre-update item count.
                 self.collectionView.performBatchUpdates(nil, completion: nil)
                 
             default: break
@@ -2728,7 +3092,6 @@ extension MyAppsViewController: NSFetchedResultsControllerDelegate
         switch dataSource
         {
         case self.activeAppsDataSource where type == .insert || type == .delete:
-            // Update unsupportedUpdates if there is insertion or deletion in active apps section.
             self.didChangeActiveApps = true
             
         default: break
@@ -2772,17 +3135,14 @@ extension MyAppsViewController: NSFetchedResultsControllerDelegate
                 
                 if previousUpdateCount == 0 && updateCount > 0
                 {
-                    // Remove "No Updates Available" cell.
                     let change = CellContentChange(type: .delete, currentIndexPath: IndexPath(item: 0, section: Section.noUpdates.rawValue), destinationIndexPath: nil)
                     self.collectionView.add(change)
                 }
                 else if previousUpdateCount > 0 && updateCount == 0
                 {
-                    // Insert "No Updates Available" cell.
                     let change = CellContentChange(type: .insert, currentIndexPath: nil, destinationIndexPath: IndexPath(item: 0, section: Section.noUpdates.rawValue))
                     self.collectionView.add(change)
                     
-                    // Update unsupported updates _before_ calling controllerDidChangeContent()
                     self.updateUnsupportedUpdates()
                 }
             
@@ -2858,7 +3218,7 @@ extension MyAppsViewController: UIViewControllerPreviewingDelegate
 }
 
 #if !os(tvOS)
-extension MyAppsViewController: UIImagePickerControllerDelegate, UINavigationControllerDelegate
+extension MyAppsViewController: UIImagePickerControllerDelegate
 {
     func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any])
     {

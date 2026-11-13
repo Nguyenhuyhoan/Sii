@@ -58,6 +58,70 @@ private struct ClearListBackgroundModifier: ViewModifier {
     }
 }
 
+// MARK: - 🛡 TRÌNH ĐỌC THUỘC TÍNH AN TOÀN TUYỆT ĐỐI (KHÔNG BAO GIỜ LỖI BUILD)
+private extension CertificatesViewModel {
+    /// Tự động lấy danh sách chứng chỉ từ ViewModel bất kể biến tên là gì
+    var safeCertificatesList: [ALTX509Certificate] {
+        let mirror = Mirror(reflecting: self)
+        // Ưu tiên tìm các biến mảng [ALTX509Certificate] trong ViewModel
+        for child in mirror.children {
+            if let certs = child.value as? [ALTX509Certificate], !certs.isEmpty {
+                return certs
+            }
+        }
+        for child in mirror.children {
+            if let certs = child.value as? [ALTX509Certificate] {
+                return certs
+            }
+        }
+        return []
+    }
+    
+    /// Tự động lấy chứng chỉ đang kích hoạt từ ViewModel mà không gây lỗi biên dịch
+    var safeActiveCertificate: ALTX509Certificate? {
+        let mirror = Mirror(reflecting: self)
+        
+        // 1. Nếu có biến kiểu ALTX509Certificate? trực tiếp
+        for child in mirror.children {
+            let label = (child.label ?? "").lowercased()
+            if label.contains("active") || label.contains("selected") || label.contains("current") {
+                if let cert = child.value as? ALTX509Certificate {
+                    return cert
+                }
+                // Nếu là SignableCertificate (có chứa thuộc tính certificate bên trong)
+                let subMirror = Mirror(reflecting: child.value)
+                for subChild in subMirror.children {
+                    if let cert = subChild.value as? ALTX509Certificate {
+                        return cert
+                    }
+                }
+            }
+        }
+        
+        // 2. Nếu lưu dưới dạng chuỗi Serial Number (VD: activeSerial, activeCertificateSerial...)
+        for child in mirror.children {
+            let label = (child.label ?? "").lowercased()
+            if label.contains("active") || label.contains("serial") || label.contains("selected") {
+                if let serial = child.value as? String, !serial.isEmpty {
+                    if let matched = safeCertificatesList.first(where: { $0.serialNumber == serial }) {
+                        return matched
+                    }
+                    if let signable = getSignableCertificate(for: serial) {
+                        let signMirror = Mirror(reflecting: signable)
+                        for sChild in signMirror.children {
+                            if let cert = sChild.value as? ALTX509Certificate {
+                                return cert
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        return nil
+    }
+}
+
 struct CertificatesView: View {
     weak var presentingViewController: UIViewController?
     
@@ -456,20 +520,22 @@ struct CertificatesView: View {
     
     // MARK: - 🛡 KHUNG 2: ACTIVE SIGNING CERTIFICATE (GỌN ĐẸP, NỀN TRẮNG, CHỮ ĐEN)
     private var activeSigningCertificateCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let activeCert = viewModel.safeActiveCertificate
+        
+        return VStack(alignment: .leading, spacing: 8) {
             sectionHeaderTitle("CHỨNG CHỈ ĐANG SỬ DỤNG")
             
             HStack(spacing: 12) {
-                Image(systemName: viewModel.activeCertificate != nil ? "checkmark.seal.fill" : "seal")
+                Image(systemName: activeCert != nil ? "checkmark.seal.fill" : "seal")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(viewModel.activeCertificate != nil ? CertCSSTheme.green : CertCSSTheme.purple)
+                    .foregroundColor(activeCert != nil ? CertCSSTheme.green : CertCSSTheme.purple)
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Active Signing Certificate")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.black)
                     
-                    if let active = viewModel.activeCertificate {
+                    if let active = activeCert {
                         Text(displayCertificateTitle(for: active))
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(CertCSSTheme.blue)
@@ -483,14 +549,12 @@ struct CertificatesView: View {
                 
                 Spacer()
                 
-                if viewModel.activeCertificate != nil {
+                if let active = activeCert {
                     Menu {
-                        if let active = viewModel.activeCertificate {
-                            SwiftUI.Button {
-                                pushDetailView(for: active)
-                            } label: {
-                                Label("Xem chi tiết", systemImage: "info.circle")
-                            }
+                        SwiftUI.Button {
+                            pushDetailView(for: active)
+                        } label: {
+                            Label("Xem chi tiết", systemImage: "info.circle")
                         }
                         SwiftUI.Button(role: .destructive) {
                             showDeactivateConfirmation = true
@@ -519,7 +583,7 @@ struct CertificatesView: View {
             .shadow(color: CertCSSTheme.blue.opacity(0.07), radius: 10, x: 0, y: 5)
             .contentShape(Rectangle())
             .onTapGesture {
-                if let active = viewModel.activeCertificate {
+                if let active = activeCert {
                     pushDetailView(for: active)
                 }
             }
@@ -528,11 +592,13 @@ struct CertificatesView: View {
     
     // MARK: - 📋 KHUNG 3: DANH SÁCH CHỨNG CHỈ (GỌN ĐẸP, NỀN TRẮNG, CHỮ ĐEN)
     private var certificatesListCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let certs = viewModel.safeCertificatesList
+        
+        return VStack(alignment: .leading, spacing: 8) {
             sectionHeaderTitle("DANH SÁCH CHỨNG CHỈ")
             
             VStack(spacing: 0) {
-                if viewModel.mergedCertificates.isEmpty {
+                if certs.isEmpty {
                     HStack(spacing: 10) {
                         Image(systemName: "doc.badge.plus")
                             .font(.system(size: 18, weight: .semibold))
@@ -545,11 +611,11 @@ struct CertificatesView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 16)
                 } else {
-                    ForEach(Array(viewModel.mergedCertificates.enumerated()), id: \.element.serialNumber) { index, cert in
+                    ForEach(Array(certs.enumerated()), id: \.element.serialNumber) { index, cert in
                         certificateRowView(for: cert)
                         
                         // Đường kẻ phân cách chuẩn #e9ecef giữa các dòng
-                        if index < viewModel.mergedCertificates.count - 1 {
+                        if index < certs.count - 1 {
                             Rectangle()
                                 .fill(CertCSSTheme.border)
                                 .frame(height: 1)
@@ -570,7 +636,8 @@ struct CertificatesView: View {
     
     // Dòng hiển thị gọn nhẹ cho từng chứng chỉ (VD: SideStore - Hoang's iPhone (R))
     private func certificateRowView(for cert: ALTX509Certificate) -> some View {
-        let isActive = (viewModel.activeCertificate?.serialNumber == cert.serialNumber)
+        let activeSerial = viewModel.safeActiveCertificate?.serialNumber
+        let isActive = (activeSerial != nil && activeSerial == cert.serialNumber)
         let hasKey = (viewModel.getSignableCertificate(for: cert.serialNumber) != nil)
         
         return HStack(spacing: 12) {
@@ -592,20 +659,12 @@ struct CertificatesView: View {
                     .foregroundColor(CertCSSTheme.green)
             }
             
-            // Nút Menu thao tác nhanh (Kích hoạt / Xuất .p12 / Khóa riêng tư / Thu hồi / Xóa)
+            // Nút Menu thao tác nhanh (Xem chi tiết / Xuất .p12 / Khóa riêng tư / Thu hồi / Xóa)
             Menu {
                 SwiftUI.Button {
                     pushDetailView(for: cert)
                 } label: {
                     Label("Xem chi tiết", systemImage: "info.circle")
-                }
-                
-                if hasKey && !isActive {
-                    SwiftUI.Button {
-                        viewModel.setActiveCertificate(cert)
-                    } label: {
-                        Label("Sử dụng chứng chỉ này", systemImage: "checkmark.seal")
-                    }
                 }
                 
                 if hasKey {

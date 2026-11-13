@@ -470,6 +470,7 @@ final class SystemCheckViewModel: ObservableObject {
 
     @Published var isAnisetteOK: Bool = !UserDefaults.standard.useOnDeviceAnisette
     @Published var useOnDeviceAnisette: Bool = UserDefaults.standard.useOnDeviceAnisette
+    @Published var isAnisetteAutoRotationEnabled: Bool = !UserDefaults.standard.disableAnisetteRotation
     @Published var selectedAnisetteServerURL: String = AnisetteDefaultsHelper.currentServerURL
     @Published var anisetteDetail: String = ""
 
@@ -761,6 +762,12 @@ final class SystemCheckViewModel: ObservableObject {
         updateInstantStatus()
     }
 
+    func setAnisetteAutoRotationEnabled(_ enabled: Bool) {
+        UserDefaults.standard.disableAnisetteRotation = !enabled
+        assignIfChanged(\.isAnisetteAutoRotationEnabled, enabled)
+        updateInstantStatus()
+    }
+
     func setCellularRefreshEnabled(_ enabled: Bool) {
         guard isCellularRefreshEnabled != enabled || UserDefaults.standard.isCellularRefreshEnabled != enabled else { return }
         isCellularRefreshEnabled = enabled
@@ -951,6 +958,9 @@ final class SystemCheckViewModel: ObservableObject {
         let onDevice = UserDefaults.standard.useOnDeviceAnisette
         assignIfChanged(\.useOnDeviceAnisette, onDevice)
         assignIfChanged(\.isAnisetteOK, !onDevice)
+
+        let autoRotation = !UserDefaults.standard.disableAnisetteRotation
+        assignIfChanged(\.isAnisetteAutoRotationEnabled, autoRotation)
 
         let selectedURL = AnisetteDefaultsHelper.currentServerURL
         assignIfChanged(\.selectedAnisetteServerURL, selectedURL)
@@ -2762,6 +2772,30 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                                              : "(Nên Tắt Để Dễ Đăng Nhập)")
                                     .font(.system(size: 13, weight: .semibold))
                                     .foregroundColor(vm.useOnDeviceAnisette ? CSSTheme.red : CSSTheme.green)
+                            }
+                        }
+                        .tint(CSSTheme.primary)
+                        .padding(12)
+                        .background(CSSTheme.innerRowBackground)
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(CSSTheme.innerBorder, lineWidth: 1)
+                        )
+
+                        Toggle(isOn: Binding(
+                            get: { vm.isAnisetteAutoRotationEnabled },
+                            set: { vm.setAnisetteAutoRotationEnabled($0) }
+                        )) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                SwiftUI.Text("Enable Auto Rotation")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(CSSTheme.pureBlack)
+                                SwiftUI.Text(vm.isAnisetteAutoRotationEnabled
+                                             ? "(Tự Động Đổi Máy Chủ Khi Lỗi)"
+                                             : "Đang TẮT (Nên Bật Để Tự Đổi Máy Chủ)")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(vm.isAnisetteAutoRotationEnabled ? CSSTheme.green : CSSTheme.red)
                             }
                         }
                         .tint(CSSTheme.primary)

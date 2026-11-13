@@ -8,513 +8,818 @@
 //
 
 import UIKit
+import StoreKit
 import Intents
-import IntentsUI
-import SafariServices
-import UniformTypeIdentifiers
 import SwiftUI
-
-import AltStoreCore
-import Roxas
+import UniformTypeIdentifiers
+import LocalAuthentication
 import Minimuxer
+import Nuke
+import SemanticVersion
 
-extension SettingsViewController {
-    private enum Section: Int, CaseIterable {
-        case appleID, activeTeam, backgroundRefresh, cellularRefresh, appLimit, useMainProfile, patreon, pairingFile, errorLog, customizations, instructions, troubleshooting
+extension SettingsViewController
+{
+    private enum Section: Int, CaseIterable
+    {
+        case appleID
+        case patreon
+        case pairingFile
+        case refreshAttempts
+        case errorLog
+        case jit
+        case app
+        case userCustomizations
+        case debug
     }
+    
+    private enum AppleIDRow: Int, CaseIterable
+    {
+        case account
+        case activeProfile
+        case server
+    }
+    
+    private enum PatreonRow: Int, CaseIterable
+    {
+        case account
+        case about
+    }
+    
+    private enum PairingFileRow: Int, CaseIterable
+    {
+        case reset
+        case export
+        case test
+    }
+    
+    private enum JITRow: Int, CaseIterable
+    {
+        case customUrl
+    }
+    
+    private enum AppRow: Int, CaseIterable
+    {
+        case backgroundRefresh
+        case siriShortcuts
+        case appIcon
+    }
+    
+    private enum DebugRow: Int, CaseIterable
+    {
+        case clearCache
+        case appGrouping
+        case enforceThreeAppLimit
+        case syncTrustedSources
+        case resetAllSettings
+    }
+}
 
-    private enum InstructionLink: Int, CaseIterable {
-        case step1, step2, step3
-        var url: URL {
-            switch self {
-            case .step1: return URL(string: "https://Getting-Started/#installing-wireguard")!
-            case .step2: return URL(string: "https://Getting-Started/#generate-the-pairing-file")!
-            case .step3: return URL(string: "https://Getting-Started/#install-sidestore")!
+class SettingsViewController: UITableViewController
+{
+    private var prototypeAboutPatreonCell: AboutPatreonTableViewCell!
+    
+    private var patrons = [Patron]()
+    
+    private lazy var dateFormatter: DateFormatter = {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .short
+        dateFormatter.timeStyle = .medium
+        return dateFormatter
+    }()
+    
+    @IBOutlet private var accountLabel: UILabel!
+    @IBOutlet private var signInButton: UIButton!
+    @IBOutlet private var activeTeamLabel: UILabel!
+    @IBOutlet private var serverHeaderTextView: UITextView!
+    @IBOutlet private var serverFooterTextView: UITextView!
+    @IBOutlet private var anisetteServerButton: UIButton!
+    
+    @IBOutlet private var patreonAccountLabel: UILabel!
+    @IBOutlet private var patreonButton: UIButton!
+    @IBOutlet private var backgroundRefreshSwitch: UISwitch!
+    @IBOutlet private var clearCacheButton: UIButton!
+    @IBOutlet private var appGroupingSwitch: UISwitch!
+    @IBOutlet private var enforceThreeAppLimitSwitch: UISwitch!
+    @IBOutlet private var syncTrustedSourcesSwitch: UISwitch!
+    @IBOutlet private var resetPairingFileButton: UIButton!
+    @IBOutlet private var exportPairingFileButton: UIButton!
+    @IBOutlet private var testPairingFileButton: UIButton!
+    @IBOutlet private var resetAllSettingsButton: UIButton!
+    @IBOutlet private var jitURLTextField: UITextField!
+    
+    override func viewDidLoad()
+    {
+        super.viewDidLoad()
+        
+        self.prototypeAboutPatreonCell = AboutPatreonTableViewCell.instantiate(with: AboutPatreonTableViewCell.nib!)
+        self.prototypeAboutPatreonCell.contentView.translatesAutoresizingMaskIntoConstraints = false
+        
+        self.tableView.backgroundColor = .altBackground
+        
+        self.tableView.register(AboutPatreonTableViewCell.nib, forCellReuseIdentifier: "AboutPatreonCell")
+        self.tableView.register(RefreshAttemptTableViewCell.self, forCellReuseIdentifier: "RefreshAttemptCell")
+        self.tableView.register(PatreonGoalTableViewHeaderView.self, forHeaderFooterViewReuseIdentifier: "PatreonHeaderView")
+        self.tableView.register(SettingsFooterView.nib, forHeaderFooterViewReuseIdentifier: "FooterView")
+        
+        self.signInButton.titleLabel?.font = UIFont.systemFont(ofSize: 17)
+        self.patreonButton.titleLabel?.font = UIFont.systemFont(ofSize: 17)
+        self.clearCacheButton.titleLabel?.font = UIFont.systemFont(ofSize: 17)
+        
+        let tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(SettingsViewController.dismissKeyboard))
+        tapGestureRecognizer.cancelsTouchesInView = false
+        self.tableView.addGestureRecognizer(tapGestureRecognizer)
+        
+        self.serverHeaderTextView.textContainerInset = .zero
+        self.serverHeaderTextView.textContainer.lineFragmentPadding = 0
+        self.serverFooterTextView.textContainerInset = .zero
+        self.serverFooterTextView.textContainer.lineFragmentPadding = 0
+        
+        self.jitURLTextField.text = UserDefaults.standard.textFieldJITURL
+        self.jitURLTextField.delegate = self
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 2
+        
+        let headerString = AppStrings.Settings.Server.headerDescription
+        let headerAttributedString = NSMutableAttributedString(string: headerString, attributes: [
+            .font: UIFont.preferredFont(forTextStyle: .footnote),
+            .foregroundColor: UIColor.systemGray,
+            .paragraphStyle: paragraphStyle
+        ])
+        
+        if let linkRange = headerString.range(of: AppStrings.Settings.Server.hostYourOwnLink)
+        {
+            headerAttributedString.addAttributes([
+                .link: URL(string: "https://wiki.sidestore.io/guides/custom-anisette/")!
+            ], range: NSRange(linkRange, in: headerString))
+        }
+        self.serverHeaderTextView.attributedText = headerAttributedString
+        
+        let footerString = AppStrings.Settings.Server.footerDescription
+        let footerAttributedString = NSMutableAttributedString(string: footerString, attributes: [
+            .font: UIFont.preferredFont(forTextStyle: .footnote),
+            .foregroundColor: UIColor.systemGray,
+            .paragraphStyle: paragraphStyle
+        ])
+        self.serverFooterTextView.attributedText = footerAttributedString
+        
+        NotificationCenter.default.addObserver(self, selector: #selector(SettingsViewController.didUpdatePatrons(_:)), name: AppManager.didUpdatePatronsNotification, object: nil)
+        
+        self.fetchPatrons()
+        self.prepareAnisetteServerMenu()
+    }
+    
+    override func viewWillAppear(_ animated: Bool)
+    {
+        super.viewWillAppear(animated)
+        
+        self.update()
+    }
+    
+    override func viewDidLayoutSubviews()
+    {
+        super.viewDidLayoutSubviews()
+        
+        let insets = self.tableView.separatorInset
+        let width = self.tableView.bounds.width - (insets.left + insets.right)
+        
+        if self.prototypeAboutPatreonCell.contentView.bounds.size.width != width
+        {
+            self.prototypeAboutPatreonCell.contentView.bounds.size.width = width
+            self.tableView.reloadData()
+        }
+    }
+}
+
+private extension SettingsViewController
+{
+    func update()
+    {
+        if let team = DatabaseManager.shared.activeTeam()
+        {
+            self.accountLabel.text = "\(team.account.name) (\(team.account.appleID))"
+            self.signInButton.setTitle(AppStrings.Settings.signOut, for: .normal)
+            self.signInButton.tintColor = .refreshRed
+            
+            self.activeTeamLabel.text = "\(team.name) (\(team.type.localizedDescription))"
+        }
+        else
+        {
+            self.accountLabel.text = AppStrings.Settings.none
+            self.signInButton.setTitle(AppStrings.Settings.signIn, for: .normal)
+            self.signInButton.tintColor = .altPrimary
+            
+            self.activeTeamLabel.text = AppStrings.Settings.none
+        }
+        
+        if PatreonAPI.shared.isAuthenticated
+        {
+            if let account = DatabaseManager.shared.patreonAccount()
+            {
+                self.patreonAccountLabel.text = account.name
+            }
+            else
+            {
+                self.patreonAccountLabel.text = AppStrings.Settings.none
+            }
+            
+            self.patreonButton.setTitle(AppStrings.Settings.unlinkPatreon, for: .normal)
+            self.patreonButton.tintColor = .refreshRed
+        }
+        else
+        {
+            self.patreonAccountLabel.text = AppStrings.Settings.none
+            self.patreonButton.setTitle(AppStrings.Settings.linkPatreon, for: .normal)
+            self.patreonButton.tintColor = .altPrimary
+        }
+        
+        self.backgroundRefreshSwitch.isOn = UserDefaults.standard.isBackgroundRefreshEnabled
+        self.appGroupingSwitch.isOn = !UserDefaults.standard.isAppGroupingDisabled
+        self.enforceThreeAppLimitSwitch.isOn = UserDefaults.shared.enforceThreeAppLimit
+        self.syncTrustedSourcesSwitch.isOn = UserDefaults.standard.syncTrustedSources
+        
+        self.tableView.reloadData()
+    }
+    
+    func fetchPatrons()
+    {
+        DispatchQueue.global().async {
+            let context = DatabaseManager.shared.persistentContainer.newBackgroundContext()
+            context.performAndWait {
+                let fetchRequest = Patron.fetchRequest() as NSFetchRequest<Patron>
+                fetchRequest.sortDescriptors = [NSSortDescriptor(key: #keyPath(Patron.name), ascending: true, selector: #selector(NSString.localizedCaseInsensitiveCompare(_:)))]
+                
+                do
+                {
+                    let patrons = try context.fetch(fetchRequest)
+                    
+                    DispatchQueue.main.async {
+                        self.patrons = patrons
+                        
+                        UIView.performWithoutAnimation {
+                            self.tableView.reloadSections([Section.patreon.rawValue], with: .none)
+                        }
+                    }
+                }
+                catch
+                {
+                    print("Failed to fetch Patrons:", error)
+                }
+            }
+        }
+        
+        AppManager.shared.updatePatronsIfNeeded()
+    }
+    
+    func prepareAnisetteServerMenu()
+    {
+        self.anisetteServerButton.showsMenuAsPrimaryAction = true
+        self.anisetteServerButton.changesSelectionAsPrimaryAction = true
+        
+        let currentURL = UserDefaults.standard.menuAnisetteURL
+        var isCustomSelected = !AnisetteServer.currentServers.contains(where: { $0.url == currentURL })
+        
+        // Check if currentURL is empty (initial state)
+        if currentURL.isEmpty, let firstServer = AnisetteServer.currentServers.first {
+            UserDefaults.standard.menuAnisetteURL = firstServer.url
+            isCustomSelected = false
+        }
+        
+        var actions: [UIMenuElement] = AnisetteServer.currentServers.map { server in
+            let isSelected = (server.url == UserDefaults.standard.menuAnisetteURL)
+            return UIAction(title: server.name, subtitle: server.url, state: isSelected ? .on : .off) { _ in
+                UserDefaults.standard.menuAnisetteURL = server.url
+                UserDefaults.standard.isCustomAnisetteServer = false
+                self.prepareAnisetteServerMenu()
+            }
+        }
+        
+        let customSubtitle = isCustomSelected ? UserDefaults.standard.customAnisetteURL : AppStrings.Settings.Server.enterCustomURL
+        let customAction = UIAction(title: AppStrings.Settings.Server.custom, subtitle: customSubtitle, state: isCustomSelected ? .on : .off) { [weak self] _ in
+            self?.promptForCustomAnisetteURL()
+        }
+        actions.append(customAction)
+        
+        self.anisetteServerButton.menu = UIMenu(title: AppStrings.Settings.Server.selectAnisetteServer, children: actions)
+    }
+    
+    func promptForCustomAnisetteURL()
+    {
+        let alertController = UIAlertController(title: AppStrings.Settings.Server.customAnisetteServerTitle, message: AppStrings.Settings.Server.customAnisetteServerMessage, preferredStyle: .alert)
+        alertController.addTextField { textField in
+            textField.placeholder = "https://anisette.example.com"
+            textField.text = UserDefaults.standard.customAnisetteURL
+            textField.keyboardType = .URL
+            textField.autocorrectionType = .no
+            textField.autocapitalizationType = .none
+        }
+        
+        let cancelAction = UIAlertAction(title: UIAlertAction.cancel.title, style: .cancel) { [weak self] _ in
+            self?.prepareAnisetteServerMenu()
+        }
+        alertController.addAction(cancelAction)
+        
+        let saveAction = UIAlertAction(title: AppStrings.Common.save, style: .default) { [weak self] _ in
+            guard let text = alertController.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !text.isEmpty,
+                  let url = URL(string: text),
+                  url.scheme != nil, url.host != nil else {
+                self?.presentAlert(title: AppStrings.Error.invalidURLTitle, message: AppStrings.Error.invalidURLMessage)
+                self?.prepareAnisetteServerMenu()
+                return
+            }
+            
+            UserDefaults.standard.customAnisetteURL = text
+            UserDefaults.standard.menuAnisetteURL = text
+            UserDefaults.standard.isCustomAnisetteServer = true
+            self?.prepareAnisetteServerMenu()
+        }
+        alertController.addAction(saveAction)
+        
+        self.present(alertController, animated: true)
+    }
+    
+    func presentAlert(title: String, message: String)
+    {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: systemLocalizedString("OK"), style: .default))
+        self.present(alert, animated: true)
+    }
+    
+    @objc func dismissKeyboard()
+    {
+        self.view.endEditing(true)
+    }
+}
+
+private extension SettingsViewController
+{
+    @IBAction func authenticate(_ sender: UIButton)
+    {
+        if let team = DatabaseManager.shared.activeTeam()
+        {
+            let alertController = UIAlertController(title: AppStrings.Settings.signOutConfirmTitle, message: AppStrings.Settings.signOutConfirmMessage, preferredStyle: .actionSheet)
+            alertController.popoverPresentationController?.sourceView = sender
+            alertController.popoverPresentationController?.sourceRect = sender.bounds
+            alertController.addAction(UIAlertAction(title: AppStrings.Settings.signOut, style: .destructive) { (action) in
+                DatabaseManager.shared.signOut { (error) in
+                    DispatchQueue.main.async {
+                        if let error = error
+                        {
+                            let toastView = ToastView(error: error)
+                            toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
+                        }
+                        
+                        self.update()
+                    }
+                }
+            })
+            alertController.addAction(.cancel)
+            self.present(alertController, animated: true, completion: nil)
+        }
+        else
+        {
+            AuthenticationViewController.authenticate { (result) in
+                switch result
+                {
+                case .failure(OperationError.cancelled): break // Ignore
+                case .failure(let error):
+                    DispatchQueue.main.async {
+                        let toastView = ToastView(error: error)
+                        toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
+                    }
+                    
+                case .success((let account, let team, _)):
+                    let context = DatabaseManager.shared.persistentContainer.newBackgroundContext()
+                    context.performAndWait {
+                        let account = context.object(with: account.objectID) as! Account
+                        account.isActiveAccount = true
+                        
+                        let team = context.object(with: team.objectID) as! Team
+                        team.isActiveTeam = true
+                        
+                        do
+                        {
+                            try context.save()
+                        }
+                        catch
+                        {
+                            print("Failed to save active account and team.", error)
+                        }
+                    }
+                }
+                
+                DispatchQueue.main.async {
+                    self.update()
+                }
             }
         }
     }
-
-    private enum TroubleshootingRow: Int, CaseIterable {
-        case resetAll, clearCache, EnforceFallback
-    }
-}
-
-final class SettingsViewController: UITableViewController {
-    private var account: Account?
-    private var team: Team?
-    private var isFetchingPatrons = true
-    private var fetchPatronsError: Error?
-
-    private var debugTapCount = 0
-    private var showDebugSection = false
-
-    @IBOutlet private var backgroundRefreshSwitch: UISwitch!
-    @IBOutlet private var cellularRefreshSwitch: UISwitch!
-    @IBOutlet private var appLimitSwitch: UISwitch!
-    @IBOutlet private var useMainProfileSwitch: UISwitch!
-
-    @IBOutlet private var signOutBarButtonItem: UIBarButtonItem!
-    @IBOutlet private var footerView: UIView!
-    @IBOutlet private var signOutButton: UIButton!
-    @IBOutlet private var versionLabel: UILabel!
-
-    @IBOutlet var mastodonButton: UIButton!
-    @IBOutlet var threadsButton: UIButton!
-    @IBOutlet var twitterButton: UIButton!
-    @IBOutlet var githubButton: UIButton!
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-
-        // Đồng bộ thanh Navigation Bar kính mờ (.site-header) từ ThemeManager
-        applyCSSNavigationBar(tintColor: AppUI.Colors.blue, transparentEdge: true)
-
-        let bgView = UIView(frame: view.bounds)
-        bgView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        bgView.applyCSSBodyGradient()
-        tableView.backgroundView = bgView
-        tableView.backgroundColor = .clear
-        tableView.separatorColor = AppUI.Colors.border
-        footerView.backgroundColor = .clear
-
-        // Đồng bộ màu các nút gạt UISwitch theo bảng màu CSS
-        [backgroundRefreshSwitch, cellularRefreshSwitch, appLimitSwitch, useMainProfileSwitch].forEach {
-            $0?.onTintColor = AppUI.Colors.green
-            $0?.tintColor = AppUI.Colors.border
-        }
-
-        // Làm đẹp các nút Icon mạng xã hội (Mastodon, Threads, Twitter, GitHub) từ ThemeManager
-        [mastodonButton, threadsButton, twitterButton, githubButton].forEach {
-            $0?.applyCSSSocialIconStyle()
-        }
-
-        // Nút Sign Out theo chuẩn nút CSS (.btn-color-1 / destructive)
-        signOutButton.configuration = nil
-        signOutButton.applyCSSButton(title: AppStrings.Settings.signOut, style: .destructiveRed, fontSize: 16)
-
-        tableView.register(SettingsHeaderFooterView.self, forHeaderFooterViewReuseIdentifier: "HeaderView")
-        tableView.register(SettingsHeaderFooterView.self, forHeaderFooterViewReuseIdentifier: "FooterView")
-
-        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(didTapVersionLabel(_:)))
-        versionLabel.addGestureRecognizer(tapGesture)
-        versionLabel.isUserInteractionEnabled = true
-
-        NotificationCenter.default.addObserver(self, selector: #selector(didUpdatePatrons(_:)), name: PatreonAPI.didUpdatePatronsNotification, object: nil)
-        update()
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        tableView.backgroundView?.updateCSSBodyGradientFrame()
-    }
-
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        fetchPatronsIfNeeded()
-        update()
-    }
-}
-
-private extension SettingsViewController {
-    var appVersionText: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
-        var build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
-        if let index = build.range(of: ".", options: .backwards)?.upperBound {
-            build = String(build[index...])
-        }
-        return version == build ? "SideStore \(version)" : "SideStore \(version) (\(build))"
-    }
-
-    var iosVersionText: String {
-        let osVersion = ProcessInfo.processInfo.operatingSystemVersion
-        var versionString = "\(osVersion.majorVersion).\(osVersion.minorVersion)"
-        if osVersion.patchVersion != 0 { versionString += ".\(osVersion.patchVersion)" }
-        let buildString = Self.osBuildString() ?? "Unknown"
-        return "\(UIDevice.current.systemName) \(versionString) (\(buildString))"
-    }
-
-    static func osBuildString() -> String? {
-        var size: Int = 0
-        guard sysctlbyname("kern.osversion", nil, &size, nil, 0) == 0, size > 0 else { return nil }
-        var buffer = [CChar](repeating: 0, count: size)
-        guard sysctlbyname("kern.osversion", &buffer, &size, nil, 0) == 0 else { return nil }
-        return String(cString: buffer)
-    }
-
-    func update() {
-        account = DatabaseManager.shared.activeAccount()
-        team = DatabaseManager.shared.activeTeam()
-
-        navigationItem.rightBarButtonItem = (account == nil) ? nil : signOutBarButtonItem
-
-        versionLabel.numberOfLines = 0
-        versionLabel.attributedText = UILabel.makeCSSVersionAttributedString(appVersion: appVersionText, iosVersion: iosVersionText)
-
-        backgroundRefreshSwitch.isOn = UserDefaults.standard.isBackgroundRefreshEnabled
-        cellularRefreshSwitch.isOn = UserDefaults.standard.isCellularRefreshEnabled
-        appLimitSwitch.isOn = UserDefaults.standard.isAppLimitDisabled
-        useMainProfileSwitch.isOn = UserDefaults.standard.useMainProfile
-
-        signOutButton.isHidden = (account == nil)
-
-        footerView.layoutIfNeeded()
-        let height = footerView.systemLayoutSizeFitting(CGSize(width: tableView.bounds.width, height: UIView.layoutFittingCompressedSize.height)).height
-        footerView.frame.size.height = height
-        tableView.tableFooterView = footerView
-
-        tableView.reloadData()
-    }
-
-    func signIn() {
-        guard Minimuxer.ready() else {
-            let alert = UIAlertController(
-                title: AppStrings.Settings.noPairingFileTitle,
-                message: AppStrings.Settings.noPairingFileMessage,
-                preferredStyle: .alert
-            )
-            alert.addAction(UIAlertAction(title: RSTSystemLocalizedString("OK"), style: .default))
-            present(alert, animated: true)
+    
+    @IBAction func linkPatreonAccount(_ sender: UIButton)
+    {
+        guard !PatreonAPI.shared.isAuthenticated else {
+            let alertController = UIAlertController(title: AppStrings.Settings.unlinkPatreonConfirmTitle, message: AppStrings.Settings.unlinkPatreonConfirmMessage, preferredStyle: .actionSheet)
+            alertController.popoverPresentationController?.sourceView = sender
+            alertController.popoverPresentationController?.sourceRect = sender.bounds
+            alertController.addAction(UIAlertAction(title: AppStrings.Settings.unlinkPatreon, style: .destructive) { (action) in
+                PatreonAPI.shared.signOut { (result) in
+                    DispatchQueue.main.async {
+                        do
+                        {
+                            try result.get()
+                        }
+                        catch
+                        {
+                            let toastView = ToastView(error: error)
+                            toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
+                        }
+                        
+                        self.update()
+                    }
+                }
+            })
+            alertController.addAction(.cancel)
+            self.present(alertController, animated: true, completion: nil)
+            
             return
         }
-
-        AppManager.shared.authenticate(presentingViewController: self) { result in
+        
+        PatreonAPI.shared.authenticate(presentingViewController: self) { (result) in
             DispatchQueue.main.async {
-                switch result {
-                case .failure(AuthenticationError.cancelled): break
-                case .failure(let error):
-                    ToastView(error: error, opensLog: true).show(in: self.navigationController?.view ?? self.view)
-                case .success:
-                    self.update()
+                do
+                {
+                    let account = try result.get()
+                    try account.managedObjectContext?.save()
                 }
+                catch OperationError.cancelled
+                {
+                    // Ignore
+                }
+                catch
+                {
+                    let toastView = ToastView(error: error)
+                    toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
+                }
+                
+                self.update()
             }
         }
     }
-
-    @IBAction func signOut(_ sender: Any) {
-        let alert = UIAlertController(
-            title: AppStrings.Settings.signOutConfirmTitle,
-            message: AppStrings.Settings.signOutConfirmMessage,
-            preferredStyle: .actionSheet
-        )
-        alert.addAction(UIAlertAction(title: AppStrings.Settings.signOut, style: .destructive) { _ in
-            DatabaseManager.shared.signOut { error in
-                DispatchQueue.main.async {
-                    if let error { ToastView(error: error, opensLog: true).show(in: self) }
-                    self.update()
-                }
-            }
-        })
-        alert.addAction(UIAlertAction(title: UIAlertAction.cancel.title, style: .cancel))
-        present(alert, animated: true)
-    }
-
-    @IBAction func toggleBackgroundRefresh(_ sender: UISwitch) {
+    
+    @IBAction func toggleBackgroundRefresh(_ sender: UISwitch)
+    {
         UserDefaults.standard.isBackgroundRefreshEnabled = sender.isOn
     }
-
-    @IBAction func toggleCellularRefresh(_ sender: UISwitch) {
-        UserDefaults.standard.isCellularRefreshEnabled = sender.isOn
-    }
-
-    @IBAction func toggleAppLimit(_ sender: UISwitch) {
-        guard sender.isOn else {
-            UserDefaults.standard.isAppLimitDisabled = false
-            return
-        }
-        let alert = UIAlertController(
-            title: AppStrings.Settings.removeAppLimitTitle,
-            message: AppStrings.Settings.removeAppLimitMessage,
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: UIAlertAction.cancel.title, style: .cancel) { _ in
-            sender.setOn(false, animated: true)
-        })
-        alert.addAction(UIAlertAction(title: AppStrings.Settings.removeAppLimitConfirm, style: .default) { _ in
-            UserDefaults.standard.isAppLimitDisabled = true
-        })
-        present(alert, animated: true)
-    }
-
-    @IBAction func toggleUseMainProfile(_ sender: UISwitch) {
-        guard sender.isOn else {
-            UserDefaults.standard.useMainProfile = false
-            return
-        }
-        let alert = UIAlertController(
-            title: AppStrings.Settings.useMainProfileTitle,
-            message: AppStrings.Settings.useMainProfileMessage,
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: UIAlertAction.cancel.title, style: .cancel) { _ in
-            sender.setOn(false, animated: true)
-        })
-        alert.addAction(UIAlertAction(title: AppStrings.Settings.useMainProfileConfirm, style: .default) { _ in
-            UserDefaults.standard.useMainProfile = true
-        })
-        present(alert, animated: true)
-    }
-
-    @IBAction func openMastodon(_ sender: UIButton) { open(URL(string: "https://fosstodon.org/@sidestore")!, sender: sender) }
-    @IBAction func openThreads(_ sender: UIButton) { open(URL(string: "https://www.threads.net/@sidestore.io")!, sender: sender) }
-    @IBAction func openTwitter(_ sender: UIButton) { open(URL(string: "https://twitter.com/SideStore_io")!, sender: sender) }
-    @IBAction func openGitHub(_ sender: UIButton) { open(URL(string: "https://github.com/SideStore/SideStore")!, sender: sender) }
-
-    func open(_ url: URL, sender: Any?) {
-        let safariVC = SFSafariViewController(url: url)
-        safariVC.preferredControlTintColor = AppUI.Colors.blue
-        present(safariVC, animated: true)
-    }
-
-    @objc func resetPairingFile(_ sender: Any) {
-        let docPicker = UIDocumentPickerViewController(forOpeningContentTypes: [.data, .xml, .propertyList, .item], asCopy: true)
-        docPicker.delegate = self
-        docPicker.allowsMultipleSelection = false
-        present(docPicker, animated: true)
-    }
-
-    func resetAll() {
-        let alert = UIAlertController(
-            title: AppStrings.Settings.resetConfirmTitle,
-            message: AppStrings.Settings.resetConfirmMessage,
-            preferredStyle: .actionSheet
-        )
-        alert.addAction(UIAlertAction(title: AppStrings.Settings.resetAllAction, style: .destructive) { _ in
-            AppManager.shared.resetAll()
-        })
-        alert.addAction(UIAlertAction(title: UIAlertAction.cancel.title, style: .cancel))
-        present(alert, animated: true)
-    }
-
-    func clearCache() {
-        let alert = UIAlertController(
-            title: AppStrings.Settings.clearCacheConfirmTitle,
-            message: AppStrings.Settings.clearCacheConfirmMessage,
-            preferredStyle: .actionSheet
-        )
-        alert.addAction(UIAlertAction(title: AppStrings.Settings.clearCacheAction, style: .destructive) { _ in
-            AppManager.shared.clearCache()
-        })
-        alert.addAction(UIAlertAction(title: UIAlertAction.cancel.title, style: .cancel))
-        present(alert, animated: true)
-    }
-
-    func enforceFallback() {
-        let isEnforced = UserDefaults.standard.enforceRefreshFallback
-        let title = isEnforced ? AppStrings.Settings.disableFallbackTitle : AppStrings.Settings.enableFallbackTitle
-        let message = isEnforced ? AppStrings.Settings.disableFallbackMessage : AppStrings.Settings.enableFallbackMessage
-        let actionTitle = isEnforced ? AppStrings.Settings.disableFallbackAction : AppStrings.Settings.enableFallbackAction
-
-        let alert = UIAlertController(title: title, message: message, preferredStyle: .actionSheet)
-        alert.addAction(UIAlertAction(title: actionTitle, style: .destructive) { _ in
-            UserDefaults.standard.enforceRefreshFallback.toggle()
-            self.tableView.reloadSections(IndexSet(integer: Section.troubleshooting.rawValue), with: .automatic)
-        })
-        alert.addAction(UIAlertAction(title: UIAlertAction.cancel.title, style: .cancel))
-        present(alert, animated: true)
-    }
-
-    func fetchPatronsIfNeeded() {
-        guard PatreonAPI.shared.isAuthenticated else { return }
-        PatreonAPI.shared.updatePatrons { result in
-            DispatchQueue.main.async {
-                self.isFetchingPatrons = false
-                if case .failure(let error) = result { self.fetchPatronsError = error }
-                self.tableView.reloadSections([Section.patreon.rawValue], with: .none)
-            }
-        }
-    }
-
-    @objc func didUpdatePatrons(_ notification: Notification) {
-        DispatchQueue.main.async {
-            self.tableView.reloadSections([Section.patreon.rawValue], with: .none)
-        }
-    }
-
-    @objc func didTapVersionLabel(_ gesture: UITapGestureRecognizer) {
-        UIPasteboard.general.string = "\(appVersionText)\n\(iosVersionText)"
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-
-        UIView.transition(with: versionLabel, duration: 0.2, options: .transitionCrossDissolve) {
-            self.versionLabel.attributedText = UILabel.makeCSSCopiedAttributedString(copiedText: AppStrings.Common.copied())
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-            guard let self else { return }
-            UIView.transition(with: self.versionLabel, duration: 0.25, options: .transitionCrossDissolve) {
-                self.versionLabel.attributedText = UILabel.makeCSSVersionAttributedString(appVersion: self.appVersionText, iosVersion: self.iosVersionText)
-            }
-        }
-    }
-}
-
-// MARK: - UITableViewDataSource & Delegate
-extension SettingsViewController {
-    override func numberOfSections(in tableView: UITableView) -> Int { Section.allCases.count }
-
-    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        switch Section.allCases[section] {
-        case .activeTeam where team == nil: return 0
-        case .appLimit where !(Bundle.main.alt_bundleIdentifier?.contains("SideStore") ?? false): return 0
-        case .useMainProfile where !(Bundle.main.alt_bundleIdentifier?.contains("SideStore") ?? false): return 0
-        case .patreon: return 0
-        default: return super.tableView(tableView, numberOfRowsInSection: section)
-        }
-    }
-
-    override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        switch Section.allCases[section] {
-        case .activeTeam where team == nil: return nil
-        case .appLimit where !(Bundle.main.alt_bundleIdentifier?.contains("SideStore") ?? false): return nil
-        case .useMainProfile where !(Bundle.main.alt_bundleIdentifier?.contains("SideStore") ?? false): return nil
-        case .patreon: return nil
-        default: return super.tableView(tableView, titleForHeaderInSection: section)
-        }
-    }
-
-    override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
-        switch Section.allCases[section] {
-        case .activeTeam where team == nil: return nil
-        case .appLimit where !(Bundle.main.alt_bundleIdentifier?.contains("SideStore") ?? false): return nil
-        case .useMainProfile where !(Bundle.main.alt_bundleIdentifier?.contains("SideStore") ?? false): return nil
-        case .patreon: return nil
-        default: return super.tableView(tableView, titleForFooterInSection: section)
-        }
-    }
-
-    override func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
-        switch Section.allCases[section] {
-        case .activeTeam where team == nil: return .leastNormalMagnitude
-        case .appLimit where !(Bundle.main.alt_bundleIdentifier?.contains("SideStore") ?? false): return .leastNormalMagnitude
-        case .useMainProfile where !(Bundle.main.alt_bundleIdentifier?.contains("SideStore") ?? false): return .leastNormalMagnitude
-        case .patreon: return .leastNormalMagnitude
-        default: return super.tableView(tableView, heightForHeaderInSection: section)
-        }
-    }
-
-    override func tableView(_ tableView: UITableView, heightForFooterInSection section: Int) -> CGFloat {
-        switch Section.allCases[section] {
-        case .activeTeam where team == nil: return .leastNormalMagnitude
-        case .appLimit where !(Bundle.main.alt_bundleIdentifier?.contains("SideStore") ?? false): return .leastNormalMagnitude
-        case .useMainProfile where !(Bundle.main.alt_bundleIdentifier?.contains("SideStore") ?? false): return .leastNormalMagnitude
-        case .patreon: return .leastNormalMagnitude
-        default: return super.tableView(tableView, heightForFooterInSection: section)
-        }
-    }
-
-    override func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
-        guard let title = self.tableView(tableView, titleForHeaderInSection: section) else { return nil }
-        let view = tableView.dequeueReusableHeaderFooterView(withIdentifier: "HeaderView") as! SettingsHeaderFooterView
-        view.configure(with: title, style: .header)
-        view.textLabel?.textColor = AppUI.Colors.blue
-        view.textLabel?.font = .systemFont(ofSize: 15, weight: .bold)
-        return view
-    }
-
-    override func tableView(_ tableView: UITableView, viewForFooterInSection section: Int) -> UIView? {
-        guard let text = self.tableView(tableView, titleForFooterInSection: section) else { return nil }
-        let view = tableView.dequeueReusableHeaderFooterView(withIdentifier: "FooterView") as! SettingsHeaderFooterView
-        view.configure(with: text, style: .footer)
-        view.textLabel?.textColor = AppUI.Colors.dark.withAlphaComponent(0.75)
-        return view
-    }
-
-    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = super.tableView(tableView, cellForRowAt: indexPath)
-        cell.applyCSSTableCellStyle()
-
-        switch Section.allCases[indexPath.section] {
-        case .appleID:
-            if let account {
-                cell.textLabel?.text = account.name
-                cell.detailTextLabel?.text = account.appleID
-                cell.accessoryType = .disclosureIndicator
-                cell.selectionStyle = .default
-            } else {
-                cell.textLabel?.text = AppStrings.Settings.signInWithAppleID
-                cell.textLabel?.textColor = AppUI.Colors.blue
-                cell.detailTextLabel?.text = nil
-                cell.accessoryType = .none
-            }
-
-        case .activeTeam:
-            if let team {
-                cell.textLabel?.text = team.name
-                cell.detailTextLabel?.text = team.type.localizedDescription
-                cell.accessoryType = .disclosureIndicator
-            }
-
-        case .pairingFile:
-            cell.textLabel?.text = AppStrings.Settings.resetPairingFile
-            cell.textLabel?.textColor = AppUI.Colors.blue
-
-        case .troubleshooting:
-            switch TroubleshootingRow.allCases[indexPath.row] {
-            case .resetAll:
-                cell.textLabel?.text = AppStrings.Settings.resetAllRow
-                cell.textLabel?.textColor = AppUI.Colors.red
-            case .clearCache:
-                cell.textLabel?.text = AppStrings.Settings.clearCacheRow
-                cell.textLabel?.textColor = AppUI.Colors.blue
-            case .EnforceFallback:
-                let isEnforced = UserDefaults.standard.enforceRefreshFallback
-                cell.textLabel?.text = isEnforced ? AppStrings.Settings.disableFallbackRow : AppStrings.Settings.enableFallbackRow
-                cell.textLabel?.textColor = isEnforced ? AppUI.Colors.green : AppUI.Colors.orange
-            }
-
-        default: break
-        }
-
-        return cell
-    }
-
-    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        tableView.deselectRow(at: indexPath, animated: true)
-
-        switch Section.allCases[indexPath.section] {
-        case .appleID:
-            if account == nil { signIn() }
-
-        case .pairingFile:
-            resetPairingFile(tableView)
-
-        case .instructions:
-            let link = InstructionLink.allCases[indexPath.row]
-            open(link.url, sender: tableView.cellForRow(at: indexPath))
-
-        case .troubleshooting:
-            switch TroubleshootingRow.allCases[indexPath.row] {
-            case .resetAll: resetAll()
-            case .clearCache: clearCache()
-            case .EnforceFallback: enforceFallback()
-            }
-
-        default: break
-        }
-    }
-}
-
-// MARK: - UIDocumentPickerDelegate
-extension SettingsViewController: UIDocumentPickerDelegate {
-    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        guard let url = urls.first else { return }
-        do {
-            let data = try Data(contentsOf: url)
-            if let docDir = FileManager.default.documentsDirectory {
-                try? data.write(to: docDir.appendingPathComponent("ALTPairingFile.mobiledevicepairing"), options: .atomic)
-            }
-            AppManager.shared.installPairingFile(data: data) { result in
+    
+    @IBAction func clearAppCache(_ sender: UIButton)
+    {
+        let alertController = UIAlertController(title: AppStrings.Settings.clearCacheConfirmTitle, message: nil, preferredStyle: .actionSheet)
+        alertController.popoverPresentationController?.sourceView = sender
+        alertController.popoverPresentationController?.sourceRect = sender.bounds
+        alertController.addAction(UIAlertAction(title: AppStrings.Settings.clearCache, style: .destructive) { (action) in
+            AppManager.shared.clearAppCache { (result) in
                 DispatchQueue.main.async {
-                    if case .failure(let error) = result {
-                        ToastView(error: error, opensLog: true).show(in: self)
-                    } else {
-                        let alert = UIAlertController(title: AppStrings.Settings.pairingSuccessTitle, message: nil, preferredStyle: .alert)
-                        alert.addAction(UIAlertAction(title: RSTSystemLocalizedString("OK"), style: .default))
-                        self.present(alert, animated: true)
+                    switch result
+                    {
+                    case .failure(let error):
+                        let toastView = ToastView(error: error)
+                        toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
+                        
+                    case .success:
+                        let toastView = ToastView(text: AppStrings.Settings.clearedAppCache, detailText: nil)
+                        toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
                     }
                 }
             }
+        })
+        alertController.addAction(.cancel)
+        self.present(alertController, animated: true, completion: nil)
+    }
+    
+    @IBAction func toggleAppGrouping(_ sender: UISwitch)
+    {
+        UserDefaults.standard.isAppGroupingDisabled = !sender.isOn
+    }
+    
+    @IBAction func toggleEnforceThreeAppLimit(_ sender: UISwitch)
+    {
+        UserDefaults.shared.enforceThreeAppLimit = sender.isOn
+    }
+    
+    @IBAction func toggleSyncTrustedSources(_ sender: UISwitch)
+    {
+        UserDefaults.standard.syncTrustedSources = sender.isOn
+    }
+    
+    @IBAction func resetPairingFile(_ sender: UIButton)
+    {
+        let alertController = UIAlertController(
+            title: AppStrings.Settings.PairingFile.resetConfirmTitle,
+            message: AppStrings.Settings.PairingFile.resetConfirmMessage,
+            preferredStyle: .actionSheet
+        )
+        alertController.popoverPresentationController?.sourceView = sender
+        alertController.popoverPresentationController?.sourceRect = sender.bounds
+        alertController.addAction(UIAlertAction(title: AppStrings.Settings.PairingFile.reset, style: .destructive) { _ in
+            MinimizeManager.shared.removePairingFile()
+            
+            MinimizeManager.shared.PromptForPairingFile(presentingViewController: self) { success in
+                if success {
+                    DispatchQueue.main.async {
+                        self.presentAlert(
+                            title: AppStrings.Settings.PairingFile.importSuccessTitle,
+                            message: AppStrings.Settings.PairingFile.importSuccessMessage
+                        )
+                    }
+                }
+            }
+        })
+        alertController.addAction(.cancel)
+        self.present(alertController, animated: true)
+    }
+    
+    @IBAction func exportPairingFile(_ sender: UIButton)
+    {
+        guard let pairingFileURL = MinimizeManager.shared.pairingFileURL,
+              FileManager.default.fileExists(atPath: pairingFileURL.path) else {
+            self.presentAlert(
+                title: AppStrings.Settings.PairingFile.notFoundTitle,
+                message: AppStrings.Settings.PairingFile.notFoundMessage
+            )
+            return
+        }
+        
+        let activityViewController = UIActivityViewController(activityItems: [pairingFileURL], applicationActivities: nil)
+        activityViewController.popoverPresentationController?.sourceView = sender
+        activityViewController.popoverPresentationController?.sourceRect = sender.bounds
+        self.present(activityViewController, animated: true)
+    }
+    
+    @IBAction func testPairingFile(_ sender: UIButton)
+    {
+        do {
+            try MinimizeManager.shared.testPairingFile()
+            self.presentAlert(
+                title: AppStrings.Settings.PairingFile.testSuccessTitle,
+                message: AppStrings.Settings.PairingFile.testSuccessMessage
+            )
         } catch {
-            ToastView(error: error, opensLog: true).show(in: self)
+            self.presentAlert(
+                title: AppStrings.Settings.PairingFile.testFailedTitle,
+                message: error.localizedDescription
+            )
+        }
+    }
+    
+    @IBAction func resetAllSettings(_ sender: UIButton)
+    {
+        let alertController = UIAlertController(
+            title: AppStrings.Settings.resetAllConfirmTitle,
+            message: AppStrings.Settings.resetAllConfirmMessage,
+            preferredStyle: .actionSheet
+        )
+        alertController.popoverPresentationController?.sourceView = sender
+        alertController.popoverPresentationController?.sourceRect = sender.bounds
+        alertController.addAction(UIAlertAction(title: AppStrings.Settings.resetAll, style: .destructive) { _ in
+            if let bundleID = Bundle.main.bundleIdentifier {
+                UserDefaults.standard.removePersistentDomain(forName: bundleID)
+            }
+            UserDefaults.shared.removePersistentDomain(forName: Bundle.main.altstoreAppGroup)
+            self.update()
+            self.prepareAnisetteServerMenu()
+        })
+        alertController.addAction(.cancel)
+        self.present(alertController, animated: true)
+    }
+    
+    @objc func openPatreonSettings(_ sender: UIBarButtonItem)
+    {
+        let patreonSettingsURL = URL(string: "https://www.patreon.com/RileyTestut")!
+        UIApplication.shared.open(patreonSettingsURL, options: [:], completionHandler: nil)
+    }
+    
+    @objc func didUpdatePatrons(_ notification: Notification)
+    {
+        self.fetchPatrons()
+    }
+}
+
+extension SettingsViewController
+{
+    override func numberOfSections(in tableView: UITableView) -> Int
+    {
+        var sections = Section.allCases.count
+        if !Bundle.main.isMainAltStore
+        {
+            // Hide debug section
+            sections -= 1
+        }
+        
+        return sections
+    }
+    
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int
+    {
+        let section = Section.allCases[section]
+        switch section
+        {
+        case .appleID:
+            if DatabaseManager.shared.activeTeam() == nil
+            {
+                // Hide active profile cell when not signed in.
+                return super.tableView(tableView, numberOfRowsInSection: section.rawValue) - 1
+            }
+            else
+            {
+                return super.tableView(tableView, numberOfRowsInSection: section.rawValue)
+            }
+            
+        case .patreon:
+            return 2 + self.patrons.count
+            
+        case .refreshAttempts:
+            let refreshAttempts = DatabaseManager.shared.refreshAttempts()
+            return refreshAttempts.isEmpty ? 0 : 1
+            
+        case .errorLog:
+            let loggedErrors = DatabaseManager.shared.loggedErrors()
+            return loggedErrors.isEmpty ? 0 : 1
+            
+        case .app:
+            var count = super.tableView(tableView, numberOfRowsInSection: section.rawValue)
+            if !UIApplication.shared.supportsAlternateIcons
+            {
+                count -= 1
+            }
+            
+            return count
+            
+        default:
+            return super.tableView(tableView, numberOfRowsInSection: section.rawValue)
+        }
+    }
+    
+    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell
+    {
+        switch Section.allCases[indexPath.section]
+        {
+        case .appleID:
+            if DatabaseManager.shared.activeTeam() == nil && indexPath.row >= AppleIDRow.activeProfile.rawValue
+            {
+                // Shift rows up to account for hidden activeProfile cell
+                let shiftedIndexPath = IndexPath(row: indexPath.row + 1, section: indexPath.section)
+                return super.tableView(tableView, cellForRowAt: shiftedIndexPath)
+            }
+            else
+            {
+                return super.tableView(tableView, cellForRowAt: indexPath)
+            }
+            
+        case .patreon where indexPath.row == PatreonRow.about.rawValue:
+            let cell = tableView.dequeueReusableCell(withIdentifier: "AboutPatreonCell", for: indexPath) as! AboutPatreonTableViewCell
+            cell.supportButton.addTarget(self, action: #selector(SettingsViewController.openPatreonSettings(_:)), for: .touchUpInside)
+            return cell
+            
+        case .patreon where indexPath.row > PatreonRow.about.rawValue:
+            let patronIndex = indexPath.row - 2
+            let patron = self.patrons[patronIndex]
+            
+            let cell = tableView.dequeueReusableCell(withIdentifier: "PatronCell") ?? UITableViewCell(style: .default, reuseIdentifier: "PatronCell")
+            cell.selectionStyle = .none
+            cell.backgroundColor = .altCellBackground
+            
+            cell.textLabel?.text = patron.name
+            cell.textLabel?.textColor = .white
+            
+            return cell
+            
+        default:
+            let cell = super.tableView(tableView, cellForRowAt: indexPath)
+            return cell
+        }
+    }
+    
+    override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat
+    {
+        switch Section.allCases[indexPath.section]
+        {
+        case .appleID:
+            if DatabaseManager.shared.activeTeam() == nil && indexPath.row >= AppleIDRow.activeProfile.rawValue
+            {
+                let shiftedIndexPath = IndexPath(row: indexPath.row + 1, section: indexPath.section)
+                return super.tableView(tableView, heightForRowAt: shiftedIndexPath)
+            }
+            return UITableView.automaticDimension
+            
+        case .patreon:
+            if indexPath.row == PatreonRow.about.rawValue
+            {
+                return UITableView.automaticDimension
+            }
+            else if indexPath.row > PatreonRow.about.rawValue
+            {
+                return 44
+            }
+            else
+            {
+                return super.tableView(tableView, heightForRowAt: indexPath)
+            }
+            
+        default: return super.tableView(tableView, heightForRowAt: indexPath)
+        }
+    }
+    
+    override func tableView(_ tableView: UITableView, estimatedHeightForRowAt indexPath: IndexPath) -> CGFloat
+    {
+        switch Section.allCases[indexPath.section]
+        {
+        case .patreon where indexPath.row == PatreonRow.about.rawValue: return 300
+        case .patreon where indexPath.row > PatreonRow.about.rawValue: return 44
+        default: return 44
+        }
+    }
+    
+    override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String?
+    {
+        let sectionType = Section.allCases[section]
+        switch sectionType
+        {
+        case .refreshAttempts:
+            if self.tableView(tableView, numberOfRowsInSection: section) == 0 { return nil }
+            return super.tableView(tableView, titleForHeaderInSection: section)
+            
+        case .errorLog:
+            if self.tableView(tableView, numberOfRowsInSection: section) == 0 { return nil }
+            return super.tableView(tableView, titleForHeaderInSection: section)
+            
+        default:
+            return super.tableView(tableView, titleForHeaderInSection: section)
+        }
+    }
+    
+    override func tableView(_ tableView: UITableView, viewForFooterInSection section: Int) -> UIView?
+    {
+        let lastSection = self.numberOfSections(in: tableView) - 1
+        guard section == lastSection else { return nil }
+        
+        let footerView = tableView.dequeueReusableHeaderFooterView(withIdentifier: "FooterView") as! SettingsFooterView
+        
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+        footerView.versionLabel.text = "SideStore \(version) (\(build))"
+        
+        return footerView
+    }
+    
+    override func tableView(_ tableView: UITableView, heightForFooterInSection section: Int) -> CGFloat
+    {
+        let lastSection = self.numberOfSections(in: tableView) - 1
+        guard section == lastSection else { return super.tableView(tableView, heightForFooterInSection: section) }
+        
+        return 100
+    }
+    
+    override func tableView(_ tableView: UITableView, indentationLevelForRowAt indexPath: IndexPath) -> Int
+    {
+        switch Section.allCases[indexPath.section]
+        {
+        case .patreon where indexPath.row >= PatreonRow.about.rawValue: return 0
+        default: return super.tableView(tableView, indentationLevelForRowAt: indexPath)
+        }
+    }
+    
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath)
+    {
+        tableView.deselectRow(at: indexPath, animated: true)
+        
+        switch Section.allCases[indexPath.section]
+        {
+        case .userCustomizations:
+            let customizationsView = UserCustomizationsView()
+            let hostingController = UIHostingController(rootView: customizationsView)
+            hostingController.title = AppStrings.UserCustomizations.title
+            self.navigationController?.pushViewController(hostingController, animated: true)
+            
+        default: break
+        }
+    }
+}
+
+extension SettingsViewController: UITextFieldDelegate
+{
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool
+    {
+        textField.resignFirstResponder()
+        return true
+    }
+    
+    func textFieldDidEndEditing(_ textField: UITextField)
+    {
+        if textField == self.jitURLTextField
+        {
+            let text = textField.text?.trimmingCharacters(in: .whitespacesAndNewlines)
+            UserDefaults.standard.textFieldJITURL = (text?.isEmpty == false) ? text : nil
         }
     }
 }

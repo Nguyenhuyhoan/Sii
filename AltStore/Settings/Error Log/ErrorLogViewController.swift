@@ -1,3 +1,4 @@
+
 //
 //  ErrorLogViewController.swift
 //  AltStore
@@ -11,10 +12,60 @@ import CoreData
 import Nuke
 import SwiftUI
 
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ SETTINGS)
+private struct ErrorLogCSSTheme {
+    static let white = UIColor.white
+    static let light = UIColor(red: 248/255, green: 249/255, blue: 250/255, alpha: 1.0) // #f8f9fa
+    static let border = UIColor(red: 233/255, green: 236/255, blue: 239/255, alpha: 1.0) // #e9ecef
+    static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0) // #007bff
+    static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0) // #6f42c1
+    static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0) // #28a745
+    static let magenta = UIColor(red: 255/255, green: 0/255, blue: 255/255, alpha: 1.0) // #ff00ff
+    static let danger = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0) // #dc3545
+    static let dark = UIColor(red: 52/255, green: 58/255, blue: 64/255, alpha: 1.0) // #343a40
+
+    // Gradient Background (#f3e0ff -> #e0f7ff)
+    static let bgGradientStart = UIColor(red: 243/255, green: 224/255, blue: 255/255, alpha: 1.0).cgColor
+    static let bgGradientEnd = UIColor(red: 224/255, green: 247/255, blue: 255/255, alpha: 1.0).cgColor
+
+    // Hero Gradient (rgba(0,123,255,.92) -> rgba(111,66,193,.88))
+    static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.92).cgColor
+    static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.88).cgColor
+
+    static let cornerRadius: CGFloat = 15.0
+}
+
+// MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH
+private final class ErrorLogGradientBackgroundView: UIView {
+    override class var layerClass: AnyClass {
+        return CAGradientLayer.self
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupGradient()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupGradient()
+    }
+
+    private func setupGradient() {
+        guard let gradientLayer = self.layer as? CAGradientLayer else { return }
+        gradientLayer.colors = [ErrorLogCSSTheme.bgGradientStart, ErrorLogCSSTheme.bgGradientEnd]
+        gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+        gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+    }
+}
+
 final class ErrorLogViewController: UITableViewController
 {
     private lazy var dataSource = self.makeDataSource()
     private var expandedErrorIDs = Set<NSManagedObjectID>()
+    
+    private var heroGradientLayer: CAGradientLayer?
+    private var floatingClearAllButton: UIButton?
     
     private var isScrolling = false {
         didSet {
@@ -25,11 +76,13 @@ final class ErrorLogViewController: UITableViewController
 
     private lazy var timeFormatter: DateFormatter = {
         let dateFormatter = DateFormatter()
+        dateFormatter.locale = Locale(identifier: "vi_VN")
         dateFormatter.dateStyle = .none
         dateFormatter.timeStyle = .short
         return dateFormatter
     }()
     
+    // Giữ nguyên @IBOutlet để Storyboard không bao giờ bị lỗi runtime
     @IBOutlet private var exportLogButton: UIBarButtonItem?
     @IBOutlet private var clearLogButton: UIBarButtonItem!
     
@@ -37,13 +90,20 @@ final class ErrorLogViewController: UITableViewController
     
     #if !os(tvOS)
     override var preferredStatusBarStyle: UIStatusBarStyle {
-        return .lightContent
+        return .darkContent
     }
     #endif
     
     override func viewDidLoad()
     {
         super.viewDidLoad()
+        
+        // Ẩn tiêu đề mặc định để đồng bộ giao diện tràn viền với SettingsViewController
+        self.title = nil
+        self.navigationItem.title = nil
+        #if !os(tvOS)
+        self.navigationItem.largeTitleDisplayMode = .never
+        #endif
         
         self.tableView.dataSource = self.dataSource
         self.dataSource.contentView = self.tableView
@@ -53,48 +113,40 @@ final class ErrorLogViewController: UITableViewController
         
         if #unavailable(iOS 15)
         {
-            // Assign just clearLogButton to hide export button.
             self.navigationItem.rightBarButtonItems = [self.clearLogButton]
         }
         
-//        // Adjust the width of the right bar button items
-//        adjustRightBarButtonWidth()
+        self.tableView.contentInset.top = 0
+        self.tableView.contentInset.bottom = 50
+        if #available(iOS 15.0, tvOS 15.0, *) {
+            self.tableView.sectionHeaderTopPadding = 0
+        }
+        
+        // ✨ KÍCH HOẠT GIAO DIỆN CSS THEME & NÚT XOÁ TẤT CẢ GÓC TRÊN PHẢI ✨
+        self.applySmartWebCSSTheme()
     }
     
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        self.navigationController?.setNavigationBarHidden(true, animated: animated)
+        self.setupFloatingClearAllButton()
+        self.updateFloatingClearAllButtonState()
+    }
     
-//    func adjustRightBarButtonWidth() {
-//        // Access the current rightBarButtonItems
-//        if let rightBarButtonItems = self.navigationItem.rightBarButtonItems {
-//            for barButtonItem in rightBarButtonItems {
-//                // Check if the button is a system button, and if so, replace it with a custom button
-//                if barButtonItem.customView == nil {
-//                    // Replace with a custom UIButton for each bar button item
-//                    let customButton = UIButton(type: .custom)
-//                    if let image = barButtonItem.image {
-//                        customButton.setImage(image, for: .normal)
-//                    }
-//                    if let action = barButtonItem.action{
-//                        customButton.addTarget(barButtonItem.target, action: action, for: .touchUpInside)
-//                    }
-//                    
-//                    // Calculate the original size based on the system button
-//                    let originalSize = customButton.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
-//                    
-//                    let scaleFactor = 0.7
-//                    
-//                    // Scale the size by 0.7 (70%)
-//                    let scaledSize = CGSize(width: originalSize.width * scaleFactor, height: originalSize.height * scaleFactor)
-//                    
-//                    // Adjust the custom button's width
-////                    customButton.frame.size = CGSize(width: 22, height: 22) // Adjust width as needed
-//                    customButton.frame.size = scaledSize // Adjust width as needed
-//                    
-//                    // Set the custom button as the custom view for the UIBarButtonItem
-//                    barButtonItem.customView = customButton
-//                }
-//            }
-//        }
-//    }
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        self.floatingClearAllButton?.removeFromSuperview()
+        self.floatingClearAllButton = nil
+    }
+    
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        if let heroHeader = self.tableView.tableHeaderView,
+           let heroCard = heroHeader.subviews.first {
+            self.heroGradientLayer?.frame = heroCard.bounds
+        }
+        self.updateFloatingClearAllButtonState()
+    }
     
     override func prepare(for segue: UIStoryboardSegue, sender: Any?)
     {
@@ -108,6 +160,365 @@ final class ErrorLogViewController: UITableViewController
     
     @IBAction private func unwindFromErrorDetails(_ segue: UIStoryboardSegue)
     {
+    }
+}
+
+// MARK: - ✨ HỆ THỐNG GIAO DIỆN CSS THEME & VIỆT HÓA THÔNG BÁO LỖI
+private extension ErrorLogViewController
+{
+    func applySmartWebCSSTheme() {
+        // 1. Nền Gradient cố định
+        let bgView = ErrorLogGradientBackgroundView(frame: UIScreen.main.bounds)
+        bgView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        self.tableView.backgroundView = bgView
+        self.tableView.backgroundColor = .clear
+        self.tableView.separatorStyle = .none
+        
+        // 2. Tạo Hero Banner kèm nút mở Nhật ký Console
+        self.setupCSSHeroBanner()
+    }
+    
+    func setupCSSHeroBanner() {
+        let headerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 148))
+        headerContainer.backgroundColor = .clear
+        
+        let heroCard = UIView()
+        heroCard.translatesAutoresizingMaskIntoConstraints = false
+        heroCard.layer.cornerRadius = ErrorLogCSSTheme.cornerRadius
+        heroCard.layer.masksToBounds = false
+        heroCard.layer.shadowColor = ErrorLogCSSTheme.blue.cgColor
+        heroCard.layer.shadowOffset = CGSize(width: 0, height: 6)
+        heroCard.layer.shadowRadius = 16
+        heroCard.layer.shadowOpacity = 0.25
+        
+        let gradient = CAGradientLayer()
+        gradient.colors = [ErrorLogCSSTheme.heroStart, ErrorLogCSSTheme.heroEnd]
+        gradient.startPoint = CGPoint(x: 0, y: 0)
+        gradient.endPoint = CGPoint(x: 1, y: 1)
+        gradient.cornerRadius = ErrorLogCSSTheme.cornerRadius
+        heroCard.layer.insertSublayer(gradient, at: 0)
+        self.heroGradientLayer = gradient
+        
+        let titleLabel = UILabel()
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.text = "Nhật Ký Lỗi Hệ Thống"
+        titleLabel.font = UIFont.systemFont(ofSize: 22, weight: .heavy)
+        titleLabel.textColor = ErrorLogCSSTheme.white
+        titleLabel.textAlignment = .center
+        titleLabel.layer.shadowColor = UIColor.black.cgColor
+        titleLabel.layer.shadowOffset = CGSize(width: 1, height: 2)
+        titleLabel.layer.shadowRadius = 4
+        titleLabel.layer.shadowOpacity = 0.35
+        
+        let subLabel = UILabel()
+        subLabel.translatesAutoresizingMaskIntoConstraints = false
+        subLabel.text = "Theo dõi và chẩn đoán chi tiết các sự cố phát sinh khi cài đặt IPA hoặc làm mới ứng dụng"
+        subLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .medium)
+        subLabel.textColor = ErrorLogCSSTheme.white.withAlphaComponent(0.95)
+        subLabel.textAlignment = .center
+        subLabel.numberOfLines = 2
+        
+        // Nút mở nhanh Console Log ngay trên Banner
+        let consoleBtn = UIButton(type: .system)
+        consoleBtn.translatesAutoresizingMaskIntoConstraints = false
+        let termConfig = UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)
+        consoleBtn.setImage(UIImage(systemName: "terminal.fill", withConfiguration: termConfig), for: .normal)
+        consoleBtn.setTitle("  Xem Nhật Ký Console Chi Tiết  ", for: .normal)
+        consoleBtn.tintColor = ErrorLogCSSTheme.white
+        consoleBtn.setTitleColor(ErrorLogCSSTheme.white, for: .normal)
+        consoleBtn.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
+        consoleBtn.backgroundColor = UIColor.black.withAlphaComponent(0.24)
+        consoleBtn.layer.cornerRadius = 13
+        consoleBtn.layer.borderWidth = 1.0
+        consoleBtn.layer.borderColor = ErrorLogCSSTheme.white.withAlphaComponent(0.4).cgColor
+        consoleBtn.addTarget(self, action: #selector(handleConsoleButtonTapped), for: .touchUpInside)
+        
+        heroCard.addSubview(titleLabel)
+        heroCard.addSubview(subLabel)
+        heroCard.addSubview(consoleBtn)
+        headerContainer.addSubview(heroCard)
+        
+        NSLayoutConstraint.activate([
+            heroCard.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor, constant: 16),
+            heroCard.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -16),
+            heroCard.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 12),
+            heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -6),
+            
+            titleLabel.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
+            titleLabel.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 14),
+            
+            subLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
+            subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 14),
+            subLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -14),
+            
+            consoleBtn.topAnchor.constraint(equalTo: subLabel.bottomAnchor, constant: 10),
+            consoleBtn.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
+            consoleBtn.heightAnchor.constraint(equalToConstant: 26)
+        ])
+        
+        heroCard.alpha = 0
+        heroCard.transform = CGAffineTransform(translationX: 0, y: -10)
+        UIView.animate(withDuration: 0.5, delay: 0.05, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.5, options: .curveEaseOut) {
+            heroCard.alpha = 1
+            heroCard.transform = .identity
+        }
+        
+        self.tableView.tableHeaderView = headerContainer
+    }
+    
+    // MARK: - 🗑️ NÚT ICON XOÁ TẤT CẢ TRÊN CÙNG BÊN PHẢI (ĐỐI XỨNG VỚI NÚT BACK TRÁI)
+    func setupFloatingClearAllButton() {
+        guard let nav = self.navigationController else { return }
+        if self.floatingClearAllButton == nil {
+            let btn = UIButton(type: .system)
+            btn.translatesAutoresizingMaskIntoConstraints = false
+            
+            let config = UIImage.SymbolConfiguration(pointSize: 14, weight: .bold)
+            btn.setImage(UIImage(systemName: "trash.fill", withConfiguration: config), for: .normal)
+            btn.tintColor = ErrorLogCSSTheme.danger
+            btn.backgroundColor = ErrorLogCSSTheme.white.withAlphaComponent(0.94)
+            
+            // Nút tròn nhỏ 34x34 cố định góc trên bên phải, đối xứng hoàn toàn với nút Back
+            btn.layer.cornerRadius = 17
+            btn.layer.borderWidth = 1.0
+            btn.layer.borderColor = ErrorLogCSSTheme.border.cgColor
+            btn.layer.shadowColor = UIColor.black.cgColor
+            btn.layer.shadowOffset = CGSize(width: 0, height: 2)
+            btn.layer.shadowRadius = 6
+            btn.layer.shadowOpacity = 0.15
+            
+            btn.addTarget(self, action: #selector(handleFloatingClearAllTapped(_:)), for: .touchUpInside)
+            nav.view.addSubview(btn)
+            
+            NSLayoutConstraint.activate([
+                btn.trailingAnchor.constraint(equalTo: nav.view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+                btn.topAnchor.constraint(equalTo: nav.view.safeAreaLayoutGuide.topAnchor, constant: 6),
+                btn.widthAnchor.constraint(equalToConstant: 34),
+                btn.heightAnchor.constraint(equalToConstant: 34)
+            ])
+            
+            self.floatingClearAllButton = btn
+        }
+        
+        if let btn = self.floatingClearAllButton {
+            nav.view.bringSubviewToFront(btn)
+        }
+    }
+    
+    func updateFloatingClearAllButtonState() {
+        guard let btn = self.floatingClearAllButton else { return }
+        let hasErrors = (self.dataSource.fetchedResultsController.fetchedObjects?.isEmpty == false)
+        btn.isEnabled = hasErrors
+        btn.tintColor = hasErrors ? ErrorLogCSSTheme.danger : UIColor.systemGray3
+        btn.alpha = 1.0
+    }
+    
+    @objc func handleFloatingClearAllTapped(_ sender: UIButton) {
+        UIView.animate(withDuration: 0.12, animations: {
+            sender.transform = CGAffineTransform(scaleX: 0.88, y: 0.88)
+        }) { _ in
+            UIView.animate(withDuration: 0.25) {
+                sender.transform = .identity
+            }
+        }
+        
+        let alertController = UIAlertController(
+            title: "Xóa toàn bộ nhật ký lỗi?",
+            message: "Thao tác này sẽ xóa vĩnh viễn tất cả lịch sử báo lỗi cài đặt IPA và làm mới ứng dụng.",
+            preferredStyle: .actionSheet
+        )
+        alertController.popoverPresentationController?.sourceView = sender
+        alertController.popoverPresentationController?.sourceRect = sender.bounds
+        alertController.addAction(UIAlertAction(title: "Hủy", style: .cancel, handler: nil))
+        alertController.addAction(UIAlertAction(title: "Xóa tất cả nhật ký", style: .destructive) { [weak self] _ in
+            Task {
+                await self?.clearLoggedErrors()
+                await MainActor.run {
+                    self?.updateFloatingClearAllButtonState()
+                }
+            }
+        })
+        self.present(alertController, animated: true)
+    }
+    
+    @objc func handleConsoleButtonTapped() {
+        self.showConsoleLogs(self.clearLogButton)
+    }
+    
+    // MARK: - 🇻🇳 BỘ DỊCH THÔNG MINH CÁC LỖI CÀI IPA & REFRESH SANG TIẾNG VIỆT
+    func translateErrorFailureTitle(_ text: String?) -> String {
+        guard let text = text, !text.isEmpty else {
+            return "Thao tác thất bại"
+        }
+        
+        var translated = text
+        let exactDictionary: [String: String] = [
+            "Operation Failed": "Thao tác thất bại",
+            "Failed to Refresh App": "Không thể làm mới ứng dụng",
+            "Failed to Refresh Apps": "Không thể làm mới các ứng dụng",
+            "Failed to Install App": "Không thể cài đặt ứng dụng (IPA)",
+            "Failed to Sideload App": "Không thể cài đặt ứng dụng (Sideload)",
+            "Failed to Update App": "Không thể cập nhật ứng dụng",
+            "Failed to Activate App": "Không thể kích hoạt ứng dụng",
+            "Failed to Deactivate App": "Không thể hủy kích hoạt ứng dụng",
+            "Failed to Backup App": "Không thể sao lưu ứng dụng",
+            "Failed to Restore App": "Không thể khôi phục ứng dụng",
+            "Failed to Enable JIT": "Không thể kích hoạt JIT",
+            "Failed to Remove App": "Không thể gỡ bỏ ứng dụng",
+            "Failed to Sign App": "Không thể ký chứng chỉ ứng dụng",
+            "Failed to Verify App": "Không thể xác minh gói IPA",
+            "Failed to Fetch Source": "Không thể tải dữ liệu nguồn (Source)",
+            "Failed to Log In": "Đăng nhập tài khoản thất bại",
+            "Failed to Sign In": "Đăng nhập ID Apple thất bại"
+        ]
+        
+        if let exact = exactDictionary[translated] {
+            return exact
+        }
+        
+        // Dịch theo mẫu câu động (ví dụ: "Failed to Refresh SideStore", "Failed to Install Delta"...)
+        let prefixReplacements: [(String, String)] = [
+            ("Failed to Refresh ", "Lỗi làm mới "),
+            ("Failed to Install ", "Lỗi cài đặt "),
+            ("Failed to Sideload ", "Lỗi cài đặt IPA "),
+            ("Failed to Update ", "Lỗi cập nhật "),
+            ("Failed to Activate ", "Lỗi kích hoạt "),
+            ("Failed to Deactivate ", "Lỗi tắt kích hoạt "),
+            ("Failed to Backup ", "Lỗi sao lưu "),
+            ("Failed to Restore ", "Lỗi khôi phục "),
+            ("Failed to Remove ", "Lỗi gỡ cài đặt "),
+            ("Failed to Enable JIT for ", "Lỗi bật JIT cho "),
+            ("Could not install ", "Không thể cài đặt "),
+            ("Could not refresh ", "Không thể làm mới ")
+        ]
+        
+        for (enPrefix, viPrefix) in prefixReplacements {
+            if translated.hasPrefix(enPrefix) {
+                translated = viPrefix + translated.dropFirst(enPrefix.count)
+                break
+            }
+        }
+        
+        return translated
+    }
+    
+    func translateErrorDescriptionText(_ text: String) -> String {
+        var result = text
+        let phraseReplacements: [(String, String)] = [
+            ("The operation couldn’t be completed.", "Thao tác không thể hoàn tất."),
+            ("The operation couldn't be completed.", "Thao tác không thể hoàn tất."),
+            ("Could not connect to server.", "Không thể kết nối tới máy chủ."),
+            ("The Internet connection appears to be offline.", "Kết nối mạng có vẻ đang bị ngắt."),
+            ("A server with the specified hostname could not be found.", "Không tìm thấy máy chủ với tên miền được chỉ định."),
+            ("The request timed out.", "Yêu cầu kết nối đã quá thời gian chờ (Timeout)."),
+            ("Make sure you are connected to Wi-Fi and your VPN/StosVPN/LocalDevVPN is enabled.", "Hãy đảm bảo bạn đang bật Wi-Fi và đã kết nối VPN (StosVPN / WireGuard / LocalDevVPN)."),
+            ("Unable to connect to device.", "Không thể kết nối với thiết bị. Hãy kiểm tra lại VPN hoặc tệp Pairing."),
+            ("Invalid pairing file", "Tệp ghép đôi (Pairing file) không hợp lệ hoặc đã hết hạn"),
+            ("No pairing file found", "Không tìm thấy tệp ghép đôi (Pairing file)"),
+            ("Your session has expired. Please sign in again.", "Phiên đăng nhập ID Apple đã hết hạn. Vui lòng đăng nhập lại."),
+            ("Maximum number of App IDs reached", "Đã đạt giới hạn tối đa 10 App ID của tài khoản Apple miễn phí"),
+            ("You cannot activate more than 3 apps", "Tài khoản miễn phí không thể kích hoạt quá 3 ứng dụng cùng lúc"),
+            ("The app is invalid.", "Tệp ứng dụng (.ipa) không hợp lệ hoặc bị hỏng."),
+            ("Failed to verify code signature", "Xác thực chữ ký số (Code Signature) thất bại"),
+            ("Certificate has been revoked", "Chứng chỉ phát triển đã bị thu hồi (Revoked)"),
+            ("Anisette error", "Lỗi máy chủ xác thực Anisette"),
+            ("Failed to fetch Anisette data", "Không thể lấy dữ liệu xác thực Anisette")
+        ]
+        
+        for (en, vi) in phraseReplacements {
+            result = result.replacingOccurrences(of: en, with: vi)
+        }
+        return result
+    }
+    
+    // MARK: - 🃏 BÓC TÁCH VÀ ÁP DỤNG CARD CSS CHO TỪNG DÒNG LỖI
+    func styleInnerCardOfErrorCell(_ cell: ErrorLogTableViewCell, at indexPath: IndexPath, totalRows: Int) {
+        cell.backgroundColor = .clear
+        cell.contentView.backgroundColor = .clear
+        
+        let cardTag = 8899
+        let cardView: UIView
+        if let existing = cell.contentView.viewWithTag(cardTag) {
+            cardView = existing
+        } else {
+            let newCard = UIView()
+            newCard.tag = cardTag
+            newCard.translatesAutoresizingMaskIntoConstraints = false
+            newCard.isUserInteractionEnabled = false
+            cell.contentView.insertSubview(newCard, at: 0)
+            NSLayoutConstraint.activate([
+                newCard.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 16),
+                newCard.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -16),
+                newCard.topAnchor.constraint(equalTo: cell.contentView.topAnchor),
+                newCard.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor)
+            ])
+            cardView = newCard
+        }
+        
+        cardView.backgroundColor = ErrorLogCSSTheme.white
+        
+        var corners: CACornerMask = []
+        if totalRows == 1 {
+            corners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        } else if indexPath.row == 0 {
+            corners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        } else if indexPath.row == totalRows - 1 {
+            corners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        }
+        
+        cardView.layer.cornerRadius = corners.isEmpty ? 0 : ErrorLogCSSTheme.cornerRadius
+        cardView.layer.maskedCorners = corners
+        
+        cell.layer.masksToBounds = false
+        cell.layer.shadowColor = ErrorLogCSSTheme.blue.cgColor
+        cell.layer.shadowOffset = CGSize(width: 0, height: 4)
+        cell.layer.shadowRadius = 10
+        cell.layer.shadowOpacity = 0.07
+        
+        // Đường kẻ phân cách tinh tế giữa các lỗi trong cùng một ngày
+        let sepTag = 8888
+        cell.contentView.viewWithTag(sepTag)?.removeFromSuperview()
+        if indexPath.row < totalRows - 1 {
+            let sep = UIView()
+            sep.tag = sepTag
+            sep.backgroundColor = ErrorLogCSSTheme.border
+            sep.translatesAutoresizingMaskIntoConstraints = false
+            cell.contentView.addSubview(sep)
+            NSLayoutConstraint.activate([
+                sep.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 32),
+                sep.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -32),
+                sep.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor),
+                sep.heightAnchor.constraint(equalToConstant: 1.0)
+            ])
+        }
+        
+        // Làm đẹp các thành phần bên trong Cell
+        cell.errorFailureLabel.textColor = ErrorLogCSSTheme.dark
+        cell.errorFailureLabel.font = UIFont.systemFont(ofSize: 15.5, weight: .bold)
+        
+        cell.dateLabel.textColor = ErrorLogCSSTheme.blue
+        cell.dateLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .semibold)
+        
+        // Tạo hiệu ứng Badge cho Mã lỗi (Error Code)
+        cell.errorCodeLabel.textColor = ErrorLogCSSTheme.purple
+        cell.errorCodeLabel.font = UIFont.monospacedSystemFont(ofSize: 11.5, weight: .bold)
+        cell.errorCodeLabel.backgroundColor = ErrorLogCSSTheme.purple.withAlphaComponent(0.10)
+        cell.errorCodeLabel.layer.cornerRadius = 6
+        cell.errorCodeLabel.layer.masksToBounds = true
+        
+        // Làm đẹp nội dung chi tiết lỗi và nút Xem thêm (More)
+        cell.errorDescriptionTextView.textColor = ErrorLogCSSTheme.dark.withAlphaComponent(0.88)
+        cell.errorDescriptionTextView.font = UIFont.systemFont(ofSize: 13.5, weight: .regular)
+        cell.errorDescriptionTextView.moreButton.setTitle("Xem thêm", for: .normal)
+        cell.errorDescriptionTextView.moreButton.setTitleColor(ErrorLogCSSTheme.blue, for: .normal)
+        cell.errorDescriptionTextView.moreButton.tintColor = ErrorLogCSSTheme.blue
+        
+        // Bo góc chuẩn iOS cho Icon ứng dụng bị lỗi
+        cell.appIconImageView.layer.cornerRadius = 12
+        cell.appIconImageView.layer.masksToBounds = true
+        cell.appIconImageView.layer.borderColor = ErrorLogCSSTheme.border.cgColor
+        cell.appIconImageView.layer.borderWidth = 1.0
+        cell.appIconImageView.backgroundColor = ErrorLogCSSTheme.light
     }
 }
 
@@ -129,34 +540,32 @@ private extension ErrorLogViewController
             
             let cell = cell as! ErrorLogTableViewCell
             cell.dateLabel.text = self.timeFormatter.string(from: loggedError.date)
-            cell.errorFailureLabel.text = loggedError.localizedFailure ?? NSLocalizedString("Operation Failed", comment: "")
-            cell.errorCodeLabel.text = loggedError.error.localizedErrorCode
+            cell.errorFailureLabel.text = self.translateErrorFailureTitle(loggedError.localizedFailure)
+            cell.errorCodeLabel.text = "  \(loggedError.error.localizedErrorCode)  "
             
             let nsError = loggedError.error as NSError
-            let errorDescription = [nsError.localizedDescription, nsError.localizedRecoverySuggestion].compactMap { $0 }.joined(separator: "\n\n")
+            let rawDescription = [nsError.localizedDescription, nsError.localizedRecoverySuggestion].compactMap { $0 }.joined(separator: "\n\n")
+            let errorDescription = self.translateErrorDescriptionText(rawDescription)
+            
             cell.errorDescriptionTextView.text = errorDescription
             cell.errorDescriptionTextView.maximumNumberOfLines = 5
             cell.errorDescriptionTextView.isCollapsed = !self.expandedErrorIDs.contains(loggedError.objectID)
             cell.errorDescriptionTextView.moreButton.addTarget(self, action: #selector(ErrorLogViewController.toggleCollapsingCell(_:)), for: .primaryActionTriggered)
             
-            cell.appIconImageView.image = nil
+            cell.appIconImageView.image = UIImage(systemName: "exclamationmark.triangle.fill")?.withTintColor(ErrorLogCSSTheme.purple.withAlphaComponent(0.75), renderingMode: .alwaysOriginal)
+            cell.appIconImageView.contentMode = .scaleAspectFit
             cell.appIconImageView.isIndicatingActivity = true
-            cell.appIconImageView.layer.borderColor = UIColor.gray.cgColor
             
-            let displayScale = (self.traitCollection.displayScale == 0.0) ? 1.0 : self.traitCollection.displayScale // 0.0 == "unspecified"
-            cell.appIconImageView.layer.borderWidth = 1.0 / displayScale
-                        
             cell.menuButton.isHidden = true
             if #available(tvOS 17.0, *) {
                 cell.menuButton.menu = nil
             }
             cell.selectionStyle = .none
 
-            // Include errorDescriptionTextView's text in cell summary.
             cell.accessibilityLabel = [cell.errorFailureLabel.text, cell.dateLabel.text, cell.errorCodeLabel.text, cell.errorDescriptionTextView.text].compactMap { $0 }.joined(separator: ". ")
-            
-            // Group all paragraphs together into single accessibility element (otherwise, each paragraph is independently selectable).
             cell.errorDescriptionTextView.accessibilityLabel = cell.errorDescriptionTextView.text
+            
+            self.updateFloatingClearAllButtonState()
         }
         dataSource.prefetchHandler = { (loggedError, indexPath) in
             let (installedApp, iconURL) = await loggedError.managedObjectContext?.perform {
@@ -173,13 +582,23 @@ private extension ErrorLogViewController
         }
         dataSource.prefetchCompletionHandler = { (cell, image, indexPath, error) in
             let cell = cell as! ErrorLogTableViewCell
-            cell.appIconImageView.image = image
+            if let image = image {
+                cell.appIconImageView.contentMode = .scaleAspectFill
+                cell.appIconImageView.image = image
+            } else {
+                cell.appIconImageView.contentMode = .center
+                let config = UIImage.SymbolConfiguration(pointSize: 20, weight: .bold)
+                cell.appIconImageView.image = UIImage(systemName: "app.badge.checkmark", withConfiguration: config)?.withTintColor(ErrorLogCSSTheme.blue, renderingMode: .alwaysOriginal)
+            }
             cell.appIconImageView.isIndicatingActivity = false
         }
         
         let placeholderView = PlaceholderView()
-        placeholderView.textLabel.text = NSLocalizedString("No Errors", comment: "")
-        placeholderView.detailTextLabel.text = NSLocalizedString("Errors that occur when sideloading or refreshing apps will appear here.", comment: "")
+        placeholderView.textLabel.text = "Hệ Thống Hoạt Động Ổn Định ✓"
+        placeholderView.textLabel.textColor = ErrorLogCSSTheme.blue
+        placeholderView.textLabel.font = UIFont.systemFont(ofSize: 18, weight: .bold)
+        placeholderView.detailTextLabel.text = "Chưa ghi nhận bất kỳ lỗi nào.\nCác sự cố phát sinh khi cài đặt IPA hoặc làm mới (Refresh) ứng dụng sẽ xuất hiện tại đây."
+        placeholderView.detailTextLabel.textColor = ErrorLogCSSTheme.dark.withAlphaComponent(0.75)
         dataSource.placeholderView = placeholderView
         
         return dataSource
@@ -209,7 +628,6 @@ private extension ErrorLogViewController
         }
     }
     
-    
     enum LogView: String {
         case consoleLog = "console-log"
 
@@ -220,34 +638,36 @@ private extension ErrorLogViewController
     }
     
     @IBAction func showConsoleLogs(_ sender: UIBarButtonItem) {
-        // Create the SwiftUI ConsoleLogView with the URL
         let consoleLogView = ConsoleLogView(logURL: (UIApplication.shared.delegate as! AppDelegate).consoleLog.logFileURL)
-        
-        // Create the UIHostingController
         let consoleLogController = UIHostingController(rootView: consoleLogView)
         
-        // Configure the bottom sheet presentation
         #if !os(tvOS)
         consoleLogController.modalPresentationStyle = .pageSheet
         if let sheet = consoleLogController.sheetPresentationController {
-            sheet.detents = [.medium(), .large()]  // You can adjust the size of the sheet (medium/large)
-            sheet.prefersGrabberVisible = true    // Optional: Shows a grabber at the top of the sheet
-            sheet.selectedDetentIdentifier = .large  // Default size when presented
+            sheet.detents = [.medium(), .large()]
+            sheet.prefersGrabberVisible = true
+            sheet.selectedDetentIdentifier = .large
         }
         #endif
         
-        // Present the bottom sheet
         present(consoleLogController, animated: true, completion: nil)
     }
         
     @IBAction func clearLoggedErrors(_ sender: UIBarButtonItem)
     {
-        let alertController = UIAlertController(title: NSLocalizedString("Are you sure you want to clear the error log?", comment: ""), message: nil, preferredStyle: .actionSheet)
+        let alertController = UIAlertController(
+            title: "Bạn có chắc chắn muốn xóa toàn bộ nhật ký lỗi?",
+            message: nil,
+            preferredStyle: .actionSheet
+        )
         alertController.popoverPresentationController?.barButtonItem = sender
-        alertController.addAction(.cancel)
-        alertController.addAction(UIAlertAction(title: NSLocalizedString("Clear Error Log", comment: ""), style: .destructive) { _ in
+        alertController.addAction(UIAlertAction(title: "Hủy", style: .cancel, handler: nil))
+        alertController.addAction(UIAlertAction(title: "Xóa tất cả nhật ký", style: .destructive) { _ in
             Task {
                 await self.clearLoggedErrors()
+                await MainActor.run {
+                    self.updateFloatingClearAllButtonState()
+                }
             }
         })
         self.present(alertController, animated: true)
@@ -262,7 +682,7 @@ private extension ErrorLogViewController
         catch
         {
             let alertController = UIAlertController(
-                title: NSLocalizedString("Failed to Clear Error Log", comment: ""),
+                title: "Không thể xóa nhật ký lỗi",
                 message: error.localizedDescription,
                 preferredStyle: .alert
             )
@@ -292,7 +712,7 @@ private extension ErrorLogViewController
     func searchFAQ(for loggedError: LoggedError)
     {
         let staticURL = AppConstants.URLs.errorCodesDocumentation
-        self.openWebURL(staticURL, preferredTintColor: .altPrimary)
+        self.openWebURL(staticURL, preferredTintColor: ErrorLogCSSTheme.blue)
     }
 
     func viewMoreDetails(for loggedError: LoggedError) {
@@ -302,22 +722,65 @@ private extension ErrorLogViewController
 
 extension ErrorLogViewController
 {
+    override func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
+        guard let errorCell = cell as? ErrorLogTableViewCell else { return }
+        let totalRows = tableView.numberOfRows(inSection: indexPath.section)
+        self.styleInnerCardOfErrorCell(errorCell, at: indexPath, totalRows: totalRows)
+    }
+    
+    override func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
+        return 38.0
+    }
+    
+    override func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
+        let headerTitle = self.tableView(tableView, titleForHeaderInSection: section) ?? ""
+        
+        let container = UIView()
+        container.backgroundColor = .clear
+        
+        let titleLabel = UILabel()
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.text = headerTitle.uppercased()
+        titleLabel.font = UIFont.systemFont(ofSize: 14, weight: .heavy)
+        titleLabel.textColor = ErrorLogCSSTheme.blue
+        
+        let underline = UIView()
+        underline.translatesAutoresizingMaskIntoConstraints = false
+        underline.backgroundColor = ErrorLogCSSTheme.blue
+        underline.layer.cornerRadius = 1.5
+        
+        container.addSubview(titleLabel)
+        container.addSubview(underline)
+        
+        NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
+            titleLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor, constant: 2),
+            
+            underline.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            underline.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 2),
+            underline.widthAnchor.constraint(equalToConstant: 36),
+            underline.heightAnchor.constraint(equalToConstant: 3)
+        ])
+        
+        return container
+    }
+
     @available(tvOS 17.0, *)
     override func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration?
     {
         let loggedError = self.dataSource.item(at: indexPath)
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
-            return UIMenu(title: "", children: [
-                UIAction(title: NSLocalizedString("Copy Error Message", comment: ""), image: UIImage(systemName: "doc.on.doc")) { [weak self] _ in
+            return UIMenu(title: "Tùy chọn lỗi", children: [
+                UIAction(title: "Sao chép nội dung lỗi", image: UIImage(systemName: "doc.on.doc")) { [weak self] _ in
                     self?.copyErrorMessage(for: loggedError)
                 },
-                UIAction(title: NSLocalizedString("Copy Error Code", comment: ""), image: UIImage(systemName: "doc.on.doc")) { [weak self] _ in
+                UIAction(title: "Sao chép mã lỗi (Code)", image: UIImage(systemName: "number.square")) { [weak self] _ in
                     self?.copyErrorCode(for: loggedError)
                 },
-                UIAction(title: NSLocalizedString("Search FAQ", comment: ""), image: UIImage(systemName: "magnifyingglass")) { [weak self] _ in
+                UIAction(title: "Tra cứu hướng dẫn sửa lỗi (FAQ)", image: UIImage(systemName: "magnifyingglass")) { [weak self] _ in
                     self?.searchFAQ(for: loggedError)
                 },
-                UIAction(title: NSLocalizedString("View More Details", comment: ""), image: UIImage(systemName: "ellipsis.circle")) { [weak self] _ in
+                UIAction(title: "Xem chi tiết kỹ thuật", image: UIImage(systemName: "ellipsis.circle")) { [weak self] _ in
                     self?.viewMoreDetails(for: loggedError)
                 },
             ])
@@ -329,16 +792,33 @@ extension ErrorLogViewController
         tableView.deselectRow(at: indexPath, animated: true)
         guard let cell = tableView.cellForRow(at: indexPath) as? ErrorLogTableViewCell else { return }
         
+        UIView.animate(withDuration: 0.12, animations: {
+            cell.transform = CGAffineTransform(scaleX: 0.98, y: 0.98)
+        }) { _ in
+            UIView.animate(withDuration: 0.25) {
+                cell.transform = .identity
+            }
+        }
+        
         if !cell.errorDescriptionTextView.moreButton.isHidden
         {
             self.toggleCollapsingCell(cell.errorDescriptionTextView.moreButton)
+        }
+        else
+        {
+            let loggedError = self.dataSource.item(at: indexPath)
+            self.viewMoreDetails(for: loggedError)
         }
     }
     
     #if !os(tvOS)
     override func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration?
     {
-        let deleteAction = UIContextualAction(style: .destructive, title: NSLocalizedString("Delete", comment: "")) { _, _, completion in
+        let deleteAction = UIContextualAction(style: .destructive, title: "Xóa") { [weak self] _, _, completion in
+            guard let self = self else {
+                completion(false)
+                return
+            }
             let loggedError = self.dataSource.item(at: indexPath)
             DatabaseManager.shared.persistentContainer.performBackgroundTask { context in
                 do
@@ -348,6 +828,7 @@ extension ErrorLogViewController
                     
                     try context.save()
                     DispatchQueue.main.async {
+                        self.updateFloatingClearAllButtonState()
                         completion(true)
                     }
                 }
@@ -360,6 +841,7 @@ extension ErrorLogViewController
                 }
             }
         }
+        deleteAction.backgroundColor = ErrorLogCSSTheme.danger
         
         let configuration = UISwipeActionsConfiguration(actions: [deleteAction])
         configuration.performsFirstActionWithFullSwipe = false
@@ -374,7 +856,11 @@ extension ErrorLogViewController
         
         if Calendar.current.isDateInToday(loggedError.date)
         {
-            return NSLocalizedString("Today", comment: "")
+            return "Hôm nay"
+        }
+        else if Calendar.current.isDateInYesterday(loggedError.date)
+        {
+            return "Hôm qua"
         }
         else
         {
@@ -382,8 +868,6 @@ extension ErrorLogViewController
         }
     }
 }
-
-
 
 extension ErrorLogViewController
 {

@@ -227,7 +227,7 @@ final class SettingsViewController: UITableViewController
         let channel = UserDefaults.standard.betaUdpatesTrack ?? UserDefaults.defaultBetaUpdatesTrack
         let displayTitle = translateStaticText(channel)
         
-        if var config = betaTrackPopupButton.configuration {
+        if #available(iOS 15.0, tvOS 15.0, *), var config = betaTrackPopupButton.configuration {
             var attrTitle = AttributedString(displayTitle)
             attrTitle.font = UIFont.systemFont(ofSize: 13, weight: .bold)
             attrTitle.foregroundColor = CSSTheme.blue
@@ -253,7 +253,12 @@ final class SettingsViewController: UITableViewController
             })
         }
         
-        let menu = UIMenu(title: "Chọn kênh cập nhật Beta", options: [.singleSelection, .displayInline], children: items)
+        var menuOptions: UIMenu.Options = [.displayInline]
+        if #available(iOS 15.0, tvOS 15.0, *) {
+            menuOptions.insert(.singleSelection)
+        }
+        
+        let menu = UIMenu(title: "Chọn kênh cập nhật Beta", options: menuOptions, children: items)
         #if !os(tvOS)
         betaTrackPopupButton.menu = menu
         betaTrackPopupButton.showsMenuAsPrimaryAction = true
@@ -275,7 +280,7 @@ final class SettingsViewController: UITableViewController
         self.navigationItem.title = "Cài đặt"
         #if !os(tvOS)
         // Thu gọn thanh tiêu đề lớn để khung SideStore nằm sát ngay phía trên
-        self.navigationItem.largeTitleDisplayMode = .inline
+        self.navigationItem.largeTitleDisplayMode = UINavigationItem.LargeTitleDisplayMode.inline
         #endif
         
         let nib = UINib(nibName: "SettingsHeaderFooterView", bundle: nil)
@@ -299,7 +304,7 @@ final class SettingsViewController: UITableViewController
         
         self.tableView.contentInset.top = 0
         self.tableView.contentInset.bottom = 50
-        if #available(iOS 15.0, *) {
+        if #available(iOS 15.0, tvOS 15.0, *) {
             self.tableView.sectionHeaderTopPadding = 0
         }
         
@@ -343,7 +348,7 @@ final class SettingsViewController: UITableViewController
             appearance.titleTextAttributes = [.foregroundColor: CSSTheme.blue]
             appearance.largeTitleTextAttributes = [.foregroundColor: CSSTheme.blue]
             
-            controller.navigationItem.largeTitleDisplayMode = .inline
+            controller.navigationItem.largeTitleDisplayMode = UINavigationItem.LargeTitleDisplayMode.inline
             controller.navigationItem.standardAppearance = appearance
             controller.navigationItem.scrollEdgeAppearance = appearance
             #endif
@@ -422,8 +427,11 @@ private extension SettingsViewController {
         
         for (button, color) in socialButtons {
             guard let btn = button else { continue }
-            let image = btn.configuration?.background.image ?? btn.image(for: .normal)
-            btn.configuration = nil
+            var image = btn.image(for: .normal)
+            if #available(iOS 15.0, tvOS 15.0, *) {
+                image = btn.configuration?.background.image ?? image
+                btn.configuration = nil
+            }
             btn.setImage(image?.withRenderingMode(.alwaysTemplate), for: .normal)
             btn.tintColor = color
             btn.imageView?.contentMode = .scaleAspectFit
@@ -446,21 +454,30 @@ private extension SettingsViewController {
     private func styleBetaTrackPopupButton() {
         guard let btn = self.betaTrackPopupButton else { return }
         
-        var config = UIButton.Configuration.filled()
-        config.baseBackgroundColor = CSSTheme.light
-        config.baseForegroundColor = CSSTheme.blue
-        config.cornerStyle = .capsule
-        config.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 14, bottom: 6, trailing: 12)
+        if #available(iOS 15.0, tvOS 15.0, *) {
+            var config = UIButton.Configuration.filled()
+            config.baseBackgroundColor = CSSTheme.light
+            config.baseForegroundColor = CSSTheme.blue
+            config.cornerStyle = .capsule
+            config.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 14, bottom: 6, trailing: 12)
+            
+            let chevronConfig = UIImage.SymbolConfiguration(pointSize: 10, weight: .bold)
+            config.image = UIImage(systemName: "chevron.up.chevron.down", withConfiguration: chevronConfig)
+            config.imagePlacement = .trailing
+            config.imagePadding = 6
+            
+            config.background.strokeColor = CSSTheme.blue.withAlphaComponent(0.35)
+            config.background.strokeWidth = 1.2
+            
+            btn.configuration = config
+        } else {
+            btn.backgroundColor = CSSTheme.light
+            btn.setTitleColor(CSSTheme.blue, for: .normal)
+            btn.layer.cornerRadius = 14
+            btn.layer.borderWidth = 1.2
+            btn.layer.borderColor = CSSTheme.blue.withAlphaComponent(0.35).cgColor
+        }
         
-        let chevronConfig = UIImage.SymbolConfiguration(pointSize: 10, weight: .bold)
-        config.image = UIImage(systemName: "chevron.up.chevron.down", withConfiguration: chevronConfig)
-        config.imagePlacement = .trailing
-        config.imagePadding = 6
-        
-        config.background.strokeColor = CSSTheme.blue.withAlphaComponent(0.35)
-        config.background.strokeWidth = 1.2
-        
-        btn.configuration = config
         btn.layer.shadowColor = CSSTheme.purple.cgColor
         btn.layer.shadowOffset = CGSize(width: 0, height: 3)
         btn.layer.shadowRadius = 6
@@ -959,13 +976,12 @@ private extension SettingsViewController
             let toggleBtn = UIButton(type: .system)
             toggleBtn.tag = toggleAccountTag
             toggleBtn.translatesAutoresizingMaskIntoConstraints = false
-            let toggleTitle = self.isAccountDetailsExpanded ? "Ẩn Tài Khoản ▲" : "Tài Khoản ▼"
+            let toggleTitle = self.isAccountDetailsExpanded ? "  Ẩn Tài Khoản ▲  " : "  Tài Khoản ▼  "
             toggleBtn.setTitle(toggleTitle, for: .normal)
             toggleBtn.setTitleColor(CSSTheme.white, for: .normal)
             toggleBtn.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .bold)
             toggleBtn.backgroundColor = self.isAccountDetailsExpanded ? CSSTheme.purple : CSSTheme.blue
             toggleBtn.layer.cornerRadius = 12
-            toggleBtn.contentEdgeInsets = UIEdgeInsets(top: 4, left: 10, bottom: 4, right: 10)
             toggleBtn.layer.shadowColor = CSSTheme.blue.cgColor
             toggleBtn.layer.shadowOffset = CGSize(width: 0, height: 2)
             toggleBtn.layer.shadowRadius = 4
@@ -1046,7 +1062,6 @@ private extension SettingsViewController
         self.prepare(settingsHeaderFooterView, for: section, isHeader: isHeader)
         
         let size = settingsHeaderFooterView.contentView.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
-        // Thu nhỏ chiều cao của Header Tài khoản vừa vặn với chữ
         if section == .account && isHeader {
             return max(34, size.height)
         }
@@ -1374,7 +1389,9 @@ extension SettingsViewController
                 actionCell.style = self.isAccountDetailsExpanded ? .bottom : .single
                 actionCell.backgroundColor = .clear
                 actionCell.contentView.backgroundColor = .clear
-                actionCell.backgroundConfiguration = .clear()
+                if #available(iOS 14.0, tvOS 14.0, *) {
+                    actionCell.backgroundConfiguration = .clear()
+                }
                 return
             }
         }

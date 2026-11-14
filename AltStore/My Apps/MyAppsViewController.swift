@@ -119,9 +119,10 @@ class MyAppsViewController: UICollectionViewController
     private var heroGradientLayer: CAGradientLayer?
     private var heroSideloadButton: UIButton?
     private var heroSideloadSpinner: UIActivityIndicatorView?
+    private var heroLiveContainerButton: UIButton?
     private var heroRefreshAllButton: UIButton?
     private var floatingBackButton: UIButton?
-    private let heroTopSpace: CGFloat = 104.0
+    private let heroTopSpace: CGFloat = 108.0
     
     private var _imagePickerInstalledApp: InstalledApp?
     private var _viewDidAppear = false
@@ -238,7 +239,10 @@ class MyAppsViewController: UICollectionViewController
         }
         
         Task { @MainActor [weak self] in
-            self?.activeTeam = try? await AuthManager.shared.getAuthenticatedTeam()
+            guard let self = self else { return }
+            self.activeTeam = try? await AuthManager.shared.getAuthenticatedTeam()
+            self.collectionView.reloadData()
+            self.collectionView.collectionViewLayout.invalidateLayout()
         }
     }
     
@@ -261,10 +265,12 @@ class MyAppsViewController: UICollectionViewController
             {
                 self.activeTeam = team
                 self.collectionView.reloadData()
+                self.collectionView.collectionViewLayout.invalidateLayout()
             }
         }
         
         self.collectionView.reloadData()
+        self.collectionView.collectionViewLayout.invalidateLayout()
         
         self.update()
         
@@ -351,7 +357,11 @@ class MyAppsViewController: UICollectionViewController
         case "showAppIDs":
             let navigationController = segue.destination as? UINavigationController
             let appIDsViewController = navigationController?.viewControllers.first as? AppIDsViewController
-            appIDsViewController?.activeTeam = self.activeTeam
+            if let team = self.activeTeam {
+                appIDsViewController?.activeTeam = team
+            } else if let dbTeam = DatabaseManager.shared.viewContext.activeTeam {
+                appIDsViewController?.activeTeam = ALTTeam(team: dbTeam)
+            }
             
         default: break
         }
@@ -454,7 +464,7 @@ private extension MyAppsViewController {
         self.collectionView.contentInset.top = self.heroTopSpace
         self.collectionView.contentInset.bottom = 40
         
-        // 3. Khởi tạo khối .hero Banner kèm nút "+ Cài IPA" và "Làm mới"
+        // 3. Khởi tạo khối .hero Banner kèm nút "+ Cài IPA", icon quay lại LiveContainer (dưới cùng bên trái) và nút "Làm mới"
         setupCSSHeroBanner()
         
         // 4. Đồng bộ màu Badge trên TabBar
@@ -526,17 +536,7 @@ private extension MyAppsViewController {
         titleStack.addArrangedSubview(titleLabel)
         titleStack.addArrangedSubview(dot)
         
-        // Phụ đề hướng dẫn
-        let subLabel = UILabel()
-        subLabel.translatesAutoresizingMaskIntoConstraints = false
-        subLabel.text = "Quản lý, cài đặt tệp .ipa & gia hạn ứng dụng dễ dàng"
-        subLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .medium)
-        subLabel.textColor = CSSTheme.white.withAlphaComponent(0.95)
-        subLabel.textAlignment = .center
-        subLabel.numberOfLines = 1
-        subLabel.adjustsFontSizeToFitWidth = true
-        
-        // Nút "+ Cài IPA" bên trái Hero Card
+        // Nút "+ Cài IPA" góc trên bên trái Hero Card
         let addBtn = UIButton(type: .system)
         addBtn.translatesAutoresizingMaskIntoConstraints = false
         let plusConfig = UIImage.SymbolConfiguration(pointSize: 12, weight: .bold)
@@ -562,6 +562,37 @@ private extension MyAppsViewController {
         addBtn.addSubview(spinner)
         self.heroSideloadSpinner = spinner
         
+        // Nút Icon quay lại LiveContainer ở vị trí DƯỚI CÙNG BÊN TRÁI của khung Hero Card
+        let lcBackBtn = UIButton(type: .system)
+        lcBackBtn.translatesAutoresizingMaskIntoConstraints = false
+        let lcIconConfig = UIImage.SymbolConfiguration(pointSize: 14, weight: .bold)
+        let lcIcon = UIImage(systemName: "arrow.uturn.backward.circle.fill", withConfiguration: lcIconConfig)
+            ?? UIImage(systemName: "arrow.backward.circle.fill", withConfiguration: lcIconConfig)
+        lcBackBtn.setImage(lcIcon, for: .normal)
+        lcBackBtn.tintColor = CSSTheme.white
+        lcBackBtn.backgroundColor = CSSTheme.white.withAlphaComponent(0.24)
+        lcBackBtn.layer.cornerRadius = 14
+        lcBackBtn.layer.borderWidth = 1.0
+        lcBackBtn.layer.borderColor = CSSTheme.white.withAlphaComponent(0.55).cgColor
+        lcBackBtn.layer.shadowColor = UIColor.black.cgColor
+        lcBackBtn.layer.shadowOffset = CGSize(width: 0, height: 2)
+        lcBackBtn.layer.shadowRadius = 4
+        lcBackBtn.layer.shadowOpacity = 0.15
+        lcBackBtn.accessibilityLabel = "Quay lại LiveContainer"
+        lcBackBtn.addTarget(self, action: #selector(handleReturnToLiveContainerTap(_:)), for: .touchUpInside)
+        self.heroLiveContainerButton = lcBackBtn
+        
+        // Phụ đề hướng dẫn (nằm gọn giữa nút LiveContainer bên trái và nút Làm mới bên phải)
+        let subLabel = UILabel()
+        subLabel.translatesAutoresizingMaskIntoConstraints = false
+        subLabel.text = "Quản lý, cài đặt tệp .ipa & gia hạn ứng dụng dễ dàng"
+        subLabel.font = UIFont.systemFont(ofSize: 12.0, weight: .medium)
+        subLabel.textColor = CSSTheme.white.withAlphaComponent(0.95)
+        subLabel.textAlignment = .center
+        subLabel.numberOfLines = 1
+        subLabel.adjustsFontSizeToFitWidth = true
+        subLabel.minimumScaleFactor = 0.75
+        
         // Nút "Làm mới" nhanh bên phải Hero Card
         let refreshBtn = UIButton(type: .system)
         refreshBtn.translatesAutoresizingMaskIntoConstraints = false
@@ -582,6 +613,7 @@ private extension MyAppsViewController {
         heroCard.addSubview(titleStack)
         heroCard.addSubview(subLabel)
         heroCard.addSubview(addBtn)
+        heroCard.addSubview(lcBackBtn)
         heroCard.addSubview(refreshBtn)
         heroCard.addSubview(self.sideloadingProgressView)
         headerContainer.addSubview(heroCard)
@@ -593,6 +625,7 @@ private extension MyAppsViewController {
             heroCard.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 4),
             heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -6),
             
+            // Nút + Cài IPA (Trên cùng bên trái)
             addBtn.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
             addBtn.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 12),
             addBtn.heightAnchor.constraint(equalToConstant: 28),
@@ -600,18 +633,28 @@ private extension MyAppsViewController {
             spinner.centerXAnchor.constraint(equalTo: addBtn.centerXAnchor),
             spinner.centerYAnchor.constraint(equalTo: addBtn.centerYAnchor),
             
+            // Nút quay lại LiveContainer (Dưới cùng bên trái của khung)
+            lcBackBtn.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
+            lcBackBtn.bottomAnchor.constraint(equalTo: heroCard.bottomAnchor, constant: -11),
+            lcBackBtn.widthAnchor.constraint(equalToConstant: 32),
+            lcBackBtn.heightAnchor.constraint(equalToConstant: 28),
+            
+            // Nút Làm mới nhanh (Bên phải)
             refreshBtn.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
-            refreshBtn.centerYAnchor.constraint(equalTo: addBtn.centerYAnchor),
+            refreshBtn.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
             refreshBtn.widthAnchor.constraint(equalToConstant: 32),
             refreshBtn.heightAnchor.constraint(equalToConstant: 28),
             
+            // Tiêu đề chính "Ứng dụng của tôi"
             titleStack.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor, constant: 14),
             titleStack.centerYAnchor.constraint(equalTo: addBtn.centerYAnchor),
             
-            subLabel.topAnchor.constraint(equalTo: addBtn.bottomAnchor, constant: 12),
-            subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
-            subLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
+            // Dòng chữ "Quản lý, cài đặt tệp .ipa & gia hạn..." căn thẳng hàng ngang với nút LiveContainer
+            subLabel.centerYAnchor.constraint(equalTo: lcBackBtn.centerYAnchor),
+            subLabel.leadingAnchor.constraint(equalTo: lcBackBtn.trailingAnchor, constant: 8),
+            subLabel.trailingAnchor.constraint(equalTo: refreshBtn.leadingAnchor, constant: -8),
             
+            // Thanh tiến trình cài đặt dưới đáy khung
             self.sideloadingProgressView.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
             self.sideloadingProgressView.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
             self.sideloadingProgressView.bottomAnchor.constraint(equalTo: heroCard.bottomAnchor, constant: -3),
@@ -653,6 +696,42 @@ private extension MyAppsViewController {
         animateButtonBounce(sender)
         let barButton = self.navigationItem.rightBarButtonItem ?? UIBarButtonItem()
         self.refreshAllApps(barButton)
+    }
+    
+    // Xử lý khi nhấn nút Icon quay lại LiveContainer ở góc dưới cùng bên trái khung Hero
+    @objc func handleReturnToLiveContainerTap(_ sender: UIButton) {
+        animateButtonBounce(sender)
+        
+        // 1. Kiểm tra nếu bản vá @livecontainer có gắn UIBarButtonItem quay về LiveContainer trên navigationItem
+        let allBarItems = (self.navigationItem.leftBarButtonItems ?? []) + (self.navigationItem.rightBarButtonItems ?? [])
+        for item in allBarItems {
+            if let action = item.action, action != #selector(MyAppsViewController.sideloadApp(_:)) && action != #selector(MyAppsViewController.refreshAllApps(_:)) {
+                if UIApplication.shared.sendAction(action, to: item.target, from: item, for: nil) {
+                    return
+                }
+            }
+            if let customButton = item.customView as? UIButton {
+                customButton.sendActions(for: .touchUpInside)
+                return
+            }
+        }
+        
+        // 2. Mở trực tiếp URL Scheme của LiveContainer để chuyển về LiveContainer ngay lập tức
+        let schemes = [
+            "livecontainer://",
+            "livecontainer://open"
+        ]
+        
+        func tryOpenScheme(at index: Int) {
+            guard index < schemes.count, let url = URL(string: schemes[index]) else { return }
+            UIApplication.shared.open(url, options: [:]) { success in
+                if !success {
+                    tryOpenScheme(at: index + 1)
+                }
+            }
+        }
+        
+        tryOpenScheme(at: 0)
     }
     
     func animateButtonBounce(_ sender: UIView) {
@@ -912,6 +991,50 @@ private extension MyAppsViewController {
             underline.widthAnchor.constraint(equalToConstant: 38),
             underline.heightAnchor.constraint(equalToConstant: 3)
         ])
+    }
+    
+    // Cấu hình hiển thị Footer App IDs luôn hiện ổn định, đẹp mắt
+    func configureAppIDsFooter(_ footerView: InstalledAppsCollectionFooterView) {
+        footerView.overrideUserInterfaceStyle = .light
+        footerView.isHidden = false
+        footerView.alpha = 1.0
+        
+        footerView.textLabel.isHidden = false
+        footerView.textLabel.textColor = CSSTheme.purple
+        footerView.textLabel.font = UIFont.systemFont(ofSize: 14, weight: .bold)
+        
+        footerView.button?.isHidden = false
+        footerView.button?.tintColor = CSSTheme.blue
+        footerView.button?.setTitleColor(CSSTheme.blue, for: .normal)
+        footerView.button?.titleLabel?.font = UIFont.systemFont(ofSize: 13.5, weight: .semibold)
+        
+        // Tìm Team hiện tại từ biến activeTeam hoặc trực tiếp từ CoreData để luôn có dữ liệu tức thì
+        let context = DatabaseManager.shared.viewContext
+        var resolvedManagedTeam: Team? = nil
+        
+        if let activeTeam = self.activeTeam {
+            resolvedManagedTeam = Team.first(satisfying: NSPredicate(format: "%K == %@", #keyPath(Team.identifier), activeTeam.identifier), in: context)
+        }
+        if resolvedManagedTeam == nil {
+            resolvedManagedTeam = context.activeTeam
+        }
+        
+        if let managedTeam = resolvedManagedTeam {
+            let teamType = self.activeTeam?.type ?? managedTeam.type
+            let registeredAppIDs = managedTeam.appIDs.count
+            
+            if teamType == .free {
+                let maximumAppIDCount = 10
+                let remainingAppIDs = max(0, maximumAppIDCount - registeredAppIDs)
+                footerView.textLabel.text = String(format: "Còn lại %@ App ID khả dụng", NSNumber(value: remainingAppIDs))
+            } else {
+                footerView.textLabel.text = String(format: "Đã đăng ký %@ App ID khả dụng", NSNumber(value: registeredAppIDs))
+            }
+        } else {
+            let totalAppIDs = AppID.all(in: context).count
+            let remainingAppIDs = max(0, 10 - totalAppIDs)
+            footerView.textLabel.text = String(format: "Còn lại %@ App ID khả dụng", NSNumber(value: remainingAppIDs))
+        }
     }
 }
 
@@ -1265,14 +1388,20 @@ private extension MyAppsViewController
     
     func fetchAppIDs()
     {
-        AppManager.shared.syncAppIDs { (result) in
+        AppManager.shared.syncAppIDs { [weak self] (result) in
             do
             {
-                try result.get()
+                _ = try result.get()
             }
             catch
             {
                 debugLog("Failed to fetch App IDs. \(error)")
+            }
+            
+            DispatchQueue.main.async {
+                guard let self = self, self.isViewLoaded else { return }
+                self.collectionView.reloadData()
+                self.collectionView.collectionViewLayout.invalidateLayout()
             }
         }
     }
@@ -1561,6 +1690,7 @@ private extension MyAppsViewController
                 self?.setSideloadingActivity(false)
                 self?.sideloadingProgressView.observedProgress = nil
                 self?.sideloadingProgressView.setHidden(true, animated: true)
+                self?.fetchAppIDs()
                 
                 switch result {
                 case .success(let installedApp):
@@ -2580,26 +2710,8 @@ extension MyAppsViewController
         case .activeApps, .inactiveApps:
             let footerView = collectionView.dequeueReusableSupplementaryView(ofKind: UICollectionView.elementKindSectionFooter, withReuseIdentifier: "InstalledAppsFooter", for: indexPath) as! InstalledAppsCollectionFooterView
             
-            footerView.overrideUserInterfaceStyle = .light
-            footerView.textLabel.textColor = CSSTheme.purple
-            footerView.textLabel.font = UIFont.systemFont(ofSize: 14, weight: .bold)
-            footerView.button?.tintColor = CSSTheme.blue
-            
-            guard let team = self.activeTeam else { return footerView }
-            switch team.type
-            {
-            case .free:
-                guard let managedTeam = Team.first(satisfying: NSPredicate(format: "%K == %@", #keyPath(Team.identifier), team.identifier), in: DatabaseManager.shared.viewContext) else { return footerView }
-                let registeredAppIDs = managedTeam.appIDs.count
-                
-                let maximumAppIDCount = 10
-                let remainingAppIDs = maximumAppIDCount - registeredAppIDs
-                
-                footerView.textLabel.text = String(format: "Còn lại %@ App ID khả dụng", NSNumber(value: remainingAppIDs))
-                footerView.textLabel.isHidden = remainingAppIDs < 0
-                
-            case .individual, .organization, .unknown: footerView.textLabel.isHidden = true
-            @unknown default: break
+            UIView.performWithoutAnimation {
+                self.configureAppIDsFooter(footerView)
             }
             
             return footerView
@@ -3018,10 +3130,10 @@ extension MyAppsViewController: UICollectionViewDelegateFlowLayout
     {
         let section = Section.allCases[section]
         
+        // Luôn trả về kích thước cố định để khung "Còn lại ... App ID khả dụng / View App IDs" luôn hiển thị, không bị ẩn lúc mới vào hoặc khi activeTeam đang tải
         func appIDsFooterSize() -> CGSize
         {
-            guard let _ = self.activeTeam else { return .zero }
-            return CGSize(width: collectionView.bounds.width, height: 60.5)
+            return CGSize(width: collectionView.bounds.width, height: 64.0)
         }
         
         switch section

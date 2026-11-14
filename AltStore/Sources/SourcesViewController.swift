@@ -85,10 +85,11 @@ private struct GuideArticle: Hashable {
         var count = 0
         for block in blocks {
             if case .text(let str) = block.type {
-                let lines = str.components(separatedBy: .newlines)
-                count += lines.filter {
-                    $0.trimmingCharacters(in: .whitespaces).range(of: #"^\d+\."#, options: .regularExpression) != nil
-                }.count
+                let lines = str
+                    .components(separatedBy: .newlines)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                count += lines.count
             }
         }
         return count
@@ -109,33 +110,71 @@ private struct GuideArticle: Hashable {
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .first { !$0.isEmpty }
                 if let line = firstLine {
-                    return line
+                    let cleaned = GuideParser.stripLeadingNumberOrBullet(from: line)
+                    return "• " + cleaned
                 }
             }
         }
-        return "Nhấn để xem chi tiết hướng dẫn đầy đủ và hình ảnh minh họa..."
+        return "• Nhấn để xem chi tiết hướng dẫn đầy đủ và hình ảnh minh họa..."
     }
 }
 
 private enum GuideParser {
     static let githubGuideURL = "https://github.com/Nguyenhuyhoan/Config/blob/main/huongdan.txt"
 
-    /// Tự động chuyển đổi link GitHub `/blob/` hoặc `?raw=true` sang link `raw.githubusercontent.com`
+    /// Xóa bỏ con số đầu dòng (ví dụ: "1.", "2)", "Bước 1:") hoặc ký tự gạch đầu dòng để chuẩn hóa sang dấu chấm đầu dòng
+    static func stripLeadingNumberOrBullet(from line: String) -> String {
+        var cleaned = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pattern = #"^(?:(?:\d+[\.\)\:\-]?)|(?:[•\-\*\+]))\s*"#
+        if let range = cleaned.range(of: pattern, options: .regularExpression) {
+            cleaned.removeSubrange(range)
+        }
+        return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Tự động chuẩn hóa mọi dạng link GitHub (`github.com/.../blob/...`, `github.com/.../raw/...`, `raw.githubusercontent.com/...`) để tải và hiển thị trực tiếp
     static func convertToRawGitHubURL(_ urlString: String) -> URL? {
         var cleaned = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Loại bỏ các dấu ngoặc hoặc dấu câu vô tình dính ở đầu/cuối link
+        let trimChars = CharacterSet(charactersIn: "<>\"'()[]{}")
+        cleaned = cleaned.trimmingCharacters(in: trimChars)
         guard !cleaned.isEmpty else { return nil }
 
-        if cleaned.contains("github.com") && cleaned.contains("/blob/") {
+        // 1. Chuyển https://github.com/user/repo/blob/branch/path -> https://raw.githubusercontent.com/user/repo/branch/path
+        if cleaned.contains("github.com") {
             cleaned = cleaned
-                .replacingOccurrences(of: "https://github.com/", with: "https://raw.githubusercontent.com/")
-                .replacingOccurrences(of: "http://github.com/", with: "https://raw.githubusercontent.com/")
-                .replacingOccurrences(of: "/blob/", with: "/")
+                .replacingOccurrences(of: "http://github.com/", with: "https://github.com/")
+                .replacingOccurrences(of: "https://www.github.com/", with: "https://github.com/")
+
+            if cleaned.contains("/blob/") {
+                cleaned = cleaned
+                    .replacingOccurrences(of: "https://github.com/", with: "https://raw.githubusercontent.com/")
+                    .replacingOccurrences(of: "/blob/refs/heads/", with: "/")
+                    .replacingOccurrences(of: "/blob/", with: "/")
+            } else if cleaned.contains("/raw/") {
+                cleaned = cleaned
+                    .replacingOccurrences(of: "https://github.com/", with: "https://raw.githubusercontent.com/")
+                    .replacingOccurrences(of: "/raw/refs/heads/", with: "/")
+                    .replacingOccurrences(of: "/raw/", with: "/")
+            }
         }
-        if cleaned.hasSuffix("?raw=true") {
+
+        // 2. Chuẩn hóa link raw.githubusercontent.com nếu có chứa /refs/heads/ hoặc ?raw=true
+        if cleaned.contains("raw.githubusercontent.com") {
+            cleaned = cleaned.replacingOccurrences(of: "/refs/heads/", with: "/")
+        }
+
+        if cleaned.lowercased().hasSuffix("?raw=true") {
             cleaned = String(cleaned.dropLast("?raw=true".count))
+        } else if cleaned.lowercased().hasSuffix("&raw=true") {
+            cleaned = String(cleaned.dropLast("&raw=true".count))
         }
 
         if let url = URL(string: cleaned) {
+            return url
+        } else if let decoded = cleaned.removingPercentEncoding,
+                  let encoded = decoded.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                  let url = URL(string: encoded) {
             return url
         } else if let encoded = cleaned.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
             return URL(string: encoded)
@@ -143,22 +182,29 @@ private enum GuideParser {
         return nil
     }
 
-    /// Kiểm tra một dòng có phải là link ảnh hợp lệ hay không
+    /// Kiểm tra một dòng (hoặc URL nằm trong dòng) có phải là link ảnh hợp lệ hay không
     private static func extractImageURL(from line: String) -> URL? {
-        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.lowercased().hasPrefix("http://") || trimmed.lowercased().hasPrefix("https://"),
-              !trimmed.contains(" ") else {
+        // Loại bỏ số thứ tự hoặc dấu chấm ở đầu dòng nếu người viết vô tình gõ: "1. https://github.com/.../fix.jpeg"
+        let strippedLine = stripLeadingNumberOrBullet(from: line)
+        let candidate = strippedLine.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard candidate.lowercased().hasPrefix("http://") || candidate.lowercased().hasPrefix("https://"),
+              !candidate.contains(" ") else {
             return nil
         }
 
-        let lower = trimmed.lowercased()
-        let imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".bmp"]
+        let lower = candidate.lowercased()
+        let imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".bmp", ".svg"]
         let isImageExt = imageExtensions.contains {
-            lower.hasSuffix($0) || lower.contains("\($0)?") || lower.contains("\($0)#")
+            lower.hasSuffix($0) || lower.contains("\($0)?") || lower.contains("\($0)#") || lower.contains("\($0)&")
         }
 
-        if isImageExt || (lower.contains("github") && lower.contains("/blob/")) {
-            return convertToRawGitHubURL(trimmed)
+        let isGitHubImageLink = (lower.contains("github.com") || lower.contains("githubusercontent.com")) &&
+            (isImageExt || lower.contains("/blob/") || lower.contains("/raw/")) &&
+            !lower.hasSuffix(".txt") && !lower.hasSuffix(".md") && !lower.hasSuffix(".json")
+
+        if isImageExt || isGitHubImageLink {
+            return convertToRawGitHubURL(candidate)
         }
         return nil
     }
@@ -220,9 +266,15 @@ private enum GuideParser {
         return articles.sorted { $0.orderNumber > $1.orderNumber }
     }
 
+    /// Tách văn bản và link ảnh thành các khối riêng biệt (kể cả khi link ảnh nằm chung dòng với văn bản)
     private static func parseContentBlocks(from lines: [String]) -> [GuideContentBlock] {
         var blocks: [GuideContentBlock] = []
         var currentTextBuffer: [String] = []
+
+        let inlineURLRegex = try? NSRegularExpression(
+            pattern: #"https?://[^\s<>"]+"#,
+            options: [.caseInsensitive]
+        )
 
         func flushTextBuffer() {
             let joined = currentTextBuffer.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -233,9 +285,39 @@ private enum GuideParser {
         }
 
         for line in lines {
-            if let imageURL = extractImageURL(from: line) {
+            // Trường hợp 1: Cả dòng là một đường dẫn ảnh
+            if let directImageURL = extractImageURL(from: line) {
                 flushTextBuffer()
-                blocks.append(GuideContentBlock(type: .image(imageURL)))
+                blocks.append(GuideContentBlock(type: .image(directImageURL)))
+                continue
+            }
+
+            // Trường hợp 2: Trong dòng văn bản có chứa link ảnh (ví dụ: "Xem hình: https://raw.githubusercontent.com/.../fix.jpeg")
+            let nsLine = line as NSString
+            let matches = inlineURLRegex?.matches(in: line, options: [], range: NSRange(location: 0, length: nsLine.length)) ?? []
+
+            var foundInlineImageURLs: [URL] = []
+            var remainingText = line
+
+            for match in matches.reversed() {
+                let matchedString = nsLine.substring(with: match.range)
+                if let imgURL = extractImageURL(from: matchedString) {
+                    foundInlineImageURLs.insert(imgURL, at: 0)
+                    if let swiftRange = Range(match.range, in: remainingText) {
+                        remainingText.removeSubrange(swiftRange)
+                    }
+                }
+            }
+
+            if !foundInlineImageURLs.isEmpty {
+                let cleanedRemaining = remainingText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !cleanedRemaining.isEmpty {
+                    currentTextBuffer.append(cleanedRemaining)
+                }
+                flushTextBuffer()
+                for imgURL in foundInlineImageURLs {
+                    blocks.append(GuideContentBlock(type: .image(imgURL)))
+                }
             } else {
                 currentTextBuffer.append(line)
             }
@@ -295,7 +377,7 @@ private final class GuidesHeroHeaderView: UIView {
 
         let subLabel = UILabel()
         subLabel.translatesAutoresizingMaskIntoConstraints = false
-        subLabel.text = "Cẩm nang khắc phục sự cố & tối ưu hóa trải nghiệm SideStore"
+        subLabel.text = "Cẩm nang khắc phục sự cố do cộng đồng mạng chia sẽ"
         subLabel.font = UIFont.systemFont(ofSize: 13, weight: .medium)
         subLabel.textColor = SourcesCSSTheme.white.withAlphaComponent(0.95)
         subLabel.textAlignment = .center
@@ -306,7 +388,7 @@ private final class GuidesHeroHeaderView: UIView {
 
         // 2. Tiêu đề Section + Gạch chân xanh giống hệt SettingsHeaderFooterView
         sectionTitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        sectionTitleLabel.text = "DANH MỤC HƯỚNG DẪN"
+        sectionTitleLabel.text = "TỔNG HỢP CÁC DANH MỤC"
         sectionTitleLabel.textColor = SourcesCSSTheme.blue
         sectionTitleLabel.font = UIFont.systemFont(ofSize: 15, weight: .heavy)
 
@@ -560,7 +642,7 @@ private final class GuideTopicRowCell: UITableViewCell {
         }
 
         let steps = article.stepCount
-        stepsTagLabel.text = steps > 0 ? "  ✓ \(steps) bước  " : "  ✓ Chi tiết  "
+        stepsTagLabel.text = steps > 0 ? "  • \(steps) mục  " : "  • Chi tiết  "
 
         let imgs = article.imageCount
         if imgs > 0 {
@@ -593,7 +675,7 @@ private final class GuideStyledImageView: UIView {
     var onTapImage: ((UIImage) -> Void)?
 
     init(url: URL) {
-        self.imageURL = url
+        self.imageURL = GuideParser.convertToRawGitHubURL(url.absoluteString) ?? url
         super.init(frame: .zero)
         setupViews()
         loadImage()
@@ -726,7 +808,9 @@ private final class GuideStyledImageView: UIView {
     }
 
     @objc private func loadImage() {
-        guard let url = imageURL else { return }
+        guard let originalURL = imageURL else { return }
+        let resolvedURL = GuideParser.convertToRawGitHubURL(originalURL.absoluteString) ?? originalURL
+
         errorLabel.isHidden = true
         retryButton.isHidden = true
         shimmerActivity.startAnimating()
@@ -735,11 +819,14 @@ private final class GuideStyledImageView: UIView {
             guard let self = self else { return }
             do {
                 let loadedImage: UIImage
-                if let nukeImage = try? await ImagePipeline.shared.image(for: url) {
+                if let nukeImage = try? await ImagePipeline.shared.image(for: resolvedURL) {
                     loadedImage = nukeImage
                 } else {
-                    var req = URLRequest(url: url)
-                    req.timeoutInterval = 20
+                    var req = URLRequest(url: resolvedURL)
+                    req.timeoutInterval = 25
+                    req.cachePolicy = .returnCacheDataElseLoad
+                    req.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField: "User-Agent")
+                    req.setValue("image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
                     let (data, _) = try await URLSession.shared.data(for: req)
                     guard let img = UIImage(data: data) else {
                         throw URLError(.cannotDecodeContentData)
@@ -1006,11 +1093,11 @@ private final class GuideArticleDetailViewController: UIViewController {
 
         let subLabel = UILabel()
         subLabel.translatesAutoresizingMaskIntoConstraints = false
-        subLabel.text = "Thực hiện lần lượt theo các bước hướng dẫn và hình ảnh bên dưới"
+        subLabel.text = "Mọi cách khắc phục không đảm bảo thành công 100%, bạn cần kiên nhẫn và thực hiện lại nhiều lần."
         subLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .medium)
         subLabel.textColor = SourcesCSSTheme.white.withAlphaComponent(0.92)
         subLabel.textAlignment = .center
-        subLabel.numberOfLines = 2
+        subLabel.numberOfLines = 0
 
         heroCard.addSubview(badgePill)
         heroCard.addSubview(titleLabel)
@@ -1040,7 +1127,7 @@ private final class GuideArticleDetailViewController: UIViewController {
 
         let primaryLabel = UILabel()
         primaryLabel.translatesAutoresizingMaskIntoConstraints = false
-        primaryLabel.text = "CHI TIẾT CÁC BƯỚC THỰC HIỆN"
+        primaryLabel.text = "HƯỚNG DẪN & KHẮC PHỤC SỰ CỐ"
         primaryLabel.textColor = SourcesCSSTheme.blue
         primaryLabel.font = UIFont.systemFont(ofSize: 15, weight: .heavy)
 
@@ -1090,7 +1177,7 @@ private final class GuideArticleDetailViewController: UIViewController {
         }
     }
 
-    /// Tạo khối Card trắng chứa các bước hướng dẫn, tự động nhận diện dòng đánh số `1.`, `2.` để gắn huy hiệu tròn đẹp mắt
+    /// Tạo khối Card trắng chứa các dòng hướng dẫn, thay toàn bộ số đầu dòng bằng dấu chấm đầu dòng (nếu không có số đầu dòng vẫn để dấu chấm đầu dòng)
     private func makeTextCardView(for rawText: String) -> UIView {
         let card = UIView()
         card.translatesAutoresizingMaskIntoConstraints = false
@@ -1111,45 +1198,25 @@ private final class GuideArticleDetailViewController: UIViewController {
         innerStack.axis = .vertical
         innerStack.spacing = 12
 
-        // Gộp các dòng bị xuống hàng giữa chừng vào bước đánh số liền trước
         let rawLines = rawText.components(separatedBy: .newlines)
-        var logicalParagraphs: [String] = []
-        let stepRegex = try? NSRegularExpression(pattern: #"^\s*(\d+)\.\s*(.+)$"#)
+        var bulletItems: [String] = []
 
         for line in rawLines {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { continue }
 
-            let nsRange = NSRange(location: 0, length: (trimmed as NSString).length)
-            let isStepLine = stepRegex?.firstMatch(in: trimmed, options: [], range: nsRange) != nil
-
-            if isStepLine || logicalParagraphs.isEmpty {
-                logicalParagraphs.append(trimmed)
-            } else {
-                // Nếu dòng trước là 1 bước đánh số và dòng hiện tại là phần bị ngắt xuống dòng
-                let last = logicalParagraphs.removeLast()
-                logicalParagraphs.append(last + " " + trimmed)
+            // Xóa số thứ tự đầu dòng (nếu có) để đồng nhất hiển thị bằng dấu chấm đầu dòng
+            let cleanedText = GuideParser.stripLeadingNumberOrBullet(from: trimmed)
+            if !cleanedText.isEmpty {
+                bulletItems.append(cleanedText)
             }
         }
 
-        for (index, paragraph) in logicalParagraphs.enumerated() {
-            let nsParagraph = paragraph as NSString
-            let range = NSRange(location: 0, length: nsParagraph.length)
+        for (index, itemText) in bulletItems.enumerated() {
+            let bulletRow = makeBulletRow(stepText: itemText)
+            innerStack.addArrangedSubview(bulletRow)
 
-            if let match = stepRegex?.firstMatch(in: paragraph, options: [], range: range),
-               match.numberOfRanges >= 3 {
-                let stepNum = nsParagraph.substring(with: match.range(at: 1))
-                let stepBody = nsParagraph.substring(with: match.range(at: 2))
-                let stepRow = makeStepRow(stepNumber: stepNum, stepText: stepBody)
-                innerStack.addArrangedSubview(stepRow)
-            } else {
-                let label = UILabel()
-                label.numberOfLines = 0
-                label.attributedText = styleHighlightedInstructionText(paragraph)
-                innerStack.addArrangedSubview(label)
-            }
-
-            if index < logicalParagraphs.count - 1 {
+            if index < bulletItems.count - 1 {
                 let separator = UIView()
                 separator.translatesAutoresizingMaskIntoConstraints = false
                 separator.backgroundColor = SourcesCSSTheme.border
@@ -1169,35 +1236,32 @@ private final class GuideArticleDetailViewController: UIViewController {
         return card
     }
 
-    private func makeStepRow(stepNumber: String, stepText: String) -> UIView {
+    private func makeBulletRow(stepText: String) -> UIView {
         let row = UIView()
         row.translatesAutoresizingMaskIntoConstraints = false
 
-        let badge = UILabel()
-        badge.translatesAutoresizingMaskIntoConstraints = false
-        badge.text = stepNumber
-        badge.font = UIFont.systemFont(ofSize: 13, weight: .heavy)
-        badge.textColor = SourcesCSSTheme.white
-        badge.backgroundColor = SourcesCSSTheme.blue
-        badge.textAlignment = .center
-        badge.layer.cornerRadius = 13
-        badge.layer.masksToBounds = true
+        // Dấu chấm đầu dòng nổi bật đồng bộ màu sắc
+        let bulletDot = UILabel()
+        bulletDot.translatesAutoresizingMaskIntoConstraints = false
+        bulletDot.text = "•"
+        bulletDot.font = UIFont.systemFont(ofSize: 22, weight: .black)
+        bulletDot.textColor = SourcesCSSTheme.blue
+        bulletDot.textAlignment = .center
 
         let bodyLabel = UILabel()
         bodyLabel.translatesAutoresizingMaskIntoConstraints = false
         bodyLabel.numberOfLines = 0
         bodyLabel.attributedText = styleHighlightedInstructionText(stepText)
 
-        row.addSubview(badge)
+        row.addSubview(bulletDot)
         row.addSubview(bodyLabel)
 
         NSLayoutConstraint.activate([
-            badge.leadingAnchor.constraint(equalTo: row.leadingAnchor),
-            badge.topAnchor.constraint(equalTo: row.topAnchor, constant: 1),
-            badge.widthAnchor.constraint(equalToConstant: 26),
-            badge.heightAnchor.constraint(equalToConstant: 26),
+            bulletDot.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+            bulletDot.topAnchor.constraint(equalTo: row.topAnchor, constant: -2),
+            bulletDot.widthAnchor.constraint(equalToConstant: 18),
 
-            bodyLabel.leadingAnchor.constraint(equalTo: badge.trailingAnchor, constant: 12),
+            bodyLabel.leadingAnchor.constraint(equalTo: bulletDot.trailingAnchor, constant: 8),
             bodyLabel.trailingAnchor.constraint(equalTo: row.trailingAnchor),
             bodyLabel.topAnchor.constraint(equalTo: row.topAnchor, constant: 2),
             bodyLabel.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: -2)

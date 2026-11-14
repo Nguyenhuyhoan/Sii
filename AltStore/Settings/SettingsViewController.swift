@@ -41,6 +41,27 @@ private struct CSSTheme {
     static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.88).cgColor
 
     static let cornerRadius: CGFloat = 15.0
+
+    // SwiftUI Colors (Phục vụ bảng Máy chủ Anisette)
+    static let suiPrimary = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255)
+    static let suiSecondary = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)
+    static let suiGreen = SwiftUI.Color(red: 40/255, green: 167/255, blue: 69/255)
+    static let suiRed = SwiftUI.Color(red: 220/255, green: 53/255, blue: 69/255)
+    static let suiPureBlack = SwiftUI.Color.black
+    static let suiCardBackground = SwiftUI.Color.white
+    static let suiInnerRowBackground = SwiftUI.Color(red: 246/255, green: 248/255, blue: 251/255)
+    static let suiBorder = SwiftUI.Color(red: 218/255, green: 224/255, blue: 233/255)
+    static let suiInnerBorder = SwiftUI.Color(red: 222/255, green: 228/255, blue: 236/255)
+    static var suiPageGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                SwiftUI.Color(red: 243/255, green: 224/255, blue: 255/255),
+                SwiftUI.Color(red: 224/255, green: 247/255, blue: 255/255)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
 }
 
 // MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH (KHÔNG BỊ TRẮNG KHI CUỘN XUỐNG DƯỚI)
@@ -64,6 +85,457 @@ private final class CSSGradientBackgroundView: UIView {
         gradientLayer.colors = [CSSTheme.bgGradientStart, CSSTheme.bgGradientEnd]
         gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
         gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+    }
+}
+
+// MARK: - 🌐 BỘ QUẢN LÝ & GIAO DIỆN MÁY CHỦ ANISETTE (ĐƯỢC CHUYỂN TỪ NEWSVIEWCONTROLLER SANG)
+private enum SettingsAnisetteDefaultsHelper {
+    static var currentServerURL: String {
+        let menuURL = UserDefaults.standard.menuAnisetteURL.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        if !menuURL.isEmpty {
+            return menuURL
+        }
+        if let textInput = UserDefaults.standard.textInputAnisetteURL?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+           !textInput.isEmpty {
+            return textInput
+        }
+        if let custom = UserDefaults.standard.customAnisetteURL?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+           !custom.isEmpty {
+            return custom
+        }
+        return AppConstants.Anisette.Servers.defaultServerURL
+    }
+
+    static func selectServerFromList(_ url: String) {
+        let trimmed = url.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        UserDefaults.standard.textServer = false
+        UserDefaults.standard.menuAnisetteURL = trimmed
+        UserDefaults.standard.textInputAnisetteURL = trimmed
+        UserDefaults.standard.customAnisetteURL = trimmed
+    }
+
+    static func setCustomServerURL(_ url: String) {
+        let trimmed = url.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        UserDefaults.standard.menuAnisetteURL = trimmed
+        UserDefaults.standard.textInputAnisetteURL = trimmed
+        UserDefaults.standard.customAnisetteURL = trimmed
+    }
+}
+
+private struct SettingsBounceButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some SwiftUI.View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .offset(x: configuration.isPressed ? 3 : 0, y: configuration.isPressed ? -1 : 0)
+            .animation(.spring(response: 0.28, dampingFraction: 0.62), value: configuration.isPressed)
+    }
+}
+
+private struct SettingsSkySectionCard<Content: SwiftUI.View>: SwiftUI.View {
+    let title: String
+    let icon: String
+    let color: SwiftUI.Color
+    var trailingView: AnyView? = nil
+    @ViewBuilder let content: Content
+
+    var body: some SwiftUI.View {
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    SwiftUI.Image(systemName: icon)
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundColor(CSSTheme.suiPrimary)
+
+                    SwiftUI.Text(title.uppercased())
+                        .font(.system(size: 15, weight: .heavy))
+                        .foregroundColor(CSSTheme.suiPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+
+                    Spacer(minLength: 4)
+
+                    if let trailingView = trailingView {
+                        trailingView
+                    }
+                }
+
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(CSSTheme.suiPrimary)
+                    .frame(width: 38, height: 3)
+            }
+            .padding(.horizontal, 4)
+
+            VStack(alignment: .leading, spacing: 10) {
+                content
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(CSSTheme.suiCardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
+                    .stroke(CSSTheme.suiBorder, lineWidth: 1.0)
+            )
+            .shadow(color: CSSTheme.suiPrimary.opacity(0.08), radius: 10, x: 0, y: 5)
+        }
+    }
+}
+
+@MainActor
+private final class SettingsAnisetteViewModel: ObservableObject {
+    @Published var isAnisetteOK: Bool = !UserDefaults.standard.useOnDeviceAnisette
+    @Published var useOnDeviceAnisette: Bool = UserDefaults.standard.useOnDeviceAnisette
+    @Published var isAnisetteAutoRotationEnabled: Bool = !UserDefaults.standard.disableAnisetteRotation
+    @Published var selectedAnisetteServerURL: String = SettingsAnisetteDefaultsHelper.currentServerURL
+    @Published var anisetteDetail: String = ""
+    @Published var servers: [AnisetteServerItem] = []
+    @Published var isLoading: Bool = false
+
+    init() {
+        updateInstantStatus()
+    }
+
+    func updateInstantStatus() {
+        let onDevice = UserDefaults.standard.useOnDeviceAnisette
+        useOnDeviceAnisette = onDevice
+        isAnisetteOK = !onDevice
+        isAnisetteAutoRotationEnabled = !UserDefaults.standard.disableAnisetteRotation
+
+        let selectedURL = SettingsAnisetteDefaultsHelper.currentServerURL
+        selectedAnisetteServerURL = selectedURL
+        let serverHost = URL(string: selectedURL)?.host ?? selectedURL
+        anisetteDetail = onDevice
+            ? "Không ổn định • Hãy tắt Use On-Device Anisette"
+            : "Ổn định • Máy chủ: \(serverHost)"
+    }
+
+    func setUseOnDeviceAnisette(_ enabled: Bool) {
+        UserDefaults.standard.useOnDeviceAnisette = enabled
+        updateInstantStatus()
+    }
+
+    func setAnisetteAutoRotationEnabled(_ enabled: Bool) {
+        UserDefaults.standard.disableAnisetteRotation = !enabled
+        updateInstantStatus()
+    }
+
+    func selectAnisetteServerURL(_ urlString: String, isCustom: Bool = false) {
+        if isCustom {
+            SettingsAnisetteDefaultsHelper.setCustomServerURL(urlString)
+        } else {
+            SettingsAnisetteDefaultsHelper.selectServerFromList(urlString)
+        }
+        if UserDefaults.standard.useOnDeviceAnisette {
+            UserDefaults.standard.useOnDeviceAnisette = false
+        }
+        updateInstantStatus()
+    }
+
+    func loadCachedAndSync(customPrefix: String) async {
+        let local = await AnisetteServersManager.shared.loadLocalServers().filter { !$0.isHidden }
+        if !local.isEmpty {
+            self.servers = mergeWithCurrent(local, customPrefix: customPrefix)
+        }
+        await refreshFromRemote(customPrefix: customPrefix)
+    }
+
+    func refreshFromRemote(customPrefix: String) async {
+        guard !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+
+        if let synced = try? await AnisetteServersManager.shared.syncWithRemote() {
+            let visible = synced.filter { !$0.isHidden }
+            self.servers = mergeWithCurrent(visible, customPrefix: customPrefix)
+        } else {
+            let local = await AnisetteServersManager.shared.loadLocalServers().filter { !$0.isHidden }
+            self.servers = mergeWithCurrent(local, customPrefix: customPrefix)
+        }
+    }
+
+    func reloadCurrentSelection(customPrefix: String) async {
+        let local = await AnisetteServersManager.shared.loadLocalServers().filter { !$0.isHidden }
+        self.servers = mergeWithCurrent(local, customPrefix: customPrefix)
+    }
+
+    private func mergeWithCurrent(_ items: [AnisetteServerItem], customPrefix: String) -> [AnisetteServerItem] {
+        var result = items
+        if result.isEmpty {
+            result = [
+                AnisetteServerItem(
+                    name: "SideStore (New)",
+                    address: AppConstants.Anisette.Servers.defaultServerURL,
+                    isHidden: false
+                )
+            ]
+        }
+        let current = SettingsAnisetteDefaultsHelper.currentServerURL.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        if !current.isEmpty,
+           !result.contains(where: { $0.address.caseInsensitiveCompare(current) == .orderedSame }) {
+            let host = URL(string: current)?.host ?? current
+            result.insert(AnisetteServerItem(name: "\(customPrefix) (\(host))", address: current, isHidden: false), at: 0)
+        }
+        return result
+    }
+}
+
+private struct SettingsAnisetteSheetView: SwiftUI.View {
+    @StateObject private var vm = SettingsAnisetteViewModel()
+    @State private var customServerInput: String = ""
+    @Environment(\.dismiss) private var dismiss
+
+    private let customServerPrefix = "Máy chủ tùy chỉnh"
+
+    private func isRecommendedSideStoreNew(_ server: AnisetteServerItem) -> Bool {
+        let lowerName = server.name.lowercased()
+        return lowerName.contains("sidestore (new)")
+            || (lowerName.contains("sidestore") && lowerName.contains("new"))
+    }
+
+    var body: some SwiftUI.View {
+        NavigationView {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(vm.isAnisetteOK ? CSSTheme.suiGreen.opacity(0.15) : CSSTheme.suiRed.opacity(0.15))
+                                .frame(width: 48, height: 48)
+                            SwiftUI.Image(systemName: vm.isAnisetteOK ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(vm.isAnisetteOK ? CSSTheme.suiGreen : CSSTheme.suiRed)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            SwiftUI.Text(vm.isAnisetteOK
+                                         ? "Máy Chủ Anisette Ổn Định"
+                                         : "Đang Bật On-Device Anisette")
+                                .font(.system(size: 16.5, weight: .bold))
+                                .foregroundColor(CSSTheme.suiPureBlack)
+                            SwiftUI.Text(vm.anisetteDetail)
+                                .font(.system(size: 13.5, weight: .medium))
+                                .foregroundColor(CSSTheme.suiPureBlack)
+                        }
+                        Spacer()
+                    }
+                    .padding(14)
+                    .background(CSSTheme.suiCardBackground)
+                    .cornerRadius(CSSTheme.cornerRadius)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
+                            .stroke(CSSTheme.suiBorder, lineWidth: 1.0)
+                    )
+                    .shadow(color: CSSTheme.suiPrimary.opacity(0.08), radius: 10, x: 0, y: 5)
+
+                    SettingsSkySectionCard(
+                        title: "CHẾ ĐỘ XÁC THỰC ANISETTE",
+                        icon: "switch.2",
+                        color: CSSTheme.suiPrimary
+                    ) {
+                        Toggle(isOn: Binding(
+                            get: { vm.useOnDeviceAnisette },
+                            set: { vm.setUseOnDeviceAnisette($0) }
+                        )) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                SwiftUI.Text("Use On-Device Anisette")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(CSSTheme.suiPureBlack)
+                                SwiftUI.Text(vm.useOnDeviceAnisette
+                                             ? "Đang BẬT (Khuyên tắt để ổn định hơn)"
+                                             : "(Nên Tắt Để Dễ Đăng Nhập)")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(vm.useOnDeviceAnisette ? CSSTheme.suiRed : CSSTheme.suiGreen)
+                            }
+                        }
+                        .tint(CSSTheme.suiPrimary)
+                        .padding(12)
+                        .background(CSSTheme.suiInnerRowBackground)
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(CSSTheme.suiInnerBorder, lineWidth: 1)
+                        )
+
+                        Toggle(isOn: Binding(
+                            get: { vm.isAnisetteAutoRotationEnabled },
+                            set: { vm.setAnisetteAutoRotationEnabled($0) }
+                        )) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                SwiftUI.Text("Enable Auto Rotation")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(CSSTheme.suiPureBlack)
+                                SwiftUI.Text(vm.isAnisetteAutoRotationEnabled
+                                             ? "(Tự Động Đổi Máy Chủ Khi Lỗi)"
+                                             : "Đang Tắt “Nên chọn SideStore (New)”")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(vm.isAnisetteAutoRotationEnabled ? CSSTheme.suiGreen : CSSTheme.suiRed)
+                            }
+                        }
+                        .tint(CSSTheme.suiPrimary)
+                        .padding(12)
+                        .background(CSSTheme.suiInnerRowBackground)
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(CSSTheme.suiInnerBorder, lineWidth: 1)
+                        )
+
+                        if vm.useOnDeviceAnisette {
+                            SwiftUI.Button {
+                                vm.setUseOnDeviceAnisette(false)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    SwiftUI.Image(systemName: "checkmark.shield.fill")
+                                    SwiftUI.Text("Tắt ngay Use On-Device Anisette")
+                                        .font(.system(size: 15, weight: .bold))
+                                }
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(CSSTheme.suiPrimary)
+                                .cornerRadius(12)
+                                .shadow(color: CSSTheme.suiPrimary.opacity(0.35), radius: 5, x: 0, y: 3)
+                            }
+                            .buttonStyle(SettingsBounceButtonStyle())
+                        }
+                    }
+
+                    SettingsSkySectionCard(
+                        title: "CHỌN MÁY CHỦ ANISETTE",
+                        icon: "server.rack",
+                        color: CSSTheme.suiSecondary,
+                        trailingView: vm.isLoading ? AnyView(ProgressView().tint(CSSTheme.suiPrimary)) : nil
+                    ) {
+                        VStack(spacing: 8) {
+                            ForEach(vm.servers) { server in
+                                let isSelected = (vm.selectedAnisetteServerURL.caseInsensitiveCompare(server.address) == .orderedSame)
+                                let isRecommended = isRecommendedSideStoreNew(server)
+
+                                SwiftUI.Button {
+                                    vm.selectAnisetteServerURL(server.address, isCustom: false)
+                                    Task { await vm.reloadCurrentSelection(customPrefix: customServerPrefix) }
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        SwiftUI.Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                                            .font(.system(size: 20, weight: .semibold))
+                                            .foregroundColor(isSelected ? CSSTheme.suiPrimary : CSSTheme.suiPureBlack)
+
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            HStack(spacing: 6) {
+                                                SwiftUI.Text(server.name)
+                                                    .font(.system(size: 15, weight: .bold))
+                                                    .foregroundColor(CSSTheme.suiPureBlack)
+
+                                                if isRecommended {
+                                                    SwiftUI.Text("★ Khuyên dùng")
+                                                        .font(.system(size: 10.5, weight: .heavy))
+                                                        .padding(.horizontal, 7)
+                                                        .padding(.vertical, 2.5)
+                                                        .background(CSSTheme.suiGreen.opacity(0.16))
+                                                        .foregroundColor(CSSTheme.suiGreen)
+                                                        .clipShape(Capsule())
+                                                }
+                                            }
+                                            SwiftUI.Text(server.address)
+                                                .font(.system(size: 12.5, weight: .medium))
+                                                .foregroundColor(CSSTheme.suiPureBlack)
+                                                .lineLimit(1)
+                                        }
+                                        Spacer()
+                                        if isSelected {
+                                            SwiftUI.Text("Đang dùng")
+                                                .font(.system(size: 11.5, weight: .bold))
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(CSSTheme.suiPrimary.opacity(0.15))
+                                                .foregroundColor(CSSTheme.suiPrimary)
+                                                .clipShape(Capsule())
+                                        }
+                                    }
+                                    .padding(12)
+                                    .background(CSSTheme.suiInnerRowBackground)
+                                    .cornerRadius(12)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(
+                                                isSelected
+                                                ? CSSTheme.suiPrimary.opacity(0.65)
+                                                : (isRecommended ? CSSTheme.suiGreen.opacity(0.45) : CSSTheme.suiInnerBorder),
+                                                lineWidth: isSelected ? 1.5 : 1.1
+                                            )
+                                    )
+                                }
+                                .buttonStyle(SettingsBounceButtonStyle())
+                            }
+                        }
+
+                        Divider().padding(.vertical, 2)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            SwiftUI.Text("Hoặc nhập URL máy chủ tùy chỉnh:")
+                                .font(.system(size: 13.5, weight: .bold))
+                                .foregroundColor(CSSTheme.suiPureBlack)
+
+                            HStack(spacing: 8) {
+                                TextField(AppConstants.Anisette.Servers.defaultServerURL, text: $customServerInput)
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(CSSTheme.suiPureBlack)
+                                    .keyboardType(.URL)
+                                    .autocapitalization(.none)
+                                    .disableAutocorrection(true)
+                                    .padding(10)
+                                    .background(CSSTheme.suiInnerRowBackground)
+                                    .cornerRadius(10)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(CSSTheme.suiInnerBorder, lineWidth: 1)
+                                    )
+
+                                SwiftUI.Button {
+                                    let trimmed = customServerInput.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                                    guard !trimmed.isEmpty else { return }
+                                    vm.selectAnisetteServerURL(trimmed, isCustom: true)
+                                    Task { await vm.reloadCurrentSelection(customPrefix: customServerPrefix) }
+                                    customServerInput = ""
+                                } label: {
+                                    SwiftUI.Text("Lưu")
+                                        .font(.system(size: 14.5, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
+                                        .background(CSSTheme.suiPrimary)
+                                        .cornerRadius(10)
+                                        .shadow(color: CSSTheme.suiPrimary.opacity(0.35), radius: 5, x: 0, y: 3)
+                                }
+                                .buttonStyle(SettingsBounceButtonStyle())
+                            }
+                        }
+                    }
+                }
+                .padding(16)
+            }
+            .background(CSSTheme.suiPageGradient.ignoresSafeArea())
+            .navigationTitle("Máy Chủ Anisette")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    SwiftUI.Text("Máy Chủ Anisette")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(CSSTheme.suiPrimary)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    SwiftUI.Button("Xong") { dismiss() }
+                        .font(.headline)
+                        .foregroundColor(CSSTheme.suiPrimary)
+                }
+            }
+            .task {
+                vm.updateInstantStatus()
+                await vm.loadCachedAndSync(customPrefix: customServerPrefix)
+            }
+        }
+        .preferredColorScheme(.light)
     }
 }
 
@@ -133,6 +605,7 @@ extension SettingsViewController
         
         static var allCases: [AdvancedSettingsRow] {
             return [
+                .anisetteServers,
                 .refreshAttempts,
                 .refreshSideJITServer,
                 .certificateManagement,
@@ -144,32 +617,38 @@ extension SettingsViewController
     fileprivate enum BetaTestingRow: Int, CaseIterable {
         case betaUpdates
         case betaTrack
+        
+        static var allCases: [BetaTestingRow] {
+            return []
+        }
     }
 
     fileprivate enum DiagnosticsRow: Int, CaseIterable
     {
         case developerOptions
         case experimentalFeatures
+        
+        static var allCases: [DiagnosticsRow] {
+            return []
+        }
     }
 
     // MARK: - 📦 GỘP TẤT CẢ CÁC MỤC CÀI ĐẶT THÀNH 1 MỤC DUY NHẤT CHUẨN GỐC
+    // Đã xoá Beta Updates, Beta Track và Developer Options theo yêu cầu.
+    // Đưa Máy chủ Anisette lên vị trí đầu tiên (trên Lịch sử làm mới ứng dụng).
     fileprivate enum UnifiedSettingsItem: CaseIterable
     {
-        case betaUpdates
-        case betaTrack
+        case anisetteServers
         case refreshAttempts
         case refreshSideJITServer
         case certificateManagement
         case userCustomizations
         case errorLog
         case clearCache
-        case developerOptions
-        case experimentalFeatures
 
         static var activeItems: [UnifiedSettingsItem] {
-            var items: [UnifiedSettingsItem] = [
-                .betaUpdates,
-                .betaTrack,
+            return [
+                .anisetteServers,
                 .refreshAttempts,
                 .refreshSideJITServer,
                 .certificateManagement,
@@ -177,19 +656,13 @@ extension SettingsViewController
                 .errorLog,
                 .clearCache
             ]
-            if UserDefaults.standard.isDebugModeEnabled {
-                items.append(contentsOf: [.developerOptions, .experimentalFeatures])
-            }
-            return items
         }
 
-        // Ánh xạ chính xác về IndexPath gốc trên Storyboard để giữ nguyên UISwitch, UIButton và Segue
+        // Ánh xạ chính xác về IndexPath gốc trên Storyboard để giữ nguyên UI và Segue
         var originalIndexPath: IndexPath {
             switch self {
-            case .betaUpdates:
-                return IndexPath(row: BetaTestingRow.betaUpdates.rawValue, section: Section.betaTesting.rawValue)
-            case .betaTrack:
-                return IndexPath(row: BetaTestingRow.betaTrack.rawValue, section: Section.betaTesting.rawValue)
+            case .anisetteServers:
+                return IndexPath(row: AdvancedSettingsRow.anisetteServers.rawValue, section: Section.advancedSettings.rawValue)
             case .refreshAttempts:
                 return IndexPath(row: AdvancedSettingsRow.refreshAttempts.rawValue, section: Section.advancedSettings.rawValue)
             case .refreshSideJITServer:
@@ -202,10 +675,6 @@ extension SettingsViewController
                 return IndexPath(row: TechyThingsRow.errorLog.rawValue, section: Section.techyThings.rawValue)
             case .clearCache:
                 return IndexPath(row: TechyThingsRow.clearCache.rawValue, section: Section.techyThings.rawValue)
-            case .developerOptions:
-                return IndexPath(row: DiagnosticsRow.developerOptions.rawValue, section: Section.diagnostics.rawValue)
-            case .experimentalFeatures:
-                return IndexPath(row: DiagnosticsRow.experimentalFeatures.rawValue, section: Section.diagnostics.rawValue)
             }
         }
     }
@@ -275,84 +744,26 @@ final class SettingsViewController: UITableViewController
         NotificationCenter.default.removeObserver(self)
     }
 
-    private func handleReleaseChannelSelection(_ channel: String) {
-        UserDefaults.standard.betaUdpatesTrack = channel
-        updateReleaseChannelButtonTitle()
-    }
-
-    private func updateReleaseChannelButtonTitle() {
-        let channel = UserDefaults.standard.betaUdpatesTrack ?? UserDefaults.defaultBetaUpdatesTrack
-        let displayTitle = translateStaticText(channel)
-        
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 11, weight: .semibold),
-            .foregroundColor: UIColor.black
-        ]
-        let attrTitle = NSAttributedString(string: displayTitle, attributes: attributes)
-        
-        if #available(iOS 15.0, tvOS 15.0, *) {
-            betaTrackPopupButton.configuration = nil
-        }
-        
-        betaTrackPopupButton.setAttributedTitle(attrTitle, for: .normal)
-        betaTrackPopupButton.setAttributedTitle(attrTitle, for: .disabled)
-        betaTrackPopupButton.setAttributedTitle(attrTitle, for: .highlighted)
-        betaTrackPopupButton.setAttributedTitle(attrTitle, for: .selected)
-        betaTrackPopupButton.setTitleColor(.black, for: .normal)
-        betaTrackPopupButton.setTitleColor(.black, for: .disabled)
-        betaTrackPopupButton.sizeToFit()
-    }
-
-    private func configureReleaseChannelButton() {
-        let currentTrack = UserDefaults.standard.betaUdpatesTrack
-        var trackOptions: [String] = ReleaseTrackType.betaTracks.map {$0.rawValue}
-        
-        if let currentTrack {
-            trackOptions = [currentTrack] + trackOptions.filter { $0 != currentTrack }
-        }
-        
-        let items = trackOptions.map { channel in
-            UIAction(title: self.translateStaticText(channel), handler: { [weak self] _ in
-                self?.handleReleaseChannelSelection(channel)
-            })
-        }
-        
-        var menuOptions: UIMenu.Options = [.displayInline]
-        if #available(iOS 15.0, tvOS 15.0, *) {
-            menuOptions.insert(.singleSelection)
-        }
-        
-        let menu = UIMenu(title: "Chọn kênh cập nhật Beta", options: menuOptions, children: items)
-        #if !os(tvOS)
-        betaTrackPopupButton.menu = menu
-        betaTrackPopupButton.showsMenuAsPrimaryAction = true
-        #else
-        if #available(tvOS 17.0, *) {
-            betaTrackPopupButton.menu = menu
-        }
-        #endif
-        
-        styleBetaTrackPopupButton()
-        updateReleaseChannelButtonTitle()
-    }
-
-    // Tắt cứng toàn bộ tính năng Làm mới ứng dụng (Background Refresh, Idle Timeout, App Limit)
-    private func forceDisableAppRefreshSettings() {
+    // Tắt cứng toàn bộ tính năng Làm mới ứng dụng, Beta Updates và Developer Mode
+    private func forceDisableRemovedSettings() {
         UserDefaults.standard.isBackgroundRefreshEnabled = false
         UserDefaults.standard.isIdleTimeoutDisableEnabled = false
         UserDefaults.standard.isAppLimitDisabled = false
+        UserDefaults.standard.isBetaUpdatesEnabled = false
+        UserDefaults.standard.isDebugModeEnabled = false
         
         self.backgroundRefreshSwitch?.isOn = false
         self.noIdleTimeoutSwitch?.isOn = false
         self.disableAppLimitSwitch?.isOn = false
+        self.betaUpdatesSwitch?.isOn = false
     }
 
     override func viewDidLoad()
     {
         super.viewDidLoad()
         
-        // Tắt cứng LÀM MỚI ỨNG DỤNG
-        self.forceDisableAppRefreshSettings()
+        // Tắt cứng Làm mới ứng dụng, Beta và Developer Mode
+        self.forceDisableRemovedSettings()
         
         // Xóa bỏ tiêu đề "Cài đặt" và ẩn hoàn toàn thanh điều hướng
         self.title = nil
@@ -369,14 +780,6 @@ final class SettingsViewController: UITableViewController
         let nib = UINib(nibName: "SettingsHeaderFooterView", bundle: nil)
         self.prototypeHeaderFooterView = nib.instantiate(withOwner: nil, options: nil)[0] as? SettingsHeaderFooterView
         self.tableView.register(nib, forHeaderFooterViewReuseIdentifier: "HeaderFooterView")
-        
-        let debugModeGestureRecognizer = UISwipeGestureRecognizer(target: self, action: #selector(SettingsViewController.handleDebugModeGesture(_:)))
-        debugModeGestureRecognizer.delegate = self
-        debugModeGestureRecognizer.direction = .up
-        #if !os(tvOS)
-        debugModeGestureRecognizer.numberOfTouchesRequired = 3
-        #endif
-        self.tableView.addGestureRecognizer(debugModeGestureRecognizer)
         
         self.versionLabel.attributedText = getVersionAttributedString()
         self.versionLabel.isUserInteractionEnabled = true
@@ -395,7 +798,6 @@ final class SettingsViewController: UITableViewController
         self.applySmartWebCSSTheme()
         
         self.update()
-        configureReleaseChannelButton()
     }
 
     override func viewDidLayoutSubviews() {
@@ -411,7 +813,7 @@ final class SettingsViewController: UITableViewController
         super.viewWillAppear(animated)
         // Đảm bảo ẩn thanh màu trắng và chữ Cài đặt ở trên cùng để tràn viền toàn màn hình
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
-        self.forceDisableAppRefreshSettings()
+        self.forceDisableRemovedSettings()
         self.update()
     }
 
@@ -419,6 +821,14 @@ final class SettingsViewController: UITableViewController
     {
         super.viewWillDisappear(animated)
         self.accountVerificationTask?.cancel()
+    }
+
+    override func shouldPerformSegue(withIdentifier identifier: String, sender: Any?) -> Bool {
+        // Chặn Segue mặc định của anisetteServers để mở bảng SwiftUI Anisette tùy chỉnh
+        if identifier == "anisetteServers" {
+            return false
+        }
+        return super.shouldPerformSegue(withIdentifier: identifier, sender: sender)
     }
 
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
@@ -512,7 +922,7 @@ private extension SettingsViewController {
         // 2. Tạo khối .hero Banner nằm sát phía trên
         setupCSSHeroBanner()
         
-        // 3. Tạo Footer hiển thị phiên bản
+        // 3. Tạo Footer hiển thị Lời cảm ơn gọn gàng + Phiên bản
         setupVersionTableFooterView()
         
         // 4. Cấu hình TabBar đồng bộ màu
@@ -540,54 +950,6 @@ private extension SettingsViewController {
             sw.layer.shadowRadius = 6
             sw.layer.shadowOpacity = 0.28
         }
-        
-        // 6. Cố định màu chữ đen cho Beta Track Label & thu nhỏ nút chọn kênh Beta
-        if let betaLabel = self.betaTrackLabel {
-            betaLabel.isEnabled = true
-            betaLabel.textColor = .black
-            betaLabel.alpha = 1.0
-        }
-        styleBetaTrackPopupButton()
-    }
-
-    // Chỉnh khung chứa chữ `Hằng đêm (Nightly)` nhỏ gọn hơn, chữ nhỏ hơn và cố định màu đen rõ nét kể cả khi bật hay tắt
-    private func styleBetaTrackPopupButton() {
-        guard let btn = self.betaTrackPopupButton else { return }
-        
-        if #available(iOS 15.0, tvOS 15.0, *) {
-            btn.configuration = nil
-        }
-        
-        btn.backgroundColor = CSSTheme.light
-        btn.tintColor = .black
-        btn.setTitleColor(.black, for: .normal)
-        btn.setTitleColor(.black, for: .disabled)
-        btn.setTitleColor(.black, for: .highlighted)
-        btn.setTitleColor(.black, for: .selected)
-        btn.titleLabel?.font = UIFont.systemFont(ofSize: 11, weight: .semibold)
-        
-        let chevronConfig = UIImage.SymbolConfiguration(pointSize: 9, weight: .bold)
-        let chevronImage = UIImage(systemName: "chevron.up.chevron.down", withConfiguration: chevronConfig)?
-            .withTintColor(.black, renderingMode: .alwaysOriginal)
-        btn.setImage(chevronImage, for: .normal)
-        btn.setImage(chevronImage, for: .disabled)
-        btn.setImage(chevronImage, for: .highlighted)
-        
-        btn.semanticContentAttribute = .forceRightToLeft
-        btn.contentEdgeInsets = UIEdgeInsets(top: 3, left: 8, bottom: 3, right: 8)
-        btn.imageEdgeInsets = UIEdgeInsets(top: 0, left: 4, bottom: 0, right: -2)
-        
-        btn.layer.cornerRadius = 9
-        btn.layer.borderWidth = 1.0
-        btn.layer.borderColor = UIColor.black.withAlphaComponent(0.22).cgColor
-        btn.layer.shadowColor = UIColor.black.cgColor
-        btn.layer.shadowOffset = CGSize(width: 0, height: 1)
-        btn.layer.shadowRadius = 2
-        btn.layer.shadowOpacity = 0.08
-        btn.alpha = 1.0
-        
-        btn.setContentHuggingPriority(.required, for: .horizontal)
-        btn.setContentCompressionResistancePriority(.required, for: .horizontal)
     }
 
     // Tạo khối .hero nằm sát phía trên và đã Việt hóa
@@ -659,11 +1021,85 @@ private extension SettingsViewController {
         self.tableView.tableHeaderView = headerContainer
     }
 
-    // Hiển thị thông tin Phiên bản gọn đẹp ở chân trang
+    private func createCompactCreditChip(title: String, color: UIColor, action: Selector) -> UIButton {
+        let btn = UIButton(type: .system)
+        btn.translatesAutoresizingMaskIntoConstraints = false
+        btn.setTitle("  \(title)  ", for: .normal)
+        btn.setTitleColor(color, for: .normal)
+        btn.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
+        btn.backgroundColor = color.withAlphaComponent(0.10)
+        btn.layer.cornerRadius = 11
+        btn.layer.borderWidth = 1.0
+        btn.layer.borderColor = color.withAlphaComponent(0.28).cgColor
+        btn.addTarget(self, action: action, for: .touchUpInside)
+        NSLayoutConstraint.activate([
+            btn.heightAnchor.constraint(equalToConstant: 24)
+        ])
+        return btn
+    }
+
+    // Chân trang gọn đẹp: Thẻ Lời cảm ơn rút gọn + Phiên bản ứng dụng
     private func setupVersionTableFooterView() {
-        let footerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 64))
+        let footerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 190))
         footerContainer.backgroundColor = .clear
-        
+
+        // Khung Card Lời cảm ơn nhỏ gọn
+        let thanksCard = UIView()
+        thanksCard.translatesAutoresizingMaskIntoConstraints = false
+        thanksCard.backgroundColor = CSSTheme.white.withAlphaComponent(0.92)
+        thanksCard.layer.cornerRadius = CSSTheme.cornerRadius
+        thanksCard.layer.borderWidth = 1.0
+        thanksCard.layer.borderColor = CSSTheme.border.cgColor
+        thanksCard.layer.shadowColor = CSSTheme.blue.cgColor
+        thanksCard.layer.shadowOffset = CGSize(width: 0, height: 4)
+        thanksCard.layer.shadowRadius = 10
+        thanksCard.layer.shadowOpacity = 0.06
+
+        let titleLabel = UILabel()
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.text = "❤️ LỜI CẢM ƠN"
+        titleLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .heavy)
+        titleLabel.textColor = CSSTheme.blue
+        titleLabel.textAlignment = .center
+
+        let bodyLabel = UILabel()
+        bodyLabel.translatesAutoresizingMaskIntoConstraints = false
+        bodyLabel.numberOfLines = 0
+        bodyLabel.textAlignment = .center
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        paragraph.lineSpacing = 3.5
+
+        let bodyText = """
+        Tri ân đội ngũ phát triển & cộng đồng mã nguồn mở:
+        SideStore Team (@sidestoreio) • Giao diện: @lit_ritt
+        Nền tảng AltStore: Riley Testut & Cộng đồng
+        """
+        bodyLabel.attributedText = NSAttributedString(
+            string: bodyText,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 11.5, weight: .medium),
+                .foregroundColor: UIColor.black.withAlphaComponent(0.82),
+                .paragraphStyle: paragraph
+            ]
+        )
+
+        let btnSideStore = createCompactCreditChip(title: "@sidestoreio", color: CSSTheme.blue, action: #selector(openSideStoreTwitterChip))
+        let btnLitRitt = createCompactCreditChip(title: "@lit_ritt", color: CSSTheme.purple, action: #selector(openLitRittTwitterChip))
+        let btnGitHub = createCompactCreditChip(title: "GitHub", color: CSSTheme.dark, action: #selector(followAltStoreGitHub))
+
+        let chipStack = UIStackView(arrangedSubviews: [btnSideStore, btnLitRitt, btnGitHub])
+        chipStack.translatesAutoresizingMaskIntoConstraints = false
+        chipStack.axis = .horizontal
+        chipStack.spacing = 8
+        chipStack.alignment = .center
+        chipStack.distribution = .equalSpacing
+
+        thanksCard.addSubview(titleLabel)
+        thanksCard.addSubview(bodyLabel)
+        thanksCard.addSubview(chipStack)
+
         let vLabel = UILabel()
         vLabel.tag = 7771
         vLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -672,19 +1108,44 @@ private extension SettingsViewController {
         vLabel.textAlignment = .center
         vLabel.isUserInteractionEnabled = true
         vLabel.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(copyVersionLabelTapped)))
-        
+
+        footerContainer.addSubview(thanksCard)
         footerContainer.addSubview(vLabel)
+
         NSLayoutConstraint.activate([
-            vLabel.centerXAnchor.constraint(equalTo: footerContainer.centerXAnchor),
-            vLabel.centerYAnchor.constraint(equalTo: footerContainer.centerYAnchor),
+            thanksCard.topAnchor.constraint(equalTo: footerContainer.topAnchor, constant: 6),
+            thanksCard.leadingAnchor.constraint(equalTo: footerContainer.leadingAnchor, constant: 16),
+            thanksCard.trailingAnchor.constraint(equalTo: footerContainer.trailingAnchor, constant: -16),
+
+            titleLabel.topAnchor.constraint(equalTo: thanksCard.topAnchor, constant: 10),
+            titleLabel.leadingAnchor.constraint(equalTo: thanksCard.leadingAnchor, constant: 12),
+            titleLabel.trailingAnchor.constraint(equalTo: thanksCard.trailingAnchor, constant: -12),
+
+            bodyLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
+            bodyLabel.leadingAnchor.constraint(equalTo: thanksCard.leadingAnchor, constant: 12),
+            bodyLabel.trailingAnchor.constraint(equalTo: thanksCard.trailingAnchor, constant: -12),
+
+            chipStack.topAnchor.constraint(equalTo: bodyLabel.bottomAnchor, constant: 8),
+            chipStack.centerXAnchor.constraint(equalTo: thanksCard.centerXAnchor),
+            chipStack.bottomAnchor.constraint(equalTo: thanksCard.bottomAnchor, constant: -10),
+
+            vLabel.topAnchor.constraint(equalTo: thanksCard.bottomAnchor, constant: 12),
             vLabel.leadingAnchor.constraint(equalTo: footerContainer.leadingAnchor, constant: 16),
             vLabel.trailingAnchor.constraint(equalTo: footerContainer.trailingAnchor, constant: -16)
         ])
-        
+
         self.tableView.tableFooterView = footerContainer
     }
 
-    // Bóc tách lớp nền của InsetGroupTableViewCell để ép nhận diện CSS Card mà không phạm lỗi `private insetView`
+    @objc private func openSideStoreTwitterChip() {
+        self.openTwitter(username: "sidestoreio")
+    }
+
+    @objc private func openLitRittTwitterChip() {
+        self.openTwitter(username: "lit_ritt")
+    }
+
+    // Bóc tách lớp nền của InsetGroupTableViewCell để ép nhận diện CSS Card
     private func styleInnerCardOfCell(_ cell: UITableViewCell, at indexPath: IndexPath, totalRows: Int) {
         cell.backgroundColor = .clear
         cell.contentView.backgroundColor = .clear
@@ -757,37 +1218,16 @@ private extension SettingsViewController {
             "View Error Log": "Xem nhật ký lỗi hệ thống",
             "Clear Cache": "Xóa bộ nhớ đệm (Cache)",
             
-            // Thử nghiệm Beta
-            "Beta Updates": "Cập nhật phiên bản Beta",
-            "Enable Beta Updates": "Bật cập nhật phiên bản Beta",
-            "Beta Updates Track": "Kênh cập nhật Beta",
-            "Release Channel": "Kênh phát hành",
-            "nightly": "Hằng đêm (Nightly)",
-            "Nightly": "Hằng đêm (Nightly)",
-            "beta": "Thử nghiệm (Beta)",
-            "Beta": "Thử nghiệm (Beta)",
-            "release": "Chính thức (Release)",
-            "Release": "Chính thức (Release)",
-            "stable": "Ổn định (Stable)",
-            
-            // Cài đặt nâng cao
+            // Cài đặt nâng cao & Máy chủ Anisette
+            "Anisette Servers": "Máy chủ Anisette",
+            "Anisette Server": "Máy chủ Anisette",
             "View Refresh Attempts": "Lịch sử làm mới ứng dụng",
             "Refresh Attempts": "Lịch sử làm mới ứng dụng",
             "Refresh SideJITServer": "Cấu hình máy chủ SideJITServer",
             "SideJITServer": "Cấu hình máy chủ SideJITServer",
             "Certificate Management": "Quản lý chứng chỉ (Certificate)",
             "Certificates Management": "Quản lý chứng chỉ (Certificate)",
-            "User Customizations": "Tùy chỉnh giao diện & người dùng",
-            
-            // Chẩn đoán & Gỡ lỗi (Debug)
-            "Developer Options": "Tùy chọn nhà phát triển",
-            "Experimental Features": "Tính năng thử nghiệm",
-            "Verbose Operations Logging": "Ghi nhật ký hoạt động chi tiết",
-            "AltSign Verbose Logging": "Ghi nhật ký AltSign chi tiết",
-            "Minimuxer Verbose Logging": "Ghi nhật ký Minimuxer chi tiết",
-            "Rotate Logs on Startup": "Xoay vòng nhật ký khi khởi động",
-            "Disable Response Caching": "Tắt lưu đệm phản hồi mạng",
-            "Recreate Database on Next Start": "Tạo lại cơ sở dữ liệu ở lần mở tới"
+            "User Customizations": "Tùy chỉnh giao diện & người dùng"
         ]
         
         return dictionary[trimmed] ?? text
@@ -796,16 +1236,13 @@ private extension SettingsViewController {
     private func translateAndStyleLabelsInside(view: UIView, section: Section, row: Int) {
         let activeItems = UnifiedSettingsItem.activeItems
         let isClearCacheRow = (section == .advancedSettings && activeItems.indices.contains(row) && activeItems[row] == .clearCache)
-        let isBetaRow = (section == .advancedSettings && activeItems.indices.contains(row) && (activeItems[row] == .betaUpdates || activeItems[row] == .betaTrack))
 
         for subview in view.subviews {
             if let label = subview as? UILabel {
-                // Bỏ qua các label nằm bên trong UIButton để tránh ghi đè style của nút chọn kênh Beta
                 if subview.superview is UIButton {
                     continue
                 }
                 
-                // Dịch văn bản sang tiếng Việt nếu khớp từ điển
                 if let currentText = label.text, !currentText.isEmpty {
                     label.text = translateStaticText(currentText)
                 }
@@ -819,11 +1256,6 @@ private extension SettingsViewController {
                 } else if section == .signIn {
                     label.textColor = CSSTheme.blue
                     label.font = UIFont.systemFont(ofSize: 17, weight: .bold)
-                } else if isBetaRow {
-                    label.isEnabled = true
-                    label.textColor = .black
-                    label.alpha = 1.0
-                    label.font = UIFont.systemFont(ofSize: 16, weight: .medium)
                 } else if isClearCacheRow {
                     label.textColor = CSSTheme.magenta
                     label.font = UIFont.systemFont(ofSize: 16, weight: .bold)
@@ -873,14 +1305,14 @@ private extension SettingsViewController
 
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .center
-        paragraphStyle.lineSpacing = 5
+        paragraphStyle.lineSpacing = 4
         
         let fullString = NSMutableAttributedString()
         
         let appVersionAttr = NSAttributedString(
             string: appVersion,
             attributes: [
-                .font: UIFont.systemFont(ofSize: 14, weight: .bold),
+                .font: UIFont.systemFont(ofSize: 13.5, weight: .bold),
                 .foregroundColor: CSSTheme.blue,
                 .paragraphStyle: paragraphStyle
             ]
@@ -889,7 +1321,7 @@ private extension SettingsViewController
         let iosVersionAttr = NSAttributedString(
             string: "\n" + iosVersion,
             attributes: [
-                .font: UIFont.systemFont(ofSize: 12, weight: .semibold),
+                .font: UIFont.systemFont(ofSize: 11.5, weight: .semibold),
                 .foregroundColor: CSSTheme.purple.withAlphaComponent(0.85),
                 .paragraphStyle: paragraphStyle
             ]
@@ -913,13 +1345,13 @@ private extension SettingsViewController
         let attributed = NSMutableAttributedString(
             string: "Đã sao chép phiên bản! ",
             attributes: [
-                .font: UIFont.systemFont(ofSize: 15, weight: .bold),
+                .font: UIFont.systemFont(ofSize: 14, weight: .bold),
                 .foregroundColor: CSSTheme.blue,
                 .paragraphStyle: paragraphStyle
             ]
         )
         attributed.append(NSAttributedString(string: "✓", attributes: [
-            .font: UIFont.systemFont(ofSize: 15, weight: .bold),
+            .font: UIFont.systemFont(ofSize: 14, weight: .bold),
             .foregroundColor: CSSTheme.green
         ]))
         
@@ -966,18 +1398,8 @@ private extension SettingsViewController
             self.tableView.reloadData()
         }
         
-        // Đảm bảo LÀM MỚI ỨNG DỤNG luôn tắt cứng
-        self.forceDisableAppRefreshSettings()
-        
-        self.betaUpdatesSwitch.isOn = UserDefaults.standard.isBetaUpdatesEnabled
-        // Giữ chữ và nút chọn kênh Beta luôn hiển thị màu đen cố định, không bị mờ
-        self.betaTrackLabel.isEnabled = true
-        self.betaTrackLabel.textColor = .black
-        self.betaTrackLabel.alpha = 1.0
-        self.betaTrackPopupButton.isEnabled = UserDefaults.standard.isBetaUpdatesEnabled
-        self.betaTrackPopupButton.alpha = 1.0
-        self.styleBetaTrackPopupButton()
-        self.updateReleaseChannelButtonTitle()
+        // Đảm bảo Làm mới ứng dụng, Beta và Developer luôn tắt cứng
+        self.forceDisableRemovedSettings()
         
         self.disableResponseCachingSwitch?.isOn = UserDefaults.standard.responseCachingDisabled
         self.verboseOperationsLoggingSwitch?.isOn = UserDefaults.standard.isVerboseOperationsLoggingEnabled
@@ -1120,7 +1542,7 @@ private extension SettingsViewController
             if isHeader {
                 settingsHeaderFooterView.primaryLabel.text = "TRUNG TÂM CÀI ĐẶT & HỆ THỐNG"
             } else {
-                settingsHeaderFooterView.secondaryLabel.text = "Quản lý kênh cập nhật, cấu hình chứng chỉ, tùy chỉnh giao diện và dọn dẹp bộ nhớ đệm để tối ưu hóa hiệu suất hoạt động của SideStore."
+                settingsHeaderFooterView.secondaryLabel.text = "Quản lý máy chủ Anisette, cấu hình chứng chỉ, tùy chỉnh giao diện và dọn dẹp bộ nhớ đệm để tối ưu hóa hiệu suất hoạt động của SideStore."
             }
             
         case .patreon, .display, .appRefresh, .instructions, .techyThings, .credits, .betaTesting, .diagnostics:
@@ -1217,7 +1639,7 @@ private extension SettingsViewController
         self.present(alertController, animated: true, completion: nil)
     }
 
-    // Khóa cứng trạng thái tắt cho 3 IBAction của LÀM MỚI ỨNG DỤNG
+    // Khóa cứng trạng thái tắt cho các IBAction đã loại bỏ (Giữ @IBAction để không crash Storyboard)
     @IBAction private func toggleDisableAppLimit(_ sender: UISwitch) {
         sender.setOn(false, animated: false)
         UserDefaults.standard.isAppLimitDisabled = false
@@ -1278,17 +1700,8 @@ private extension SettingsViewController
     }
 
     @IBAction private func toggleEnableBetaUpdates(_ sender: UISwitch) {
-        UserDefaults.standard.isBetaUpdatesEnabled = sender.isOn
-        
-        // Giữ màu chữ đen cố định hoàn toàn, không bị mờ hay đổi màu khi bật/tắt
-        betaTrackLabel.isEnabled = true
-        betaTrackLabel.textColor = .black
-        betaTrackLabel.alpha = 1.0
-        
-        betaTrackPopupButton.isEnabled = sender.isOn
-        betaTrackPopupButton.alpha = 1.0
-        styleBetaTrackPopupButton()
-        updateReleaseChannelButtonTitle()
+        sender.setOn(false, animated: false)
+        UserDefaults.standard.isBetaUpdatesEnabled = false
     }
 
     @IBAction private func toggleDisableResponseCaching(_ sender: UISwitch) {
@@ -1335,23 +1748,10 @@ private extension SettingsViewController
         }
     }
 
+    // Tắt hoàn toàn thao tác kích hoạt Developer Mode
     @IBAction private func handleDebugModeGesture(_ gestureRecognizer: UISwipeGestureRecognizer)
     {
-        self.debugGestureCounter += 1
-        self.debugGestureTimer?.invalidate()
-        
-        if self.debugGestureCounter >= 3
-        {
-            self.debugGestureCounter = 0
-            UserDefaults.standard.isDebugModeEnabled.toggle()
-            self.tableView.reloadData()
-        }
-        else
-        {
-            self.debugGestureTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: false) { [weak self] (timer) in
-                self?.debugGestureCounter = 0
-            }
-        }
+        UserDefaults.standard.isDebugModeEnabled = false
     }
 
     private func openTwitter(username: String)
@@ -1390,7 +1790,13 @@ private extension SettingsViewController
     @IBAction private func followAltStoreMastodon() { self.openMastodon(username: "@sidestoreio@fosstodon.org") }
     @IBAction private func followAltStoreThreads() { self.openThreads(username: "sidestore.io") }
     @IBAction private func followAltStoreTwitter() { self.openTwitter(username: "sidestoreio") }
-    @IBAction private func followAltStoreGitHub() { UIApplication.shared.open(AppConstants.URLs.sideStoreGitHub, options: [:]) }
+    @objc @IBAction private func followAltStoreGitHub() { UIApplication.shared.open(AppConstants.URLs.sideStoreGitHub, options: [:]) }
+
+    private func presentAnisetteSheet() {
+        let hostingController = UIHostingController(rootView: SettingsAnisetteSheetView())
+        hostingController.overrideUserInterfaceStyle = .light
+        self.present(hostingController, animated: true)
+    }
 }
 
 private extension SettingsViewController
@@ -1465,19 +1871,6 @@ extension SettingsViewController
                     actionCell.backgroundConfiguration = .clear()
                 }
                 return
-            }
-        }
-        
-        // Đảm bảo các dòng Beta trong mục gộp chung luôn giữ chữ màu đen rõ nét khi hiển thị
-        if section == .advancedSettings {
-            let activeItems = UnifiedSettingsItem.activeItems
-            if activeItems.indices.contains(indexPath.row),
-               (activeItems[indexPath.row] == .betaUpdates || activeItems[indexPath.row] == .betaTrack) {
-                self.betaTrackLabel?.isEnabled = true
-                self.betaTrackLabel?.textColor = .black
-                self.betaTrackLabel?.alpha = 1.0
-                self.styleBetaTrackPopupButton()
-                self.updateReleaseChannelButtonTitle()
             }
         }
         
@@ -1656,8 +2049,8 @@ extension SettingsViewController
             let item = activeItems[indexPath.row]
             
             switch item {
-            case .betaUpdates, .betaTrack:
-                break
+            case .anisetteServers:
+                self.presentAnisetteSheet()
                 
             case .refreshAttempts, .errorLog:
                 // Được kích hoạt tự động qua Storyboard Segue gắn liền trên Cell gốc
@@ -1680,16 +2073,6 @@ extension SettingsViewController
                 
             case .clearCache:
                 self.clearCache()
-                
-            case .developerOptions:
-                let hostingController = UIHostingController(rootView: DeveloperOptionsView())
-                hostingController.title = nil
-                self.prepare(for: UIStoryboardSegue(identifier: "diagnostics", source: self, destination: hostingController), sender: nil)
-                
-            case .experimentalFeatures:
-                let hostingController = UIHostingController(rootView: ExperimentalFeaturesView())
-                hostingController.title = nil
-                self.prepare(for: UIStoryboardSegue(identifier: "diagnostics", source: self, destination: hostingController), sender: nil)
             }
             
         case .patreon, .display, .appRefresh, .instructions, .techyThings, .credits, .betaTesting, .diagnostics:

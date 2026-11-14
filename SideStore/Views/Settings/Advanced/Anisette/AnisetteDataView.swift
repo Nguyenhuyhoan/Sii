@@ -278,7 +278,7 @@ class AnisetteDataViewModel: ObservableObject {
             toast = ToastView(text: text, detailText: detailText)
         }
 
-        if let presentingVC = PresenterProvider.shared.topViewController ?? UIApplication.shared.topViewController() {
+        if let presentingVC = UIApplication.shared.topViewController() {
             toast.show(in: presentingVC)
         }
     }
@@ -627,7 +627,7 @@ struct AnisetteDataView: View {
                                 #if !os(tvOS)
                                 showingFileImporter = true
                                 #else
-                                if let topVC = PresenterProvider.shared.topViewController ?? UIApplication.shared.topViewController() {
+                                if let topVC = UIApplication.shared.topViewController() {
                                     TVWebFileTransferManager.shared.startImport(
                                         acceptedExtensions: ["json"],
                                         title: "Nhập tệp JSON Cấu hình Anisette",

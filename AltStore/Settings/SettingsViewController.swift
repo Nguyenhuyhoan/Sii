@@ -7,18 +7,18 @@
 //  Copyright © 2019 Riley Testut. All rights reserved.
 //
 
-import UIKit
+@preconcurrency import UIKit
 import SwiftUI
-import CoreData
-import Minimuxer
-import SafariServices
-
-#if canImport(AltStoreCore)
-import AltStoreCore
+#if !os(tvOS)
+import MessageUI
 #endif
-import Roxas
+import Intents
+#if !os(tvOS)
+import IntentsUI
+#endif
 
-import AltSign
+import SemanticVersion
+import SideSign
 import UniformTypeIdentifiers
 
 extension SettingsViewController
@@ -26,399 +26,1047 @@ extension SettingsViewController
     private enum Section: Int, CaseIterable
     {
         case signIn
-        case appleID
+        case account
         case patreon
-        case anisette
-        case pairingFile
-        case refreshAttempts
-        case errorLog
-        case debug
-        case appData
+        case display
+        case appRefresh
+        case instructions
+        case techyThings
         case credits
+        case betaTesting
+        case advancedSettings
+        case diagnostics    // diagnostics section, will be enabled on release builds only on swipe down with 3 fingers 3 times
+        // case macDirtyCow
     }
     
-    private enum AppleIDRow: Int, CaseIterable
+    private enum AppRefreshRow: Int, CaseIterable
     {
-        case account = 0
-        case activeAppLimit
+        case backgroundRefresh
+        case noIdleTimeout
+        case addToSiri
+        case disableAppLimit
+        
+        static var allCases: [AppRefreshRow] {
+            var c: [AppRefreshRow] = [.backgroundRefresh, .noIdleTimeout, .addToSiri]
+
+            // conditional entries go at the last to preserve ordering
+            if UserDefaults.standard.isCowExploitSupported || !ProcessInfo().sparseRestorePatched
+            {
+                c.append(.disableAppLimit)
+            }
+            return c
+        }
     }
     
-    private enum PatreonRow: Int, CaseIterable
+    private enum CreditsRow: Int, CaseIterable
     {
-        case account = 0
-        case about
+        case developer
+        case operations
+        case designer
+        case softwareLicenses
+    }
+    
+    private enum TechyThingsRow: Int, CaseIterable
+    {
+        case healthCheck
+        case errorLog
+        case storageExplorer
+        case clearCache
+    }
+    private enum AdvancedSettingsRow: Int, CaseIterable
+    {
+        case sendFeedback           // row 0 - Send Feedback
+        case refreshAttempts        // row 1 - View Refresh Attempts
+        case refreshSideJITServer   // row 2 - SideJITServer
+        case pairingFileManagement  // row 3 - Pairing File Management
+        case anisetteServers        // row 4 - Anisette Servers
+        case connectionConfig       // row 5 - Connection Configuration
+        case networkDiscovery       // row 6 - Network Discovery
+        case developerServices      // row 7 - Developer Portal Services
+        case profileManagement      // row 8 - Profile Management
+        case certificateManagement  // row 9 - Certificate Management
+        case backupAndRestore       // row 10 - Backup & Restore
+        case userCustomizations     // row 11 - User Customizations
+
+        static var allCases: [AdvancedSettingsRow] {
+            var rows: [AdvancedSettingsRow] = [.sendFeedback, .refreshAttempts, .refreshSideJITServer, .pairingFileManagement]
+            if !UserDefaults.standard.useOnDeviceAnisette {
+                rows.append(.anisetteServers)
+            }
+            rows.append(contentsOf: [
+                .connectionConfig,
+                .networkDiscovery,
+                .developerServices,
+                .profileManagement,
+                .certificateManagement,
+                .backupAndRestore,
+                .userCustomizations
+            ])
+            return rows
+        }
+    }
+
+    private enum BetaTestingRow: Int, CaseIterable {
+        case betaUpdates
+        case betaTrack
+    }
+
+    private enum DiagnosticsRow: Int, CaseIterable
+    {
+        case developerOptions            // row 0 - Developer Options
+        case experimentalFeatures        // row 1 - Experimental Features
     }
 }
 
-class SettingsViewController: UITableViewController, UIDocumentPickerDelegate
+final class SettingsViewController: UITableViewController, ThemeAwareViewController
 {
-    private lazy var refreshAttemptsDataSource = self.makeRefreshAttemptsDataSource()
+    private var activeTeam: ALTTeam?
+    private var accountStatus: AccountVerificationRow.Status = .completed
+    private var accountVerificationTask: Task<Void, Never>?
     
-    private var account: Account?
-    private var team: Team?
+    private var prototypeHeaderFooterView: SettingsHeaderFooterView!
     
-    private var patreonAccount: PatreonAccount?
+    // Add outlet
+    @IBOutlet private var betaTrackLabel: UILabel!
+    @IBOutlet private var betaTrackPopupButton: UIButton!
+
+    private var debugGestureCounter = 0
+    private weak var debugGestureTimer: Timer?
     
-    private var activeAppsLimit: Int? {
-        guard let team = self.team else { return nil }
-        let limit = (team.type == .free) ? 3 : nil
-        return limit
+    @IBOutlet private var accountNameLabel: UILabel!
+    @IBOutlet private var accountEmailLabel: UILabel!
+    @IBOutlet private var accountTypeLabel: UILabel!
+    
+    @IBOutlet private var backgroundRefreshSwitch: UISwitch!
+    @IBOutlet private var noIdleTimeoutSwitch: UISwitch!
+    @IBOutlet private var disableAppLimitSwitch: UISwitch!
+    @IBOutlet private var betaUpdatesSwitch: UISwitch!
+    @IBOutlet private var verboseOperationsLoggingSwitch: UISwitch!
+    @IBOutlet private var altSignVerboseLoggingSwitch: UISwitch!
+    @IBOutlet private var minimuxerVerboseLoggingSwitch: UISwitch!
+    @IBOutlet private var rotateLogsOnStartupSwitch: UISwitch!
+    
+//    @IBOutlet private var refreshSideJITServer: UILabel!
+    @IBOutlet private var disableResponseCachingSwitch: UISwitch!
+    
+    @IBOutlet private var mastodonButton: UIButton!
+    @IBOutlet private var threadsButton: UIButton!
+    @IBOutlet private var twitterButton: UIButton!
+    @IBOutlet private var githubButton: UIButton!
+    
+    @IBOutlet private var versionLabel: UILabel!
+    
+    @IBOutlet private var recreateDatabaseSwitch: UISwitch!
+    
+    #if !os(tvOS)
+    override var preferredStatusBarStyle: UIStatusBarStyle {
+        return .lightContent
+    }
+    #endif
+    
+    private static var exportDBInProgress = false
+    private static var deleteDBInProgress = false
+    
+    required init?(coder aDecoder: NSCoder)
+    {
+        super.init(coder: aDecoder)
+        
+        NotificationCenter.default.addObserver(self, selector: #selector(SettingsViewController.openPatreonSettings(_:)), name: AppDelegate.openPatreonSettingsDeepLinkNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(SettingsViewController.openErrorLog(_:)), name: ToastView.openErrorLogNotification, object: nil)
     }
     
-    private var remainingAvailableAppIDs: Int?
+    deinit
+    {
+        NotificationCenter.default.removeObserver(self)
+    }
     
-    @IBOutlet private var accountCell: UITableViewCell!
-    @IBOutlet private var patreonAccountCell: UITableViewCell!
-    @IBOutlet private var anisetteServerPickerCell: UITableViewCell!
-    @IBOutlet private var serverTextField: UITextField!
-    @IBOutlet private var refreshAttemptsCell: UITableViewCell!
-    @IBOutlet private var resetAnisetteCell: UITableViewCell!
-    @IBOutlet private var activeAppLimitCell: UITableViewCell!
-    @IBOutlet private var errorLogCell: UITableViewCell!
-    @IBOutlet private var verboseLogCell: UITableViewCell!
-    @IBOutlet private var shareLogCell: UITableViewCell!
-    @IBOutlet private var resetPairingCell: UITableViewCell!
-    @IBOutlet private var udidCell: UITableViewCell!
-    @IBOutlet private var profileCell: UITableViewCell!
-    @IBOutlet private var connectionCell: UITableViewCell!
+    private func handleReleaseChannelSelection(_ channel: String) {
+        // Update your model/preferences
+        UserDefaults.standard.betaUdpatesTrack = channel
+        updateReleaseChannelButtonTitle()
+    }
     
-    private var prototypeConstraint: NSLayoutConstraint!
-    private var _updatingView: Bool = false
+    private func updateReleaseChannelButtonTitle() {
+        let channel = UserDefaults.standard.betaUdpatesTrack ?? UserDefaults.defaultBetaUpdatesTrack
+        betaTrackPopupButton.setTitle(channel, for: .normal)
+    }
     
+    private func configureReleaseChannelButton() {
+        let currentTrack = UserDefaults.standard.betaUdpatesTrack
+        
+        // get all tracks as string available except .stable and .unknown
+        var trackOptions: [String] = ReleaseTrackType.betaTracks.map {$0.rawValue}
+
+        if let currentTrack{
+            // prepend currently selected beta track from the user defaults
+            trackOptions = [currentTrack] + trackOptions.filter { $0 != currentTrack }
+        }
+    
+        // Create menu items with proper styling
+        let items = trackOptions.map{ channel in
+            UIAction(title: channel, handler: { [weak self] _ in
+                self?.handleReleaseChannelSelection(channel)
+            })
+        }
+        
+        // Create menu with proper styling
+        let menu = UIMenu(title: "",
+                         options: [.singleSelection, .displayInline], // Add displayInline
+                         children: items
+        )
+        #if !os(tvOS)
+        betaTrackPopupButton.menu = menu
+        #else
+        if #available(tvOS 17.0, *) {
+            betaTrackPopupButton.menu = menu
+        }
+        #endif
+
+        // Set initial state
+        updateReleaseChannelButtonTitle()
+    }
+
+
     override func viewDidLoad()
     {
         super.viewDidLoad()
         
-        self.prototypeConstraint = self.refreshAttemptsCell.contentView.heightAnchor.constraint(equalToConstant: 44)
+        #if !os(tvOS)
+        // --- iOS 26 fix ---
+        if #available(iOS 26.0, *) {
+            let appearance = UINavigationBarAppearance()
+            appearance.titleTextAttributes = [.foregroundColor: UIColor.white]
+            appearance.largeTitleTextAttributes = [.foregroundColor: UIColor.white]
+            navigationController?.navigationBar.standardAppearance = appearance
+            navigationController?.navigationBar.scrollEdgeAppearance = appearance       // required for iOS 26, maybe enforce it in storyboard?
+        }
+        #endif
+        let nib = UINib(nibName: "SettingsHeaderFooterView", bundle: nil)
+        self.prototypeHeaderFooterView = nib.instantiate(withOwner: nil, options: nil)[0] as? SettingsHeaderFooterView
         
-        self.tableView.register(CollapsibleTableSectionHeaderView.self, forHeaderFooterViewReuseIdentifier: "HeaderView")
-        self.tableView.register(ServerURLTableViewCell.self, forCellReuseIdentifier: "ServerURLCell")
+        self.tableView.register(nib, forHeaderFooterViewReuseIdentifier: "HeaderFooterView")
         
-        if #unavailable(iOS 15)
+        let debugModeGestureRecognizer = UISwipeGestureRecognizer(target: self, action: #selector(SettingsViewController.handleDebugModeGesture(_:)))
+        debugModeGestureRecognizer.delegate = self
+        debugModeGestureRecognizer.direction = .up
+        #if !os(tvOS)
+        debugModeGestureRecognizer.numberOfTouchesRequired = 3
+        #endif
+        self.tableView.addGestureRecognizer(debugModeGestureRecognizer)
+        
+        // set the version label to show in settings screen
+        self.versionLabel.attributedText = getVersionAttributedString()
+        self.versionLabel.isUserInteractionEnabled = true
+        self.versionLabel.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(copyVersionLabelTapped)))
+        
+        self.versionLabel.numberOfLines = 0
+        self.versionLabel.lineBreakMode = .byWordWrapping
+        self.versionLabel.setNeedsUpdateConstraints()
+        
+        self.tableView.contentInset.bottom = 40
+        
+        self.update()
+        
+        #if !os(tvOS)
+        if let appearance = self.tabBarController?.tabBar.standardAppearance
         {
-            // Keep pre-iOS 15 behavior of removing separator above section headers.
-            self.tableView.sectionHeaderHeight = .leastNormalMagnitude
+            appearance.stackedLayoutAppearance.normal.badgeBackgroundColor = .altPrimary
+            self.navigationController?.tabBarItem.scrollEdgeAppearance = appearance
+        }
+        #endif
+        
+        // We can only configure the contentMode for a button's background image from Interface Builder.
+        // This works, but it means buttons don't visually highlight because there's no foreground image.
+        // As a workaround, we manually set the foreground image + contentMode here.
+        for button in [self.mastodonButton!, self.threadsButton!, self.twitterButton!, self.githubButton!]
+        {
+            // Get the assigned image from Interface Builder.
+            let image = button.configuration?.background.image
+            
+            button.configuration = nil
+            button.setImage(image, for: .normal)
+            button.imageView?.contentMode = .scaleAspectFit
         }
         
-        NotificationCenter.default.addObserver(self, selector: #selector(SettingsViewController.didFetchLatestRefreshAttempts(_:)), name: DatabaseManager.didFetchLatestRefreshAttemptsNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(SettingsViewController.update), name: PatreonAPI.didUpdateAccountNotification, object: nil)
+        configureReleaseChannelButton()
         
-        self.initializeAnisetteSettings()
+        NotificationCenter.default.addObserver(self, selector: #selector(handleCSSThemeUpdate), name: .cssThemeDidUpdateNotification, object: nil)
+        applyCSSTheme()
     }
     
     override func viewWillAppear(_ animated: Bool)
     {
         super.viewWillAppear(animated)
         
-        self.refreshAttemptsDataSource.performFetch()
+        // show nav bar if not shown already
+        self.navigationController?.setNavigationBarHidden(false, animated: animated)
         
         self.update()
-        
-        PatreonAPI.shared.updateAccount()
+        self.applyCSSTheme()
     }
     
-    override func viewDidLayoutSubviews()
+    override func viewWillDisappear(_ animated: Bool)
     {
-        super.viewDidLayoutSubviews()
-        
-        guard !self._updatingView else { return }
-        self._updatingView = true
-        
-        // Wait until self.tableView's Safe Area Insets have been assigned, then reload data to adjust bottom contentInset cleanly.
-        self.reload()
-    }
-}
-
-private extension SettingsViewController
-{
-    func makeRefreshAttemptsDataSource() -> RSTFetchedResultsTableViewDataSource<RefreshAttempt>
-    {
-        let fetchRequest: NSFetchRequest<RefreshAttempt> = RefreshAttempt.fetchRequest()
-        fetchRequest.fetchLimit = 3
-        fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \RefreshAttempt.date, ascending: false)]
-        
-        let dataSource = RSTFetchedResultsTableViewDataSource(fetchRequest: fetchRequest, managedObjectContext: DatabaseManager.shared.viewContext)
-        dataSource.cellConfigurationHandler = { (cell, refreshAttempt, indexPath) in
-            let cell = cell as! RefreshAttemptTableViewCell
-            
-            let formatString: String
-            
-            if Calendar.current.isDateInToday(refreshAttempt.date)
-            {
-                formatString = NSLocalizedString("Today at %@", comment: "")
-            }
-            else if Calendar.current.isDateInYesterday(refreshAttempt.date)
-            {
-                formatString = NSLocalizedString("Yesterday at %@", comment: "")
-            }
-            else
-            {
-                formatString = "%@ at %@"
-            }
-            
-            if refreshAttempt.isSuccess
-            {
-                cell.statusImageView.image = UIImage(systemName: "checkmark.circle")
-                cell.statusImageView.tintColor = .refreshSuccess
-                
-                cell.errorDescriptionLabel.isHidden = true
-            }
-            else
-            {
-                cell.statusImageView.image = UIImage(systemName: "exclamationmark.circle")
-                cell.statusImageView.tintColor = .refreshFailure
-                
-                cell.errorDescriptionLabel.text = refreshAttempt.errorDescription
-                cell.errorDescriptionLabel.isHidden = false
-            }
-            
-            if formatString.components(separatedBy: "%@").count == 2
-            {
-                cell.dateLabel.text = String(format: formatString, DateFormatter.shortTime.string(from: refreshAttempt.date))
-            }
-            else
-            {
-                cell.dateLabel.text = String(format: formatString, DateFormatter.mediumDate.string(from: refreshAttempt.date), DateFormatter.shortTime.string(from: refreshAttempt.date))
-            }
-        }
-        
-        return dataSource
+        super.viewWillDisappear(animated)
+        self.accountVerificationTask?.cancel()
     }
     
-    @objc func update()
+    @objc private func handleCSSThemeUpdate()
     {
-        let context = DatabaseManager.shared.viewContext
-        context.performAndWait {
-            self.account = DatabaseManager.shared.activeAccount(in: context)
-            self.team = DatabaseManager.shared.activeTeam(in: context)
-            self.patreonAccount = DatabaseManager.shared.patreonAccount(in: context)
-            
-            let fetchRequest = AppID.fetchRequest() as NSFetchRequest<AppID>
-            fetchRequest.predicate = NSPredicate(format: "%K >= %@", #keyPath(AppID.expirationDate), NSDate())
-            
-            let appIDs = try? context.fetch(fetchRequest)
-            self.remainingAvailableAppIDs = appIDs.map { max(10 - $0.count, 0) }
-        }
-        
-        self.reload()
+        applyCSSTheme()
     }
     
-    func reload()
+    func applyCSSTheme()
     {
-        if let account = self.account
-        {
-            self.accountCell.detailTextLabel?.text = account.appleID
+        let theme = CSSThemeManager.shared
+        guard theme.isActive else {
+            self.tableView.backgroundColor = .settingsBackground
+            self.tableView.backgroundView = nil
+            self.versionLabel?.attributedText = getVersionAttributedString()
+            self.tableView.reloadData()
+            return
         }
         
-        if let patreonAccount = self.patreonAccount
-        {
-            self.patreonAccountCell.detailTextLabel?.text = patreonAccount.name
-        }
-        else
-        {
-            self.patreonAccountCell.detailTextLabel?.text = NSLocalizedString("Link Patreon Account", comment: "")
+        let bgColor = theme.color(for: "settings", property: "background-color", default: theme.backgroundColor(default: .settingsBackground))
+        let accentColor = theme.accentColor(default: .altPrimary)
+        let textPrimary = theme.textPrimaryColor(default: .white)
+        
+        if let grad = theme.gradientLayer(for: "settings", frame: self.tableView.bounds) ?? theme.gradientLayer(for: ":root", frame: self.tableView.bounds) {
+            let bgView = UIView(frame: self.tableView.bounds)
+            grad.frame = bgView.bounds
+            bgView.layer.insertSublayer(grad, at: 0)
+            self.tableView.backgroundView = bgView
+            self.tableView.backgroundColor = .clear
+        } else {
+            self.tableView.backgroundView = nil
+            self.tableView.backgroundColor = bgColor
         }
         
-        if let limit = self.activeAppsLimit
-        {
-            let format: String
-            if limit == 1
-            {
-                format = NSLocalizedString("%@ App", comment: "")
-            }
-            else
-            {
-                format = NSLocalizedString("%@ Apps", comment: "")
-            }
-            
-            self.activeAppLimitCell.detailTextLabel?.text = String(format: format, NSNumber(value: limit))
-            self.activeAppLimitCell.accessoryType = .disclosureIndicator
-            self.activeAppLimitCell.selectionStyle = .default
-        }
-        else
-        {
-            self.activeAppLimitCell.detailTextLabel?.text = NSLocalizedString("None", comment: "")
-            self.activeAppLimitCell.accessoryType = .none
-            self.activeAppLimitCell.selectionStyle = .none
+        #if !os(tvOS)
+        let navAppearance = UINavigationBarAppearance()
+        navAppearance.configureWithOpaqueBackground()
+        navAppearance.backgroundColor = bgColor
+        navAppearance.titleTextAttributes = [.foregroundColor: textPrimary]
+        navAppearance.largeTitleTextAttributes = [.foregroundColor: textPrimary]
+        self.navigationController?.navigationBar.standardAppearance = navAppearance
+        self.navigationController?.navigationBar.scrollEdgeAppearance = navAppearance
+        self.navigationController?.navigationBar.tintColor = accentColor
+        #endif
+        
+        let switches: [UISwitch?] = [
+            backgroundRefreshSwitch,
+            noIdleTimeoutSwitch,
+            disableAppLimitSwitch,
+            betaUpdatesSwitch,
+            verboseOperationsLoggingSwitch,
+            altSignVerboseLoggingSwitch,
+            minimuxerVerboseLoggingSwitch,
+            rotateLogsOnStartupSwitch,
+            disableResponseCachingSwitch,
+            recreateDatabaseSwitch
+        ]
+        for sw in switches {
+            sw?.onTintColor = accentColor
         }
         
-        let bottomInset = self.tableView.safeAreaInsets.bottom
-        self.tableView.contentInset.bottom = bottomInset + 20
+        for button in [mastodonButton, threadsButton, twitterButton, githubButton, betaTrackPopupButton] {
+            button?.tintColor = accentColor
+        }
         
+        self.versionLabel?.attributedText = getVersionAttributedString()
         self.tableView.reloadData()
-        self.reloadUDIDLabel()
-        self.reloadProfileStatusLabel()
-        self.reloadConnectionStatusLabel()
     }
     
-    @objc func didFetchLatestRefreshAttempts(_ notification: Notification)
+    private func configureHostedViewController(_ vc: UIViewController, title: String? = nil)
     {
-        DispatchQueue.main.async {
-            self.tableView.reloadSections(IndexSet(integer: Section.refreshAttempts.rawValue), with: .Automatic)
+        let theme = CSSThemeManager.shared
+        let bgColor = theme.isActive
+            ? theme.color(for: "settings", property: "background-color", default: theme.backgroundColor(default: .settingsBackground))
+            : .settingsBackground
+        let textPrimary = theme.isActive ? theme.textPrimaryColor(default: .white) : .white
+        let accentColor = theme.isActive ? theme.accentColor(default: .altPrimary) : .altPrimary
+        
+        vc.view.backgroundColor = bgColor
+        if let title = title {
+            vc.title = title
+        }
+        #if !os(tvOS)
+        let appearance = UINavigationBarAppearance()
+        if theme.isActive {
+            appearance.configureWithOpaqueBackground()
+            appearance.backgroundColor = bgColor
+        } else {
+            appearance.configureWithDefaultBackground()
+        }
+        appearance.titleTextAttributes = [.foregroundColor: textPrimary]
+        appearance.largeTitleTextAttributes = [.foregroundColor: textPrimary]
+        vc.navigationItem.standardAppearance = appearance
+        vc.navigationItem.scrollEdgeAppearance = appearance
+        self.navigationController?.navigationBar.tintColor = accentColor
+        #endif
+    }
+    
+    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
+        if segue.identifier == "anisetteServers" || segue.identifier == "developerServices" || segue.identifier == "profileManagement" || segue.identifier == "certificateManagement" || segue.identifier == "diagnostics" {
+            let controller = segue.destination
+            
+        #if !os(tvOS)
+            if segue.identifier == "anisetteServers"        ||
+                segue.identifier == "developerServices"      ||
+                segue.identifier == "profileManagement"      ||
+                segue.identifier == "certificateManagement" ||
+                segue.identifier == "diagnostics"
+            {
+                let theme = CSSThemeManager.shared
+                let bgColor = theme.isActive
+                    ? theme.color(for: "settings", property: "background-color", default: theme.backgroundColor(default: .settingsBackground))
+                    : .settingsBackground
+                let textPrimary = theme.isActive ? theme.textPrimaryColor(default: .white) : .white
+                
+                let appearance = UINavigationBarAppearance()
+                if theme.isActive {
+                    appearance.configureWithOpaqueBackground()
+                    appearance.backgroundColor = bgColor
+                } else {
+                    appearance.configureWithDefaultBackground()
+                }
+                appearance.titleTextAttributes = [.foregroundColor: textPrimary]
+                appearance.largeTitleTextAttributes = [.foregroundColor: textPrimary]
+                controller.navigationItem.largeTitleDisplayMode = .always
+                controller.navigationItem.standardAppearance = appearance
+                controller.navigationItem.scrollEdgeAppearance = appearance
+            }
+        #endif
+            
+            // disable bottom tab bar since 'back' button is already available
+//            controller.hidesBottomBarWhenPushed = true
+            
+            self.show(controller, sender: nil)
+        } else {
+            super.prepare(for: segue, sender: sender)
         }
     }
+
 }
+
 
 private extension SettingsViewController
 {
-    @IBAction func signIn(_ sender: UIButton)
+    
+    private func getVersionAttributedString() -> NSAttributedString {
+        let appVersion = Bundle.Info.activeBundleVersion
+        let iosVersion = "iOS \(UIDevice.current.systemVersion) (\(ProcessInfo.processInfo.operatingSystemBuild))"
+        
+        let theme = CSSThemeManager.shared
+        let primaryColor = theme.isActive ? theme.textPrimaryColor(default: .white).withAlphaComponent(0.7) : UIColor.white.withAlphaComponent(0.7)
+        let secondaryColor = theme.isActive ? theme.textSecondaryColor(default: UIColor.white.withAlphaComponent(0.5)) : UIColor.white.withAlphaComponent(0.5)
+        
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        paragraphStyle.lineSpacing = 4
+        
+        let fullString = NSMutableAttributedString()
+        
+        let appVersionAttr = NSAttributedString(
+            string: appVersion,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 14),
+                .foregroundColor: primaryColor,
+                .paragraphStyle: paragraphStyle
+            ]
+        )
+        
+        let iosVersionAttr = NSAttributedString(
+            string: "\n" + iosVersion,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 12),
+                .foregroundColor: secondaryColor,
+                .paragraphStyle: paragraphStyle
+            ]
+        )
+        
+        fullString.append(appVersionAttr)
+        fullString.append(iosVersionAttr)
+        return fullString
+    }
+    
+    @objc private func copyVersionLabelTapped() {
+        let appVersion = Bundle.Info.activeBundleVersion
+        let iosVersion = "iOS \(UIDevice.current.systemVersion) (\(ProcessInfo.processInfo.operatingSystemBuild))"
+        let fullText = "\(appVersion)\n\(iosVersion)"
+        #if !os(tvOS)
+        UIPasteboard.general.string = fullText.hasPrefix("Version ") ? String(fullText.dropFirst("Version ".count)) : fullText
+        #endif
+        
+        let theme = CSSThemeManager.shared
+        let primaryColor = theme.isActive ? theme.textPrimaryColor(default: .white).withAlphaComponent(0.7) : UIColor.white.withAlphaComponent(0.7)
+        let successColor = theme.isActive ? theme.successColor(default: .systemGreen) : .systemGreen
+        
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        let attributed = NSMutableAttributedString(
+            string: "Copied! ",
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 14),
+                .foregroundColor: primaryColor,
+                .paragraphStyle: paragraphStyle
+            ]
+        )
+        attributed.append(NSAttributedString(string: "✓", attributes: [
+            .font: UIFont.systemFont(ofSize: 14),
+            .foregroundColor: successColor
+        ]))
+        self.versionLabel.attributedText = attributed
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.versionLabel.attributedText = self?.getVersionAttributedString()
+        }
+    }
+    
+    
+    func update()
     {
-        AppManager.shared.authenticate(presentingViewController: self) { (result) in
-            DispatchQueue.main.async {
-                switch result
-                {
-                case .failure(OperationError.cancelled): break
-                case .failure(let error):
-                    let toastView = ToastView(error: error)
-                    toastView.show(in: self)
-                    
-                case .success:
-                    self.update()
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            let currentActiveTeam = try? await AuthManager.shared.getAuthenticatedTeam()
+            let appleID = AuthManager.shared.currentAppleID
+            verboseLog("[SettingsVC] update() called. activeTeam: \(currentActiveTeam?.identifier ?? "nil"), account: \(appleID ?? "nil")")
+            
+            if let team = currentActiveTeam, AuthManager.shared.isAuthenticated
+            {
+                self.accountNameLabel.text = team.name
+                self.accountEmailLabel.text = appleID
+                self.accountTypeLabel.text = team.type.localizedDescription
+                
+                self.activeTeam = team
+                self.startAccountVerification(for: team)
+            }
+            else
+            {
+                self.activeTeam = nil
+                self.accountVerificationTask?.cancel()
+                self.accountVerificationTask = nil
+                self.accountStatus = .completed
+                self.updateAccountCardRowStyles()
+            }
+            self.tableView.reloadData()
+        }
+        
+        // AppRefreshRow
+        self.backgroundRefreshSwitch.isOn = UserDefaults.standard.isBackgroundRefreshEnabled
+        self.noIdleTimeoutSwitch.isOn = UserDefaults.standard.isIdleTimeoutDisableEnabled
+        self.disableAppLimitSwitch.isOn = UserDefaults.standard.isAppLimitDisabled
+
+        // BetaTestingRow
+        self.betaUpdatesSwitch.isOn = UserDefaults.standard.isBetaUpdatesEnabled
+        self.betaTrackPopupButton.isEnabled = UserDefaults.standard.isBetaUpdatesEnabled
+
+        // DiagnosticsRow (managed via DeveloperOptionsView)
+        self.disableResponseCachingSwitch?.isOn = UserDefaults.standard.responseCachingDisabled
+        self.verboseOperationsLoggingSwitch?.isOn = UserDefaults.standard.isVerboseOperationsLoggingEnabled
+        self.altSignVerboseLoggingSwitch?.isOn = UserDefaults.standard.isAltSignVerboseLoggingEnabled
+        self.minimuxerVerboseLoggingSwitch?.isOn = UserDefaults.standard.isMinimuxerVerboseLoggingEnabled
+        self.rotateLogsOnStartupSwitch?.isOn = UserDefaults.standard.isRotateLogsOnStartupEnabled
+        self.recreateDatabaseSwitch?.isOn = UserDefaults.standard.recreateDatabaseOnNextStart
+
+        if self.isViewLoaded
+        {
+            self.tableView.reloadData()
+        }
+    }
+    
+    private func startAccountVerification(for team: ALTTeam)
+    {
+        self.accountVerificationTask?.cancel()
+        self.accountVerificationTask = Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            if !UserDefaults.standard.isDeviceRegistered {
+                self.accountStatus = .checking
+                self.tableView.reloadData()
+                self.updateAccountCardRowStyles()
+            }
+            let status = await AccountVerificationRow.verifyStatus(for: team)
+            if !Task.isCancelled {
+                self.accountStatus = status
+                self.tableView.reloadData()
+                self.updateAccountCardRowStyles()
+            }
+        }
+    }
+    
+    private func updateAccountCardRowStyles()
+    {
+        guard self.isViewLoaded else { return }
+        let typeIndexPath = IndexPath(row: 2, section: Section.account.rawValue)
+        if let typeCell = self.tableView.cellForRow(at: typeIndexPath) as? InsetGroupTableViewCell {
+            typeCell.style = (self.accountStatus == .completed) ? .bottom : .middle
+        }
+    }
+    
+    private func resolvePendingAccountActions()
+    {
+        guard let team = self.activeTeam else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            await AccountVerificationRow.resolvePendingActions(for: self.accountStatus, team: team, presentingViewController: self)
+            self.startAccountVerification(for: team)
+        }
+    }
+    
+    private func prepare(_ settingsHeaderFooterView: SettingsHeaderFooterView, for section: Section, isHeader: Bool)
+    {
+        settingsHeaderFooterView.primaryLabel.isHidden = !isHeader
+        settingsHeaderFooterView.secondaryLabel.isHidden = isHeader
+        settingsHeaderFooterView.button.isHidden = true
+        
+        settingsHeaderFooterView.layoutMargins.bottom = isHeader ? 0 : 8
+        
+        let theme = CSSThemeManager.shared
+        if theme.isActive {
+            settingsHeaderFooterView.primaryLabel.textColor = theme.textSecondaryColor(default: .secondaryLabel)
+            settingsHeaderFooterView.secondaryLabel.textColor = theme.textMutedColor(default: .tertiaryLabel)
+            settingsHeaderFooterView.button.tintColor = theme.accentColor(default: .altPrimary)
+        }
+        
+        switch section
+        {
+        case .signIn:
+            if isHeader
+            {
+                settingsHeaderFooterView.primaryLabel.text = NSLocalizedString("ACCOUNT", comment: "")
+            }
+            else
+            {
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Sign in with your Apple ID to download apps from SideStore.", comment: "")
+            }
+            
+        case .patreon:
+            if isHeader
+            {
+                settingsHeaderFooterView.primaryLabel.text = NSLocalizedString("SUPPORT US", comment: "")
+            }
+            else
+            {
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Support the SideStore Team by following our socials or becoming a patron!", comment: "")
+            }
+
+        case .account:
+            settingsHeaderFooterView.primaryLabel.text = NSLocalizedString("ACCOUNT", comment: "")
+            
+            settingsHeaderFooterView.button.setTitle(NSLocalizedString("SIGN OUT", comment: ""), for: .normal)
+            settingsHeaderFooterView.button.addTarget(self, action: #selector(SettingsViewController.signOut(_:)), for: .primaryActionTriggered)
+            settingsHeaderFooterView.button.isHidden = false
+            
+        case .appRefresh:
+            if isHeader
+            {
+                settingsHeaderFooterView.primaryLabel.text = NSLocalizedString("REFRESHING APPS", comment: "")
+            }
+            else
+            {
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Enable Background Refresh to automatically refresh apps in the background when connected to Wi-Fi. \n\nEnable Disable Idle Timeout to allow SideStore to keep your device awake during a refresh or install of any apps.", comment: "")
+            }
+            
+        case .display:
+            if isHeader
+            {
+                settingsHeaderFooterView.primaryLabel.text = NSLocalizedString("DISPLAY", comment: "")
+            }
+            else
+            {
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Personalize your SideStore experience by choosing an alternate app icon.", comment: "")
+            }
+            
+            
+        case .instructions:
+            break
+            
+        case .techyThings:
+            if isHeader
+            {
+                settingsHeaderFooterView.primaryLabel.text = NSLocalizedString("TECHY THINGS", comment: "")
+            }
+            else
+            {
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Free up disk space by removing non-essential data, such as temporary files and backups for uninstalled apps.", comment: "")
+            }
+            
+        case .credits:
+            settingsHeaderFooterView.primaryLabel.text = NSLocalizedString("CREDITS", comment: "")
+            
+        case .advancedSettings:
+            settingsHeaderFooterView.primaryLabel.text = NSLocalizedString("ADVANCED SETTINGS", comment: "")
+
+        case .betaTesting:
+            if isHeader
+            {
+                settingsHeaderFooterView.primaryLabel.text = NSLocalizedString("BETA TESTING", comment: "")
+            }
+            else
+            {
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString(
+                    """
+                    Opt in for beta testing to receive regular updates and early previews of upcoming releases.\n
+                    Please note that these builds are experimental and may be unstable or break unexpectedly.
+                    """,
+                    comment: ""
+                )
+            }
+            
+        case .diagnostics:
+            settingsHeaderFooterView.primaryLabel.text = NSLocalizedString("DIAGNOSTICS", comment: "")
+        }
+    }
+    
+    private func preferredHeight(for settingsHeaderFooterView: SettingsHeaderFooterView, in section: Section, isHeader: Bool) -> CGFloat
+    {
+        let widthConstraint = settingsHeaderFooterView.contentView.widthAnchor.constraint(equalToConstant: tableView.bounds.width)
+        NSLayoutConstraint.activate([widthConstraint])
+        defer { NSLayoutConstraint.deactivate([widthConstraint]) }
+        
+        self.prepare(settingsHeaderFooterView, for: section, isHeader: isHeader)
+        
+        let size = settingsHeaderFooterView.contentView.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+        return size.height
+    }
+    
+    private func isSectionHidden(_ section: Section) -> Bool
+    {
+        switch section
+        {
+        default: return false
+        }
+    }
+    
+    private func applyCSSTheme(to cell: UITableViewCell)
+    {
+        let theme = CSSThemeManager.shared
+        guard theme.isActive else { return }
+        
+        let cardBg = theme.color(for: "settings-cell", property: "background-color", default: theme.surfaceColor(default: UIColor.white.withAlphaComponent(0.08)))
+        let textPrimary = theme.textPrimaryColor(default: .white)
+        let textSecondary = theme.textSecondaryColor(default: UIColor.white.withAlphaComponent(0.6))
+        
+        if let insetCell = cell as? InsetGroupTableViewCell {
+            insetCell.insetView.backgroundColor = cardBg
+        } else {
+            cell.backgroundColor = cardBg
+        }
+        
+        func styleLabels(in view: UIView) {
+            for subview in view.subviews {
+                if let label = subview as? UILabel {
+                    if label === accountEmailLabel || label === accountTypeLabel {
+                        label.textColor = textSecondary
+                    } else {
+                        label.textColor = textPrimary
+                    }
+                } else {
+                    styleLabels(in: subview)
                 }
             }
         }
+        styleLabels(in: cell.contentView)
+    }
+}
+
+private extension SettingsViewController
+{
+    func signIn()
+    {
+        debugLog("[SettingsVC] signIn() invoked by user action")
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                let result = try await AuthManager.shared.signIn(presentingViewController: self)
+                debugLog("[SettingsVC] signIn() authentication succeeded for team: \(result.team.name) (\(result.team.identifier))")
+            } catch is CancellationError {
+                debugLog("[SettingsVC] signIn() authentication cancelled by user")
+            } catch {
+                debugLog("[SettingsVC] signIn() authentication failed with error: \(error)")
+                let toastView = ToastView(error: error)
+                toastView.show(in: self.view)
+            }
+            
+            debugLog("[SettingsVC] signIn() calling update()...")
+            self.update()
+        }
     }
     
-    func signOutButtonTapped()
+    @objc func signOut(_ sender: UIBarButtonItem)
     {
-        let alertController = UIAlertController(title: NSLocalizedString("Are you sure you want to sign out?", comment: ""),
-                                                message: NSLocalizedString("You will no longer be able to install or refresh apps once you sign out.", comment: ""),
-                                                preferredStyle: .actionSheet)
-        alertController.addAction(UIAlertAction(title: NSLocalizedString("Sign Out", comment: ""), style: .destructive) { (action) in
-            self.signOut()
-        })
-        alertController.addAction(.cancel)
+        debugLog("[SettingsVC] signOut() invoked by user action")
+        let contentVC = SignOutAlertViewController()
+        
+        let alertController = UIAlertController(
+            title: NSLocalizedString("Sign Out", comment: ""),
+            message: NSLocalizedString("Are you sure you want to sign out? You will no longer be able to install or refresh apps once you sign out.", comment: ""),
+            preferredStyle: .alert
+        )
+        
+        alertController.setValue(contentVC, forKey: "contentViewController")
+        
+        let cancelAction = UIAlertAction(title: NSLocalizedString("Cancel", comment: ""), style: .cancel, handler: nil)
+        
+        let signOutAction = UIAlertAction(title: NSLocalizedString("Sign Out", comment: ""), style: .destructive) { [weak self] _ in
+            let keepCert = contentVC.isChecked
+            let keepAnisette = contentVC.isKeepAnisetteChecked
+            let keepAnisetteHeaders = contentVC.isKeepAnisetteHeadersChecked
+            let keepSideSignHeaders = contentVC.isKeepSideSignHeadersChecked
+            Task.detached { [weak self] in
+                await AuthManager.shared.signOut(
+                    keepCertificate: keepCert,
+                    keepAnisetteData: keepAnisette,
+                    keepAnisetteHeaders: keepAnisetteHeaders,
+                    keepSideSignHeaders: keepSideSignHeaders
+                )
+                await MainActor.run {
+                    self?.update()
+                }
+            }
+        }
+        
+        alertController.addAction(cancelAction)
+        alertController.addAction(signOutAction)
+        
         self.present(alertController, animated: true, completion: nil)
     }
     
-    func signOut()
-    {
-        DatabaseManager.shared.signOut { (error) in
-            DispatchQueue.main.async {
-                if let error = error
-                {
-                    let toastView = ToastView(error: error)
-                    toastView.show(in: self)
-                }
-                
-                self.update()
-            }
-        }
-    }
-    
-    func patreonButtonTapped()
-    {
-        if let account = self.patreonAccount
-        {
-            let message = String(format: NSLocalizedString("SideStore is currently linked with the Patreon account %@.", comment: ""), account.name)
+    @IBAction func toggleDisableAppLimit(_ sender: UISwitch) {
+        if UserDefaults.standard.isCowExploitSupported || !ProcessInfo().sparseRestorePatched {
+            // accept state change only when valid
+            UserDefaults.standard.isAppLimitDisabled = sender.isOn
             
-            let alertController = UIAlertController(title: nil, message: message, preferredStyle: .actionSheet)
-            alertController.addAction(UIAlertAction(title: NSLocalizedString("Unlink Patreon Account", comment: ""), style: .destructive, handler: { (action) in
-                self.signOutPatreon()
-            }))
-            alertController.addAction(.cancel)
-            
-            self.present(alertController, animated: true, completion: nil)
-        }
-        else
-        {
-            self.signInPatreon()
-        }
-    }
-    
-    func signInPatreon()
-    {
-        PatreonAPI.shared.authenticate(presentingViewController: self) { (result) in
-            DispatchQueue.main.async {
-                switch result
-                {
-                case .failure(URLError.cancelled), .failure(OperationError.cancelled): break
-                case .failure(let error):
-                    let toastView = ToastView(error: error)
-                    toastView.show(in: self)
-                    
-                case .success:
-                    self.update()
-                }
-            }
-        }
-    }
-    
-    func signOutPatreon()
-    {
-        PatreonAPI.shared.signOut { (result) in
-            DispatchQueue.main.async {
-                switch result
-                {
-                case .failure(let error):
-                    let toastView = ToastView(error: error)
-                    toastView.show(in: self)
-                    
-                case .success:
-                    self.update()
-                }
-            }
-        }
-    }
-    
-    func toggleActiveAppLimit()
-    {
-        guard self.activeAppsLimit != nil else { return }
-        
-        if UserDefaults.standard.isAppLimitDisabled
-        {
-            UserDefaults.standard.isAppLimitDisabled = false
-            
-            self.reload()
-        }
-        else
-        {
-            let title = NSLocalizedString("Remove 3-App Limit?", comment: "")
-            let message = NSLocalizedString("""
-            SideStore allows you to install up to 10 apps at a time when using the MacDirtyCow exploit or on iOS 16.1.2 and below.
-            
-            After disabling this limit, you can deactivate and activate apps freely from the My Apps tab.
-            """, comment: "")
-            
-            let alertController = UIAlertController(title: title, message: message, preferredStyle: .alert)
-            alertController.addAction(.cancel)
-            alertController.addAction(UIAlertAction(title: NSLocalizedString("Remove Limit", comment: ""), style: .default) { (action) in
-                UserDefaults.standard.isAppLimitDisabled = true
-                self.reload()
-            })
-            self.present(alertController, animated: true, completion: nil)
-        }
-    }
-    
-    func clearAppCache()
-    {
-        let title = NSLocalizedString("Clear App Cache?", comment: "")
-        let message = NSLocalizedString("Are you sure you want to clear SideStore's app cache? This will delete any cached data for downloaded apps.", comment: "")
-        
-        let alertController = UIAlertController(title: title, message: message, preferredStyle: .actionSheet)
-        alertController.addAction(.cancel)
-        alertController.addAction(UIAlertAction(title: title, style: .destructive) { _ in
-            do
+            if UserDefaults.standard.activeAppsLimit != nil
             {
-                let cacheDirectory = FileManager.default.AltStoreCachesDirectory
-                if FileManager.default.fileExists(atPath: cacheDirectory.path)
-                {
-                    try FileManager.default.removeItem(at: cacheDirectory)
-                }
-                
-                try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true, attributes: nil)
-                
-                let toastView = ToastView(text: NSLocalizedString("Cleared App Cache", comment: ""), detailText: nil)
-                toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
+                UserDefaults.standard.activeAppsLimit = InstalledApp.freeAccountActiveAppsLimit
             }
-            catch
-            {
-                let toastView = ToastView(error: error)
-                toastView.show(in: self.navigationController?.view ?? self.view)
+        }
+    }
+    
+    @IBAction func toggleVerboseOperationsLogging(_ sender: UISwitch) {
+        UserDefaults.standard.isVerboseOperationsLoggingEnabled = sender.isOn
+    }
+
+    @IBAction func toggleAltSignVerboseLogging(_ sender: UISwitch) {
+        UserDefaults.standard.isAltSignVerboseLoggingEnabled = sender.isOn
+        AltSign.setLogging(sender.isOn)
+    }
+
+    @IBAction func toggleMinimuxerVerboseLogging(_ sender: UISwitch) {
+        UserDefaults.standard.isMinimuxerVerboseLoggingEnabled = sender.isOn
+        minimuxerSetLogging(sender.isOn)
+    }
+
+    @IBAction func toggleRotateLogsOnStartup(_ sender: UISwitch) {
+        UserDefaults.standard.isRotateLogsOnStartupEnabled = sender.isOn
+        let suffixFormat: SuffixFormat = sender.isOn ? .timestamp : .none
+        let appDelegate = UIApplication.shared.delegate as! AppDelegate
+        appDelegate.consoleLog.updateConfiguration(baseName: "console", suffixFormat: suffixFormat, policy: .immediate)
+    }
+
+    @IBAction func toggleRecreateDatabaseSwitch(_ sender: UISwitch) {
+        UserDefaults.standard.recreateDatabaseOnNextStart = sender.isOn
+
+        guard sender.isOn else { return }
+        
+        DispatchQueue.global().async {
+            for time in (1...3).reversed() {
+                DispatchQueue.main.async {
+                    guard UserDefaults.standard.recreateDatabaseOnNextStart else {
+                        return
+                    }
+                    let toast = ToastView(text: "Database Delete Scheduled on Next Launch", detailText: "App is closing in \(time) seconds...")
+                    toast.tintColor = .altPrimary
+                    toast.preferredDuration = 1
+                    toast.show(in: self)
+                }
+                sleep(1)
+            }
+
+            DispatchQueue.main.async {
+                guard UserDefaults.standard.recreateDatabaseOnNextStart else {
+                    return
+                }
+                exit(0)
+            }
+        }
+    }
+
+    
+    @IBAction func toggleEnableBetaUpdates(_ sender: UISwitch) {
+        betaTrackLabel.isEnabled = sender.isOn
+        betaTrackPopupButton.isEnabled = sender.isOn
+        UserDefaults.standard.isBetaUpdatesEnabled = sender.isOn
+    }
+    
+    @IBAction func toggleIsBackgroundRefreshEnabled(_ sender: UISwitch)
+    {
+        UserDefaults.standard.isBackgroundRefreshEnabled = sender.isOn
+    }
+    
+    @IBAction func toggleNoIdleTimeoutEnabled(_ sender: UISwitch)
+    {
+        UserDefaults.standard.isIdleTimeoutDisableEnabled = sender.isOn
+    }
+    
+    @IBAction func toggleDisableResponseCaching(_ sender: UISwitch)
+    {
+        UserDefaults.standard.responseCachingDisabled = sender.isOn
+    }
+    
+    #if !os(tvOS)
+    func addRefreshAppsShortcut()
+    {
+        guard let shortcut = INShortcut(intent: INInteraction.refreshAllApps().intent) else { return }
+        
+        let viewController = INUIAddVoiceShortcutViewController(shortcut: shortcut)
+        viewController.delegate = self
+        viewController.modalPresentationStyle = .formSheet
+        self.present(viewController, animated: true, completion: nil)
+    }
+    #endif
+    
+    func clearCache()
+    {
+        let makeCacheTitle: (String) -> String = { sizeString in
+            String(format: NSLocalizedString("Are you sure you want to clear SideStore's cache?\n\nCache Size: %@", comment: ""), sizeString)
+        }
+        let alertController = UIAlertController(title: makeCacheTitle(NSLocalizedString("Calculating…", comment: "")),
+                                                message: NSLocalizedString("This will remove all temporary files as well as backups for uninstalled apps.", comment: ""),
+                                                preferredStyle: .actionSheet)
+        alertController.addAction(UIAlertAction(title: UIAlertAction.cancel.title, style: UIAlertAction.cancel.style) { [weak self] _ in
+            self?.tableView.indexPathForSelectedRow.map { self?.tableView.deselectRow(at: $0, animated: true) }
+        })
+        alertController.addAction(UIAlertAction(title: NSLocalizedString("Clear Cache", comment: ""), style: .destructive) { [weak self] _ in
+            AppManager.shared.clearAppCache { result in
+                DispatchQueue.main.async {
+                    self?.tableView.indexPathForSelectedRow.map { self?.tableView.deselectRow(at: $0, animated: true) }
+                    
+                    switch result
+                    {
+                    case .success: break
+                    case .failure(let error):
+                        let alertController = UIAlertController(title: NSLocalizedString("Unable to Clear Cache", comment: ""), message: error.localizedDescription, preferredStyle: .alert)
+                        alertController.addAction(.ok)
+                        self?.present(alertController, animated: true)
+                    }
+                }
             }
         })
         
+        if let popoverController = alertController.popoverPresentationController {
+            popoverController.sourceView = self.view
+            popoverController.sourceRect = CGRect(x: self.view.bounds.midX, y: self.view.bounds.midY, width: 0, height: 0)
+        }
+        
         self.present(alertController, animated: true)
+        
+        CacheManager.shared.formattedCacheSize { [weak alertController] sizeString in
+            DispatchQueue.main.async {
+                alertController?.title = makeCacheTitle(sizeString)
+            }
+        }
+    }
+    
+    @IBAction func handleDebugModeGesture(_ gestureRecognizer: UISwipeGestureRecognizer)
+    {
+        self.debugGestureCounter += 1
+        self.debugGestureTimer?.invalidate()
+        
+        if self.debugGestureCounter >= 3
+        {
+            self.debugGestureCounter = 0
+            
+            UserDefaults.standard.isDebugModeEnabled.toggle()
+            self.tableView.reloadData()
+        }
+        else
+        {
+            self.debugGestureTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: false) { [weak self] (timer) in
+                self?.debugGestureCounter = 0
+            }
+        }
+    }
+    
+    func openTwitter(username: String)
+    {
+        let twitterAppURL = URL(string: "twitter://user?screen_name=" + username)!
+        UIApplication.shared.open(twitterAppURL, options: [:]) { (success) in
+            if success
+            {
+                if let selectedIndexPath = self.tableView.indexPathForSelectedRow
+                {
+                    self.tableView.deselectRow(at: selectedIndexPath, animated: true)
+                }
+            }
+            else
+            {
+                let safariURL = URL(string: "https://twitter.com/" + username)!
+                self.openWebURL(safariURL, preferredTintColor: .altPrimary)
+            }
+        }
+    }
+    
+    func openMastodon(username: String)
+    {
+        let components = username.split(separator: "@")
+        guard components.count == 2 else { return }
+        
+        let server = String(components[1])
+        let username = "@" + String(components[0])
+        
+        guard let serverURL = URL(string: "https://" + server) else { return }
+        
+        let mastodonURL = serverURL.appendingPathComponent(username)
+        UIApplication.shared.open(mastodonURL, options: [:])
+    }
+    
+    func openThreads(username: String)
+    {
+        let safariURL = URL(string: "https://www.threads.net/@" + username)!
+        UIApplication.shared.open(safariURL, options: [:])
+    }
+    
+    @IBAction func followAltStoreMastodon()
+    {
+        self.openMastodon(username: "@sidestoreio@fosstodon.org")
+    }
+    
+    @IBAction func followAltStoreThreads()
+    {
+        self.openThreads(username: "sidestore.io")
+    }
+    
+    @IBAction func followAltStoreTwitter()
+    {
+        self.openTwitter(username: "sidestoreio")
+    }
+    
+    @IBAction func followAltStoreGitHub()
+    {
+        UIApplication.shared.open(AppConstants.URLs.sideStoreGitHub, options: [:])
+    }
+}
+
+private extension SettingsViewController
+{
+    @objc func openPatreonSettings(_ notification: Notification)
+    {
+        guard self.presentedViewController == nil else { return }
+                
+        UIView.performWithoutAnimation {
+            self.navigationController?.popViewController(animated: false)
+            self.performSegue(withIdentifier: "showPatreon", sender: nil)
+        }
+    }
+
+    @objc func openErrorLog(_: Notification) {
+        guard self.presentedViewController == nil else { return }
+
+        self.navigationController?.popViewController(animated: false)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            self.performSegue(withIdentifier: "showErrorLog", sender: nil)
+        }
     }
 }
 
@@ -426,14 +1074,60 @@ extension SettingsViewController
 {
     override func numberOfSections(in tableView: UITableView) -> Int
     {
-        var sections = Section.allCases.count
+        var numberOfSections = super.numberOfSections(in: tableView)
+        
         if !UserDefaults.standard.isDebugModeEnabled
         {
-            // Hide App Data section unless Debug Mode is enabled.
-            sections -= 1
+            numberOfSections -= 1
         }
         
-        return sections
+        return numberOfSections
+    }
+    
+    override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat
+    {
+        if Section.allCases[indexPath.section] == .account && indexPath.row == 3 {
+            return AccountVerificationRow.preferredHeight
+        }
+        let effectiveIndexPath: IndexPath
+        if Section.allCases[indexPath.section] == .advancedSettings {
+            let row = AdvancedSettingsRow.allCases[indexPath.row]
+            effectiveIndexPath = IndexPath(row: row.rawValue, section: indexPath.section)
+        } else {
+            effectiveIndexPath = indexPath
+        }
+        return super.tableView(tableView, heightForRowAt: effectiveIndexPath)
+    }
+
+    override func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath)
+    {
+        if Section.allCases[indexPath.section] == .account {
+            if indexPath.row == 2, let insetCell = cell as? InsetGroupTableViewCell {
+                insetCell.style = (self.accountStatus == .completed) ? .bottom : .middle
+            } else if indexPath.row == 3, let actionCell = cell as? AccountVerificationRow {
+                actionCell.style = .bottom
+                actionCell.backgroundColor = .clear
+                actionCell.contentView.backgroundColor = .clear
+                actionCell.backgroundConfiguration = .clear()
+            }
+        }
+        
+        self.applyCSSTheme(to: cell)
+    }
+
+    override func tableView(_ tableView: UITableView, indentationLevelForRowAt indexPath: IndexPath) -> Int
+    {
+        if Section.allCases[indexPath.section] == .account && indexPath.row == 3 {
+            return 0
+        }
+        let effectiveIndexPath: IndexPath
+        if Section.allCases[indexPath.section] == .advancedSettings {
+            let row = AdvancedSettingsRow.allCases[indexPath.row]
+            effectiveIndexPath = IndexPath(row: row.rawValue, section: indexPath.section)
+        } else {
+            effectiveIndexPath = indexPath
+        }
+        return super.tableView(tableView, indentationLevelForRowAt: effectiveIndexPath)
     }
     
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int
@@ -441,232 +1135,110 @@ extension SettingsViewController
         let section = Section.allCases[section]
         switch section
         {
-        case .signIn:
-            guard self.account == nil else { return 0 }
-            return super.tableView(tableView, numberOfRowsInSection: section.rawValue)
-            
-        case .appleID:
-            guard self.account != nil else { return 0 }
-            
-            var rows = super.tableView(tableView, numberOfRowsInSection: section.rawValue)
-            if self.activeAppsLimit == nil
-            {
-                // No active app limit, so hide the cell.
-                rows -= 1
-            }
-            
-            return rows
-            
-        case .patreon:
-            return super.tableView(tableView, numberOfRowsInSection: section.rawValue)
-            
-        case .anisette:
-            if UserDefaults.standard.textInputAnisetteURL
-            {
-                return 3 // Text field, Toggle, Reset
-            }
-            else
-            {
-                return 3 // Picker, Toggle, Reset
-            }
-            
-        case .pairingFile:
-            return super.tableView(tableView, numberOfRowsInSection: section.rawValue)
-            
-        case .refreshAttempts:
-            guard self.refreshAttemptsDataSource.itemCount > 0 else { return 0 }
-            guard UserDefaults.standard.isBackgroundRefreshEnabled else { return 0 }
-            return super.tableView(tableView, numberOfRowsInSection: section.rawValue)
-            
-        case .errorLog:
-            let count = super.tableView(tableView, numberOfRowsInSection: section.rawValue)
-            return count
-            
-        case .debug:
-            return super.tableView(tableView, numberOfRowsInSection: section.rawValue)
-            
-        case .appData:
-            return super.tableView(tableView, numberOfRowsInSection: section.rawValue)
-            
-        case .credits:
-            return super.tableView(tableView, numberOfRowsInSection: section.rawValue)
+        case _ where isSectionHidden(section): return 0
+        case .signIn: return (self.activeTeam == nil) ? 1 : 0
+        case .account: return (self.activeTeam == nil) ? 0 : (self.accountStatus == .completed ? 3 : 4)
+        case .appRefresh: return AppRefreshRow.allCases.count
+        case .advancedSettings: return AdvancedSettingsRow.allCases.count
+        default: return super.tableView(tableView, numberOfRowsInSection: section.rawValue)
         }
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell
     {
-        let section = Section.allCases[indexPath.section]
-        switch section
-        {
-        case .anisette:
-            return self.tableView(tableView, anisetteCellForRowAt: indexPath)
-            
-        case .refreshAttempts:
-            let cell = super.tableView(tableView, cellForRowAt: indexPath)
-            
-            for subview in cell.contentView.subviews
-            {
-                subview.removeFromSuperview()
-            }
-            
-            let stackView = UIStackView()
-            stackView.axis = .vertical
-            stackView.translatesAutoresizingMaskIntoConstraints = false
-            cell.contentView.addSubview(stackView)
-            
-            for (index, refreshAttempt) in (self.refreshAttemptsDataSource.fetchedResultsController.fetchedObjects ?? []).enumerated()
-            {
-                let indexPath = IndexPath(row: index, section: 0)
-                
-                let attemptCell = self.refreshAttemptsCell.instantiateView() as! RefreshAttemptTableViewCell
-                attemptCell.contentView.translatesAutoresizingMaskIntoConstraints = false
-                self.refreshAttemptsDataSource.cellConfigurationHandler(attemptCell, refreshAttempt, indexPath)
-                
-                if index == self.refreshAttemptsDataSource.itemCount - 1
-                {
-                    attemptCell.separatorView.isHidden = true
-                }
-                
-                stackView.addArrangedSubview(attemptCell.contentView)
-            }
-            
-            NSLayoutConstraint.activate([
-                stackView.topAnchor.constraint(equalTo: cell.contentView.topAnchor),
-                stackView.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor),
-                stackView.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor),
-                stackView.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor),
-            ])
-            
+        if Section.allCases[indexPath.section] == .account && indexPath.row == 3 {
+            let cell = tableView.dequeueReusableCell(withIdentifier: AccountVerificationRow.reuseIdentifier) as? AccountVerificationRow
+                ?? AccountVerificationRow()
+            cell.configure(with: self.accountStatus)
+            cell.style = .bottom
             return cell
-            
-        case .appleID:
-            let cell = super.tableView(tableView, cellForRowAt: indexPath)
-            
-            let row = AppleIDRow.allCases[indexPath.row]
-            switch row
-            {
-            case .account: break
-            case .activeAppLimit:
-                if UserDefaults.standard.isAppLimitDisabled
-                {
-                    cell.detailTextLabel?.text = NSLocalizedString("Disabled", comment: "")
+        }
+        
+        let effectiveIndexPath: IndexPath
+        if Section.allCases[indexPath.section] == .advancedSettings {
+            let row = AdvancedSettingsRow.allCases[indexPath.row]
+            effectiveIndexPath = IndexPath(row: row.rawValue, section: indexPath.section)
+        } else {
+            effectiveIndexPath = indexPath
+        }
+        let cell = super.tableView(tableView, cellForRowAt: effectiveIndexPath)
+        
+        if Section.allCases[indexPath.section] == .account {
+            if indexPath.row == 2 {
+                if let insetCell = cell as? InsetGroupTableViewCell {
+                    insetCell.style = (self.accountStatus == .completed) ? .bottom : .middle
                 }
             }
-            
-            return cell
-            
-        case .debug:
-            let cell = super.tableView(tableView, cellForRowAt: indexPath)
-            if indexPath.row == DebugRow.verboseLog.rawValue
-            {
-                let switchControl = UISwitch()
-                switchControl.isOn = UserDefaults.standard.isVerboseLoggingEnabled
-                switchControl.addTarget(self, action: #selector(SettingsViewController.toggleVerboseLogging(_:)), for: .valueChanged)
-                cell.accessoryView = switchControl
-            }
-            return cell
-            
-        default:
-            let cell = super.tableView(tableView, cellForRowAt: indexPath)
-            return cell
         }
-    }
-    
-    override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat
-    {
-        let section = Section.allCases[indexPath.section]
-        switch section
+        
+
+        if AppRefreshRow.AllCases().count == 1
         {
-        case .refreshAttempts: return UITableView.automaticDimension
-        case .anisette:
-            if indexPath.row == 0 && UserDefaults.standard.textInputAnisetteURL
+            if let cell = cell as? InsetGroupTableViewCell,
+               indexPath.section == Section.appRefresh.rawValue,
+               indexPath.row == AppRefreshRow.backgroundRefresh.rawValue
             {
-                return 44.0
+                cell.style = .single
             }
-            return super.tableView(tableView, heightForRowAt: indexPath)
-            
-        default: return super.tableView(tableView, heightForRowAt: indexPath)
         }
-    }
-    
-    override func tableView(_ tableView: UITableView, estimatedHeightForRowAt indexPath: IndexPath) -> CGFloat
-    {
-        let section = Section.allCases[indexPath.section]
-        switch section
+        
+        if let cell = cell as? InsetGroupTableViewCell,
+               indexPath.section == Section.appRefresh.rawValue,
+               indexPath.row == AppRefreshRow.allCases.count-1      // last row
         {
-        case .refreshAttempts: return 132
-        default: return UITableView.automaticDimension
+            cell.setValue(3, forKey: "style")
         }
+        
+        
+        return cell
     }
     
-    override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String?
+    override func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView?
     {
         let section = Section.allCases[section]
         switch section
         {
-        case .signIn where self.account != nil: return nil
-        case .appleID where self.account == nil: return nil
-        case .refreshAttempts where self.refreshAttemptsDataSource.itemCount == 0 || !UserDefaults.standard.isBackgroundRefreshEnabled: return nil
-        default: return super.tableView(tableView, titleForHeaderInSection: section.rawValue)
+        case _ where isSectionHidden(section): return nil
+        case .signIn where self.activeTeam != nil: return nil
+        case .account where self.activeTeam == nil: return nil
+        case .signIn, .account, .patreon, .display, .appRefresh, .techyThings, .credits, .advancedSettings, .betaTesting, .diagnostics:
+            let headerView = tableView.dequeueReusableHeaderFooterView(withIdentifier: "HeaderFooterView") as! SettingsHeaderFooterView
+            self.prepare(headerView, for: section, isHeader: true)
+            return headerView
+            
+        case .instructions: return nil
         }
     }
     
+    override func tableView(_ tableView: UITableView, viewForFooterInSection section: Int) -> UIView?
+    {
+        let section = Section.allCases[section]
+        switch section
+        {
+        case _ where isSectionHidden(section): return nil
+        case .signIn where self.activeTeam != nil: return nil
+        case .signIn, .patreon, .display, .appRefresh, .techyThings, .betaTesting:
+            let footerView = tableView.dequeueReusableHeaderFooterView(withIdentifier: "HeaderFooterView") as! SettingsHeaderFooterView
+            self.prepare(footerView, for: section, isHeader: false)
+            return footerView
+            
+        case .account, .credits, .advancedSettings, .instructions, .diagnostics: return nil
+        }
+    }
+
     override func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat
     {
         let section = Section.allCases[section]
         switch section
         {
-        case .signIn where self.account != nil: return .leastNormalMagnitude
-        case .appleID where self.account == nil: return .leastNormalMagnitude
-        case .refreshAttempts where self.refreshAttemptsDataSource.itemCount == 0 || !UserDefaults.standard.isBackgroundRefreshEnabled: return .leastNormalMagnitude
-        default: return super.tableView(tableView, heightForHeaderInSection: section.rawValue)
-        }
-    }
-    
-    override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String?
-    {
-        let section = Section.allCases[section]
-        switch section
-        {
-        case .signIn where self.account != nil: return nil
-        case .appleID:
-            guard self.account != nil else { return nil }
+        case _ where isSectionHidden(section): return 1.0
+        case .signIn where self.activeTeam != nil: return 1.0
+        case .account where self.activeTeam == nil: return 1.0
+        case .signIn, .account, .patreon, .display, .appRefresh, .techyThings, .credits, .advancedSettings, .betaTesting, .diagnostics:
+            let height = self.preferredHeight(for: self.prototypeHeaderFooterView, in: section, isHeader: true)
+            return height
             
-            var footerText: String?
-            
-            if self.activeAppsLimit != nil
-            {
-                footerText = NSLocalizedString("Free Developer accounts are limited to 3 active apps by default.", comment: "")
-            }
-            
-            if let remainingAppIDs = self.remainingAvailableAppIDs, self.team?.type == .free
-            {
-                let remainingFormat: String
-                if remainingAppIDs == 1
-                {
-                    remainingFormat = NSLocalizedString("You can register %@ more App ID with this account this week.", comment: "")
-                }
-                else
-                {
-                    remainingFormat = NSLocalizedString("You can register %@ more App IDs with this account this week.", comment: "")
-                }
-                
-                let remainingText = String(format: remainingFormat, NSNumber(value: remainingAppIDs))
-                
-                if let existingText = footerText
-                {
-                    footerText = existingText + "\n\n" + remainingText
-                }
-                else
-                {
-                    footerText = remainingText
-                }
-            }
-            
-            return footerText
-            
-        case .refreshAttempts where self.refreshAttemptsDataSource.itemCount == 0 || !UserDefaults.standard.isBackgroundRefreshEnabled: return nil
-        default: return super.tableView(tableView, titleForFooterInSection: section.rawValue)
+        case .instructions: return 0.0
         }
     }
     
@@ -675,418 +1247,294 @@ extension SettingsViewController
         let section = Section.allCases[section]
         switch section
         {
-        case .signIn where self.account != nil: return .leastNormalMagnitude
-        case .appleID where self.account == nil: return .leastNormalMagnitude
-        case .refreshAttempts where self.refreshAttemptsDataSource.itemCount == 0 || !UserDefaults.standard.isBackgroundRefreshEnabled: return .leastNormalMagnitude
-        default: return super.tableView(tableView, heightForFooterInSection: section.rawValue)
+        case _ where isSectionHidden(section): return 1.0
+        case .signIn where self.activeTeam != nil: return 1.0
+        case .account where self.activeTeam == nil: return 1.0
+        case .signIn, .patreon, .display, .appRefresh, .techyThings, .betaTesting:
+            let height = self.preferredHeight(for: self.prototypeHeaderFooterView, in: section, isHeader: false)
+            return height
+            
+        case .account, .credits, .advancedSettings, .instructions, .diagnostics: return 0.0
         }
     }
-    
+}
+
+extension SettingsViewController
+{
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath)
     {
-        tableView.deselectRow(at: indexPath, animated: true)
-        
         let section = Section.allCases[indexPath.section]
+        verboseLog("[SettingsVC] didSelectRowAt: section \(section) (index \(indexPath.section)), row \(indexPath.row)")
         switch section
         {
-        case .appleID:
-            switch AppleIDRow.allCases[indexPath.row]
+        case .signIn: self.signIn()
+        case .account:
+            if indexPath.row == 3 {
+                tableView.deselectRow(at: indexPath, animated: true)
+                self.resolvePendingAccountActions()
+            }
+        case .appRefresh:
+            let row = AppRefreshRow.allCases[indexPath.row]
+            switch row
             {
-            case .account: self.signOutButtonTapped()
-            case .activeAppLimit: self.toggleActiveAppLimit()
+            case .backgroundRefresh: break
+            case .noIdleTimeout: break
+            case .disableAppLimit: break
+            case .addToSiri:
+                #if !os(tvOS)
+                self.addRefreshAppsShortcut()
+                #endif
             }
             
-        case .patreon:
-            switch PatreonRow.allCases[indexPath.row]
+        case .techyThings:
+            let row = TechyThingsRow.allCases[indexPath.row]
+            switch row
             {
-            case .account: self.patreonButtonTapped()
-            case .about: break
-            }
-            
-        case .anisette:
-            self.tableView(tableView, didSelectAnisetteRowAt: indexPath)
-            
-        case .pairingFile:
-            self.selectPairingFile()
-            
-        case .debug:
-            self.tableView(tableView, didSelectDebugRowAt: indexPath)
-            
-        default: break
-        }
-    }
-}
-
-// MARK: - Anisette -
-private extension SettingsViewController
-{
-    enum AnisetteRow: Int, CaseIterable
-    {
-        case server = 0
-        case toggleInput = 1
-        case reset = 2
-    }
-    
-    func initializeAnisetteSettings()
-    {
-        self.serverTextField?.delegate = self
-    }
-    
-    func tableView(_ tableView: UITableView, anisetteCellForRowAt indexPath: IndexPath) -> UITableViewCell
-    {
-        guard let row = AnisetteRow(rawValue: indexPath.row) else {
-            return super.tableView(tableView, cellForRowAt: indexPath)
-        }
-        
-        switch row
-        {
-        case .server:
-            if UserDefaults.standard.textInputAnisetteURL
-            {
-                let cell = tableView.dequeueReusableCell(withIdentifier: "ServerURLCell", for: indexPath) as! ServerURLTableViewCell
-                cell.textField.text = UserDefaults.standard.anisetteServer
-                cell.textField.placeholder = "https://..."
-                cell.textField.delegate = self
-                cell.textField.keyboardType = .URL
-                cell.textField.autocorrectionType = .no
-                cell.textField.autocapitalizationType = .none
-                cell.textField.returnKeyType = .done
-                return cell
-            }
-            else
-            {
-                let cell = self.anisetteServerPickerCell!
-                cell.detailTextLabel?.text = AnisetteServer.currentServerName()
-                return cell
-            }
-            
-        case .toggleInput:
-            let cell = UITableViewCell(style: .default, reuseIdentifier: "ToggleAnisetteInputCell")
-            cell.textLabel?.text = NSLocalizedString("Custom Anisette URL", comment: "")
-            
-            let switchControl = UISwitch()
-            switchControl.isOn = UserDefaults.standard.textInputAnisetteURL
-            switchControl.addTarget(self, action: #selector(SettingsViewController.toggleAnisetteURLInput(_:)), for: .valueChanged)
-            cell.accessoryView = switchControl
-            cell.selectionStyle = .none
-            
-            return cell
-            
-        case .reset:
-            return self.resetAnisetteCell
-        }
-    }
-    
-    func tableView(_ tableView: UITableView, didSelectAnisetteRowAt indexPath: IndexPath)
-    {
-        guard let row = AnisetteRow(rawValue: indexPath.row) else { return }
-        
-        switch row
-        {
-        case .server:
-            if !UserDefaults.standard.textInputAnisetteURL
-            {
-                self.presentAnisetteServerPicker()
-            }
-            
-        case .toggleInput:
-            break
-            
-        case .reset:
-            self.resetAnisetteData()
-        }
-    }
-    
-    @objc func toggleAnisetteURLInput(_ sender: UISwitch)
-    {
-        UserDefaults.standard.textInputAnisetteURL = sender.isOn
-        self.tableView.reloadSections(IndexSet(integer: Section.anisette.rawValue), with: .automatic)
-    }
-    
-    func presentAnisetteServerPicker()
-    {
-        let alertController = UIAlertController(title: NSLocalizedString("Select Anisette Server", comment: ""), message: nil, preferredStyle: .actionSheet)
-        
-        for server in AnisetteServer.allCases
-        {
-            let action = UIAlertAction(title: server.name, style: .default) { _ in
-                UserDefaults.standard.anisetteServer = server.rawValue
-                self.tableView.reloadSections(IndexSet(integer: Section.anisette.rawValue), with: .automatic)
-            }
-            
-            if UserDefaults.standard.anisetteServer == server.rawValue
-            {
-                action.setValue(true, forKey: "checked")
-            }
-            
-            alertController.addAction(action)
-        }
-        
-        alertController.addAction(.cancel)
-        
-        if let popover = alertController.popoverPresentationController
-        {
-            popover.sourceView = self.anisetteServerPickerCell
-            popover.sourceRect = self.anisetteServerPickerCell.bounds
-        }
-        
-        self.present(alertController, animated: true)
-    }
-    
-    func resetAnisetteData()
-    {
-        let alertController = UIAlertController(title: NSLocalizedString("Reset Anisette Data?", comment: ""),
-                                                message: NSLocalizedString("This will clear your current Anisette data and generate new data on the next sign in or refresh.", comment: ""),
-                                                preferredStyle: .actionSheet)
-        
-        alertController.addAction(UIAlertAction(title: NSLocalizedString("Reset Anisette Data", comment: ""), style: .destructive) { _ in
-            Keychain.shared.anisetteData = nil
-            
-            let toastView = ToastView(text: NSLocalizedString("Anisette Data Reset", comment: ""), detailText: nil)
-            toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
-        })
-        
-        alertController.addAction(.cancel)
-        self.present(alertController, animated: true)
-    }
-}
-
-// MARK: - Pairing File -
-private extension SettingsViewController
-{
-    func selectPairingFile()
-    {
-        let alertController = UIAlertController(title: NSLocalizedString("Reset Pairing File?", comment: ""),
-                                                message: NSLocalizedString("Are you sure you want to choose a new pairing file?", comment: ""),
-                                                preferredStyle: .actionSheet)
-        
-        alertController.addAction(UIAlertAction(title: NSLocalizedString("Choose Pairing File", comment: ""), style: .destructive) { _ in
-            let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
-            documentPicker.delegate = self
-            documentPicker.allowsMultipleSelection = false
-            self.present(documentPicker, animated: true)
-        })
-        
-        alertController.addAction(.cancel)
-        self.present(alertController, animated: true)
-    }
-    
-    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL])
-    {
-        guard let url = urls.first else { return }
-        
-        DatabaseManager.shared.start( matches: url) { error in
-            DispatchQueue.main.async {
-                if let error = error
-                {
-                    let toastView = ToastView(error: error)
-                    toastView.show(in: self.navigationController?.view ?? self.view)
+            case .healthCheck:
+                let healthCheckView = HealthCheckView()
+                let vc = UIHostingController(rootView: healthCheckView)
+                self.configureHostedViewController(vc)
+                navigationController?.pushViewController(vc, animated: true)
+                
+            case .errorLog: break
+            case .storageExplorer:
+                verboseLog("[SettingsVC] Storage Explorer selected")
+                StorageExplorerView.clearCache()
+                func makeExplorerVC(url: URL? = nil) -> UIViewController {
+                    let onSelectFolder: (URL) -> Void = { [weak self] targetURL in
+                        guard let self = self else { return }
+                        verboseLog("[SettingsVC] Navigating to child folder: \(targetURL.path)")
+                        let childVC = makeExplorerVC(url: targetURL)
+                        self.navigationController?.pushViewController(childVC, animated: true)
+                    }
+                    if let url = url {
+                        verboseLog("[SettingsVC] Creating DirectoryExplorerView for: \(url.path)")
+                        let view = DirectoryExplorerView(url: url, onSelectFolder: onSelectFolder)
+                        let vc = UIHostingController(rootView: view)
+                        self.configureHostedViewController(vc)
+                        return vc
+                    } else {
+                        verboseLog("[SettingsVC] Creating root StorageExplorerView")
+                        let view = StorageExplorerView(onSelectFolder: onSelectFolder)
+                        let vc = UIHostingController(rootView: view)
+                        self.configureHostedViewController(vc)
+                        return vc
+                    }
                 }
-                else
-                {
-                    let toastView = ToastView(text: NSLocalizedString("Pairing File Imported", comment: ""), detailText: nil)
-                    toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
-                    
-                    self.reload()
-                }
+                let vc = makeExplorerVC()
+                verboseLog("[SettingsVC] Pushing root StorageExplorerView controller onto navigationController")
+                navigationController?.pushViewController(vc, animated: true)
+                
+            case .clearCache: self.clearCache()
             }
-        }
-    }
-}
-
-// MARK: - Debug -
-private extension SettingsViewController
-{
-    enum DebugRow: Int, CaseIterable
-    {
-        case errorLog = 0
-        case verboseLog
-        case shareLog
-        case jitRow
-        case udid
-        case profileRow
-        case connectionRow
-        case cacheRow
-    }
-    
-    func tableView(_ tableView: UITableView, didSelectDebugRowAt indexPath: IndexPath)
-    {
-        guard let row = DebugRow(rawValue: indexPath.row) else { return }
-        
-        switch row
-        {
-        case .errorLog:
-            break
             
-        case .verboseLog:
-            break
-            
-        case .shareLog:
-            self.shareLogs()
-            
-        case .jitRow:
-            break
-            
-        case .udid:
-            if let udid = self.udidCell.detailTextLabel?.text
+        case .credits:
+            let row = CreditsRow.allCases[indexPath.row]
+            switch row
             {
-                UIPasteboard.general.string = udid
-                let toastView = ToastView(text: NSLocalizedString("Copied UDID to Clipboard", comment: ""), detailText: nil)
-                toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
+            case .developer: self.openTwitter(username: "sidestoreio")
+            case .operations: self.openTwitter(username: "sidestoreio")
+            case .designer: self.openTwitter(username: "lit_ritt")
+            case .softwareLicenses: break
             }
             
-        case .profileRow:
-            self.reloadProfileStatusLabel()
+            if let selectedIndexPath = self.tableView.indexPathForSelectedRow
+            {
+                self.tableView.deselectRow(at: selectedIndexPath, animated: true)
+            }
             
-        case .connectionRow:
-            self.reloadConnectionStatusLabel()
+        case .advancedSettings:
+            let row = AdvancedSettingsRow.allCases[indexPath.row]
+            switch row
+            {
+            case .sendFeedback:
+                let alertController = UIAlertController(title: "Send Feedback", message: "Choose a method to send feedback:", preferredStyle: .actionSheet)
+                
+                // Option 1: GitHub
+                alertController.addAction(UIAlertAction(title: "GitHub", style: .default) { _ in
+                    self.openWebURL(AppConstants.URLs.sideStoreIssues, preferredTintColor: .altPrimary)
+                })
+                
+                // Option 2: Discord
+                alertController.addAction(UIAlertAction(title: "Discord", style: .default) { _ in
+                    self.openWebURL(AppConstants.URLs.sideStoreDiscord, preferredTintColor: .altPrimary)
+                })
+                
+                #if !os(tvOS)
+                // Option 3: Mail
+                alertController.addAction(UIAlertAction(title: "Send Email", style: .default) { _ in
+                    if MFMailComposeViewController.canSendMail() {
+                        let mailViewController = MFMailComposeViewController()
+                        mailViewController.mailComposeDelegate = self
+                        mailViewController.setToRecipients(["support@sidestore.io"])
+
+                        if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
+                            mailViewController.setSubject("SideStore Beta \(version) Feedback")
+                        } else {
+                            mailViewController.setSubject("SideStore Beta Feedback")
+                        }
+
+                       self.present(mailViewController, animated: true, completion: nil)
+                    } else {
+                      let toastView = ToastView(text: NSLocalizedString("Cannot Send Mail", comment: ""), detailText: nil)
+                      toastView.show(in: self)
+                    }
+                })
+                #endif
+                
+                // Cancel action
+                alertController.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+                
+                if let popoverController = alertController.popoverPresentationController {
+                    popoverController.sourceView = self.view
+                    popoverController.sourceRect = self.view.bounds
+                }
+                
+                self.present(alertController, animated: true, completion: nil)
+                
+            case .refreshSideJITServer:
+                let jitConfigView = SideJITServerConfigView()
+                let vc = UIHostingController(rootView: jitConfigView)
+                self.configureHostedViewController(vc)
+                self.navigationController?.pushViewController(vc, animated: true)
+                self.tableView.deselectRow(at: indexPath, animated: true)
+                
+            case .pairingFileManagement:
+                let pairingView = PairingFileManagementView()
+                let vc = UIHostingController(rootView: pairingView)
+                self.configureHostedViewController(vc)
+                self.navigationController?.pushViewController(vc, animated: true)
+                self.tableView.deselectRow(at: indexPath, animated: true)
+                
+            case .anisetteServers:
+                let anisetteServersView = AnisetteServersView(
+                    selected: UserDefaults.standard.menuAnisetteURL,
+                    onResetAdiPb: { [weak self] in
+                        guard let self = self else { return }
+                        ToastView(text: "Cleared adi.pb!", detailText: "You will need to log back into Apple ID in SideStore.")
+                            .show(in: self)
+                    }
+                )
+                
+                let vc = UIHostingController(rootView: anisetteServersView)
+                self.prepare(for: UIStoryboardSegue(identifier: "anisetteServers", source: self, destination: vc), sender: nil)
+
+            case .connectionConfig:
+                let connectionConfigView = ConnectionConfigView()
+                let vc = UIHostingController(rootView: connectionConfigView)
+                self.configureHostedViewController(vc)
+                navigationController?.pushViewController(vc, animated: true)
+
+            case .networkDiscovery:
+                let discoveryView = BonjourDiscoveryView()
+                let vc = UIHostingController(rootView: discoveryView)
+                self.configureHostedViewController(vc, title: NSLocalizedString("Network Discovery", comment: ""))
+                self.prepare(for: UIStoryboardSegue(identifier: "diagnostics", source: self, destination: vc), sender: nil)
+
+            case .developerServices:
+                let developerServicesView = DeveloperServicesView(presentingViewController: self)
+                let vc = UIHostingController(rootView: developerServicesView)
+                self.prepare(for: UIStoryboardSegue(identifier: "developerServices", source: self, destination: vc), sender: nil)
+
+            case .profileManagement:
+                let profileManagementView = ProfileManagementView(presentingViewController: self)
+                let vc = UIHostingController(rootView: profileManagementView)
+                self.prepare(for: UIStoryboardSegue(identifier: "profileManagement", source: self, destination: vc), sender: nil)
+
+            case .certificateManagement:
+                let certificateManagementView = CertificatesView(presentingViewController: self)
+                let vc = UIHostingController(rootView: certificateManagementView)
+                self.prepare(for: UIStoryboardSegue(identifier: "certificateManagement", source: self, destination: vc), sender: nil)
+                
+            case .backupAndRestore:
+                let backupView = BackupAndRestoreView()
+                let vc = UIHostingController(rootView: backupView)
+                self.configureHostedViewController(vc, title: NSLocalizedString("Backup & Restore", comment: ""))
+                self.prepare(for: UIStoryboardSegue(identifier: "diagnostics", source: self, destination: vc), sender: nil)
+                
+            case .userCustomizations:
+                let userCustomizationsView = UserCustomizationsView()
+                let vc = UIHostingController(rootView: userCustomizationsView)
+                self.configureHostedViewController(vc, title: NSLocalizedString("User Customizations", comment: ""))
+                self.prepare(for: UIStoryboardSegue(identifier: "diagnostics", source: self, destination: vc), sender: nil)
+                
+            case .refreshAttempts: break
+            }
+        
+        case .diagnostics:
+            let row = DiagnosticsRow.allCases[indexPath.row]
+            switch row {
+            case .developerOptions:
+                let developerOptionsView = DeveloperOptionsView()
+                let hostingController = UIHostingController(rootView: developerOptionsView)
+                self.configureHostedViewController(hostingController, title: NSLocalizedString("Developer Options", comment: ""))
+                self.prepare(for: UIStoryboardSegue(identifier: "diagnostics", source: self, destination: hostingController), sender: nil)
+            case .experimentalFeatures:
+                let experimentalFeaturesView = ExperimentalFeaturesView()
+                let hostingController = UIHostingController(rootView: experimentalFeaturesView)
+                self.configureHostedViewController(hostingController, title: NSLocalizedString("Experimental Features", comment: ""))
+                self.prepare(for: UIStoryboardSegue(identifier: "diagnostics", source: self, destination: hostingController), sender: nil)
+            }
             
-        case .cacheRow:
-            self.clearAppCache()
-        }
-    }
-    
-    @objc func toggleVerboseLogging(_ sender: UISwitch)
-    {
-        UserDefaults.standard.isVerboseLoggingEnabled = sender.isOn
-    }
-    
-    func shareLogs()
-    {
-        let logURL = FileManager.default.logFileURL
-        guard FileManager.default.fileExists(atPath: logURL.path) else {
-            let toastView = ToastView(text: NSLocalizedString("No Log File Found", comment: ""), detailText: nil)
-            toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.0)
-            return
+        case .patreon, .display, .instructions, .betaTesting: break
         }
         
-        let activityViewController = UIActivityViewController(activityItems: [logURL], applicationActivities: nil)
-        if let popover = activityViewController.popoverPresentationController
-        {
-            popover.sourceView = self.shareLogCell
-            popover.sourceRect = self.shareLogCell.bounds
-        }
         
-        self.present(activityViewController, animated: true)
+        // deselect the row before returning (so that it doesn't look like stuck selected)
+        tableView.deselectRow(at: indexPath, animated: true)
     }
 }
 
-// MARK: - UITextFieldDelegate -
-extension SettingsViewController: UITextFieldDelegate
+#if !os(tvOS)
+extension SettingsViewController: MFMailComposeViewControllerDelegate
 {
-    func textFieldShouldReturn(_ textField: UITextField) -> Bool
+    func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?)
     {
-        textField.resignFirstResponder()
+        if let error = error
+        {
+            let toastView = ToastView(error: error)
+            toastView.show(in: self)
+        }
+        
+        controller.dismiss(animated: true, completion: nil)
+    }
+}
+#endif
+
+extension SettingsViewController: UIGestureRecognizerDelegate
+{
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool
+    {
         return true
     }
-    
-    func textFieldDidEndEditing(_ textField: UITextField)
-    {
-        guard let text = textField.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
-            textField.text = UserDefaults.standard.anisetteServer
-            return
-        }
-        
-        if let url = URL(string: text), url.scheme != nil, url.host != nil
-        {
-            UserDefaults.standard.anisetteServer = text
-        }
-        else
-        {
-            textField.text = UserDefaults.standard.anisetteServer
-            let toastView = ToastView(text: "Invalid URL the previous value will be restored", detailText: nil)
-            toastView.layer.backgroundColor = UIColor.systemRed.cgColor
-            toastView.show(in: self.navigationController?.view ?? self.view, duration: 2.5)
-        }
-    }
-    
-    private func reloadUDIDLabel()
-    {
-        Task { [weak self] in
-            do
-            {
-                let udid = try await fetchUDID()
-                await MainActor.run {
-                    self?.udidCell.detailTextLabel?.text = udid
-                }
-            }
-            catch
-            {
-                await MainActor.run {
-                    self?.udidCell.detailTextLabel?.text = NSLocalizedString("Error", comment: "")
-                }
-            }
-        }
-    }
-    
-    private func reloadProfileStatusLabel()
-    {
-        let hasProfile = Minimuxer.hasPairingFile()
-        self.profileCell.detailTextLabel?.text = hasProfile ? NSLocalizedString("Installed", comment: "") : NSLocalizedString("Not Installed", comment: "")
-    }
-    
-    private func reloadConnectionStatusLabel()
-    {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let isConnected = Minimuxer.testDeviceConnection()
-            DispatchQueue.main.async {
-                self?.connectionCell.detailTextLabel?.text = isConnected ? NSLocalizedString("Connected", comment: "") : NSLocalizedString("Disconnected", comment: "")
-            }
-        }
-    }
 }
 
-// MARK: - ServerURLTableViewCell -
-private class ServerURLTableViewCell: UITableViewCell
+#if !os(tvOS)
+extension SettingsViewController: INUIAddVoiceShortcutViewControllerDelegate
 {
-    let textField: UITextField
-    
-    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?)
+    func addVoiceShortcutViewController(_ controller: INUIAddVoiceShortcutViewController, didFinishWith voiceShortcut: INVoiceShortcut?, error: Error?)
     {
-        self.textField = UITextField()
-        self.textField.translatesAutoresizingMaskIntoConstraints = false
+        if let indexPath = self.tableView.indexPathForSelectedRow
+        {
+            self.tableView.deselectRow(at: indexPath, animated: true)
+        }
         
-        super.init(style: style, reuseIdentifier: reuseIdentifier)
+        controller.dismiss(animated: true, completion: nil)
         
-        self.selectionStyle = .none
-        self.contentView.addSubview(self.textField)
+        guard let error = error else { return }
         
-        NSLayoutConstraint.activate([
-            self.textField.leadingAnchor.constraint(equalTo: self.contentView.layoutMarginsGuide.leadingAnchor),
-            self.textField.trailingAnchor.constraint(equalTo: self.contentView.layoutMarginsGuide.trailingAnchor),
-            self.textField.topAnchor.constraint(equalTo: self.contentView.topAnchor),
-            self.textField.bottomAnchor.constraint(equalTo: self.contentView.bottomAnchor)
-        ])
+        let toastView = ToastView(error: error)
+        toastView.show(in: self)
     }
     
-    required init?(coder: NSCoder)
+    func addVoiceShortcutViewControllerDidCancel(_ controller: INUIAddVoiceShortcutViewController)
     {
-        fatalError("init(coder:) has not been implemented")
+        if let indexPath = self.tableView.indexPathForSelectedRow
+        {
+            self.tableView.deselectRow(at: indexPath, animated: true)
+        }
+        
+        controller.dismiss(animated: true, completion: nil)
     }
 }
-
-// MARK: - AnisetteServer Helper -
-private enum AnisetteServer: String, CaseIterable
-{
-    case sideStore = "https://ani.sidestore.io"
-    case macley = "https://ani.macley.me"
-    
-    var name: String
-    {
-        switch self
-        {
-        case .sideStore: return "SideStore (Official)"
-        case .macley: return "Macley"
-        }
-    }
-    
-    static func currentServerName() -> String
-    {
-        let current = UserDefaults.standard.anisetteServer
-        if let server = AnisetteServer(rawValue: current)
-        {
-            return server.name
-        }
-        return current
-    }
-}
+#endif

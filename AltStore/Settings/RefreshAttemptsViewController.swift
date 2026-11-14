@@ -76,6 +76,13 @@ private final class RefreshAttemptTableViewCell: UITableViewCell
         self.contentView.backgroundColor = .clear
         self.selectionStyle = .none
 
+        // ✨ CĂN LỀ (PADDING) BÊN TRONG KHUNG CARD CHO CÁC CHỮ VÀ NGÀY THÁNG NĂM:
+        // Khung Card cách lề màn hình 16pt + thêm 16pt lề trong = 32pt hai bên trái/phải.
+        // Cách lề trên/dưới 14pt giúp nội dung và ngày tháng thoáng đãng, không bị sát viền.
+        self.preservesSuperviewLayoutMargins = false
+        self.contentView.preservesSuperviewLayoutMargins = false
+        self.contentView.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 14, leading: 32, bottom: 14, trailing: 32)
+
         // Khung Card màu trắng bên dưới nội dung
         cardBackgroundView.translatesAutoresizingMaskIntoConstraints = false
         cardBackgroundView.backgroundColor = CSSTheme.white
@@ -86,7 +93,7 @@ private final class RefreshAttemptTableViewCell: UITableViewCell
         cardBackgroundView.layer.shadowOpacity = 0.06
         self.contentView.insertSubview(cardBackgroundView, at: 0)
 
-        // Đường kẻ phân cách giữa các dòng trong Card
+        // Đường kẻ phân cách giữa các dòng trong Card (căn thẳng hàng với lề chữ 16pt bên trong Card)
         separatorLine.translatesAutoresizingMaskIntoConstraints = false
         separatorLine.backgroundColor = CSSTheme.border
         self.contentView.addSubview(separatorLine)
@@ -105,18 +112,20 @@ private final class RefreshAttemptTableViewCell: UITableViewCell
 
         // Làm đẹp các nhãn văn bản
         if let sLabel = self.successLabel {
-            sLabel.font = UIFont.systemFont(ofSize: 13, weight: .bold)
+            sLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .bold)
             sLabel.layer.cornerRadius = 6
             sLabel.layer.masksToBounds = true
+            sLabel.setContentHuggingPriority(.required, for: .horizontal)
         }
 
         if let dLabel = self.dateLabel {
-            dLabel.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+            dLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .semibold)
             dLabel.textColor = CSSTheme.purple
+            dLabel.textAlignment = .right
         }
 
         if let eLabel = self.errorDescriptionLabel {
-            eLabel.font = UIFont.systemFont(ofSize: 13, weight: .regular)
+            eLabel.font = UIFont.systemFont(ofSize: 13.5, weight: .regular)
             eLabel.textColor = CSSTheme.dark.withAlphaComponent(0.85)
             eLabel.numberOfLines = 0
         }
@@ -135,6 +144,11 @@ private final class RefreshAttemptTableViewCell: UITableViewCell
         cardBackgroundView.layer.cornerRadius = corners.isEmpty ? 0 : CSSTheme.cornerRadius
         cardBackgroundView.layer.maskedCorners = corners
         separatorLine.isHidden = (row >= totalRows - 1)
+
+        // Tăng thêm một chút khoảng đệm ở dòng đầu tiên và dòng cuối cùng của khung Card để bo góc đẹp hơn
+        let topPadding: CGFloat = (row == 0) ? 16 : 13
+        let bottomPadding: CGFloat = (row == totalRows - 1) ? 16 : 13
+        self.contentView.directionalLayoutMargins = NSDirectionalEdgeInsets(top: topPadding, leading: 32, bottom: bottomPadding, trailing: 32)
     }
 }
 
@@ -150,7 +164,7 @@ final class RefreshAttemptsViewController: UITableViewController
     private lazy var dateFormatter: DateFormatter = {
         let dateFormatter = DateFormatter()
         dateFormatter.locale = Locale(identifier: "vi_VN")
-        dateFormatter.dateFormat = "HH:mm - dd/MM/yyyy"
+        dateFormatter.dateFormat = "HH:mm • dd/MM/yyyy"
         return dateFormatter
     }()
 
@@ -178,6 +192,10 @@ final class RefreshAttemptsViewController: UITableViewController
 
         self.tableView.dataSource = self.dataSource
         self.dataSource.contentView = self.tableView
+
+        // Cho phép TableView tự tính toán chiều cao Cell mượt mà khi thêm lề trên/dưới
+        self.tableView.rowHeight = UITableView.automaticDimension
+        self.tableView.estimatedRowHeight = 76
 
         self.tableView.contentInset.top = 0
         self.tableView.contentInset.bottom = 50
@@ -491,24 +509,47 @@ private extension RefreshAttemptsViewController
         let dataSource = FetchedResultsTableViewDataSource(fetchRequest: fetchRequest, managedObjectContext: DatabaseManager.shared.viewContext)
         dataSource.cellConfigurationHandler = { [weak self] (cell, attempt, indexPath) in
             let cell = cell as! RefreshAttemptTableViewCell
-            cell.dateLabel.text = self?.dateFormatter.string(from: attempt.date)
+
+            // Thêm khoảng đệm nhẹ cho ngày tháng năm để nhìn cân đối hơn
+            if let formattedDate = self?.dateFormatter.string(from: attempt.date) {
+                cell.dateLabel.text = formattedDate
+            } else {
+                cell.dateLabel.text = nil
+            }
+
+            let descriptionText: String
+            let descriptionColor: UIColor
 
             if attempt.isSuccess
             {
                 cell.successLabel.text = "  ✓ Thành công  "
                 cell.successLabel.textColor = CSSTheme.green
                 cell.successLabel.backgroundColor = CSSTheme.green.withAlphaComponent(0.12)
-                cell.errorDescriptionLabel.text = "Tất cả ứng dụng đã được gia hạn thành công."
-                cell.errorDescriptionLabel.textColor = CSSTheme.dark.withAlphaComponent(0.65)
+                descriptionText = "Tất cả ứng dụng đã được gia hạn thành công."
+                descriptionColor = CSSTheme.dark.withAlphaComponent(0.68)
             }
             else
             {
                 cell.successLabel.text = "  ✕ Thất bại  "
                 cell.successLabel.textColor = CSSTheme.red
                 cell.successLabel.backgroundColor = CSSTheme.red.withAlphaComponent(0.12)
-                cell.errorDescriptionLabel.text = attempt.errorDescription ?? "Đã xảy ra lỗi không xác định trong quá trình làm mới."
-                cell.errorDescriptionLabel.textColor = CSSTheme.dark.withAlphaComponent(0.9)
+                descriptionText = attempt.errorDescription ?? "Đã xảy ra lỗi không xác định trong quá trình làm mới."
+                descriptionColor = CSSTheme.dark.withAlphaComponent(0.9)
             }
+
+            // Tạo khoảng cách dòng (lineSpacing) và khoảng đệm trên nhẹ cho nội dung mô tả nhật ký
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.lineSpacing = 3.0
+            paragraphStyle.paragraphSpacingBefore = 2.0
+
+            cell.errorDescriptionLabel.attributedText = NSAttributedString(
+                string: descriptionText,
+                attributes: [
+                    .font: UIFont.systemFont(ofSize: 13.5, weight: .regular),
+                    .foregroundColor: descriptionColor,
+                    .paragraphStyle: paragraphStyle
+                ]
+            )
         }
 
         let placeholderView = PlaceholderView()

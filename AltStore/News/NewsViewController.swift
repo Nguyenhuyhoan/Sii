@@ -259,41 +259,6 @@ private enum CellularRefreshDefaultBootstrapper {
     }
 }
 
-private enum AnisetteDefaultsHelper {
-    static var currentServerURL: String {
-        let menuURL = UserDefaults.standard.menuAnisetteURL.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-        if !menuURL.isEmpty {
-            return menuURL
-        }
-        if let textInput = UserDefaults.standard.textInputAnisetteURL?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
-           !textInput.isEmpty {
-            return textInput
-        }
-        if let custom = UserDefaults.standard.customAnisetteURL?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
-           !custom.isEmpty {
-            return custom
-        }
-        return AppConstants.Anisette.Servers.defaultServerURL
-    }
-
-    static func selectServerFromList(_ url: String) {
-        let trimmed = url.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        UserDefaults.standard.textServer = false
-        UserDefaults.standard.menuAnisetteURL = trimmed
-        UserDefaults.standard.textInputAnisetteURL = trimmed
-        UserDefaults.standard.customAnisetteURL = trimmed
-    }
-
-    static func setCustomServerURL(_ url: String) {
-        let trimmed = url.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        UserDefaults.standard.menuAnisetteURL = trimmed
-        UserDefaults.standard.textInputAnisetteURL = trimmed
-        UserDefaults.standard.customAnisetteURL = trimmed
-    }
-}
-
 /// Quản lý giữ tiến trình chạy nền khi người dùng chuyển sang app Cài đặt để nhập mã PIN Pairing
 @MainActor
 private final class PairingBackgroundKeepAliveManager {
@@ -484,12 +449,6 @@ final class SystemCheckViewModel: ObservableObject {
     @Published var isWifiActive: Bool = false
     @Published var cellularDetail: String = ""
 
-    @Published var isAnisetteOK: Bool = !UserDefaults.standard.useOnDeviceAnisette
-    @Published var useOnDeviceAnisette: Bool = UserDefaults.standard.useOnDeviceAnisette
-    @Published var isAnisetteAutoRotationEnabled: Bool = !UserDefaults.standard.disableAnisetteRotation
-    @Published var selectedAnisetteServerURL: String = AnisetteDefaultsHelper.currentServerURL
-    @Published var anisetteDetail: String = ""
-
     @Published var isCellularRefreshEnabled: Bool = {
         CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
         return UserDefaults.standard.isCellularRefreshEnabled
@@ -577,7 +536,6 @@ final class SystemCheckViewModel: ObservableObject {
         updateInstantStatus()
         setupRealtimeListeners()
         Task {
-            _ = try? await AnisetteServersManager.shared.syncWithRemote()
             await checkAllStatuses(forceVerify: true)
         }
     }
@@ -686,7 +644,6 @@ final class SystemCheckViewModel: ObservableObject {
                 self.updateInstantStatus()
                 guard !self.isWirelessPairingActive else { return }
                 Task { @MainActor [weak self] in
-                    _ = try? await AnisetteServersManager.shared.syncWithRemote()
                     await self?.checkAllStatuses(forceVerify: false)
                 }
             }
@@ -773,33 +730,10 @@ final class SystemCheckViewModel: ObservableObject {
         }
     }
 
-    func setUseOnDeviceAnisette(_ enabled: Bool) {
-        UserDefaults.standard.useOnDeviceAnisette = enabled
-        updateInstantStatus()
-    }
-
-    func setAnisetteAutoRotationEnabled(_ enabled: Bool) {
-        UserDefaults.standard.disableAnisetteRotation = !enabled
-        assignIfChanged(\.isAnisetteAutoRotationEnabled, enabled)
-        updateInstantStatus()
-    }
-
     func setCellularRefreshEnabled(_ enabled: Bool) {
         guard isCellularRefreshEnabled != enabled || UserDefaults.standard.isCellularRefreshEnabled != enabled else { return }
         isCellularRefreshEnabled = enabled
         CellularRefreshManager.shared.setEnabled(enabled)
-        updateInstantStatus()
-    }
-
-    func selectAnisetteServerURL(_ urlString: String, isCustom: Bool = false) {
-        if isCustom {
-            AnisetteDefaultsHelper.setCustomServerURL(urlString)
-        } else {
-            AnisetteDefaultsHelper.selectServerFromList(urlString)
-        }
-        if UserDefaults.standard.useOnDeviceAnisette {
-            UserDefaults.standard.useOnDeviceAnisette = false
-        }
         updateInstantStatus()
     }
 
@@ -971,21 +905,6 @@ final class SystemCheckViewModel: ObservableObject {
             assignIfChanged(\.pairingProtocol, "")
         }
 
-        let onDevice = UserDefaults.standard.useOnDeviceAnisette
-        assignIfChanged(\.useOnDeviceAnisette, onDevice)
-        assignIfChanged(\.isAnisetteOK, !onDevice)
-
-        let autoRotation = !UserDefaults.standard.disableAnisetteRotation
-        assignIfChanged(\.isAnisetteAutoRotationEnabled, autoRotation)
-
-        let selectedURL = AnisetteDefaultsHelper.currentServerURL
-        assignIfChanged(\.selectedAnisetteServerURL, selectedURL)
-        let serverHost = URL(string: selectedURL)?.host ?? selectedURL
-        let newAnisetteDetail = onDevice
-            ? "Không ổn định • Hãy tắt Use On-Device Anisette"
-            : "Ổn định • Máy chủ: \(serverHost)"
-        assignIfChanged(\.anisetteDetail, newAnisetteDetail)
-
         let currentCellularRefresh = UserDefaults.standard.isCellularRefreshEnabled
         assignIfChanged(\.isCellularRefreshEnabled, currentCellularRefresh)
     }
@@ -1114,7 +1033,6 @@ struct SystemCheckDashboardView: SwiftUI.View {
     @State private var showPairingSheet = false
     @State private var showVpnSheet = false
     @State private var showCellularSheet = false
-    @State private var showAnisetteSheet = false
 
     var body: some SwiftUI.View {
         ScrollView(showsIndicators: false) {
@@ -1127,7 +1045,6 @@ struct SystemCheckDashboardView: SwiftUI.View {
                 .padding(.top, 4)
 
                 systemStatusSection
-                serverSection
                 shortcutsSection
                 automationGuideSection
                 shortcutVideoGuideSection
@@ -1158,14 +1075,10 @@ struct SystemCheckDashboardView: SwiftUI.View {
             CellularDetailSheetView(vm: vm)
                 .preferredColorScheme(.light)
         }
-        .sheet(isPresented: $showAnisetteSheet) {
-            AnisetteDetailSheetView(vm: vm)
-                .preferredColorScheme(.light)
-        }
     }
 
     private var systemStatusSection: some SwiftUI.View {
-        let allReady = vm.isPairingOK && vm.isVpnOK && vm.isCellularOK && vm.isAnisetteOK
+        let allReady = vm.isPairingOK && vm.isVpnOK && vm.isCellularOK
 
         let pairingSubtitleText: String = {
             switch vm.pairingVisualState {
@@ -1212,24 +1125,6 @@ struct SystemCheckDashboardView: SwiftUI.View {
                 visualState: vm.isCellularOK ? .verifiedOK : .failedError
             ) {
                 showCellularSheet = true
-            }
-        }
-    }
-
-    private var serverSection: some SwiftUI.View {
-        SkySectionCard(
-            title: "MÁY CHỦ ANISETTE",
-            icon: "server.rack",
-            color: CSSTheme.secondary,
-            footerText: "Khuyên tắt 'Use On-Device Anisette' để đăng nhập ID Apple và gia hạn ứng dụng ổn định nhất."
-        ) {
-            CheckItemButton(
-                title: "Máy chủ Anisette",
-                subtitle: vm.isAnisetteOK ? "Ổn định" : "Không ổn định",
-                icon: "server.rack",
-                visualState: vm.isAnisetteOK ? .verifiedOK : .failedError
-            ) {
-                showAnisetteSheet = true
             }
         }
     }
@@ -2880,318 +2775,6 @@ struct CellularDetailSheetView: SwiftUI.View {
                         .font(.headline)
                         .foregroundColor(CSSTheme.primary)
                 }
-            }
-        }
-        .preferredColorScheme(.light)
-    }
-}
-
-@MainActor
-final class AnisetteQuickListViewModel: ObservableObject {
-    @Published var servers: [AnisetteServerItem] = []
-    @Published var isLoading: Bool = false
-
-    func loadCachedAndSync(customPrefix: String) async {
-        let local = await AnisetteServersManager.shared.loadLocalServers().filter { !$0.isHidden }
-        if !local.isEmpty {
-            self.servers = mergeWithCurrent(local, customPrefix: customPrefix)
-        }
-        await refreshFromRemote(customPrefix: customPrefix)
-    }
-
-    func refreshFromRemote(customPrefix: String) async {
-        guard !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
-
-        if let synced = try? await AnisetteServersManager.shared.syncWithRemote() {
-            let visible = synced.filter { !$0.isHidden }
-            self.servers = mergeWithCurrent(visible, customPrefix: customPrefix)
-        } else {
-            let local = await AnisetteServersManager.shared.loadLocalServers().filter { !$0.isHidden }
-            self.servers = mergeWithCurrent(local, customPrefix: customPrefix)
-        }
-    }
-
-    func reloadCurrentSelection(customPrefix: String) async {
-        let local = await AnisetteServersManager.shared.loadLocalServers().filter { !$0.isHidden }
-        self.servers = mergeWithCurrent(local, customPrefix: customPrefix)
-    }
-
-    private func mergeWithCurrent(_ items: [AnisetteServerItem], customPrefix: String) -> [AnisetteServerItem] {
-        var result = items
-        if result.isEmpty {
-            result = [
-                AnisetteServerItem(
-                    name: "SideStore (New)",
-                    address: AppConstants.Anisette.Servers.defaultServerURL,
-                    isHidden: false
-                )
-            ]
-        }
-        let current = AnisetteDefaultsHelper.currentServerURL.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-        if !current.isEmpty,
-           !result.contains(where: { $0.address.caseInsensitiveCompare(current) == .orderedSame }) {
-            let host = URL(string: current)?.host ?? current
-            result.insert(AnisetteServerItem(name: "\(customPrefix) (\(host))", address: current, isHidden: false), at: 0)
-        }
-        return result
-    }
-}
-
-struct AnisetteDetailSheetView: SwiftUI.View {
-    @ObservedObject var vm: SystemCheckViewModel
-    @StateObject private var listVM = AnisetteQuickListViewModel()
-    @State private var customServerInput: String = ""
-    @Environment(\.dismiss) private var dismiss
-
-    private let customServerPrefix = "Máy chủ tùy chỉnh"
-
-    private func isRecommendedSideStoreNew(_ server: AnisetteServerItem) -> Bool {
-        let lowerName = server.name.lowercased()
-        return lowerName.contains("sidestore (new)")
-            || (lowerName.contains("sidestore") && lowerName.contains("new"))
-    }
-
-    var body: some SwiftUI.View {
-        NavigationView {
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 18) {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            Circle()
-                                .fill(vm.isAnisetteOK ? CSSTheme.green.opacity(0.15) : CSSTheme.red.opacity(0.15))
-                                .frame(width: 48, height: 48)
-                            SwiftUI.Image(systemName: vm.isAnisetteOK ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(vm.isAnisetteOK ? CSSTheme.green : CSSTheme.red)
-                        }
-                        VStack(alignment: .leading, spacing: 4) {
-                            SwiftUI.Text(vm.isAnisetteOK
-                                         ? "Máy Chủ Anisette Ổn Định"
-                                         : "Đang Bật On-Device Anisette")
-                                .font(.system(size: 16.5, weight: .bold))
-                                .foregroundColor(CSSTheme.pureBlack)
-                            SwiftUI.Text(vm.anisetteDetail)
-                                .font(.system(size: 13.5, weight: .medium))
-                                .foregroundColor(CSSTheme.pureBlack)
-                        }
-                        Spacer()
-                    }
-                    .padding(14)
-                    .background(CSSTheme.cardBackground)
-                    .cornerRadius(CSSTheme.cornerRadius)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                            .stroke(CSSTheme.border, lineWidth: 1.0)
-                    )
-                    .shadow(color: CSSTheme.primary.opacity(0.08), radius: 10, x: 0, y: 5)
-
-                    SkySectionCard(
-                        title: "CHẾ ĐỘ XÁC THỰC ANISETTE",
-                        icon: "switch.2",
-                        color: CSSTheme.primary
-                    ) {
-                        Toggle(isOn: Binding(
-                            get: { vm.useOnDeviceAnisette },
-                            set: { vm.setUseOnDeviceAnisette($0) }
-                        )) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                SwiftUI.Text("Use On-Device Anisette")
-                                    .font(.system(size: 15, weight: .bold))
-                                    .foregroundColor(CSSTheme.pureBlack)
-                                SwiftUI.Text(vm.useOnDeviceAnisette
-                                             ? "Đang BẬT (Khuyên tắt để ổn định hơn)"
-                                             : "(Nên Tắt Để Dễ Đăng Nhập)")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(vm.useOnDeviceAnisette ? CSSTheme.red : CSSTheme.green)
-                            }
-                        }
-                        .tint(CSSTheme.primary)
-                        .padding(12)
-                        .background(CSSTheme.innerRowBackground)
-                        .cornerRadius(12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(CSSTheme.innerBorder, lineWidth: 1)
-                        )
-
-                        Toggle(isOn: Binding(
-                            get: { vm.isAnisetteAutoRotationEnabled },
-                            set: { vm.setAnisetteAutoRotationEnabled($0) }
-                        )) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                SwiftUI.Text("Enable Auto Rotation")
-                                    .font(.system(size: 15, weight: .bold))
-                                    .foregroundColor(CSSTheme.pureBlack)
-                                SwiftUI.Text(vm.isAnisetteAutoRotationEnabled
-                                             ? "(Tự Động Đổi Máy Chủ Khi Lỗi)"
-                                             : "Đang Tắt “Nên chọn SideStore (New)”")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(vm.isAnisetteAutoRotationEnabled ? CSSTheme.green : CSSTheme.red)
-                            }
-                        }
-                        .tint(CSSTheme.primary)
-                        .padding(12)
-                        .background(CSSTheme.innerRowBackground)
-                        .cornerRadius(12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(CSSTheme.innerBorder, lineWidth: 1)
-                        )
-
-                        if vm.useOnDeviceAnisette {
-                            SwiftUI.Button {
-                                vm.setUseOnDeviceAnisette(false)
-                            } label: {
-                                HStack(spacing: 8) {
-                                    SwiftUI.Image(systemName: "checkmark.shield.fill")
-                                    SwiftUI.Text("Tắt ngay Use On-Device Anisette")
-                                        .font(.system(size: 15, weight: .bold))
-                                }
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(CSSTheme.primary)
-                                .cornerRadius(12)
-                                .shadow(color: CSSTheme.primary.opacity(0.35), radius: 5, x: 0, y: 3)
-                            }
-                            .buttonStyle(CSSBounceButtonStyle())
-                        }
-                    }
-
-                    SkySectionCard(
-                        title: "CHỌN MÁY CHỦ ANISETTE",
-                        icon: "server.rack",
-                        color: CSSTheme.secondary,
-                        trailingView: listVM.isLoading ? AnyView(ProgressView().tint(CSSTheme.primary)) : nil
-                    ) {
-                        VStack(spacing: 8) {
-                            ForEach(listVM.servers) { server in
-                                let isSelected = (vm.selectedAnisetteServerURL.caseInsensitiveCompare(server.address) == .orderedSame)
-                                let isRecommended = isRecommendedSideStoreNew(server)
-
-                                SwiftUI.Button {
-                                    vm.selectAnisetteServerURL(server.address, isCustom: false)
-                                    Task { await listVM.reloadCurrentSelection(customPrefix: customServerPrefix) }
-                                } label: {
-                                    HStack(spacing: 12) {
-                                        SwiftUI.Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                                            .font(.system(size: 20, weight: .semibold))
-                                            .foregroundColor(isSelected ? CSSTheme.primary : CSSTheme.pureBlack)
-
-                                        VStack(alignment: .leading, spacing: 3) {
-                                            HStack(spacing: 6) {
-                                                SwiftUI.Text(server.name)
-                                                    .font(.system(size: 15, weight: .bold))
-                                                    .foregroundColor(CSSTheme.pureBlack)
-
-                                                if isRecommended {
-                                                    SwiftUI.Text("★ Khuyên dùng")
-                                                        .font(.system(size: 10.5, weight: .heavy))
-                                                        .padding(.horizontal, 7)
-                                                        .padding(.vertical, 2.5)
-                                                        .background(CSSTheme.green.opacity(0.16))
-                                                        .foregroundColor(CSSTheme.green)
-                                                        .clipShape(Capsule())
-                                                }
-                                            }
-                                            SwiftUI.Text(server.address)
-                                                .font(.system(size: 12.5, weight: .medium))
-                                                .foregroundColor(CSSTheme.pureBlack)
-                                                .lineLimit(1)
-                                        }
-                                        Spacer()
-                                        if isSelected {
-                                            SwiftUI.Text("Đang dùng")
-                                                .font(.system(size: 11.5, weight: .bold))
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 4)
-                                                .background(CSSTheme.primary.opacity(0.15))
-                                                .foregroundColor(CSSTheme.primary)
-                                                .clipShape(Capsule())
-                                        }
-                                    }
-                                    .padding(12)
-                                    .background(CSSTheme.innerRowBackground)
-                                    .cornerRadius(12)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(
-                                                isSelected
-                                                ? CSSTheme.primary.opacity(0.65)
-                                                : (isRecommended ? CSSTheme.green.opacity(0.45) : CSSTheme.innerBorder),
-                                                lineWidth: isSelected ? 1.5 : 1.1
-                                            )
-                                    )
-                                }
-                                .buttonStyle(CSSBounceButtonStyle())
-                            }
-                        }
-
-                        Divider().padding(.vertical, 2)
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            SwiftUI.Text("Hoặc nhập URL máy chủ tùy chỉnh:")
-                                .font(.system(size: 13.5, weight: .bold))
-                                .foregroundColor(CSSTheme.pureBlack)
-
-                            HStack(spacing: 8) {
-                                TextField(AppConstants.Anisette.Servers.defaultServerURL, text: $customServerInput)
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(CSSTheme.pureBlack)
-                                    .keyboardType(.URL)
-                                    .autocapitalization(.none)
-                                    .disableAutocorrection(true)
-                                    .padding(10)
-                                    .background(CSSTheme.innerRowBackground)
-                                    .cornerRadius(10)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .stroke(CSSTheme.innerBorder, lineWidth: 1)
-                                    )
-
-                                SwiftUI.Button {
-                                    let trimmed = customServerInput.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-                                    guard !trimmed.isEmpty else { return }
-                                    vm.selectAnisetteServerURL(trimmed, isCustom: true)
-                                    Task { await listVM.reloadCurrentSelection(customPrefix: customServerPrefix) }
-                                    customServerInput = ""
-                                } label: {
-                                    SwiftUI.Text("Lưu")
-                                        .font(.system(size: 14.5, weight: .bold))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 10)
-                                        .background(CSSTheme.primary)
-                                        .cornerRadius(10)
-                                        .shadow(color: CSSTheme.primary.opacity(0.35), radius: 5, x: 0, y: 3)
-                                }
-                                .buttonStyle(CSSBounceButtonStyle())
-                            }
-                        }
-                    }
-                }
-                .padding(16)
-            }
-            .background(CSSTheme.pageBackgroundGradient.ignoresSafeArea())
-            .navigationTitle("Máy Chủ Anisette")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    SwiftUI.Text("Máy Chủ Anisette")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundColor(CSSTheme.primary)
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    SwiftUI.Button("Xong") { dismiss() }
-                        .font(.headline)
-                        .foregroundColor(CSSTheme.primary)
-                }
-            }
-            .task {
-                vm.updateInstantStatus()
-                await listVM.loadCachedAndSync(customPrefix: customServerPrefix)
             }
         }
         .preferredColorScheme(.light)

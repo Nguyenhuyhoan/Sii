@@ -1,4 +1,3 @@
-
 //
 //  SettingsViewController.swift
 //  AltStore
@@ -1608,7 +1607,6 @@ extension SettingsViewController
         {
         case _ where isSectionHidden(section): return 0.01
         case .signIn where self.activeTeam != nil: return 0.01
-        case .account where self.activeTeam == nil: return 0.01
         case .signIn, .advancedSettings:
             return self.preferredHeight(for: self.prototypeHeaderFooterView, in: section, isHeader: false)
         case .account, .patreon, .display, .appRefresh, .credits, .techyThings, .instructions, .betaTesting, .diagnostics:

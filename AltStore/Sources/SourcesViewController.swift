@@ -366,7 +366,7 @@ private final class GuidesHeroHeaderView: UIView {
 
         let titleLabel = UILabel()
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.text = "Tin Túc Và Sửa Lỗi"
+        titleLabel.text = "Tin Tức Và Sửa Lỗi"
         titleLabel.font = UIFont.systemFont(ofSize: 24, weight: .heavy)
         titleLabel.textColor = SourcesCSSTheme.white
         titleLabel.textAlignment = .center

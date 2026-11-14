@@ -120,7 +120,6 @@ class MyAppsViewController: UICollectionViewController
     private var heroSideloadButton: UIButton?
     private var heroSideloadSpinner: UIActivityIndicatorView?
     private var heroRefreshAllButton: UIButton?
-    private var heroLiveContainerButton: UIButton?
     private var floatingBackButton: UIButton?
     private let heroTopSpace: CGFloat = 104.0
     
@@ -455,7 +454,7 @@ private extension MyAppsViewController {
         self.collectionView.contentInset.top = self.heroTopSpace
         self.collectionView.contentInset.bottom = 40
         
-        // 3. Khởi tạo khối .hero Banner kèm nút "+ Cài IPA", "Làm mới" & Icon "livecontainer://"
+        // 3. Khởi tạo khối .hero Banner kèm nút "+ Cài IPA" và "Làm mới"
         setupCSSHeroBanner()
         
         // 4. Đồng bộ màu Badge trên TabBar
@@ -527,29 +526,7 @@ private extension MyAppsViewController {
         titleStack.addArrangedSubview(titleLabel)
         titleStack.addArrangedSubview(dot)
         
-        // Icon mở nhanh "livecontainer://" ở góc dưới cùng bên trái của Hero Card
-        let liveContainerBtn = UIButton(type: .system)
-        liveContainerBtn.translatesAutoresizingMaskIntoConstraints = false
-        let lcIconConfig = UIImage.SymbolConfiguration(pointSize: 12.5, weight: .bold)
-        let lcIconImage = UIImage(systemName: "shippingbox.fill", withConfiguration: lcIconConfig)
-            ?? UIImage(systemName: "cube.box.fill", withConfiguration: lcIconConfig)
-            ?? UIImage(systemName: "app.badge", withConfiguration: lcIconConfig)
-        liveContainerBtn.setImage(lcIconImage, for: .normal)
-        liveContainerBtn.tintColor = CSSTheme.white
-        liveContainerBtn.backgroundColor = CSSTheme.white.withAlphaComponent(0.22)
-        liveContainerBtn.layer.cornerRadius = 13
-        liveContainerBtn.layer.cornerCurve = .continuous
-        liveContainerBtn.layer.borderWidth = 1.0
-        liveContainerBtn.layer.borderColor = CSSTheme.white.withAlphaComponent(0.48).cgColor
-        liveContainerBtn.layer.shadowColor = UIColor.black.cgColor
-        liveContainerBtn.layer.shadowOffset = CGSize(width: 0, height: 2)
-        liveContainerBtn.layer.shadowRadius = 4
-        liveContainerBtn.layer.shadowOpacity = 0.16
-        liveContainerBtn.accessibilityLabel = "Mở LiveContainer"
-        liveContainerBtn.addTarget(self, action: #selector(handleLiveContainerTap(_:)), for: .touchUpInside)
-        self.heroLiveContainerButton = liveContainerBtn
-        
-        // Phụ đề hướng dẫn (nằm ngay bên phải icon LiveContainer)
+        // Phụ đề hướng dẫn
         let subLabel = UILabel()
         subLabel.translatesAutoresizingMaskIntoConstraints = false
         subLabel.text = "Quản lý, cài đặt tệp .ipa & gia hạn ứng dụng dễ dàng"
@@ -558,9 +535,8 @@ private extension MyAppsViewController {
         subLabel.textAlignment = .center
         subLabel.numberOfLines = 1
         subLabel.adjustsFontSizeToFitWidth = true
-        subLabel.minimumScaleFactor = 0.78
         
-        // Nút "+ Cài IPA" bên trái phía trên Hero Card
+        // Nút "+ Cài IPA" bên trái Hero Card
         let addBtn = UIButton(type: .system)
         addBtn.translatesAutoresizingMaskIntoConstraints = false
         let plusConfig = UIImage.SymbolConfiguration(pointSize: 12, weight: .bold)
@@ -604,7 +580,6 @@ private extension MyAppsViewController {
         self.sideloadingProgressView.clipsToBounds = true
         
         heroCard.addSubview(titleStack)
-        heroCard.addSubview(liveContainerBtn)
         heroCard.addSubview(subLabel)
         heroCard.addSubview(addBtn)
         heroCard.addSubview(refreshBtn)
@@ -633,15 +608,8 @@ private extension MyAppsViewController {
             titleStack.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor, constant: 14),
             titleStack.centerYAnchor.constraint(equalTo: addBtn.centerYAnchor),
             
-            // Vị trí nút icon livecontainer:// ở góc dưới cùng bên trái trong khung Hero Card
-            liveContainerBtn.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
-            liveContainerBtn.topAnchor.constraint(equalTo: addBtn.bottomAnchor, constant: 9),
-            liveContainerBtn.widthAnchor.constraint(equalToConstant: 26),
-            liveContainerBtn.heightAnchor.constraint(equalToConstant: 26),
-            
-            // Dòng chữ phụ đề nằm gọn bên phải nút icon livecontainer://
-            subLabel.centerYAnchor.constraint(equalTo: liveContainerBtn.centerYAnchor),
-            subLabel.leadingAnchor.constraint(equalTo: liveContainerBtn.trailingAnchor, constant: 8),
+            subLabel.topAnchor.constraint(equalTo: addBtn.bottomAnchor, constant: 12),
+            subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
             subLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
             
             self.sideloadingProgressView.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
@@ -685,20 +653,6 @@ private extension MyAppsViewController {
         animateButtonBounce(sender)
         let barButton = self.navigationItem.rightBarButtonItem ?? UIBarButtonItem()
         self.refreshAllApps(barButton)
-    }
-    
-    @objc func handleLiveContainerTap(_ sender: UIButton) {
-        animateButtonBounce(sender)
-        guard let url = URL(string: "livecontainer://") else { return }
-        UIApplication.shared.open(url, options: [:]) { [weak self] success in
-            guard !success, let self = self else { return }
-            let toastView = ToastView(
-                text: "Không thể mở LiveContainer",
-                detailText: "Vui lòng kiểm tra xem ứng dụng LiveContainer đã được cài đặt và kích hoạt trên thiết bị hay chưa.",
-                opensLog: false
-            )
-            toastView.show(in: self)
-        }
     }
     
     func animateButtonBounce(_ sender: UIView) {

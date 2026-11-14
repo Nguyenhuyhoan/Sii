@@ -70,6 +70,22 @@ private enum CSSTheme {
         )
     }
 
+    /// Viền khung điện thoại đồng bộ cho cả Ảnh hướng dẫn và Video YouTube
+    static var mediaFrameBorderGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                primary.opacity(0.65),
+                secondary.opacity(0.45),
+                primary.opacity(0.65)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    static let mediaFrameCornerRadius: CGFloat = 47.33
+    static let mediaFrameLineWidth: CGFloat = 4.0
+
     static let cornerRadius: CGFloat = 15.0
     static let pageBackground = SwiftUI.Color(red: 243/255, green: 224/255, blue: 255/255)
     static let cardBackground = SwiftUI.Color.white
@@ -1273,29 +1289,26 @@ struct SystemCheckDashboardView: SwiftUI.View {
         SkySectionCard(
             title: "HƯỚNG DẪN TỰ ĐỘNG HÓA",
             icon: "bell.badge.fill",
-            color: CSSTheme.secondary
+            color: CSSTheme.secondary,
+            footerText: "Mẹo: Bạn có thể chạm trực tiếp vào từng ảnh hướng dẫn bên trên để phóng to toàn màn hình."
         ) {
-            VStack(spacing: 14) {
+            VStack(spacing: 20) {
                 RemoteGuideImageView(
+                    stepBadge: "BƯỚC 1",
                     urlString: "https://raw.githubusercontent.com/Nguyenhuyhoan/icons/main/IMG_2589.jpeg",
-                    caption: "Bước 1: Mở Phím Tắt mục Auto Refresh 4G (Auto Refresh 4G 2) và nhấn vào dấu xổ xuống:",
+                    caption: "Mở Phím Tắt mục Auto Refresh 4G (Auto Refresh 4G 2) và nhấn vào dấu xổ xuống:",
                     loadingText: "Đang tải ảnh...",
                     errorText: "Không tải được ảnh. Vui lòng kiểm tra mạng."
                 )
+
                 RemoteGuideImageView(
+                    stepBadge: "BƯỚC 2",
                     urlString: "https://raw.githubusercontent.com/Nguyenhuyhoan/icons/main/IMG_2588.jpeg",
-                    caption: "Bước 2: Bật nút Tự động hóa:",
+                    caption: "Bật nút Tự động hóa:",
                     loadingText: "Đang tải ảnh...",
                     errorText: "Không tải được ảnh. Vui lòng kiểm tra mạng."
                 )
             }
-            .padding(12)
-            .background(CSSTheme.innerRowBackground)
-            .cornerRadius(CSSTheme.cornerRadius)
-            .overlay(
-                RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                    .stroke(CSSTheme.innerBorder, lineWidth: 1)
-            )
         }
     }
 
@@ -1340,7 +1353,7 @@ struct IPhone14VerticalVideoFrameView: SwiftUI.View {
     @State private var isVisibleOnScreen: Bool = false
     @State private var shouldMountWebView: Bool = false
 
-    private let iPhone14CornerRadius: CGFloat = 47.33
+    private let iPhone14CornerRadius: CGFloat = CSSTheme.mediaFrameCornerRadius
 
     var body: some SwiftUI.View {
         ZStack {
@@ -1362,16 +1375,8 @@ struct IPhone14VerticalVideoFrameView: SwiftUI.View {
         .overlay(
             RoundedRectangle(cornerRadius: iPhone14CornerRadius, style: .continuous)
                 .strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            CSSTheme.primary.opacity(0.65),
-                            CSSTheme.secondary.opacity(0.45),
-                            CSSTheme.primary.opacity(0.65)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 4
+                    CSSTheme.mediaFrameBorderGradient,
+                    lineWidth: CSSTheme.mediaFrameLineWidth
                 )
         )
         .shadow(color: CSSTheme.secondary.opacity(0.22), radius: 12, x: 0, y: 6)
@@ -1794,8 +1799,9 @@ struct ShortcutLinkRow: SwiftUI.View {
     }
 }
 
-/// Hiển thị ảnh hướng dẫn đã được giải mã ngầm (Background Decoded) + Cache RAM giúp cuộn không bị khựng
+/// Hiển thị ảnh hướng dẫn với khung viền iPhone 14 giống hệt viền Video YouTube + Hỗ trợ chạm để phóng to ảnh
 struct RemoteGuideImageView: SwiftUI.View {
+    var stepBadge: String? = nil
     let urlString: String
     let caption: String
     let loadingText: String
@@ -1803,49 +1809,144 @@ struct RemoteGuideImageView: SwiftUI.View {
 
     @State private var uiImage: UIImage? = nil
     @State private var didFail: Bool = false
+    @State private var isShowingZoomSheet: Bool = false
+
+    private let frameCornerRadius: CGFloat = CSSTheme.mediaFrameCornerRadius
 
     var body: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 8) {
-            SwiftUI.Text(caption)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(CSSTheme.pureBlack)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity, alignment: .center)
-
-            if let image = uiImage {
-                SwiftUI.Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .cornerRadius(14)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(CSSTheme.border, lineWidth: 1)
+        VStack(alignment: .center, spacing: 12) {
+            // Tiêu đề bước & mô tả tách biệt rõ ràng từng ảnh
+            VStack(spacing: 6) {
+                if let badge = stepBadge {
+                    HStack(spacing: 6) {
+                        SwiftUI.Image(systemName: "sparkles")
+                            .font(.system(size: 11, weight: .heavy))
+                        SwiftUI.Text(badge)
+                            .font(.system(size: 12, weight: .heavy))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(
+                        LinearGradient(
+                            colors: [CSSTheme.primary, CSSTheme.secondary],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
+                    .clipShape(Capsule())
+                    .shadow(color: CSSTheme.primary.opacity(0.25), radius: 4, x: 0, y: 2)
+                }
+
+                SwiftUI.Text(caption)
+                    .font(.system(size: 14.5, weight: .bold))
+                    .foregroundColor(CSSTheme.pureBlack)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .padding(.horizontal, 6)
+
+            // Khung ảnh được đóng viền Gradient 4pt + Bo góc 47.33pt + Đổ bóng giống hệt khung Video YouTube
+            if let image = uiImage {
+                SwiftUI.Button {
+                    isShowingZoomSheet = true
+                } label: {
+                    ZStack(alignment: .bottomTrailing) {
+                        SwiftUI.Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: .infinity)
+                            .background(SwiftUI.Color.black)
+                            .clipShape(RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous)
+                                    .strokeBorder(
+                                        CSSTheme.mediaFrameBorderGradient,
+                                        lineWidth: CSSTheme.mediaFrameLineWidth
+                                    )
+                            )
+                            .shadow(color: CSSTheme.secondary.opacity(0.22), radius: 12, x: 0, y: 6)
+
+                        // Nút gợi ý chạm để phóng to
+                        HStack(spacing: 5) {
+                            SwiftUI.Image(systemName: "plus.magnifyingglass")
+                                .font(.system(size: 12, weight: .bold))
+                            SwiftUI.Text("Chạm để phóng to")
+                                .font(.system(size: 11.5, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 6)
+                        .background(SwiftUI.Color.black.opacity(0.68))
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule().stroke(SwiftUI.Color.white.opacity(0.35), lineWidth: 0.8)
+                        )
+                        .padding(.trailing, 18)
+                        .padding(.bottom, 16)
+                    }
+                    .padding(.horizontal, 4)
+                }
+                .buttonStyle(CSSBounceButtonStyle())
+                .sheet(isPresented: $isShowingZoomSheet) {
+                    GuideImageFullscreenZoomView(
+                        image: image,
+                        stepBadge: stepBadge,
+                        caption: caption
+                    )
+                }
             } else if didFail {
-                VStack(spacing: 6) {
+                VStack(spacing: 8) {
                     SwiftUI.Image(systemName: "wifi.exclamationmark")
-                        .font(.title3)
+                        .font(.title2)
                         .foregroundColor(CSSTheme.primary)
                     SwiftUI.Text(errorText)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 13.5, weight: .semibold))
                         .foregroundColor(CSSTheme.pureBlack)
+                        .multilineTextAlignment(.center)
                 }
-                .frame(maxWidth: .infinity, minHeight: 160)
+                .frame(maxWidth: .infinity, minHeight: 200)
                 .background(CSSTheme.cardBackground)
-                .cornerRadius(14)
+                .clipShape(RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous)
+                        .strokeBorder(
+                            CSSTheme.mediaFrameBorderGradient,
+                            lineWidth: CSSTheme.mediaFrameLineWidth
+                        )
+                )
+                .shadow(color: CSSTheme.secondary.opacity(0.22), radius: 12, x: 0, y: 6)
+                .padding(.horizontal, 4)
             } else {
-                HStack(spacing: 8) {
+                HStack(spacing: 10) {
                     ProgressView()
                         .tint(CSSTheme.primary)
                     SwiftUI.Text(loadingText)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 13.5, weight: .semibold))
                         .foregroundColor(CSSTheme.pureBlack)
                 }
-                .frame(maxWidth: .infinity, minHeight: 220)
+                .frame(maxWidth: .infinity, minHeight: 260)
                 .background(CSSTheme.cardBackground)
-                .cornerRadius(14)
+                .clipShape(RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous)
+                        .strokeBorder(
+                            CSSTheme.mediaFrameBorderGradient,
+                            lineWidth: CSSTheme.mediaFrameLineWidth
+                        )
+                )
+                .shadow(color: CSSTheme.secondary.opacity(0.22), radius: 12, x: 0, y: 6)
+                .padding(.horizontal, 4)
             }
         }
+        .padding(14)
+        .background(CSSTheme.innerRowBackground)
+        .cornerRadius(22)
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(CSSTheme.innerBorder, lineWidth: 1.2)
+        )
         .task(id: urlString) {
             if let cached = GuideImageCacheManager.shared.cachedImage(for: urlString) {
                 self.uiImage = cached
@@ -1858,6 +1959,132 @@ struct RemoteGuideImageView: SwiftUI.View {
                 self.didFail = true
             }
         }
+    }
+}
+
+/// Trình xem ảnh hướng dẫn toàn màn hình hỗ trợ Zoom 1x - 4x và kéo xem chi tiết
+private struct GuideImageFullscreenZoomView: SwiftUI.View {
+    let image: UIImage
+    let stepBadge: String?
+    let caption: String
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+
+    var body: some SwiftUI.View {
+        NavigationView {
+            ZStack {
+                CSSTheme.pageBackgroundGradient.ignoresSafeArea()
+
+                VStack(spacing: 14) {
+                    VStack(spacing: 4) {
+                        if let stepBadge = stepBadge {
+                            SwiftUI.Text(stepBadge)
+                                .font(.system(size: 12, weight: .heavy))
+                                .foregroundColor(CSSTheme.primary)
+                        }
+                        SwiftUI.Text(caption)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(CSSTheme.pureBlack)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                    }
+                    .padding(.top, 6)
+
+                    GeometryReader { geo in
+                        SwiftUI.Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: CSSTheme.mediaFrameCornerRadius, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: CSSTheme.mediaFrameCornerRadius, style: .continuous)
+                                    .strokeBorder(
+                                        CSSTheme.mediaFrameBorderGradient,
+                                        lineWidth: CSSTheme.mediaFrameLineWidth
+                                    )
+                            )
+                            .shadow(color: CSSTheme.secondary.opacity(0.25), radius: 14, x: 0, y: 6)
+                            .padding(12)
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .scaleEffect(scale)
+                            .offset(offset)
+                            .gesture(
+                                MagnificationGesture()
+                                    .onChanged { value in
+                                        let delta = value / lastScale
+                                        lastScale = value
+                                        scale = min(max(scale * delta, 1.0), 4.0)
+                                    }
+                                    .onEnded { _ in
+                                        lastScale = 1.0
+                                        if scale <= 1.05 {
+                                            withAnimation(.spring()) {
+                                                scale = 1.0
+                                                offset = .zero
+                                                lastOffset = .zero
+                                            }
+                                        }
+                                    }
+                            )
+                            .simultaneousGesture(
+                                DragGesture()
+                                    .onChanged { value in
+                                        guard scale > 1.0 else { return }
+                                        offset = CGSize(
+                                            width: lastOffset.width + value.translation.width,
+                                            height: lastOffset.height + value.translation.height
+                                        )
+                                    }
+                                    .onEnded { _ in
+                                        if scale <= 1.0 {
+                                            withAnimation(.spring()) {
+                                                offset = .zero
+                                                lastOffset = .zero
+                                            }
+                                        } else {
+                                            lastOffset = offset
+                                        }
+                                    }
+                            )
+                            .onTapGesture(count: 2) {
+                                withAnimation(.spring()) {
+                                    if scale > 1.0 {
+                                        scale = 1.0
+                                        offset = .zero
+                                        lastOffset = .zero
+                                    } else {
+                                        scale = 2.2
+                                    }
+                                }
+                            }
+                    }
+
+                    SwiftUI.Text("Chạm đúp hoặc dùng 2 ngón tay để phóng to / thu nhỏ")
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundColor(CSSTheme.pureBlack)
+                        .padding(.bottom, 12)
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    SwiftUI.Text("Xem Chi Tiết Ảnh")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(CSSTheme.primary)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    SwiftUI.Button("Đóng") {
+                        dismiss()
+                    }
+                    .font(.headline)
+                    .foregroundColor(CSSTheme.primary)
+                }
+            }
+        }
+        .preferredColorScheme(.light)
     }
 }
 
@@ -2696,7 +2923,7 @@ final class AnisetteQuickListViewModel: ObservableObject {
         if result.isEmpty {
             result = [
                 AnisetteServerItem(
-                    name: "SideStore Official",
+                    name: "SideStore (New)",
                     address: AppConstants.Anisette.Servers.defaultServerURL,
                     isHidden: false
                 )
@@ -2719,6 +2946,12 @@ struct AnisetteDetailSheetView: SwiftUI.View {
     @Environment(\.dismiss) private var dismiss
 
     private let customServerPrefix = "Máy chủ tùy chỉnh"
+
+    private func isRecommendedSideStoreNew(_ server: AnisetteServerItem) -> Bool {
+        let lowerName = server.name.lowercased()
+        return lowerName.contains("sidestore (new)")
+            || (lowerName.contains("sidestore") && lowerName.contains("new"))
+    }
 
     var body: some SwiftUI.View {
         NavigationView {
@@ -2793,7 +3026,7 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                                     .foregroundColor(CSSTheme.pureBlack)
                                 SwiftUI.Text(vm.isAnisetteAutoRotationEnabled
                                              ? "(Tự Động Đổi Máy Chủ Khi Lỗi)"
-                                             : "Đang TẮT (Nên Bật Để Tự Đổi Máy Chủ)")
+                                             : "Đang Tắt “Nên chọn SideStore (New)”")
                                     .font(.system(size: 13, weight: .semibold))
                                     .foregroundColor(vm.isAnisetteAutoRotationEnabled ? CSSTheme.green : CSSTheme.red)
                             }
@@ -2836,6 +3069,8 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                         VStack(spacing: 8) {
                             ForEach(listVM.servers) { server in
                                 let isSelected = (vm.selectedAnisetteServerURL.caseInsensitiveCompare(server.address) == .orderedSame)
+                                let isRecommended = isRecommendedSideStoreNew(server)
+
                                 SwiftUI.Button {
                                     vm.selectAnisetteServerURL(server.address, isCustom: false)
                                     Task { await listVM.reloadCurrentSelection(customPrefix: customServerPrefix) }
@@ -2846,9 +3081,21 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                                             .foregroundColor(isSelected ? CSSTheme.primary : CSSTheme.pureBlack)
 
                                         VStack(alignment: .leading, spacing: 3) {
-                                            SwiftUI.Text(server.name)
-                                                .font(.system(size: 15, weight: .bold))
-                                                .foregroundColor(CSSTheme.pureBlack)
+                                            HStack(spacing: 6) {
+                                                SwiftUI.Text(server.name)
+                                                    .font(.system(size: 15, weight: .bold))
+                                                    .foregroundColor(CSSTheme.pureBlack)
+
+                                                if isRecommended {
+                                                    SwiftUI.Text("★ Khuyên dùng")
+                                                        .font(.system(size: 10.5, weight: .heavy))
+                                                        .padding(.horizontal, 7)
+                                                        .padding(.vertical, 2.5)
+                                                        .background(CSSTheme.green.opacity(0.16))
+                                                        .foregroundColor(CSSTheme.green)
+                                                        .clipShape(Capsule())
+                                                }
+                                            }
                                             SwiftUI.Text(server.address)
                                                 .font(.system(size: 12.5, weight: .medium))
                                                 .foregroundColor(CSSTheme.pureBlack)
@@ -2870,7 +3117,12 @@ struct AnisetteDetailSheetView: SwiftUI.View {
                                     .cornerRadius(12)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 12)
-                                            .stroke(isSelected ? CSSTheme.primary.opacity(0.6) : CSSTheme.innerBorder, lineWidth: 1.2)
+                                            .stroke(
+                                                isSelected
+                                                ? CSSTheme.primary.opacity(0.65)
+                                                : (isRecommended ? CSSTheme.green.opacity(0.45) : CSSTheme.innerBorder),
+                                                lineWidth: isSelected ? 1.5 : 1.1
+                                            )
                                     )
                                 }
                                 .buttonStyle(CSSBounceButtonStyle())

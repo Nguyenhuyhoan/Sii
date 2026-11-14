@@ -33,6 +33,10 @@ private struct ErrorLogCSSTheme {
     static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.88).cgColor
 
     static let cornerRadius: CGFloat = 15.0
+    /// Khoảng cách lề ngang chuẩn từ mép màn hình vào khung Banner & khung Lỗi
+    static let cardHorizontalInset: CGFloat = 16.0
+    /// Khoảng cách đệm từ viền khung lỗi vào chữ bên trong
+    static let cardInnerPadding: CGFloat = 16.0
 }
 
 // MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH
@@ -110,6 +114,15 @@ final class ErrorLogViewController: UITableViewController
         #if !os(tvOS)
         self.navigationItem.largeTitleDisplayMode = .never
         #endif
+        
+        // Đồng bộ lề ngang của TableView để cell.contentView trong kiểu .insetGrouped khớp 16pt với Banner
+        self.tableView.cellLayoutMarginsFollowReadableWidth = false
+        self.tableView.directionalLayoutMargins = NSDirectionalEdgeInsets(
+            top: 0,
+            leading: ErrorLogCSSTheme.cardHorizontalInset,
+            bottom: 0,
+            trailing: ErrorLogCSSTheme.cardHorizontalInset
+        )
         
         self.tableView.dataSource = self.dataSource
         self.dataSource.contentView = self.tableView
@@ -324,8 +337,8 @@ private extension ErrorLogViewController
         headerContainer.addSubview(heroCard)
         
         NSLayoutConstraint.activate([
-            heroCard.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor, constant: 16),
-            heroCard.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -16),
+            heroCard.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor, constant: ErrorLogCSSTheme.cardHorizontalInset),
+            heroCard.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -ErrorLogCSSTheme.cardHorizontalInset),
             heroCard.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 12),
             heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -6),
             
@@ -516,11 +529,25 @@ private extension ErrorLogViewController
         return result
     }
     
-    // MARK: - 🃏 BÓC TÁCH VÀ ÁP DỤNG CARD CSS CHO TỪNG DÒNG LỖI
+    // MARK: - 🃏 BÓC TÁCH VÀ ÁP DỤNG CARD CSS CHO TỪNG DÒNG LỖI (RỘNG BẰNG BANNER + CĂN LỀ ĐẸP)
     func styleInnerCardOfErrorCell(_ cell: ErrorLogTableViewCell, at indexPath: IndexPath, totalRows: Int) {
         cell.backgroundColor = .clear
         cell.contentView.backgroundColor = .clear
+        cell.contentView.clipsToBounds = false
+        cell.clipsToBounds = false
         
+        // 1. Căn lề bên trong Cell rộng rãi, cách đều mép khung lỗi để các chữ nhỏ không bị sát lề
+        cell.preservesSuperviewLayoutMargins = false
+        cell.contentView.preservesSuperviewLayoutMargins = false
+        let innerPadding = ErrorLogCSSTheme.cardInnerPadding
+        cell.contentView.directionalLayoutMargins = NSDirectionalEdgeInsets(
+            top: 14,
+            leading: innerPadding,
+            bottom: 14,
+            trailing: innerPadding
+        )
+        
+        // 2. Tạo khung Card trắng có chiều rộng bằng đúng khung chứa chữ "Nhật Ký Lỗi Hệ Thống"
         let cardTag = 8899
         let cardView: UIView
         if let existing = cell.contentView.viewWithTag(cardTag) {
@@ -531,13 +558,31 @@ private extension ErrorLogViewController
             newCard.translatesAutoresizingMaskIntoConstraints = false
             newCard.isUserInteractionEnabled = false
             cell.contentView.insertSubview(newCard, at: 0)
-            NSLayoutConstraint.activate([
-                newCard.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 16),
-                newCard.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -16),
-                newCard.topAnchor.constraint(equalTo: cell.contentView.topAnchor),
-                newCard.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor)
-            ])
             cardView = newCard
+        }
+        
+        // Neo trực tiếp chiều rộng của khung lỗi theo tableView.frameLayoutGuide (cách lề 16pt)
+        // Giúp khung lỗi luôn rộng bằng hệt khung Banner "Nhật Ký Lỗi Hệ Thống" bất kể kiểu bảng là .insetGrouped hay .plain
+        let widthConstraintID = "ErrorCardExactBannerWidth"
+        if !self.tableView.constraints.contains(where: { $0.identifier == widthConstraintID && ($0.firstItem === cardView || $0.secondItem === cardView) }) {
+            let lead = cardView.leadingAnchor.constraint(equalTo: self.tableView.frameLayoutGuide.leadingAnchor, constant: ErrorLogCSSTheme.cardHorizontalInset)
+            lead.identifier = widthConstraintID
+            lead.priority = .required
+            
+            let trail = cardView.trailingAnchor.constraint(equalTo: self.tableView.frameLayoutGuide.trailingAnchor, constant: -ErrorLogCSSTheme.cardHorizontalInset)
+            trail.identifier = widthConstraintID
+            trail.priority = .required
+            
+            let fallbackLead = cardView.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor)
+            fallbackLead.priority = UILayoutPriority(750)
+            
+            let fallbackTrail = cardView.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor)
+            fallbackTrail.priority = UILayoutPriority(750)
+            
+            let top = cardView.topAnchor.constraint(equalTo: cell.contentView.topAnchor)
+            let bottom = cardView.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor)
+            
+            NSLayoutConstraint.activate([lead, trail, fallbackLead, fallbackTrail, top, bottom])
         }
         
         cardView.backgroundColor = ErrorLogCSSTheme.white
@@ -560,7 +605,7 @@ private extension ErrorLogViewController
         cell.layer.shadowRadius = 10
         cell.layer.shadowOpacity = 0.07
         
-        // Đường kẻ phân cách tinh tế giữa các lỗi trong cùng một ngày
+        // 3. Đường kẻ phân cách tinh tế giữa các lỗi trong cùng một ngày (căn theo cardView)
         let sepTag = 8888
         cell.contentView.viewWithTag(sepTag)?.removeFromSuperview()
         if indexPath.row < totalRows - 1 {
@@ -570,14 +615,14 @@ private extension ErrorLogViewController
             sep.translatesAutoresizingMaskIntoConstraints = false
             cell.contentView.addSubview(sep)
             NSLayoutConstraint.activate([
-                sep.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 32),
-                sep.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -32),
-                sep.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor),
+                sep.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: innerPadding),
+                sep.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -innerPadding),
+                sep.bottomAnchor.constraint(equalTo: cardView.bottomAnchor),
                 sep.heightAnchor.constraint(equalToConstant: 1.0)
             ])
         }
         
-        // Làm đẹp các thành phần bên trong Cell
+        // 4. Làm đẹp và căn lề thoáng cho các chữ bên trong Cell
         cell.errorFailureLabel.textColor = ErrorLogCSSTheme.dark
         cell.errorFailureLabel.font = UIFont.systemFont(ofSize: 15.5, weight: .bold)
         
@@ -591,7 +636,9 @@ private extension ErrorLogViewController
         cell.errorCodeLabel.layer.cornerRadius = 6
         cell.errorCodeLabel.layer.masksToBounds = true
         
-        // Làm đẹp nội dung chi tiết lỗi và nút Xem thêm (More)
+        // Căn lề chuẩn cho phần chữ mô tả lỗi để thẳng hàng với tiêu đề và cách đều lề khung
+        cell.errorDescriptionTextView.textContainer.lineFragmentPadding = 0
+        cell.errorDescriptionTextView.textContainerInset = UIEdgeInsets(top: 4, left: 2, bottom: 4, right: 2)
         cell.errorDescriptionTextView.textColor = ErrorLogCSSTheme.dark.withAlphaComponent(0.88)
         cell.errorDescriptionTextView.font = UIFont.systemFont(ofSize: 13.5, weight: .regular)
         cell.errorDescriptionTextView.moreButton.setTitle("Xem thêm", for: .normal)
@@ -835,7 +882,7 @@ extension ErrorLogViewController
         container.addSubview(underline)
         
         NSLayoutConstraint.activate([
-            titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
+            titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: ErrorLogCSSTheme.cardHorizontalInset + 4),
             titleLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor, constant: 2),
             
             underline.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),

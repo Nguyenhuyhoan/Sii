@@ -11,22 +11,13 @@
 
 extension TabBarController
 {
-    // Thứ tự ban đầu được nạp từ Storyboard
-    private enum StoryboardTab: Int, CaseIterable
+    // Đã xóa case browse để index của myApps (2) và settings (3) khớp với mảng viewControllers sau khi xóa
+    private enum Tab: Int, CaseIterable
     {
-        case news
-        case sources
-        case browse
-        case myApps
-        case settings
-    }
-
-    // Thứ tự 3 tab thực tế sau khi đã bỏ Sources và Browse
-    private enum ActiveTab: Int
-    {
-        case overview = 0 // Tổng Quan
-        case myApps   = 1 // My Apps
-        case settings = 2 // Cài Đặt
+        case news      // 0: Tổng quan
+        case sources   // 1: Tin tức
+        case myApps    // 2: Ứng dụng
+        case settings  // 3: Cài đặt
     }
 }
 
@@ -36,7 +27,7 @@ final class TabBarController: UITabBarController
     
     private var _viewDidAppear = false
     
-    private var sourcesViewController: SourcesViewController?
+    private var sourcesViewController: SourcesViewController!
     
     required init?(coder aDecoder: NSCoder)
     {
@@ -52,26 +43,38 @@ final class TabBarController: UITabBarController
         super.viewDidLoad()
         debugLog("[TabBarController] viewDidLoad()")
         
-        guard let allControllers = self.viewControllers,
-              allControllers.count > StoryboardTab.settings.rawValue else { return }
+        // 1. Xóa tab Browse (nằm ở vị trí index 2 trên Storyboard gốc)
+        if var viewControllers = self.viewControllers, viewControllers.count == 5 {
+            viewControllers.remove(at: 2)
+            self.viewControllers = viewControllers
+        }
         
-        // 1. Tab Tổng Quan (News cũ)
-        let overviewNav = allControllers[StoryboardTab.news.rawValue]
-        overviewNav.tabBarItem.title = "Tổng Quan"
-        overviewNav.tabBarItem.image = UIImage(systemName: "checkmark.shield")
-        overviewNav.tabBarItem.selectedImage = UIImage(systemName: "checkmark.shield.fill")
+        // 2. Đổi tab News thành "Tổng quan" (Giữ lại icon dấu tích của bạn, nếu không muốn có thể xóa 2 dòng image)
+        if let newsNav = self.viewControllers?[Tab.news.rawValue] as? UINavigationController
+        {
+            newsNav.tabBarItem.title = "Tổng quan"
+            newsNav.tabBarItem.image = UIImage(systemName: "checkmark.shield")
+            newsNav.tabBarItem.selectedImage = UIImage(systemName: "checkmark.shield.fill")
+        }
         
-        // 2. Tab My Apps
-        let myAppsNav = allControllers[StoryboardTab.myApps.rawValue]
+        // 3. Đổi tab Sources (Nguồn) thành "Tin tức"
+        if let sourcesNav = self.viewControllers?[Tab.sources.rawValue] as? UINavigationController
+        {
+            sourcesNav.tabBarItem.title = "Tin tức"
+            self.sourcesViewController = sourcesNav.viewControllers.first as? SourcesViewController
+        }
         
-        // 3. Tab Cài Đặt (Settings)
-        let settingsNav = allControllers[StoryboardTab.settings.rawValue]
-        settingsNav.tabBarItem.title = "Cài Đặt"
-        settingsNav.tabBarItem.image = UIImage(systemName: "gearshape")
-        settingsNav.tabBarItem.selectedImage = UIImage(systemName: "gearshape.fill")
+        // 4. Đổi tab My Apps thành "Ứng dụng"
+        if let myAppsNav = self.viewControllers?[Tab.myApps.rawValue] as? UINavigationController
+        {
+            myAppsNav.tabBarItem.title = "Ứng dụng"
+        }
         
-        // Bỏ 2 tab Sources (Nguồn) và Browse khỏi thanh TabBar
-        self.viewControllers = [overviewNav, myAppsNav, settingsNav]
+        // 5. Đổi tab Settings thành "Cài đặt"
+        if let settingsNav = self.viewControllers?[Tab.settings.rawValue] as? UINavigationController
+        {
+            settingsNav.tabBarItem.title = "Cài đặt"
+        }
     }
     
     override func viewDidAppear(_ animated: Bool)
@@ -103,7 +106,6 @@ extension TabBarController
 {
     @objc func presentSources(_ sender: Any)
     {
-        // Vì đã bỏ tab Nguồn nên nếu có deep link thêm nguồn thì chuyển về tab My Apps
         if let presentedViewController = self.presentedViewController
         {
             presentedViewController.dismiss(animated: true) {
@@ -112,8 +114,13 @@ extension TabBarController
             
             return
         }
+                
+        if let notification = (sender as? Notification), let sourceURL = notification.userInfo?[AppDelegate.addSourceDeepLinkURLKey] as? URL
+        {
+            self.sourcesViewController?.deepLinkSourceURL = sourceURL
+        }
         
-        self.selectedIndex = ActiveTab.myApps.rawValue
+        self.selectedIndex = Tab.sources.rawValue
     }
 }
 
@@ -121,11 +128,11 @@ private extension TabBarController
 {
     @objc func importApp(_ notification: Notification)
     {
-        self.selectedIndex = ActiveTab.myApps.rawValue
+        self.selectedIndex = Tab.myApps.rawValue
     }
 
     @objc func openErrorLog(_ notification: Notification)
     {
-        self.selectedIndex = ActiveTab.settings.rawValue
+        self.selectedIndex = Tab.settings.rawValue
     }
 }

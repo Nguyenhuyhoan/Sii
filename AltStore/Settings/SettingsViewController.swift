@@ -285,6 +285,7 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
     @StateObject private var vm = SettingsAnisetteViewModel()
     @State private var customServerInput: String = ""
     @Environment(\.dismiss) private var dismiss
+    var onDismiss: (() -> Void)? = nil
 
     private let customServerPrefix = "Máy chủ tùy chỉnh"
 
@@ -525,9 +526,12 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                         .foregroundColor(CSSTheme.suiPrimary)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    SwiftUI.Button("Xong") { dismiss() }
-                        .font(.headline)
-                        .foregroundColor(CSSTheme.suiPrimary)
+                    SwiftUI.Button("Xong") {
+                        onDismiss?()
+                        dismiss()
+                    }
+                    .font(.headline)
+                    .foregroundColor(CSSTheme.suiPrimary)
                 }
             }
             .task {
@@ -536,6 +540,9 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
             }
         }
         .preferredColorScheme(.light)
+        .onDisappear {
+            onDismiss?()
+        }
     }
 }
 
@@ -815,6 +822,12 @@ final class SettingsViewController: UITableViewController
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
         self.forceDisableRemovedSettings()
         self.update()
+        self.restoreVisibleCellsWhiteBackground()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        self.restoreVisibleCellsWhiteBackground()
     }
 
     override func viewWillDisappear(_ animated: Bool)
@@ -1147,11 +1160,16 @@ private extension SettingsViewController {
 
     // Bóc tách lớp nền của InsetGroupTableViewCell để ép nhận diện CSS Card
     private func styleInnerCardOfCell(_ cell: UITableViewCell, at indexPath: IndexPath, totalRows: Int) {
+        // Khóa hiệu ứng tô xám mặc định của UITableViewCell để không bị kẹt màu khi mở/đóng Sheet
+        cell.selectionStyle = .none
+        cell.selectedBackgroundView = UIView()
+        cell.selectedBackgroundView?.backgroundColor = .clear
+        
         cell.backgroundColor = .clear
         cell.contentView.backgroundColor = .clear
         
         let targetCardView: UIView = cell.subviews.first(where: {
-            $0 !== cell.contentView && $0.frame.width > 100 && !($0 is UIButton)
+            $0 !== cell.contentView && $0 !== cell.selectedBackgroundView && $0.frame.width > 100 && !($0 is UIButton)
         }) ?? cell.contentView
         
         targetCardView.backgroundColor = CSSTheme.white
@@ -1192,6 +1210,19 @@ private extension SettingsViewController {
         
         // Việt hóa và làm đẹp toàn bộ chữ bên trong Cell
         translateAndStyleLabelsInside(view: cell.contentView, section: Section.allCases[indexPath.section], row: indexPath.row)
+    }
+
+    // Khôi phục ngay lập tức nền trắng #FFFFFF cho tất cả các Cell đang hiển thị
+    private func restoreVisibleCellsWhiteBackground() {
+        for cell in self.tableView.visibleCells {
+            guard let indexPath = self.tableView.indexPath(for: cell) else { continue }
+            let section = Section.allCases[indexPath.section]
+            if section == .account && indexPath.row == 3 { continue }
+            let totalRows = self.tableView(self.tableView, numberOfRowsInSection: indexPath.section)
+            cell.setHighlighted(false, animated: false)
+            cell.setSelected(false, animated: false)
+            self.styleInnerCardOfCell(cell, at: indexPath, totalRows: totalRows)
+        }
     }
 
     // Bộ từ điển dịch tự động 100% các chuỗi tĩnh từ Storyboard & Hệ thống sang Tiếng Việt
@@ -1718,11 +1749,13 @@ private extension SettingsViewController
                                                 preferredStyle: .actionSheet)
         alertController.addAction(UIAlertAction(title: "Hủy", style: .cancel) { [weak self] _ in
             self?.tableView.indexPathForSelectedRow.map { self?.tableView.deselectRow(at: $0, animated: true) }
+            self?.restoreVisibleCellsWhiteBackground()
         })
         alertController.addAction(UIAlertAction(title: "Xóa bộ nhớ đệm", style: .destructive) { [weak self] _ in
             AppManager.shared.clearAppCache { result in
                 DispatchQueue.main.async {
                     self?.tableView.indexPathForSelectedRow.map { self?.tableView.deselectRow(at: $0, animated: true) }
+                    self?.restoreVisibleCellsWhiteBackground()
                     switch result {
                     case .success: break
                     case .failure(let error):
@@ -1793,9 +1826,23 @@ private extension SettingsViewController
     @objc @IBAction private func followAltStoreGitHub() { UIApplication.shared.open(AppConstants.URLs.sideStoreGitHub, options: [:]) }
 
     private func presentAnisetteSheet() {
-        let hostingController = UIHostingController(rootView: SettingsAnisetteSheetView())
+        let sheetView = SettingsAnisetteSheetView(onDismiss: { [weak self] in
+            DispatchQueue.main.async {
+                self?.restoreVisibleCellsWhiteBackground()
+            }
+        })
+        let hostingController = UIHostingController(rootView: sheetView)
         hostingController.overrideUserInterfaceStyle = .light
-        self.present(hostingController, animated: true)
+        hostingController.presentationController?.delegate = self
+        self.present(hostingController, animated: true) { [weak self] in
+            self?.restoreVisibleCellsWhiteBackground()
+        }
+    }
+}
+
+extension SettingsViewController: UIAdaptivePresentationControllerDelegate {
+    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        self.restoreVisibleCellsWhiteBackground()
     }
 }
 
@@ -1925,6 +1972,7 @@ extension SettingsViewController
         }
         
         let cell = super.tableView(tableView, cellForRowAt: effectiveIndexPath)
+        cell.selectionStyle = .none
         
         if section == .account && indexPath.row == 2 {
             if let insetCell = cell as? InsetGroupTableViewCell {
@@ -2018,15 +2066,45 @@ extension SettingsViewController
 
 extension SettingsViewController
 {
+    override func tableView(_ tableView: UITableView, didHighlightRowAt indexPath: IndexPath)
+    {
+        if let cell = tableView.cellForRow(at: indexPath) {
+            let section = Section.allCases[indexPath.section]
+            if !(section == .account && indexPath.row == 3) {
+                let totalRows = self.tableView(tableView, numberOfRowsInSection: indexPath.section)
+                self.styleInnerCardOfCell(cell, at: indexPath, totalRows: totalRows)
+            }
+        }
+    }
+
+    override func tableView(_ tableView: UITableView, didUnhighlightRowAt indexPath: IndexPath)
+    {
+        if let cell = tableView.cellForRow(at: indexPath) {
+            let section = Section.allCases[indexPath.section]
+            if !(section == .account && indexPath.row == 3) {
+                let totalRows = self.tableView(tableView, numberOfRowsInSection: indexPath.section)
+                DispatchQueue.main.async { [weak self] in
+                    self?.styleInnerCardOfCell(cell, at: indexPath, totalRows: totalRows)
+                }
+            }
+        }
+    }
+
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath)
     {
+        tableView.deselectRow(at: indexPath, animated: false)
+        self.restoreVisibleCellsWhiteBackground()
+
         if let cell = tableView.cellForRow(at: indexPath) {
             UIView.animate(withDuration: 0.12, animations: {
                 cell.transform = CGAffineTransform(translationX: 5, y: -2).scaledBy(x: 0.98, y: 0.98)
-            }) { _ in
+            }) { [weak self] _ in
+                self?.restoreVisibleCellsWhiteBackground()
                 UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.5, initialSpringVelocity: 0.5, options: .curveEaseOut, animations: {
                     cell.transform = .identity
-                }, completion: nil)
+                }, completion: { [weak self] _ in
+                    self?.restoreVisibleCellsWhiteBackground()
+                })
             }
         }
 
@@ -2039,7 +2117,6 @@ extension SettingsViewController
             
         case .account:
             if indexPath.row == 3 {
-                tableView.deselectRow(at: indexPath, animated: true)
                 self.resolvePendingAccountActions()
             }
             
@@ -2078,8 +2155,6 @@ extension SettingsViewController
         case .patreon, .display, .appRefresh, .instructions, .techyThings, .credits, .betaTesting, .diagnostics:
             break
         }
-        
-        tableView.deselectRow(at: indexPath, animated: true)
     }
 }
 

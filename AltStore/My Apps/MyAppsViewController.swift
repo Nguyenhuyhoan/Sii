@@ -134,6 +134,20 @@ class MyAppsViewController: UICollectionViewController
     
     private var activeTeam: ALTTeam?
     
+    // Truy xuất Team hiện tại từ CoreData (dùng làm fallback ngay lập tức khi activeTeam đang tải bất đồng bộ)
+    private func resolveCurrentManagedTeam() -> Team?
+    {
+        let context = DatabaseManager.shared.viewContext
+        if let activeTeam = self.activeTeam
+        {
+            if let team = Team.first(satisfying: NSPredicate(format: "%K == %@", #keyPath(Team.identifier), activeTeam.identifier), in: context)
+            {
+                return team
+            }
+        }
+        return DatabaseManager.shared.activeTeam(in: context)
+    }
+    
     #if !os(tvOS)
     override var preferredStatusBarStyle: UIStatusBarStyle {
         return .darkContent
@@ -238,7 +252,14 @@ class MyAppsViewController: UICollectionViewController
         }
         
         Task { @MainActor [weak self] in
-            self?.activeTeam = try? await AuthManager.shared.getAuthenticatedTeam()
+            guard let self = self else { return }
+            let team = try? await AuthManager.shared.getAuthenticatedTeam()
+            if self.activeTeam != team
+            {
+                self.activeTeam = team
+                self.collectionView.collectionViewLayout.invalidateLayout()
+                self.collectionView.reloadData()
+            }
         }
     }
     
@@ -260,10 +281,12 @@ class MyAppsViewController: UICollectionViewController
             if self.activeTeam != team
             {
                 self.activeTeam = team
+                self.collectionView.collectionViewLayout.invalidateLayout()
                 self.collectionView.reloadData()
             }
         }
         
+        self.collectionView.collectionViewLayout.invalidateLayout()
         self.collectionView.reloadData()
         
         self.update()
@@ -351,7 +374,7 @@ class MyAppsViewController: UICollectionViewController
         case "showAppIDs":
             let navigationController = segue.destination as? UINavigationController
             let appIDsViewController = navigationController?.viewControllers.first as? AppIDsViewController
-            appIDsViewController?.activeTeam = self.activeTeam
+            appIDsViewController?.activeTeam = self.activeTeam ?? self.resolveCurrentManagedTeam()?.altTeam
             
         default: break
         }
@@ -1265,10 +1288,19 @@ private extension MyAppsViewController
     
     func fetchAppIDs()
     {
-        AppManager.shared.syncAppIDs { (result) in
+        AppManager.shared.syncAppIDs { [weak self] (result) in
             do
             {
-                try result.get()
+                _ = try result.get()
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    if self.activeTeam == nil
+                    {
+                        self.activeTeam = try? await AuthManager.shared.getAuthenticatedTeam()
+                    }
+                    self.collectionView.collectionViewLayout.invalidateLayout()
+                    self.collectionView.reloadData()
+                }
             }
             catch
             {
@@ -1280,6 +1312,8 @@ private extension MyAppsViewController
     @objc private func appIDsViewControllerDidDismiss(_ notification: Notification)
     {
         DispatchQueue.main.async {
+            self.collectionView.collectionViewLayout.invalidateLayout()
+            self.collectionView.reloadData()
             self.fetchAppIDs()
         }
     }
@@ -1568,6 +1602,7 @@ private extension MyAppsViewController
                     installedApp.managedObjectContext?.perform {
                         debugLog("Successfully installed app: \(installedApp.bundleIdentifier)")
                     }
+                    self?.fetchAppIDs()
                 case .failure(let error):
                     if error is CancellationError {
                         completion(.failure(OperationError.cancelled))
@@ -2581,25 +2616,39 @@ extension MyAppsViewController
             let footerView = collectionView.dequeueReusableSupplementaryView(ofKind: UICollectionView.elementKindSectionFooter, withReuseIdentifier: "InstalledAppsFooter", for: indexPath) as! InstalledAppsCollectionFooterView
             
             footerView.overrideUserInterfaceStyle = .light
+            footerView.isHidden = false
             footerView.textLabel.textColor = CSSTheme.purple
             footerView.textLabel.font = UIFont.systemFont(ofSize: 14, weight: .bold)
             footerView.button?.tintColor = CSSTheme.blue
+            footerView.button?.isHidden = false
             
-            guard let team = self.activeTeam else { return footerView }
-            switch team.type
+            let managedTeam = self.resolveCurrentManagedTeam()
+            guard let teamType = self.activeTeam?.type ?? managedTeam?.type else {
+                footerView.textLabel.isHidden = true
+                return footerView
+            }
+            
+            switch teamType
             {
             case .free:
-                guard let managedTeam = Team.first(satisfying: NSPredicate(format: "%K == %@", #keyPath(Team.identifier), team.identifier), in: DatabaseManager.shared.viewContext) else { return footerView }
-                let registeredAppIDs = managedTeam.appIDs.count
+                if let managedTeam = managedTeam
+                {
+                    let registeredAppIDs = managedTeam.appIDs.count
+                    let maximumAppIDCount = 10
+                    let remainingAppIDs = max(0, maximumAppIDCount - registeredAppIDs)
+                    
+                    footerView.textLabel.text = String(format: "Còn lại %@ App ID khả dụng", NSNumber(value: remainingAppIDs))
+                    footerView.textLabel.isHidden = false
+                }
+                else
+                {
+                    footerView.textLabel.isHidden = true
+                }
                 
-                let maximumAppIDCount = 10
-                let remainingAppIDs = maximumAppIDCount - registeredAppIDs
-                
-                footerView.textLabel.text = String(format: "Còn lại %@ App ID khả dụng", NSNumber(value: remainingAppIDs))
-                footerView.textLabel.isHidden = remainingAppIDs < 0
-                
-            case .individual, .organization, .unknown: footerView.textLabel.isHidden = true
-            @unknown default: break
+            case .individual, .organization, .unknown:
+                footerView.textLabel.isHidden = true
+            @unknown default:
+                footerView.textLabel.isHidden = true
             }
             
             return footerView
@@ -3020,7 +3069,7 @@ extension MyAppsViewController: UICollectionViewDelegateFlowLayout
         
         func appIDsFooterSize() -> CGSize
         {
-            guard let _ = self.activeTeam else { return .zero }
+            guard self.activeTeam != nil || self.resolveCurrentManagedTeam() != nil else { return .zero }
             return CGSize(width: collectionView.bounds.width, height: 60.5)
         }
         

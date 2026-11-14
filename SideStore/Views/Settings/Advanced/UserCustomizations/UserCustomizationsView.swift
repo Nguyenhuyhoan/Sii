@@ -1,4 +1,3 @@
-
 //
 //  UserCustomizationsView.swift
 //  SideStore
@@ -10,82 +9,61 @@
 import SwiftUI
 import Minimuxer
 
-// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI TAB CÀI ĐẶT)
-private enum CustomizationsCSSTheme {
-    static let white = Color.white
-    static let light = Color(red: 248/255, green: 249/255, blue: 250/255)               // #f8f9fa
-    static let border = Color(red: 233/255, green: 236/255, blue: 239/255)              // #e9ecef
-    static let blue = Color(red: 0/255, green: 123/255, blue: 255/255)                  // #007bff
-    static let purple = Color(red: 111/255, green: 66/255, blue: 193/255)               // #6f42c1
-    static let green = Color(red: 40/255, green: 167/255, blue: 69/255)                 // #28a745
-    static let magenta = Color(red: 255/255, green: 0/255, blue: 255/255)               // #ff00ff
-    static let red = Color(red: 220/255, green: 53/255, blue: 69/255)                   // #dc3545
-    static let darkText = Color(red: 52/255, green: 58/255, blue: 64/255)               // #343a40
-    static let secondaryText = Color(red: 52/255, green: 58/255, blue: 64/255).opacity(0.75)
-
-    // Gradient Background (#f3e0ff -> #e0f7ff) giống hệt CSSGradientBackgroundView
-    static let bgGradientStart = Color(red: 243/255, green: 224/255, blue: 255/255)
-    static let bgGradientEnd = Color(red: 224/255, green: 247/255, blue: 255/255)
-
-    static var pageBackgroundGradient: LinearGradient {
-        LinearGradient(
-            colors: [bgGradientStart, bgGradientEnd],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    // Hero Banner Gradient (rgba(0,123,255,.92) -> rgba(111,66,193,.88))
-    static let heroStart = Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.92)
-    static let heroEnd = Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.88)
-
-    static var heroGradient: LinearGradient {
-        LinearGradient(
-            colors: [heroStart, heroEnd],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    static let cornerRadius: CGFloat = 15.0
-    static let cardShadow = Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.08)
-}
-
-// MARK: - Hiệu ứng nhấn nút thu nhỏ mượt mà chuẩn Tab Cài đặt
-private struct CustomizationsBounceButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
-            .animation(.spring(response: 0.26, dampingFraction: 0.68), value: configuration.isPressed)
-    }
+private extension Color {
+    static let settingsRowBackground = Color.white.opacity(0.15)
+    static let settingsDivider = Color.white.opacity(0.15)
 }
 
 struct UserCustomizationsView: View {
     @State private var selectedBackend: GatewayBackend = selectedGatewayBackendCache
+    @State private var isBackgroundServiceEnabled: Bool = UserDefaults.standard.isBackgroundServiceEnabled
+    @State private var selectedBackgroundServiceMode: BackgroundServiceMode = UserDefaults.standard.backgroundServiceMode
     @State private var useOnDeviceAnisette: Bool = UserDefaults.standard.useOnDeviceAnisette
     @State private var showAnisetteRestartConfirmation: Bool = false
     @State private var customizeInfoPlist: Bool = UserDefaults.standard.customizeInfoPlist
+    @State private var preferSheetForInfoPlistCustomization: Bool = UserDefaults.standard.preferSheetForInfoPlistCustomization
+    @State private var customizeEntitlements: Bool = UserDefaults.standard.customizeEntitlements
+    @State private var preferSheetForEntitlementsCustomization: Bool = UserDefaults.standard.preferSheetForEntitlementsCustomization
     @State private var customizeAppId: Bool = UserDefaults.standard.customizeAppId
     @State private var customizeAppIcon: Bool = UserDefaults.standard.customizeAppIcon
+    @State private var customizeProvisioningProfile: Bool = UserDefaults.standard.customizeProvisioningProfile
     @State private var customizeAppExtensions: AppExtensionCustomization = UserDefaults.standard.customizeAppExtensions
     @State private var appImportSourceMode: AppImportSourceMode = UserDefaults.standard.appImportSourceMode
     @State private var isInstallConfirmationEnabled: Bool = UserDefaults.standard.isInstallConfirmationEnabled
     @State private var isClearCustomizationsOnUninstallEnabled: Bool = UserDefaults.standard.isClearCustomizationsOnUninstallEnabled
     @State private var isAutoLaunchAppAfterInstallEnabled: Bool = UserDefaults.standard.isAutoLaunchAppAfterInstallEnabled
     @State private var autoFixAppGroupIDs: Bool = UserDefaults.standard.autoFixAppGroupIDs
+    @State private var preferResignedIPA: Bool = UserDefaults.standard.preferResignedIPA
+    @State private var pendingPreferIPAOngoing: Bool = false
+    @State private var showPreferIPAToggleAlert: Bool = false
+    @State private var isExportResignedAppEnabled: Bool = UserDefaults.standard.isExportResignedAppEnabled
+    @State private var enableEMPforWireguard: Bool = UserDefaults.standard.enableEMPforWireguard
+    @State private var pendingEMPOption: Bool = false
+    @State private var showEMPRestartConfirmation: Bool = false
     @State private var pendingBackendOption: GatewayBackend? = nil
     @State private var showBackendRestartConfirmation: Bool = false
+    @State private var skipNonCopyableFiles: Bool = UserDefaults.standard.skipNonCopyableBackupFiles
     @State private var appVerificationDisabled: Bool = UserDefaults.standard.appVerificationDisabled
     @State private var isBundleIDVerificationEnabled: Bool = UserDefaults.standard.isBundleIDVerificationEnabled
     @State private var isiOSVersionVerificationEnabled: Bool = UserDefaults.standard.isiOSVersionVerificationEnabled
     @State private var isAppVersionVerificationEnabled: Bool = UserDefaults.standard.isAppVersionVerificationEnabled
+    @State private var isChecksumVerificationEnabled: Bool = UserDefaults.standard.isChecksumVerificationEnabled
+    @State private var isFileSizeVerificationEnabled: Bool = UserDefaults.standard.isFileSizeVerificationEnabled
     @State private var permissionCheckingDisabled: Bool = UserDefaults.standard.permissionCheckingDisabled
     @State private var isCellularRefreshEnabled: Bool = UserDefaults.standard.isCellularRefreshEnabled
     @State private var turnOnDataShortcutName: String = UserDefaults.standard.turnOnDataShortcutName
     @State private var turnOffDataShortcutName: String = UserDefaults.standard.turnOffDataShortcutName
+    @State private var turnOnBaseDelayText: String = {
+        let delay = CellularRefreshManager.shared.turnOnDataBaseDelayOverride ?? AppConstants.Shortcuts.defaultTurnOnDataBaseDelay
+        return String(delay)
+    }()
+    @State private var turnOffBaseDelayText: String = {
+        let delay = CellularRefreshManager.shared.turnOffDataBaseDelayOverride ?? AppConstants.Shortcuts.defaultTurnOffDataBaseDelay
+        return String(delay)
+    }()
+    @State private var wireGuardExportURL: URL? = nil
 
     @State private var isFreeAccount: Bool = false
-    @State private var animateHero: Bool = false
 
     struct EditDialogState: Identifiable {
         let id = UUID()
@@ -100,19 +78,48 @@ struct UserCustomizationsView: View {
     @State private var editingValueText: String = ""
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
-                // Khối Hero Banner đồng bộ với Tab Cài đặt
-                heroBannerView
-
-                // Section 1: DỮ LIỆU ĐỊNH DANH ANISETTE
-                VStack(alignment: .leading, spacing: 10) {
-                    sectionHeader(title: "DỮ LIỆU ĐỊNH DANH ANISETTE")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                // Section 0: APPEARANCE & THEMES
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("APPEARANCE & THEMES")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.6))
+                        .padding(.horizontal, 16)
                     
-                    sectionCard {
+                    NavigationLink(destination: ThemePickerView()) {
+                        HStack {
+                            Text("Theme Manager")
+                                .font(.system(size: 17, weight: .bold))
+                                .foregroundColor(.white)
+                            Spacer()
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(Color(uiColor: ThemeManager.shared.primaryColor))
+                                    .frame(width: 14, height: 14)
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(Color.white.opacity(0.4))
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                    }
+                    .background(Color.settingsRowBackground)
+                    .cornerRadius(14)
+                }
+
+                // Section 1: ANISETTE
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("ANISETTE")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.6))
+                        .padding(.horizontal, 16)
+                    
+                    VStack(spacing: 0) {
                         toggleRow(
-                            title: "Anisette trực tiếp trên thiết bị",
-                            subtitle: "Chạy trình giả lập định danh ngay trên máy thay vì dùng máy chủ từ xa",
+                            title: "On-Device Anisette",
+                            subtitle: "Run ADI emulation directly on device instead of remote servers",
                             isOn: Binding(
                                 get: { useOnDeviceAnisette },
                                 set: { newValue in
@@ -124,45 +131,86 @@ struct UserCustomizationsView: View {
                         
                         divider
                         
+                        NavigationLink(destination: AnisetteDataView()) {
+                            HStack {
+                                Text("Anisette Client Configuration")
+                                    .font(.system(size: 17, weight: .bold))
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(Color.white.opacity(0.4))
+                            }
+                            .padding(.horizontal, 16)
+                            .frame(height: 50)
+                        }
+                        
+                        divider
+                        
                         SwiftUI.Button(role: .destructive) {
                             presentResetAdiDialog()
                         } label: {
                             HStack {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text("Đặt lại dữ liệu adi.pb")
-                                        .font(.system(size: 16, weight: .bold))
-                                        .foregroundColor(CustomizationsCSSTheme.magenta)
-                                    Text("Xoá dữ liệu cấp phép Anisette cục bộ khỏi Chuỗi khóa bảo mật")
-                                        .font(.system(size: 12.5, weight: .regular))
-                                        .foregroundColor(CustomizationsCSSTheme.secondaryText)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Reset adi.pb")
+                                        .font(.system(size: 17, weight: .bold))
+                                        .foregroundColor(.red)
+                                    Text("Clear local Anisette provisioning data from Keychain")
+                                        .font(.system(size: 12, weight: .regular))
+                                        .foregroundColor(Color.white.opacity(0.6))
                                 }
                                 Spacer()
-                                ZStack {
-                                    Circle()
-                                        .fill(CustomizationsCSSTheme.magenta.opacity(0.12))
-                                        .frame(width: 34, height: 34)
-                                    Image(systemName: "trash.fill")
-                                        .font(.system(size: 14, weight: .bold))
-                                        .foregroundColor(CustomizationsCSSTheme.magenta)
-                                }
+                                Image(systemName: "trash")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.red)
                             }
                             .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .frame(minHeight: 54)
+                            .padding(.vertical, 10)
+                            .frame(minHeight: 50)
                         }
-                        .buttonStyle(CustomizationsBounceButtonStyle())
                     }
+                    .background(Color.settingsRowBackground)
+                    .cornerRadius(14)
                 }
 
-                // Section 2: CÀI ĐẶT CHUNG
+                // Section: SIDESIGN
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("SIDESIGN")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.6))
+                        .padding(.horizontal, 16)
+                    
+                    VStack(spacing: 0) {
+                        NavigationLink(destination: SideSignConfigurationView()) {
+                            HStack {
+                                Text("SideSign Client Configuration")
+                                    .font(.system(size: 17, weight: .bold))
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(Color.white.opacity(0.4))
+                            }
+                            .padding(.horizontal, 16)
+                            .frame(height: 50)
+                        }
+                    }
+                    .background(Color.settingsRowBackground)
+                    .cornerRadius(14)
+                }
+
+                // Section 2: GENERAL
                 generalSection
 
-                // Section 3: XÁC MINH ỨNG DỤNG
-                VStack(alignment: .leading, spacing: 10) {
-                    sectionHeader(title: "XÁC MINH ỨNG DỤNG")
+                // Section 2: APP VERIFICATION
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("APP VERIFICATION")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.6))
+                        .padding(.horizontal, 16)
                     
-                    sectionCard {
-                        toggleRow(title: "Tắt tất cả bước xác minh", isOn: Binding(
+                    VStack(spacing: 0) {
+                        toggleRow(title: "Disable All Verifications", isOn: Binding(
                             get: { appVerificationDisabled },
                             set: { newValue in
                                 appVerificationDisabled = newValue
@@ -173,7 +221,7 @@ struct UserCustomizationsView: View {
                         divider
                         
                         Group {
-                            toggleRow(title: "Kiểm tra Mã định danh gói (ID ứng dụng)", isOn: Binding(
+                            toggleRow(title: "Bundle Identifier Check", isOn: Binding(
                                 get: { isBundleIDVerificationEnabled },
                                 set: { newValue in
                                     isBundleIDVerificationEnabled = newValue
@@ -183,7 +231,7 @@ struct UserCustomizationsView: View {
                             
                             divider
                             
-                            toggleRow(title: "Kiểm tra phiên bản hệ điều hành iOS", isOn: Binding(
+                            toggleRow(title: "iOS Version Check", isOn: Binding(
                                 get: { isiOSVersionVerificationEnabled },
                                 set: { newValue in
                                     isiOSVersionVerificationEnabled = newValue
@@ -193,7 +241,7 @@ struct UserCustomizationsView: View {
                             
                             divider
                             
-                            toggleRow(title: "Kiểm tra phiên bản ứng dụng", isOn: Binding(
+                            toggleRow(title: "App Version Check", isOn: Binding(
                                 get: { isAppVersionVerificationEnabled },
                                 set: { newValue in
                                     isAppVersionVerificationEnabled = newValue
@@ -203,7 +251,27 @@ struct UserCustomizationsView: View {
                             
                             divider
                             
-                            toggleRow(title: "Kiểm tra quyền truy cập ứng dụng", isOn: Binding(
+                            toggleRow(title: "Checksum (SHA-256) Check", isOn: Binding(
+                                get: { isChecksumVerificationEnabled },
+                                set: { newValue in
+                                    isChecksumVerificationEnabled = newValue
+                                    UserDefaults.standard.isChecksumVerificationEnabled = newValue
+                                }
+                            ))
+                            
+                            divider
+                            
+                            toggleRow(title: "App File Size Check", isOn: Binding(
+                                get: { isFileSizeVerificationEnabled },
+                                set: { newValue in
+                                    isFileSizeVerificationEnabled = newValue
+                                    UserDefaults.standard.isFileSizeVerificationEnabled = newValue
+                                }
+                            ))
+                            
+                            divider
+                            
+                            toggleRow(title: "Permission Checks", isOn: Binding(
                                 get: { !permissionCheckingDisabled },
                                 set: { newValue in
                                     permissionCheckingDisabled = !newValue
@@ -212,18 +280,74 @@ struct UserCustomizationsView: View {
                             ))
                         }
                         .disabled(appVerificationDisabled)
-                        .opacity(appVerificationDisabled ? 0.45 : 1.0)
+                        .opacity(appVerificationDisabled ? 0.5 : 1.0)
                     }
+                    .background(Color.settingsRowBackground)
+                    .cornerRadius(14)
                 }
 
-                // Section 4: LÀM MỚI QUA MẠNG DI ĐỘNG (4G/5G)
+                // Section 3: EMPROXY & WIREGUARD
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("EMPROXY & WIREGUARD")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.6))
+                        .padding(.horizontal, 16)
+                    
+                    VStack(spacing: 0) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Export WireGuard Config")
+                                    .font(.system(size: 17, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .multilineTextAlignment(.leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text("Exports SideStore.conf to import into WireGuard VPN app")
+                                    .font(.system(size: 12, weight: .regular))
+                                    .foregroundColor(Color.white.opacity(0.6))
+                                    .multilineTextAlignment(.leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                            SwiftUI.Button(action: { exportWireGuardConfig() }) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 22, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .frame(width: 55, alignment: .center)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .frame(minHeight: 50)
+                        
+                        divider
+                        
+                        toggleRow(
+                            title: "EMProxy (WireGuard) Server",
+                            subtitle: "Restart required to apply changes",
+                            isOn: Binding(
+                                get: { enableEMPforWireguard },
+                                set: { newValue in
+                                    pendingEMPOption = newValue
+                                    showEMPRestartConfirmation = true
+                                }
+                            )
+                        )
+                    }
+                    .background(Color.settingsRowBackground)
+                    .cornerRadius(14)
+                }
+
+                // Section 4: CELLULAR REFRESH
                 cellularRefreshShortcutsSection
 
-                // Section 5: NHÂN KẾT NỐI MINIMUXER
-                VStack(alignment: .leading, spacing: 10) {
-                    sectionHeader(title: "NHÂN KẾT NỐI MINIMUXER")
+                // Section 5: MINIMUXER BACKEND
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("MINIMUXER BACKEND")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.6))
+                        .padding(.horizontal, 16)
                     
-                    sectionCard {
+                    VStack(spacing: 0) {
                         ForEach(GatewayBackend.allCases, id: \.self) { backend in
                             SwiftUI.Button(action: {
                                 if selectedBackend != backend {
@@ -236,67 +360,148 @@ struct UserCustomizationsView: View {
                                 }
                             }) {
                                 HStack {
-                                    Text(localizedBackendTitle(backend.rawValue))
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(CustomizationsCSSTheme.darkText)
+                                    Text(backend.rawValue)
+                                        .font(.system(size: 17, weight: .bold))
+                                        .foregroundColor(.white)
                                     Spacer()
                                     if selectedBackend == backend {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .font(.system(size: 18, weight: .bold))
-                                            .foregroundColor(CustomizationsCSSTheme.blue)
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 16, weight: .bold))
+                                            .foregroundColor(Color(uiColor: ThemeManager.shared.primaryColor))
                                     }
                                 }
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 14)
                             }
-                            .buttonStyle(CustomizationsBounceButtonStyle())
-                            
                             if backend != GatewayBackend.allCases.last {
                                 divider
                             }
                         }
                     }
+                    .background(Color.settingsRowBackground)
+                    .cornerRadius(14)
+                }
+
+                // Section 6: BACKGROUND SERVICE
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("BACKGROUND SERVICE")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.6))
+                        .padding(.horizontal, 16)
+                    
+                    VStack(spacing: 0) {
+                        toggleRow(title: "Enable Background Keepalive", isOn: Binding(
+                            get: { isBackgroundServiceEnabled },
+                            set: { newValue in
+                                isBackgroundServiceEnabled = newValue
+                                BackgroundServiceManager.setEnabled(newValue)
+                            }
+                        ))
+                        
+                        divider
+                        
+                        ForEach(BackgroundServiceMode.allCases, id: \.self) { mode in
+                            SwiftUI.Button(action: {
+                                selectedBackgroundServiceMode = mode
+                                BackgroundServiceManager.switchTo(mode: mode)
+                            }) {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(mode.displayName)
+                                            .font(.system(size: 17, weight: .bold))
+                                            .foregroundColor(isBackgroundServiceEnabled ? .white : Color.white.opacity(0.4))
+                                        Text(mode.subtitle)
+                                            .font(.system(size: 13))
+                                            .foregroundColor(Color.white.opacity(isBackgroundServiceEnabled ? 0.6 : 0.3))
+                                    }
+                                    Spacer()
+                                    if selectedBackgroundServiceMode == mode {
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 16, weight: .bold))
+                                            .foregroundColor(isBackgroundServiceEnabled ? Color(uiColor: ThemeManager.shared.primaryColor) : Color.white.opacity(0.3))
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                            }
+                            .disabled(!isBackgroundServiceEnabled)
+                            
+                            if mode != BackgroundServiceMode.allCases.last {
+                                divider
+                            }
+                        }
+                    }
+                    .background(Color.settingsRowBackground)
+                    .cornerRadius(14)
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 50)
+            .padding(.top, 16)
+            .padding(.bottom, 32)
         }
-        .background(CustomizationsCSSTheme.pageBackgroundGradient.ignoresSafeArea())
-        .navigationTitle("")
+        .background(Color(uiColor: .settingsBackground).ignoresSafeArea())
+        .navigationTitle("User Customizations")
         #if !os(tvOS)
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
         #endif
-        .onAppear {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
-                animateHero = true
-            }
-        }
-        .alert("Cần Khởi Động Lại", isPresented: $showAnisetteRestartConfirmation) {
-            SwiftUI.Button("Khởi động lại ngay", role: .destructive) {
+        .alert("Restart Required", isPresented: $showAnisetteRestartConfirmation) {
+            SwiftUI.Button("Restart Now", role: .destructive) {
                 Task {
                     await AuthManager.shared.signOut(keepCertificate: true, keepAnisetteData: false)
                     UserDefaults.standard.useOnDeviceAnisette = useOnDeviceAnisette
                     exit(0)
                 }
             }
-            SwiftUI.Button("Huỷ", role: .cancel) {
+            SwiftUI.Button("Cancel", role: .cancel) {
                 useOnDeviceAnisette = UserDefaults.standard.useOnDeviceAnisette
             }
         } message: {
-            Text("Việc thay đổi cấu hình Anisette sẽ làm mất hiệu lực dữ liệu Anisette hiện tại và tài khoản của bạn sẽ được đăng xuất.\n\nThao tác này yêu cầu khởi động lại ứng dụng, bạn có muốn tiếp tục không?")
+            Text("Changing Anisette config will invalidate your current provisioned Anisette data and you will be signed out.\n\nThis action will require a restart, do you want to proceed?")
         }
-        .alert("Cần Khởi Động Lại", isPresented: $showBackendRestartConfirmation) {
-            SwiftUI.Button("Khởi động lại ngay", role: .destructive) {
+        .alert("Restart Required", isPresented: $showEMPRestartConfirmation) {
+            SwiftUI.Button("Restart Now", role: .destructive) {
+                enableEMPforWireguard = pendingEMPOption
+                UserDefaults.standard.enableEMPforWireguard = pendingEMPOption
+                exit(0)
+            }
+            SwiftUI.Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Changing the EMProxy setting requires restarting SideStore. If canceled, changes will not be saved.")
+        }
+        .alert("Restart Required", isPresented: $showBackendRestartConfirmation) {
+            SwiftUI.Button("Restart Now", role: .destructive) {
                 if let newBackend = pendingBackendOption {
                     applyBackendChange(newBackend, restartRequired: true)
                 }
             }
-            SwiftUI.Button("Huỷ", role: .cancel) {
+            SwiftUI.Button("Cancel", role: .cancel) {
                 pendingBackendOption = nil
             }
         } message: {
-            Text("Thay đổi nhân kết nối Minimuxer yêu cầu khởi động lại SideStore. Nếu nhấn Huỷ, thay đổi sẽ không được lưu.")
+            Text("Changing the Minimuxer backend requires restarting SideStore. If canceled, changes will not be saved.")
+        }
+        .alert(pendingPreferIPAOngoing ? "Prefer Resigned IPA" : "Prefer App Bundle", isPresented: $showPreferIPAToggleAlert) {
+            SwiftUI.Button("Switch") {
+                preferResignedIPA = pendingPreferIPAOngoing
+                UserDefaults.standard.preferResignedIPA = pendingPreferIPAOngoing
+            }
+            SwiftUI.Button("Cancel", role: .cancel) {
+                pendingPreferIPAOngoing = preferResignedIPA
+            }
+        } message: {
+            if pendingPreferIPAOngoing {
+                Text("Switching to Resigned IPA prioritizes install speed (~40% faster) by packaging an uncompressed IPA for fast transfer, but temporarily uses additional disk space during packaging.")
+            } else {
+                Text("Switching to App Bundle prioritizes storage efficiency by transferring the app bundle directly without packaging a temporary IPA, but transfer speeds will be noticeably slower.")
+            }
+        }
+        .sheet(isPresented: Binding<Bool>(
+            get: { wireGuardExportURL != nil },
+            set: { if !$0 { wireGuardExportURL = nil } }
+        )) {
+            if let url = wireGuardExportURL {
+                ActivityViewController(activityItems: [url])
+            }
         }
         .alert(
             editDialog?.title ?? "",
@@ -309,13 +514,13 @@ struct UserCustomizationsView: View {
                 #if !os(tvOS)
                 .keyboardType(editDialog?.keyboardType ?? .default)
                 #endif
-            SwiftUI.Button("Lưu") {
+            SwiftUI.Button("OK") {
                 if let dialog = editDialog {
                     dialog.onSave(editingValueText)
                 }
                 editDialog = nil
             }
-            SwiftUI.Button("Huỷ", role: .cancel) {
+            SwiftUI.Button("Cancel", role: .cancel) {
                 editDialog = nil
             }
         } message: {
@@ -326,95 +531,81 @@ struct UserCustomizationsView: View {
         }
     }
 
-    // MARK: - 🌈 HERO BANNER CHUẨN TAB CÀI ĐẶT
-    private var heroBannerView: some View {
-        VStack(spacing: 4) {
-            Text("Tùy chỉnh của người dùng")
-                .font(.system(size: 22, weight: .heavy))
-                .foregroundColor(CustomizationsCSSTheme.white)
-                .multilineTextAlignment(.center)
-                .shadow(color: Color.black.opacity(0.35), radius: 4, x: 1, y: 2)
-
-            Text("Thiết lập chuyên sâu quy trình cài đặt, xác minh và làm mới ứng dụng")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(CustomizationsCSSTheme.white.opacity(0.95))
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-        }
-        .padding(.vertical, 16)
-        .padding(.horizontal, 14)
-        .frame(maxWidth: .infinity)
-        .background(CustomizationsCSSTheme.heroGradient)
-        .clipShape(RoundedRectangle(cornerRadius: CustomizationsCSSTheme.cornerRadius, style: .continuous))
-        .shadow(color: CustomizationsCSSTheme.blue.opacity(0.25), radius: 16, x: 0, y: 6)
-        .opacity(animateHero ? 1.0 : 0.0)
-        .offset(y: animateHero ? 0 : -10)
-    }
-
-    // MARK: - 🧩 THÀNH PHẦN GIAO DIỆN CHUẨN CSS TAB CÀI ĐẶT
-
-    private func sectionHeader(title: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.system(size: 15, weight: .heavy))
-                .foregroundColor(CustomizationsCSSTheme.blue)
-
-            RoundedRectangle(cornerRadius: 1.5)
-                .fill(CustomizationsCSSTheme.blue)
-                .frame(width: 38, height: 3)
-        }
-        .padding(.horizontal, 4)
-        .padding(.top, 4)
-    }
-
-    private func sectionCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        VStack(spacing: 0) {
-            content()
-        }
-        .background(CustomizationsCSSTheme.white)
-        .clipShape(RoundedRectangle(cornerRadius: CustomizationsCSSTheme.cornerRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: CustomizationsCSSTheme.cornerRadius, style: .continuous)
-                .stroke(CustomizationsCSSTheme.border, lineWidth: 1.0)
-        )
-        .shadow(color: CustomizationsCSSTheme.cardShadow, radius: 10, x: 0, y: 5)
-    }
-
     private func toggleRow(title: String, subtitle: String? = nil, isOn: Binding<Bool>) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(CustomizationsCSSTheme.darkText)
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundColor(.white)
                     .fixedSize(horizontal: false, vertical: true)
                 if let subtitle = subtitle {
                     Text(subtitle)
-                        .font(.system(size: 12.5, weight: .regular))
-                        .foregroundColor(CustomizationsCSSTheme.secondaryText)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(Color.white.opacity(0.6))
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer()
             Toggle("", isOn: isOn)
                 .labelsHidden()
-                .tint(CustomizationsCSSTheme.blue)
-                .shadow(color: CustomizationsCSSTheme.blue.opacity(0.28), radius: 6, x: 0, y: 3)
+                .tint(.green)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 11)
-        .frame(minHeight: 52)
+        .padding(.vertical, 10)
+        .frame(minHeight: 50)
     }
 
-    // MARK: - 📶 LÀM MỚI QUA MẠNG DI ĐỘNG (4G/5G)
+    private func textFieldRow(
+        title: String,
+        subtitle: String? = nil,
+        placeholder: String,
+        value: String,
+        unit: String? = nil,
+        onTap: @escaping () -> Void
+    ) -> some View {
+        SwiftUI.Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let subtitle = subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundColor(Color.white.opacity(0.6))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                HStack {
+                    Text(value.isEmpty ? placeholder : (unit != nil ? "\(value) \(unit!)" : value))
+                        .font(.system(size: 15))
+                        .foregroundColor(value.isEmpty ? Color.white.opacity(0.3) : .white)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.white.opacity(0.08))
+                .cornerRadius(8)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+        }
+    }
+
     @ViewBuilder
     private var cellularRefreshShortcutsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionHeader(title: "LÀM MỚI QUA MẠNG DI ĐỘNG (4G/5G)")
+        VStack(alignment: .leading, spacing: 8) {
+            Text("CELLULAR REFRESH")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Color.white.opacity(0.6))
+                .padding(.horizontal, 16)
 
-            sectionCard {
+            VStack(spacing: 0) {
                 toggleRow(
-                    title: "Làm mới qua mạng di động (4G/5G)",
-                    subtitle: "Tự động bật/tắt dữ liệu di động qua ứng dụng Phím tắt trong quá trình gia hạn",
+                    title: "Cellular Refresh",
+                    subtitle: "Automatically toggle cellular data via Shortcuts during refresh",
                     isOn: Binding(
                         get: { isCellularRefreshEnabled },
                         set: { newValue in
@@ -426,83 +617,69 @@ struct UserCustomizationsView: View {
 
                 divider
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("2 phím tắt cần thiết để làm mới ứng dụng qua 4G:")
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundColor(CustomizationsCSSTheme.darkText)
+                textFieldRow(
+                    title: "Turn On Cellular Shortcut",
+                    subtitle: "Name of the shortcut in Apple Shortcuts app",
+                    placeholder: AppConstants.Shortcuts.defaultTurnOnDataShortcutName,
+                    value: turnOnDataShortcutName,
+                    onTap: openTurnOnShortcutDialog
+                )
 
-                    HStack(spacing: 10) {
-                        shortcutBadgeButton(
-                            label: "Bật 4G",
-                            shortcutName: turnOnDataShortcutName.isEmpty ? AppConstants.Shortcuts.defaultTurnOnDataShortcutName : turnOnDataShortcutName,
-                            icon: "antenna.radiowaves.left.and.right",
-                            action: openTurnOnShortcutDialog
-                        )
+                divider
 
-                        shortcutBadgeButton(
-                            label: "Tắt 4G",
-                            shortcutName: turnOffDataShortcutName.isEmpty ? AppConstants.Shortcuts.defaultTurnOffDataShortcutName : turnOffDataShortcutName,
-                            icon: "antenna.radiowaves.left.and.right.slash",
-                            action: openTurnOffShortcutDialog
-                        )
+                textFieldRow(
+                    title: "Turn Off Cellular Shortcut",
+                    subtitle: "Name of the shortcut in Apple Shortcuts app",
+                    placeholder: AppConstants.Shortcuts.defaultTurnOffDataShortcutName,
+                    value: turnOffDataShortcutName,
+                    onTap: openTurnOffShortcutDialog
+                )
+
+                divider
+
+                textFieldRow(
+                    title: "Turn On Base Delay",
+                    subtitle: "Base wait time after turning on data (seconds, ≥ 0)",
+                    placeholder: String(AppConstants.Shortcuts.defaultTurnOnDataBaseDelay),
+                    value: turnOnBaseDelayText,
+                    unit: "s",
+                    onTap: openTurnOnBaseDelayDialog
+                )
+
+                divider
+
+                textFieldRow(
+                    title: "Turn Off Base Delay",
+                    subtitle: "Base wait time after turning off data (seconds, ≥ 0)",
+                    placeholder: String(AppConstants.Shortcuts.defaultTurnOffDataBaseDelay),
+                    value: turnOffBaseDelayText,
+                    unit: "s",
+                    onTap: openTurnOffBaseDelayDialog
+                )
+
+                divider
+
+                SwiftUI.Button(action: resetCellularDefaults) {
+                    HStack {
+                        Spacer()
+                        Text("Reset to Defaults")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.red)
+                        Spacer()
                     }
+                    .padding(.vertical, 12)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
             }
+            .background(Color.settingsRowBackground)
+            .cornerRadius(14)
         }
-    }
-
-    private func shortcutBadgeButton(
-        label: String,
-        shortcutName: String,
-        icon: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        SwiftUI.Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(CustomizationsCSSTheme.blue)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(label)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(CustomizationsCSSTheme.secondaryText)
-                        .lineLimit(1)
-
-                    Text(shortcutName)
-                        .font(.system(size: 13.5, weight: .bold))
-                        .foregroundColor(CustomizationsCSSTheme.blue)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                }
-
-                Spacer(minLength: 2)
-
-                Image(systemName: "pencil")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(CustomizationsCSSTheme.purple.opacity(0.75))
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(CustomizationsCSSTheme.light)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(CustomizationsCSSTheme.blue.opacity(0.32), lineWidth: 1.1)
-            )
-            .shadow(color: CustomizationsCSSTheme.purple.opacity(0.08), radius: 4, x: 0, y: 2)
-        }
-        .buttonStyle(CustomizationsBounceButtonStyle())
     }
 
     private func openTurnOnShortcutDialog() {
         editingValueText = turnOnDataShortcutName
         editDialog = EditDialogState(
-            title: "Tên phím tắt Bật mạng di động",
-            message: "Nhập tên chính xác của phím tắt Bật 4G trong ứng dụng Phím tắt (mặc định: TurnOnData)",
+            title: "Turn On Cellular Shortcut",
+            message: "Name of the shortcut in Apple Shortcuts app",
             placeholder: AppConstants.Shortcuts.defaultTurnOnDataShortcutName,
             keyboardType: .default,
             onSave: { newValue in
@@ -518,8 +695,8 @@ struct UserCustomizationsView: View {
     private func openTurnOffShortcutDialog() {
         editingValueText = turnOffDataShortcutName
         editDialog = EditDialogState(
-            title: "Tên phím tắt Tắt mạng di động",
-            message: "Nhập tên chính xác của phím tắt Tắt 4G trong ứng dụng Phím tắt (mặc định: TurnOffData)",
+            title: "Turn Off Cellular Shortcut",
+            message: "Name of the shortcut in Apple Shortcuts app",
             placeholder: AppConstants.Shortcuts.defaultTurnOffDataShortcutName,
             keyboardType: .default,
             onSave: { newValue in
@@ -532,14 +709,84 @@ struct UserCustomizationsView: View {
         )
     }
 
-    // MARK: - ⚙️ CÀI ĐẶT CHUNG
+    private func openTurnOnBaseDelayDialog() {
+        editingValueText = turnOnBaseDelayText
+        editDialog = EditDialogState(
+            title: "Turn On Base Delay",
+            message: "Base wait time after turning on data (seconds, ≥ 0)",
+            placeholder: String(AppConstants.Shortcuts.defaultTurnOnDataBaseDelay),
+            keyboardType: .decimalPad,
+            onSave: { newValue in
+                let filtered = newValue.filter { "0123456789.".contains($0) }
+                if let delay = Double(filtered), delay >= 0 {
+                    turnOnBaseDelayText = String(delay)
+                    CellularRefreshManager.shared.setTurnOnDataBaseDelayOverride(delay)
+                } else {
+                    turnOnBaseDelayText = String(AppConstants.Shortcuts.defaultTurnOnDataBaseDelay)
+                    CellularRefreshManager.shared.setTurnOnDataBaseDelayOverride(nil)
+                }
+            }
+        )
+    }
+
+    private func openTurnOffBaseDelayDialog() {
+        editingValueText = turnOffBaseDelayText
+        editDialog = EditDialogState(
+            title: "Turn Off Base Delay",
+            message: "Base wait time after turning off data (seconds, ≥ 0)",
+            placeholder: String(AppConstants.Shortcuts.defaultTurnOffDataBaseDelay),
+            keyboardType: .decimalPad,
+            onSave: { newValue in
+                let filtered = newValue.filter { "0123456789.".contains($0) }
+                if let delay = Double(filtered), delay >= 0 {
+                    turnOffBaseDelayText = String(delay)
+                    CellularRefreshManager.shared.setTurnOffDataBaseDelayOverride(delay)
+                } else {
+                    turnOffBaseDelayText = String(AppConstants.Shortcuts.defaultTurnOffDataBaseDelay)
+                    CellularRefreshManager.shared.setTurnOffDataBaseDelayOverride(nil)
+                }
+            }
+        )
+    }
+
+    private func resetCellularDefaults() {
+        CellularRefreshManager.shared.resetToDefaults()
+        turnOnDataShortcutName = AppConstants.Shortcuts.defaultTurnOnDataShortcutName
+        turnOffDataShortcutName = AppConstants.Shortcuts.defaultTurnOffDataShortcutName
+        turnOnBaseDelayText = String(AppConstants.Shortcuts.defaultTurnOnDataBaseDelay)
+        turnOffBaseDelayText = String(AppConstants.Shortcuts.defaultTurnOffDataBaseDelay)
+    }
+
+    private var customizeAppExtensionsBinding: Binding<AppExtensionCustomization> {
+        Binding<AppExtensionCustomization>(
+            get: { customizeAppExtensions },
+            set: { newValue in
+                customizeAppExtensions = newValue
+                UserDefaults.standard.customizeAppExtensions = newValue
+            }
+        )
+    }
+
+    private var appImportSourceModeBinding: Binding<AppImportSourceMode> {
+        Binding<AppImportSourceMode>(
+            get: { appImportSourceMode },
+            set: { newValue in
+                appImportSourceMode = newValue
+                UserDefaults.standard.appImportSourceMode = newValue
+            }
+        )
+    }
+
     @ViewBuilder
     private var generalSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionHeader(title: "CÀI ĐẶT CHUNG")
+        VStack(alignment: .leading, spacing: 8) {
+            Text("GENERAL")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Color.white.opacity(0.6))
+                .padding(.horizontal, 16)
             
-            sectionCard {
-                toggleRow(title: "Tùy chỉnh tệp cấu hình Info.plist", isOn: Binding(
+            VStack(spacing: 0) {
+                toggleRow(title: "Customize Info.plist", isOn: Binding(
                     get: { customizeInfoPlist },
                     set: { newValue in
                         customizeInfoPlist = newValue
@@ -549,7 +796,7 @@ struct UserCustomizationsView: View {
                 
                 divider
                 
-                toggleRow(title: "Tùy chỉnh Mã định danh ứng dụng (ID)", isOn: Binding(
+                toggleRow(title: "Customize AppID", isOn: Binding(
                     get: { customizeInfoPlist ? true : customizeAppId },
                     set: { newValue in
                         customizeAppId = newValue
@@ -557,81 +804,51 @@ struct UserCustomizationsView: View {
                     }
                 ))
                 .disabled(customizeInfoPlist)
-                .opacity(customizeInfoPlist ? 0.45 : 1.0)
+                .opacity(customizeInfoPlist ? 0.4 : 1.0)
                 
                 divider
                 
-                // Nút chọn Tiện ích mở rộng dạng Viên thuốc (Capsule) mở rộng chứa trọn 1 hàng tiếng Việt
-                HStack(spacing: 10) {
-                    Text("Tùy chỉnh Tiện ích mở rộng")
-                        .font(.system(size: 15.5, weight: .medium))
-                        .foregroundColor(CustomizationsCSSTheme.darkText)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Spacer(minLength: 6)
-
-                    Menu {
-                        ForEach(AppExtensionCustomization.allCases) { option in
-                            SwiftUI.Button {
-                                customizeAppExtensions = option
-                                UserDefaults.standard.customizeAppExtensions = option
-                            } label: {
-                                HStack {
-                                    Text(localizedOptionTitle(option.displayName))
-                                    if customizeAppExtensions == option {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
+                HStack {
+                    Text("Customize Extensions")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(.white)
+                    Spacer()
+                    Picker("", selection: customizeAppExtensionsBinding) {
+                        ForEach(AppExtensionCustomization.allCases) { (option: AppExtensionCustomization) in
+                            Text(option.displayName).tag(option)
                         }
-                    } label: {
-                        capsuleMenuButtonLabel(text: localizedOptionTitle(customizeAppExtensions.displayName))
                     }
+                    .pickerStyle(.menu)
+                    .tint(Color.white.opacity(0.7))
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .frame(minHeight: 54)
+                .frame(minHeight: 50)
                 
                 divider
                 
-                // Nút chọn Chế độ nhập tệp mặc định dạng Viên thuốc (Capsule) mở rộng chứa trọn 1 hàng tiếng Việt
-                HStack(spacing: 10) {
-                    Text("Chế độ nhập tệp mặc định")
-                        .font(.system(size: 15.5, weight: .medium))
-                        .foregroundColor(CustomizationsCSSTheme.darkText)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Spacer(minLength: 6)
-
-                    Menu {
-                        ForEach(AppImportSourceMode.allCases) { option in
-                            SwiftUI.Button {
-                                appImportSourceMode = option
-                                UserDefaults.standard.appImportSourceMode = option
-                            } label: {
-                                HStack {
-                                    Text(localizedOptionTitle(option.displayName))
-                                    if appImportSourceMode == option {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
+                HStack {
+                    Text("Default Import Mode")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(.white)
+                    Spacer()
+                    Picker("", selection: appImportSourceModeBinding) {
+                        ForEach(AppImportSourceMode.allCases) { (option: AppImportSourceMode) in
+                            Text(option.displayName).tag(option)
                         }
-                    } label: {
-                        capsuleMenuButtonLabel(text: localizedOptionTitle(appImportSourceMode.displayName))
                     }
+                    .pickerStyle(.menu)
+                    .tint(Color.white.opacity(0.7))
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .frame(minHeight: 54)
+                .frame(minHeight: 50)
                 
                 divider
 
                 toggleRow(
-                    title: "Xác nhận trước khi cài đặt ứng dụng",
-                    subtitle: "Hiển thị hộp thoại xác nhận trước khi cài đặt hoặc nhập tệp ứng dụng",
+                    title: "Confirm App Installation",
+                    subtitle: "Prompt for confirmation before installing or importing an app",
                     isOn: Binding(
                         get: { isInstallConfirmationEnabled },
                         set: { newValue in
@@ -644,8 +861,8 @@ struct UserCustomizationsView: View {
                 divider
 
                 toggleRow(
-                    title: "Xoá tùy chỉnh khi gỡ cài đặt",
-                    subtitle: "Đặt lại hồ sơ cấp phép, chứng chỉ tùy chỉnh và dữ liệu phụ khi xoá ứng dụng",
+                    title: "Clear Customizations on Uninstall",
+                    subtitle: "Reset assigned profiles, custom certificates, and metadata when an app is deleted",
                     isOn: Binding(
                         get: { isClearCustomizationsOnUninstallEnabled },
                         set: { newValue in
@@ -658,8 +875,8 @@ struct UserCustomizationsView: View {
                 divider
 
                 toggleRow(
-                    title: "Tự động mở ứng dụng sau khi cài xong",
-                    subtitle: "Tự động khởi chạy ứng dụng ngay sau khi quá trình cài đặt hoàn tất",
+                    title: "Auto-Launch App After Install",
+                    subtitle: "Automatically open apps after installation completes",
                     isOn: Binding(
                         get: { isAutoLaunchAppAfterInstallEnabled },
                         set: { newValue in
@@ -671,9 +888,19 @@ struct UserCustomizationsView: View {
                 
                 divider
                 
+                toggleRow(title: "Customize Entitlements", isOn: Binding(
+                    get: { customizeEntitlements },
+                    set: { newValue in
+                        customizeEntitlements = newValue
+                        UserDefaults.standard.customizeEntitlements = newValue
+                    }
+                ))
+                
+                divider
+                
                 toggleRow(
-                    title: "Tự động sửa định danh Nhóm ứng dụng",
-                    subtitle: isFreeAccount ? "Bắt buộc đối với tài khoản nhà phát triển miễn phí" : "Tự động sửa lỗi lệch chữ hoa/thường trong Nhóm ứng dụng",
+                    title: "Auto-Fix AppGroup IDs",
+                    subtitle: isFreeAccount ? "Required for free developer accounts" : "Automatically fix App Group casing mismatches",
                     isOn: Binding(
                         get: { isFreeAccount ? true : autoFixAppGroupIDs },
                         set: { newValue in
@@ -688,8 +915,8 @@ struct UserCustomizationsView: View {
                 divider
 
                 toggleRow(
-                    title: "Tùy chỉnh Biểu tượng ứng dụng",
-                    subtitle: "Hỏi chọn biểu tượng thay thế trước khi cài đặt",
+                    title: "Customize App Icon",
+                    subtitle: "Prompt to choose a custom icon before installing",
                     isOn: Binding(
                         get: { customizeAppIcon },
                         set: { newValue in
@@ -698,134 +925,134 @@ struct UserCustomizationsView: View {
                         }
                     )
                 )
+
+                divider
+
+                toggleRow(
+                    title: "Customize Provisioning Profile",
+                    subtitle: "Prompt to select a provisioning profile before installing",
+                    isOn: Binding(
+                        get: { customizeProvisioningProfile },
+                        set: { newValue in
+                            customizeProvisioningProfile = newValue
+                            UserDefaults.standard.customizeProvisioningProfile = newValue
+                        }
+                    )
+                )
+                
+                divider
+                
+                toggleRow(
+                    title: "Prefer Resigned IPA",
+                    subtitle: "Prefer IPA (speed) vs App (storage) efficiency",
+                    isOn: Binding(
+                        get: { preferResignedIPA },
+                        set: { newValue in
+                            pendingPreferIPAOngoing = newValue
+                            showPreferIPAToggleAlert = true
+                        }
+                    )
+                )
+                
+                divider
+                
+                toggleRow(title: "Export Resigned IPAs", isOn: Binding(
+                    get: { isExportResignedAppEnabled },
+                    set: { newValue in
+                        isExportResignedAppEnabled = newValue
+                        UserDefaults.standard.isExportResignedAppEnabled = newValue
+                    }
+                ))
+                
+                divider
+                
+                toggleRow(title: "Skip Uncopyable Backup Files", isOn: Binding(
+                    get: { skipNonCopyableFiles },
+                    set: { newValue in
+                        skipNonCopyableFiles = newValue
+                        UserDefaults.standard.skipNonCopyableBackupFiles = newValue
+                    }
+                ))
+                
+                divider
+                
+                toggleRow(
+                    title: "Prefer Sheet for Info.plist",
+                    subtitle: "Use sheet instead of dialog",
+                    isOn: Binding(
+                        get: { preferSheetForInfoPlistCustomization },
+                        set: { newValue in
+                            preferSheetForInfoPlistCustomization = newValue
+                            UserDefaults.standard.preferSheetForInfoPlistCustomization = newValue
+                        }
+                    )
+                )
+                .disabled(!customizeInfoPlist)
+                .opacity(!customizeInfoPlist ? 0.4 : 1.0)
+                
+                divider
+                
+                toggleRow(
+                    title: "Prefer Sheet for Entitlements",
+                    subtitle: "Use sheet instead of dialog",
+                    isOn: Binding(
+                        get: { preferSheetForEntitlementsCustomization },
+                        set: { newValue in
+                            preferSheetForEntitlementsCustomization = newValue
+                            UserDefaults.standard.preferSheetForEntitlementsCustomization = newValue
+                        }
+                    )
+                )
+                .disabled(!customizeEntitlements)
+                .opacity(!customizeEntitlements ? 0.4 : 1.0)
             }
+            .background(Color.settingsRowBackground)
+            .cornerRadius(14)
         }
     }
 
-    // Nhãn nút chọn kiểu viên thuốc tự động mở rộng chiều ngang để chứa trọn chữ tiếng Việt trên 1 hàng duy nhất
-    private func capsuleMenuButtonLabel(text: String) -> some View {
-        HStack(spacing: 6) {
-            Text(text)
-                .font(.system(size: 13.5, weight: .bold))
-                .foregroundColor(CustomizationsCSSTheme.blue)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
 
-            Image(systemName: "chevron.up.chevron.down")
-                .font(.system(size: 10.5, weight: .bold))
-                .foregroundColor(CustomizationsCSSTheme.blue)
-        }
-        .padding(.horizontal, 15)
-        .padding(.vertical, 8)
-        .frame(minWidth: 148)
-        .fixedSize(horizontal: true, vertical: false)
-        .background(CustomizationsCSSTheme.light)
-        .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .stroke(CustomizationsCSSTheme.blue.opacity(0.35), lineWidth: 1.2)
-        )
-        .shadow(color: CustomizationsCSSTheme.purple.opacity(0.18), radius: 6, x: 0, y: 3)
-    }
 
     private var divider: some View {
         Rectangle()
-            .fill(CustomizationsCSSTheme.border)
-            .frame(height: 1)
-            .padding(.horizontal, 20)
+            .fill(Color.settingsDivider)
+            .frame(height: 0.5)
+            .padding(.horizontal, 16)
     }
 
-    // MARK: - 🌐 BỘ TỪ ĐIỂN VIỆT HÓA CÁC TÙY CHỌN TIẾNG ANH ĐỘNG TỪ HỆ THỐNG
-    private func localizedOptionTitle(_ rawTitle: String) -> String {
-        let trimmed = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let dictionary: [String: String] = [
-            // AppExtensionCustomization & AppImportSourceMode
-            "Prompt User": "Hỏi người dùng",
-            "prompt user": "Hỏi người dùng",
-            "Use Main Profile": "Dùng hồ sơ chính",
-            "use main profile": "Dùng hồ sơ chính",
-            "Ask": "Hỏi người dùng",
-            "Always Ask": "Luôn hỏi",
-            "Prompt": "Hỏi người dùng",
-            "Keep": "Giữ nguyên",
-            "Keep All": "Giữ tất cả",
-            "Keep Extensions": "Giữ tiện ích",
-            "Remove": "Xoá bỏ",
-            "Remove All": "Xoá tất cả",
-            "Remove Extensions": "Xoá tiện ích",
-            "Register New": "Đăng ký hồ sơ mới",
-            "Create Separate Profiles": "Tạo hồ sơ riêng",
-            "Default": "Mặc định",
-            "Automatic": "Tự động",
-            "None": "Không dùng",
-            "Off": "Tắt",
-            "Disabled": "Đã tắt",
-            "Enabled": "Đã bật",
-            
-            // AppImportSourceMode
-            "Files": "Tệp (Files)",
-            "File": "Tệp tin",
-            "Files App": "Ứng dụng Tệp",
-            "URL": "Liên kết URL",
-            "Web URL": "Liên kết mạng",
-            "Link": "Liên kết",
-            "Both": "Hỏi người dùng"
-        ]
-        if let exactMatch = dictionary[trimmed] {
-            return exactMatch
+    private func exportWireGuardConfig() {
+        guard let url = Bundle.main.url(forResource: "SideStore", withExtension: "conf") else {
+            if let top = UIApplication.shared.topViewController() {
+                let toastView = ToastView(text: NSLocalizedString("SideStore.conf missing!", comment: ""), detailText: "Unable to locate SideStore.conf in bundle resources.")
+                toastView.show(in: top)
+            }
+            return
         }
-        let lowercased = trimmed.lowercased()
-        if lowercased == "prompt user" {
-            return "Hỏi người dùng"
-        }
-        if lowercased == "use main profile" {
-            return "Dùng hồ sơ chính"
-        }
-        return rawTitle
+        wireGuardExportURL = url
     }
 
-    private func localizedBackendTitle(_ rawTitle: String) -> String {
-        let trimmed = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let dictionary: [String: String] = [
-            "Legacy": "Cổ điển (Legacy)",
-            "legacy": "Cổ điển (Legacy)",
-            "Modern": "Hiện đại (Modern)",
-            "modern": "Hiện đại (Modern)",
-            "Default": "Mặc định",
-            "Standard": "Tiêu chuẩn",
-            "Native": "Nguyên bản (Native)",
-            "Rust": "Nhân Rust",
-            "C": "Nhân C",
-            "Swift": "Nhân Swift",
-            "idevice": "Giao thức idevice",
-            "usbmuxd": "Giao thức usbmuxd"
-        ]
-        return dictionary[trimmed] ?? rawTitle
-    }
-
-    // MARK: - 🛠️ CÁC HÀM XỬ LÝ LOGIC HỆ THỐNG
     private func presentResetAdiDialog() {
         guard let top = UIApplication.shared.topViewController() else { return }
         let alertController = UIAlertController(
-            title: "Đặt lại dữ liệu adi.pb",
-            message: "Thao tác này sẽ đăng xuất ID Apple của bạn khỏi SideStore và xoá dữ liệu adi.pb đã cấp phép khỏi Chuỗi khóa bảo mật. Chứng chỉ ký hiện tại của bạn vẫn sẽ được giữ nguyên.",
+            title: NSLocalizedString("Reset adi.pb", comment: ""),
+            message: NSLocalizedString("This will sign you out of Apple ID in SideStore and clear the provisioned adi.pb data from your Keychain. Your active signing certificate will be preserved.", comment: ""),
             preferredStyle: .alert
         )
         let contentVC = ResetAdiAlertViewController()
         alertController.setValue(contentVC, forKey: "contentViewController")
         
-        let cancelAction = UIAlertAction(title: "Huỷ", style: .cancel, handler: nil)
-        let resetAction = UIAlertAction(title: "Đặt lại & Đăng xuất", style: .destructive) { _ in
+        let cancelAction = UIAlertAction(title: NSLocalizedString("Cancel", comment: ""), style: .cancel, handler: nil)
+        let resetAction = UIAlertAction(title: NSLocalizedString("Reset & Sign Out", comment: ""), style: .destructive) { _ in
             let keepHeaders = contentVC.isKeepHeadersChecked
             Task {
                 await AuthManager.shared.signOut(keepCertificate: true, keepAnisetteData: false, keepAnisetteHeaders: keepHeaders)
-                debugLog("Đã đặt lại adi.pb (giữ tiêu đề Anisette: \(keepHeaders)) và đăng xuất")
+                debugLog("Reset adi.pb (keepAnisetteHeaders: \(keepHeaders)) and signed out")
                 if let topVC = UIApplication.shared.topViewController() {
                     let detail = keepHeaders
-                        ? "Đã đăng xuất ID Apple. Bây giờ bạn có thể đăng nhập lại với dữ liệu cấp phép mới."
-                        : "Đã đăng xuất ID Apple. Đã đặt lại adi.pb và cấu hình tiêu đề về mặc định."
+                        ? NSLocalizedString("Signed out of Apple ID. You can now sign back in with fresh provisioning.", comment: "")
+                        : NSLocalizedString("Signed out of Apple ID. Reset adi.pb and header configs to defaults.", comment: "")
                     ToastView(
-                        text: "Đã xoá dữ liệu adi.pb!",
+                        text: NSLocalizedString("Cleared adi.pb!", comment: ""),
                         detailText: detail
                     ).show(in: topVC)
                 }

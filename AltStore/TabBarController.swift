@@ -15,7 +15,7 @@ extension TabBarController
     private enum Tab: Int, CaseIterable
     {
         case news      // 0: Tổng quan
-        case sources   // 1: Tin tức
+        case sources   // 1: Sửa lỗi
         case myApps    // 2: Ứng dụng
         case settings  // 3: Cài đặt
     }
@@ -49,7 +49,7 @@ final class TabBarController: UITabBarController
             self.viewControllers = viewControllers
         }
         
-        // 2. Đổi tab News thành "Tổng quan" (Giữ lại icon dấu tích của bạn, nếu không muốn có thể xóa 2 dòng image)
+        // 2. Đổi tab News thành "Tổng quan"
         if let newsNav = self.viewControllers?[Tab.news.rawValue] as? UINavigationController
         {
             newsNav.tabBarItem.title = "Tổng quan"
@@ -57,10 +57,13 @@ final class TabBarController: UITabBarController
             newsNav.tabBarItem.selectedImage = UIImage(systemName: "checkmark.shield.fill")
         }
         
-        // 3. Đổi tab Sources (Nguồn) thành "Tin tức"
+        // 3. Đổi tab Sources (Nguồn) thành "Sửa lỗi" và cập nhật icon
         if let sourcesNav = self.viewControllers?[Tab.sources.rawValue] as? UINavigationController
         {
-            sourcesNav.tabBarItem.title = "Tin tức"
+            sourcesNav.tabBarItem.title = "Sửa lỗi"
+            sourcesNav.tabBarItem.image = UIImage(systemName: "wrench.and.screwdriver")
+            sourcesNav.tabBarItem.selectedImage = UIImage(systemName: "wrench.and.screwdriver.fill")
+            
             self.sourcesViewController = sourcesNav.viewControllers.first as? SourcesViewController
         }
         

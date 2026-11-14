@@ -10,24 +10,26 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ SETTINGS)
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (TƯƠNG PHẢN CAO - DỄ ĐỌC)
 private enum AnisetteCSSTheme {
     static let white = Color.white
-    static let light = Color(red: 248/255, green: 249/255, blue: 250/255) // #f8f9fa
-    static let border = Color(red: 233/255, green: 236/255, blue: 239/255) // #e9ecef
-    static let blue = Color(red: 0/255, green: 123/255, blue: 255/255) // #007bff
-    static let purple = Color(red: 111/255, green: 66/255, blue: 193/255) // #6f42c1
-    static let green = Color(red: 40/255, green: 167/255, blue: 69/255) // #28a745
-    static let magenta = Color(red: 255/255, green: 0/255, blue: 255/255) // #ff00ff
-    static let dark = Color(red: 52/255, green: 58/255, blue: 64/255) // #343a40
+    static let inputBg = Color(red: 242/255, green: 245/255, blue: 250/255) // Nền ô nhập dịu mắt, rõ chữ
+    static let border = Color(red: 210/255, green: 218/255, blue: 226/255) // Viền sắc nét hơn
+    static let inputBorder = Color(red: 190/255, green: 202/255, blue: 216/255) // Viền khung nhập liệu rõ ràng
+    static let blue = Color(red: 0/255, green: 110/255, blue: 235/255) // Xanh đậm chuẩn dễ đọc
+    static let purple = Color(red: 102/255, green: 51/255, blue: 185/255) // Tím đậm rõ nét
+    static let green = Color(red: 30/255, green: 150/255, blue: 60/255)
+    static let danger = Color(red: 220/255, green: 38/255, blue: 38/255) // Đỏ đậm dễ đọc thay cho hồng chói
+    static let textPrimary = Color(red: 18/255, green: 24/255, blue: 33/255) // Đen đậm sắc nét
+    static let textSecondary = Color(red: 55/255, green: 65/255, blue: 81/255) // Xám đậm dễ đọc cho chữ nhỏ
 
     // Gradient Nền chính (#f3e0ff -> #e0f7ff)
     static let bgGradientStart = Color(red: 243/255, green: 224/255, blue: 255/255)
     static let bgGradientEnd = Color(red: 224/255, green: 247/255, blue: 255/255)
 
     // Gradient Hero Banner
-    static let heroStart = Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.92)
-    static let heroEnd = Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.88)
+    static let heroStart = Color(red: 0/255, green: 115/255, blue: 245/255)
+    static let heroEnd = Color(red: 105/255, green: 58/255, blue: 190/255)
 
     static let cornerRadius: CGFloat = 15.0
 }
@@ -310,20 +312,8 @@ struct AnisetteDataView: View {
                     // Khối Hero Banner đồng bộ giao diện gốc
                     heroBanner
 
-                    // Thanh chuyển đổi chế độ xem
-                    Picker("Chế độ xem", selection: $viewModel.viewMode) {
-                        Text("Giao diện Tương tác").tag(0)
-                        Text("Mã JSON Thô").tag(1)
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(6)
-                    .background(AnisetteCSSTheme.white.opacity(0.92))
-                    .cornerRadius(12)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(AnisetteCSSTheme.border, lineWidth: 1)
-                    )
-                    .shadow(color: AnisetteCSSTheme.blue.opacity(0.06), radius: 8, x: 0, y: 4)
+                    // Thanh chuyển đổi chế độ xem (Custom Segmented Control cực rõ chữ)
+                    modeSwitcher
 
                     if viewModel.viewMode == 0 {
                         // MỤC 1: THÔNG TIN TRÌNH KHÁCH CHÍNH
@@ -454,11 +444,11 @@ struct AnisetteDataView: View {
                             HStack {
                                 Spacer()
                                 Label("Lưu Cấu Hình Tùy Chỉnh", systemImage: "checkmark.circle.fill")
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(.system(size: 16.5, weight: .bold))
                                     .foregroundColor(.white)
                                 Spacer()
                             }
-                            .frame(height: 50)
+                            .frame(height: 52)
                             .background(
                                 LinearGradient(
                                     gradient: Gradient(colors: [AnisetteCSSTheme.blue, AnisetteCSSTheme.purple]),
@@ -479,7 +469,7 @@ struct AnisetteDataView: View {
 
                             cssCard {
                                 VStack(spacing: 14) {
-                                    customTextEditor(text: $viewModel.rawEditableJSON, minHeight: 300)
+                                    customTextEditor(text: $viewModel.rawEditableJSON, minHeight: 310)
 
                                     SwiftUI.Button {
                                         Task {
@@ -489,11 +479,11 @@ struct AnisetteDataView: View {
                                         HStack {
                                             Spacer()
                                             Label("Lưu Mã JSON", systemImage: "square.and.arrow.down.fill")
-                                                .font(.system(size: 16, weight: .bold))
+                                                .font(.system(size: 16.5, weight: .bold))
                                                 .foregroundColor(.white)
                                             Spacer()
                                         }
-                                        .frame(height: 48)
+                                        .frame(height: 50)
                                         .background(
                                             LinearGradient(
                                                 gradient: Gradient(colors: [AnisetteCSSTheme.blue, AnisetteCSSTheme.purple]),
@@ -524,7 +514,7 @@ struct AnisetteDataView: View {
 
                                         HStack {
                                             Text("Máy chủ: \(URL(string: UserDefaults.standard.menuAnisetteURL)?.host ?? "Đang hoạt động")")
-                                                .font(.system(size: 12, weight: .semibold))
+                                                .font(.system(size: 13.5, weight: .bold))
                                                 .foregroundColor(AnisetteCSSTheme.purple)
                                             Spacer()
                                             SwiftUI.Button {
@@ -536,29 +526,29 @@ struct AnisetteDataView: View {
                                                     withAnimation { isCopiedServer = false }
                                                 }
                                             } label: {
-                                                HStack(spacing: 4) {
+                                                HStack(spacing: 5) {
                                                     Image(systemName: isCopiedServer ? "checkmark" : "doc.on.doc")
                                                     Text(isCopiedServer ? "Đã chép" : "Sao chép")
                                                 }
-                                                .font(.system(size: 12, weight: .bold))
+                                                .font(.system(size: 13, weight: .bold))
                                                 .foregroundColor(isCopiedServer ? AnisetteCSSTheme.green : AnisetteCSSTheme.blue)
-                                                .padding(.horizontal, 10)
-                                                .padding(.vertical, 5)
-                                                .background((isCopiedServer ? AnisetteCSSTheme.green : AnisetteCSSTheme.blue).opacity(0.1))
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 6)
+                                                .background((isCopiedServer ? AnisetteCSSTheme.green : AnisetteCSSTheme.blue).opacity(0.12))
                                                 .cornerRadius(8)
                                             }
                                         }
 
                                         ScrollView(.horizontal, showsIndicators: true) {
                                             Text(viewModel.serverReturnedHeadersJSON)
-                                                .font(.system(size: 11, design: .monospaced))
-                                                .foregroundColor(AnisetteCSSTheme.dark)
-                                                .padding(10)
-                                                .background(AnisetteCSSTheme.light)
-                                                .cornerRadius(8)
+                                                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                                .foregroundColor(AnisetteCSSTheme.textPrimary)
+                                                .padding(12)
+                                                .background(AnisetteCSSTheme.inputBg)
+                                                .cornerRadius(10)
                                                 .overlay(
-                                                    RoundedRectangle(cornerRadius: 8)
-                                                        .stroke(AnisetteCSSTheme.border, lineWidth: 1)
+                                                    RoundedRectangle(cornerRadius: 10)
+                                                        .stroke(AnisetteCSSTheme.inputBorder, lineWidth: 1)
                                                 )
                                         }
 
@@ -570,22 +560,22 @@ struct AnisetteDataView: View {
                                             HStack {
                                                 Spacer()
                                                 Label("Áp Dụng Vào Cấu Hình Hiện Tại", systemImage: "square.and.arrow.down.on.square")
-                                                    .font(.system(size: 14, weight: .bold))
+                                                    .font(.system(size: 15, weight: .bold))
                                                     .foregroundColor(.white)
                                                 Spacer()
                                             }
-                                            .frame(height: 44)
+                                            .frame(height: 46)
                                             .background(AnisetteCSSTheme.blue)
                                             .cornerRadius(10)
                                         }
                                         .disabled(viewModel.serverReturnedHeadersJSON == "{}" || viewModel.serverReturnedHeadersJSON.isEmpty)
                                     }
-                                    .padding(.top, 8)
+                                    .padding(.top, 10)
                                 } label: {
                                     HStack {
                                         Label("Đồng bộ cấu hình máy chủ", systemImage: "network")
-                                            .font(.system(size: 16, weight: .semibold))
-                                            .foregroundColor(.black)
+                                            .font(.system(size: 16, weight: .bold))
+                                            .foregroundColor(AnisetteCSSTheme.textPrimary)
                                         Spacer()
                                         SwiftUI.Button {
                                             Task {
@@ -593,19 +583,19 @@ struct AnisetteDataView: View {
                                                 withAnimation { showingServerHeaders = true }
                                             }
                                         } label: {
-                                            HStack(spacing: 4) {
+                                            HStack(spacing: 5) {
                                                 Image(systemName: "arrow.clockwise")
                                                 Text("Tải về")
                                             }
-                                            .font(.system(size: 12, weight: .bold))
+                                            .font(.system(size: 13, weight: .bold))
                                             .foregroundColor(AnisetteCSSTheme.blue)
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background(AnisetteCSSTheme.blue.opacity(0.1))
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 7)
+                                            .background(AnisetteCSSTheme.blue.opacity(0.12))
                                             .cornerRadius(8)
                                             .overlay(
                                                 RoundedRectangle(cornerRadius: 8)
-                                                    .stroke(AnisetteCSSTheme.blue.opacity(0.25), lineWidth: 1)
+                                                    .stroke(AnisetteCSSTheme.blue.opacity(0.3), lineWidth: 1)
                                             )
                                         }
                                         .buttonStyle(.borderless)
@@ -613,7 +603,7 @@ struct AnisetteDataView: View {
                                 }
                                 .accentColor(AnisetteCSSTheme.blue)
                                 .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
+                                .padding(.vertical, 14)
                             }
                         }
                     }
@@ -643,15 +633,15 @@ struct AnisetteDataView: View {
                             } label: {
                                 HStack {
                                     Label("Nhập cấu hình từ tệp JSON", systemImage: "square.and.arrow.down")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(.black)
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(AnisetteCSSTheme.textPrimary)
                                     Spacer()
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundColor(AnisetteCSSTheme.dark.opacity(0.4))
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundColor(AnisetteCSSTheme.textSecondary)
                                 }
                                 .padding(.horizontal, 16)
-                                .frame(height: 50)
+                                .frame(height: 52)
                             }
 
                             divider
@@ -665,15 +655,15 @@ struct AnisetteDataView: View {
                             } label: {
                                 HStack {
                                     Label("Xuất cấu hình ra tệp JSON", systemImage: "square.and.arrow.up")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(.black)
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(AnisetteCSSTheme.textPrimary)
                                     Spacer()
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundColor(AnisetteCSSTheme.dark.opacity(0.4))
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundColor(AnisetteCSSTheme.textSecondary)
                                 }
                                 .padding(.horizontal, 16)
-                                .frame(height: 50)
+                                .frame(height: 52)
                             }
 
                             divider
@@ -684,11 +674,11 @@ struct AnisetteDataView: View {
                                 HStack {
                                     Label("Khôi phục về Mặc định", systemImage: "arrow.circlepath")
                                         .font(.system(size: 16, weight: .bold))
-                                        .foregroundColor(AnisetteCSSTheme.magenta)
+                                        .foregroundColor(AnisetteCSSTheme.danger)
                                     Spacer()
                                 }
                                 .padding(.horizontal, 16)
-                                .frame(height: 50)
+                                .frame(height: 52)
                             }
                             .alert("Khôi phục về Mặc định?", isPresented: $showingResetAlert) {
                                 SwiftUI.Button("Khôi phục", role: .destructive) {
@@ -707,6 +697,8 @@ struct AnisetteDataView: View {
                 .padding(.bottom, 40)
             }
         }
+        // Khóa môi trường Light Mode cho View này để chữ trong TextField/TextEditor không bao giờ bị biến thành màu trắng khi máy bật Dark Mode
+        .environment(\.colorScheme, .light)
         .navigationTitle("")
         #if !os(tvOS)
         .navigationBarHidden(true)
@@ -715,13 +707,13 @@ struct AnisetteDataView: View {
             Group {
                 if viewModel.isLoading {
                     ProgressView("Đang xử lý...")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundColor(AnisetteCSSTheme.blue)
-                        .padding(20)
+                        .padding(22)
                         .background(
                             RoundedRectangle(cornerRadius: 14)
                                 .fill(AnisetteCSSTheme.white)
-                                .shadow(color: Color.black.opacity(0.15), radius: 12, x: 0, y: 4)
+                                .shadow(color: Color.black.opacity(0.18), radius: 12, x: 0, y: 4)
                         )
                 }
             }
@@ -754,23 +746,23 @@ struct AnisetteDataView: View {
         }
     }
 
-    // MARK: - 💎 CÁC THÀNH PHẦN GIAO DIỆN ĐỒNG BỘ CSS THEME
+    // MARK: - 💎 CÁC THÀNH PHẦN GIAO DIỆN ĐỒNG BỘ CSS THEME (TƯƠNG PHẢN CAO)
 
     private var heroBanner: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             Text("Cấu Hình Anisette")
-                .font(.system(size: 23, weight: .heavy))
+                .font(.system(size: 24, weight: .heavy))
                 .foregroundColor(.white)
-                .shadow(color: Color.black.opacity(0.3), radius: 4, x: 1, y: 2)
+                .shadow(color: Color.black.opacity(0.25), radius: 4, x: 0, y: 2)
 
             Text("Tùy chỉnh định danh thiết bị & đồng bộ thông số xác thực ID Apple")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.white.opacity(0.95))
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.white)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 12)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
+        .padding(.vertical, 18)
         .background(
             LinearGradient(
                 gradient: Gradient(colors: [AnisetteCSSTheme.heroStart, AnisetteCSSTheme.heroEnd]),
@@ -779,18 +771,72 @@ struct AnisetteDataView: View {
             )
         )
         .cornerRadius(AnisetteCSSTheme.cornerRadius)
-        .shadow(color: AnisetteCSSTheme.blue.opacity(0.25), radius: 14, x: 0, y: 6)
+        .shadow(color: AnisetteCSSTheme.blue.opacity(0.28), radius: 14, x: 0, y: 6)
+    }
+
+    /// Khung chuyển đổi chế độ xem Tương tác / JSON được thiết kế riêng đảm bảo độ tương phản cao nhất
+    private var modeSwitcher: some View {
+        HStack(spacing: 8) {
+            modeTabButton(title: "Giao diện Tương tác", icon: "slider.horizontal.3", tag: 0)
+            modeTabButton(title: "Mã JSON Thô", icon: "curlybraces", tag: 1)
+        }
+        .padding(6)
+        .background(AnisetteCSSTheme.white)
+        .cornerRadius(14)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(AnisetteCSSTheme.border, lineWidth: 1.2)
+        )
+        .shadow(color: AnisetteCSSTheme.blue.opacity(0.08), radius: 8, x: 0, y: 4)
+    }
+
+    private func modeTabButton(title: String, icon: String, tag: Int) -> some View {
+        let isSelected = viewModel.viewMode == tag
+        return SwiftUI.Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                viewModel.viewMode = tag
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .bold))
+                Text(title)
+                    .font(.system(size: 14.5, weight: .bold))
+            }
+            .foregroundColor(isSelected ? .white : AnisetteCSSTheme.textPrimary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 11)
+            .background(
+                Group {
+                    if isSelected {
+                        LinearGradient(
+                            gradient: Gradient(colors: [AnisetteCSSTheme.blue, AnisetteCSSTheme.purple]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    } else {
+                        AnisetteCSSTheme.inputBg
+                    }
+                }
+            )
+            .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isSelected ? Color.clear : AnisetteCSSTheme.inputBorder.opacity(0.6), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func sectionHeader(_ title: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.system(size: 14, weight: .heavy))
+                .font(.system(size: 14.5, weight: .heavy))
                 .foregroundColor(AnisetteCSSTheme.blue)
 
             RoundedRectangle(cornerRadius: 1.5)
                 .fill(AnisetteCSSTheme.blue)
-                .frame(width: 38, height: 3)
+                .frame(width: 42, height: 3)
         }
         .padding(.horizontal, 4)
     }
@@ -803,9 +849,9 @@ struct AnisetteDataView: View {
         .cornerRadius(AnisetteCSSTheme.cornerRadius)
         .overlay(
             RoundedRectangle(cornerRadius: AnisetteCSSTheme.cornerRadius)
-                .stroke(AnisetteCSSTheme.border, lineWidth: 1)
+                .stroke(AnisetteCSSTheme.border, lineWidth: 1.2)
         )
-        .shadow(color: AnisetteCSSTheme.blue.opacity(0.07), radius: 10, x: 0, y: 5)
+        .shadow(color: AnisetteCSSTheme.blue.opacity(0.08), radius: 10, x: 0, y: 5)
     }
 
     @ViewBuilder
@@ -814,35 +860,35 @@ struct AnisetteDataView: View {
         if #available(iOS 16.0, *) {
             TextEditor(text: text)
                 .scrollContentBackground(.hidden)
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(AnisetteCSSTheme.dark)
+                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                .foregroundColor(AnisetteCSSTheme.textPrimary)
                 .frame(minHeight: minHeight)
-                .padding(8)
-                .background(AnisetteCSSTheme.light)
+                .padding(10)
+                .background(AnisetteCSSTheme.inputBg)
                 .cornerRadius(10)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(AnisetteCSSTheme.border, lineWidth: 1)
+                        .stroke(AnisetteCSSTheme.inputBorder, lineWidth: 1.2)
                 )
         } else {
             TextEditor(text: text)
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(AnisetteCSSTheme.dark)
+                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                .foregroundColor(AnisetteCSSTheme.textPrimary)
                 .frame(minHeight: minHeight)
-                .padding(8)
-                .background(AnisetteCSSTheme.light)
+                .padding(10)
+                .background(AnisetteCSSTheme.inputBg)
                 .cornerRadius(10)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(AnisetteCSSTheme.border, lineWidth: 1)
+                        .stroke(AnisetteCSSTheme.inputBorder, lineWidth: 1.2)
                 )
         }
         #else
         TextField("", text: text)
-            .font(.system(size: 13, design: .monospaced))
-            .foregroundColor(AnisetteCSSTheme.dark)
-            .padding(8)
-            .background(AnisetteCSSTheme.light)
+            .font(.system(size: 14, weight: .semibold, design: .monospaced))
+            .foregroundColor(AnisetteCSSTheme.textPrimary)
+            .padding(10)
+            .background(AnisetteCSSTheme.inputBg)
             .cornerRadius(10)
         #endif
     }
@@ -855,65 +901,66 @@ struct AnisetteDataView: View {
         isMultiline: Bool = false,
         autocapitalization: UITextAutocapitalizationType = .none
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .center, spacing: 8) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.black)
+                    .font(.system(size: 15.5, weight: .bold))
+                    .foregroundColor(AnisetteCSSTheme.textPrimary)
                 Spacer()
                 Text(headerKey)
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .font(.system(size: 12.5, weight: .bold, design: .monospaced))
                     .foregroundColor(AnisetteCSSTheme.purple)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(AnisetteCSSTheme.purple.opacity(0.1))
-                    .cornerRadius(5)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(AnisetteCSSTheme.purple.opacity(0.14))
+                    .cornerRadius(6)
             }
 
             if isMultiline {
-                customTextEditor(text: text, minHeight: 64)
+                customTextEditor(text: text, minHeight: 72)
             } else {
                 TextField(placeholder, text: text)
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundColor(AnisetteCSSTheme.dark)
+                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                    .foregroundColor(AnisetteCSSTheme.textPrimary)
                     .autocapitalization(autocapitalization)
                     .disableAutocorrection(true)
-                    .padding(10)
-                    .background(AnisetteCSSTheme.light)
+                    .padding(12)
+                    .background(AnisetteCSSTheme.inputBg)
                     .cornerRadius(10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(AnisetteCSSTheme.border, lineWidth: 1)
+                            .stroke(AnisetteCSSTheme.inputBorder, lineWidth: 1.2)
                     )
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.vertical, 14)
     }
 
     private func infoTokenRow(title: String, headerKey: String, subtitle: String) -> some View {
         HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .center, spacing: 8) {
                     Text(title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.black)
+                        .font(.system(size: 15.5, weight: .bold))
+                        .foregroundColor(AnisetteCSSTheme.textPrimary)
                     Spacer()
                     Text(headerKey)
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .font(.system(size: 12.5, weight: .bold, design: .monospaced))
                         .foregroundColor(AnisetteCSSTheme.blue)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(AnisetteCSSTheme.blue.opacity(0.1))
-                        .cornerRadius(5)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(AnisetteCSSTheme.blue.opacity(0.14))
+                        .cornerRadius(6)
                 }
                 Text(subtitle)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundColor(AnisetteCSSTheme.dark.opacity(0.78))
+                    .font(.system(size: 13.5, weight: .medium))
+                    .foregroundColor(AnisetteCSSTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.vertical, 14)
     }
 
     private var divider: some View {

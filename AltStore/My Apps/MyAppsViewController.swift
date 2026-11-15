@@ -16,6 +16,8 @@ import Combine
 import CoreData
 import UniformTypeIdentifiers
 import SemanticVersion
+import AVKit
+import AVFoundation
 
 import Nuke
 
@@ -73,6 +75,102 @@ private final class MyAppsGradientBackgroundView: UIView {
     }
 }
 
+// MARK: - 🖼️ KHUNG ẢNH / VIDEO TỰ ĐỘNG CO GIÃN 100% CHIỀU RỘNG (BỎ KHUNG BƯỚC 1 & BƯỚC 2)
+private final class FullWidthGuideMediaView: UIView {
+    let imageView = UIImageView()
+    private let badgeLabel = UILabel()
+    private let captionLabel = UILabel()
+    private let playButton = UIButton(type: .system)
+    var onPlayTap: (() -> Void)?
+    
+    init(badge: String, caption: String, imageName: String?, isVideo: Bool = false) {
+        super.init(frame: .zero)
+        self.overrideUserInterfaceStyle = .light
+        self.translatesAutoresizingMaskIntoConstraints = false
+        self.backgroundColor = CSSTheme.white
+        self.layer.cornerRadius = CSSTheme.cornerRadius
+        self.layer.cornerCurve = .continuous
+        self.layer.masksToBounds = true
+        self.layer.borderWidth = 1.0
+        self.layer.borderColor = CSSTheme.border.cgColor
+        
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.contentMode = .scaleAspectFill
+        imageView.clipsToBounds = true
+        imageView.backgroundColor = CSSTheme.pillBg
+        if let name = imageName, let img = UIImage(named: name) {
+            imageView.image = img
+        }
+        addSubview(imageView)
+        
+        badgeLabel.translatesAutoresizingMaskIntoConstraints = false
+        badgeLabel.text = badge
+        badgeLabel.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
+        badgeLabel.textColor = CSSTheme.white
+        badgeLabel.backgroundColor = isVideo ? CSSTheme.purple : CSSTheme.blue
+        badgeLabel.textAlignment = .center
+        badgeLabel.layer.cornerRadius = 10
+        badgeLabel.layer.masksToBounds = true
+        addSubview(badgeLabel)
+        
+        captionLabel.translatesAutoresizingMaskIntoConstraints = false
+        captionLabel.text = caption
+        captionLabel.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        captionLabel.textColor = CSSTheme.textSecondary
+        captionLabel.textAlignment = .center
+        captionLabel.numberOfLines = 2
+        captionLabel.isHidden = (imageView.image != nil)
+        addSubview(captionLabel)
+        
+        NSLayoutConstraint.activate([
+            imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            imageView.topAnchor.constraint(equalTo: topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            
+            badgeLabel.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            badgeLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            badgeLabel.heightAnchor.constraint(equalToConstant: 22),
+            badgeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 68),
+            
+            captionLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            captionLabel.centerYAnchor.constraint(equalTo: centerYAnchor, constant: isVideo ? 28 : 0),
+            captionLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            captionLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16)
+        ])
+        
+        if isVideo {
+            playButton.translatesAutoresizingMaskIntoConstraints = false
+            let config = UIImage.SymbolConfiguration(pointSize: 38, weight: .bold)
+            playButton.setImage(UIImage(systemName: "play.circle.fill", withConfiguration: config), for: .normal)
+            playButton.tintColor = CSSTheme.blue
+            playButton.backgroundColor = CSSTheme.white.withAlphaComponent(0.92)
+            playButton.layer.cornerRadius = 26
+            playButton.layer.shadowColor = UIColor.black.cgColor
+            playButton.layer.shadowOffset = CGSize(width: 0, height: 3)
+            playButton.layer.shadowRadius = 8
+            playButton.layer.shadowOpacity = 0.2
+            playButton.addTarget(self, action: #selector(handlePlayTap), for: .touchUpInside)
+            addSubview(playButton)
+            
+            NSLayoutConstraint.activate([
+                playButton.centerXAnchor.constraint(equalTo: centerXAnchor),
+                playButton.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -6),
+                playButton.widthAnchor.constraint(equalToConstant: 52),
+                playButton.heightAnchor.constraint(equalToConstant: 52)
+            ])
+        }
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    @objc private func handlePlayTap() {
+        onPlayTap?()
+    }
+}
+
 extension MyAppsViewController
 {
     private enum Section: Int, CaseIterable
@@ -113,15 +211,32 @@ class MyAppsViewController: UICollectionViewController
     private var previousInactiveAppsCount = 0
     private var statusDotView: UIView?
     
-    // Thành phần giao diện CSS Hero Banner & Nút điều hướng nổi
+    // Thành phần giao diện CSS Hero Banner, Hướng dẫn Bước 1 & 2 (Không khung, Ảnh rộng bằng Video) & Nút điều hướng nổi
     private var heroContainerView: UIView?
     private var heroCardView: UIView?
     private var heroGradientLayer: CAGradientLayer?
     private var heroSideloadButton: UIButton?
     private var heroSideloadSpinner: UIActivityIndicatorView?
+    private var heroGuideToggleButton: UIButton?
     private var heroLiveContainerButton: UIButton?
+    private var guideStackView: UIStackView?
     private var floatingBackButton: UIButton?
-    private let heroTopSpace: CGFloat = 104.0
+    
+    private let heroBannerHeight: CGFloat = 104.0
+    private var isGuideExpanded: Bool = UserDefaults.standard.object(forKey: "MyApps_ShowStepsGuide") as? Bool ?? false
+    
+    private var currentTopHeaderHeight: CGFloat {
+        guard isGuideExpanded, let guideStack = self.guideStackView else {
+            return heroBannerHeight
+        }
+        let targetWidth = max(self.collectionView.bounds.width - 32, 280)
+        let fittingSize = guideStack.systemLayoutSizeFitting(
+            CGSize(width: targetWidth, height: UIView.layoutFittingCompressedSize.height),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        )
+        return heroBannerHeight + fittingSize.height + 16
+    }
     
     private var _imagePickerInstalledApp: InstalledApp?
     private var _viewDidAppear = false
@@ -304,8 +419,12 @@ class MyAppsViewController: UICollectionViewController
     override func viewDidLayoutSubviews()
     {
         super.viewDidLayoutSubviews()
+        let topSpace = self.currentTopHeaderHeight
+        if abs(self.collectionView.contentInset.top - topSpace) > 0.5 {
+            self.collectionView.contentInset.top = topSpace
+        }
         if let heroContainer = self.heroContainerView {
-            heroContainer.frame = CGRect(x: 0, y: -self.heroTopSpace, width: self.collectionView.bounds.width, height: self.heroTopSpace)
+            heroContainer.frame = CGRect(x: 0, y: -topSpace, width: self.collectionView.bounds.width, height: topSpace)
         }
         if let heroCard = self.heroCardView {
             self.heroGradientLayer?.frame = heroCard.bounds
@@ -478,12 +597,13 @@ private extension MyAppsViewController {
         self.collectionView.backgroundView = bgView
         self.collectionView.backgroundColor = .clear
         
-        // 2. Dành không gian phía trên cho khối .hero Banner và dưới đáy cho TabBar
-        self.collectionView.contentInset.top = self.heroTopSpace
-        self.collectionView.contentInset.bottom = 40
-        
-        // 3. Khởi tạo khối .hero Banner kèm nút "+ IPA" và nút Icon LiveContainer
+        // 2. Khởi tạo khối .hero Banner kèm Hướng dẫn Bước 1 & Bước 2 (Đã bỏ khung bao ngoài để chiều rộng Ảnh = chiều rộng Video)
         setupCSSHeroBanner()
+        
+        // 3. Dành không gian phía trên cho khối .hero Banner (+ hướng dẫn nếu mở) và dưới đáy cho TabBar
+        let topSpace = self.currentTopHeaderHeight
+        self.collectionView.contentInset.top = topSpace
+        self.collectionView.contentInset.bottom = 40
         
         // 4. Đồng bộ màu Badge trên TabBar
         #if !os(tvOS)
@@ -495,8 +615,73 @@ private extension MyAppsViewController {
         self.navigationController?.tabBarItem.title = "Ứng dụng"
     }
     
+    // Tạo từng bước hướng dẫn KHÔNG CÓ KHUNG BAO NGOÀI (padding = 0) để chiều rộng Ảnh bằng khít 100% chiều rộng Video
+    func makeFramelessStepSection(stepBadge: String, titleText: String, imageName: String?, mediaCaption: String) -> UIStackView {
+        let stepStack = UIStackView()
+        stepStack.axis = .vertical
+        stepStack.alignment = .fill
+        stepStack.spacing = 8
+        stepStack.translatesAutoresizingMaskIntoConstraints = false
+        // Không đặt backgroundColor, không đặt border, không đặt layoutMargins -> Ảnh rộng 100% bằng Video
+        
+        let titleLabel = UILabel()
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.text = "\(stepBadge): \(titleText)"
+        titleLabel.font = UIFont.systemFont(ofSize: 14.5, weight: .bold)
+        titleLabel.textColor = CSSTheme.textPrimary
+        titleLabel.numberOfLines = 0
+        
+        let mediaView = FullWidthGuideMediaView(
+            badge: stepBadge.uppercased(),
+            caption: mediaCaption,
+            imageName: imageName,
+            isVideo: false
+        )
+        
+        NSLayoutConstraint.activate([
+            mediaView.heightAnchor.constraint(equalTo: mediaView.widthAnchor, multiplier: 9.0 / 16.0)
+        ])
+        
+        stepStack.addArrangedSubview(titleLabel)
+        stepStack.addArrangedSubview(mediaView)
+        return stepStack
+    }
+    
+    func makeFullWidthVideoSection() -> UIStackView {
+        let videoStack = UIStackView()
+        videoStack.axis = .vertical
+        videoStack.alignment = .fill
+        videoStack.spacing = 8
+        videoStack.translatesAutoresizingMaskIntoConstraints = false
+        
+        let titleLabel = UILabel()
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.text = "Video hướng dẫn chi tiết"
+        titleLabel.font = UIFont.systemFont(ofSize: 14.5, weight: .bold)
+        titleLabel.textColor = CSSTheme.textPrimary
+        titleLabel.numberOfLines = 0
+        
+        let videoView = FullWidthGuideMediaView(
+            badge: "VIDEO HD",
+            caption: "Nhấn để xem video hướng dẫn cài đặt & làm mới ứng dụng",
+            imageName: "guide_video_thumb",
+            isVideo: true
+        )
+        videoView.onPlayTap = { [weak self] in
+            self?.presentGuideVideoPlayer()
+        }
+        
+        NSLayoutConstraint.activate([
+            videoView.heightAnchor.constraint(equalTo: videoView.widthAnchor, multiplier: 9.0 / 16.0)
+        ])
+        
+        videoStack.addArrangedSubview(titleLabel)
+        videoStack.addArrangedSubview(videoView)
+        return videoStack
+    }
+    
     func setupCSSHeroBanner() {
-        let headerContainer = UIView(frame: CGRect(x: 0, y: -self.heroTopSpace, width: self.collectionView.bounds.width, height: self.heroTopSpace))
+        let headerContainer = UIView(frame: CGRect(x: 0, y: -self.heroBannerHeight, width: self.collectionView.bounds.width, height: self.heroBannerHeight))
         headerContainer.backgroundColor = .clear
         headerContainer.autoresizingMask = [.flexibleWidth]
         headerContainer.overrideUserInterfaceStyle = .light
@@ -592,6 +777,20 @@ private extension MyAppsViewController {
         addBtn.addSubview(spinner)
         self.heroSideloadSpinner = spinner
         
+        // Nút bật/tắt nhanh Hướng dẫn Bước 1 & Bước 2
+        let guideBtn = UIButton(type: .system)
+        guideBtn.translatesAutoresizingMaskIntoConstraints = false
+        let guideIconConfig = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
+        guideBtn.setImage(UIImage(systemName: "questionmark.circle.fill", withConfiguration: guideIconConfig), for: .normal)
+        guideBtn.tintColor = CSSTheme.white
+        guideBtn.backgroundColor = CSSTheme.white.withAlphaComponent(self.isGuideExpanded ? 0.38 : 0.22)
+        guideBtn.layer.cornerRadius = 14
+        guideBtn.layer.borderWidth = 1.0
+        guideBtn.layer.borderColor = CSSTheme.white.withAlphaComponent(0.55).cgColor
+        guideBtn.accessibilityLabel = "Ẩn/Hiện hướng dẫn Bước 1 và Bước 2"
+        guideBtn.addTarget(self, action: #selector(handleToggleStepsGuide(_:)), for: .touchUpInside)
+        self.heroGuideToggleButton = guideBtn
+        
         // Nút Icon LiveContainer (chỉ giữ icon, không kèm chữ) nằm gọn ở góc phải Hero Card
         let lcBtn = UIButton(type: .system)
         lcBtn.translatesAutoresizingMaskIntoConstraints = false
@@ -617,19 +816,48 @@ private extension MyAppsViewController {
         self.sideloadingProgressView.layer.cornerRadius = 2
         self.sideloadingProgressView.clipsToBounds = true
         
+        // Khối Hướng dẫn Bước 1, Bước 2 và Video: ĐÃ BỎ KHUNG BƯỚC 1 & BƯỚC 2 để chiều rộng Ảnh = 100% chiều rộng Video
+        let step1Section = makeFramelessStepSection(
+            stepBadge: "Bước 1",
+            titleText: "Bật VPN WireGuard / StosVPN trước khi cài đặt hoặc gia hạn ứng dụng",
+            imageName: "guide_step1",
+            mediaCaption: "Minh họa Bước 1: Bật kết nối VPN trước khi thao tác trên SideStore"
+        )
+        
+        let step2Section = makeFramelessStepSection(
+            stepBadge: "Bước 2",
+            titleText: "Nhấn nút + IPA để cài đặt tệp mới hoặc nhấn Làm mới tất cả để gia hạn 7 ngày",
+            imageName: "guide_step2",
+            mediaCaption: "Minh họa Bước 2: Cài đặt tệp IPA hoặc nhấn nút số ngày màu xanh để làm mới"
+        )
+        
+        let videoSection = makeFullWidthVideoSection()
+        
+        let guideStack = UIStackView(arrangedSubviews: [step1Section, step2Section, videoSection])
+        guideStack.translatesAutoresizingMaskIntoConstraints = false
+        guideStack.axis = .vertical
+        guideStack.alignment = .fill
+        guideStack.spacing = 14
+        guideStack.isHidden = !self.isGuideExpanded
+        guideStack.alpha = self.isGuideExpanded ? 1.0 : 0.0
+        self.guideStackView = guideStack
+        
         heroCard.addSubview(titleStack)
         heroCard.addSubview(subLabel)
         heroCard.addSubview(addBtn)
+        heroCard.addSubview(guideBtn)
         heroCard.addSubview(lcBtn)
         heroCard.addSubview(self.sideloadingProgressView)
+        
         headerContainer.addSubview(heroCard)
+        headerContainer.addSubview(guideStack)
         self.collectionView.addSubview(headerContainer)
         
         NSLayoutConstraint.activate([
             heroCard.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor, constant: 16),
             heroCard.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -16),
             heroCard.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 4),
-            heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -6),
+            heroCard.heightAnchor.constraint(equalToConstant: self.heroBannerHeight - 10),
             
             addBtn.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 10),
             addBtn.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 12),
@@ -643,10 +871,15 @@ private extension MyAppsViewController {
             lcBtn.widthAnchor.constraint(equalToConstant: 30),
             lcBtn.heightAnchor.constraint(equalToConstant: 28),
             
+            guideBtn.trailingAnchor.constraint(equalTo: lcBtn.leadingAnchor, constant: -6),
+            guideBtn.centerYAnchor.constraint(equalTo: addBtn.centerYAnchor),
+            guideBtn.widthAnchor.constraint(equalToConstant: 30),
+            guideBtn.heightAnchor.constraint(equalToConstant: 28),
+            
             titleStack.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
             titleStack.centerYAnchor.constraint(equalTo: addBtn.centerYAnchor),
-            titleStack.leadingAnchor.constraint(greaterThanOrEqualTo: addBtn.trailingAnchor, constant: 8),
-            titleStack.trailingAnchor.constraint(lessThanOrEqualTo: lcBtn.leadingAnchor, constant: -8),
+            titleStack.leadingAnchor.constraint(greaterThanOrEqualTo: addBtn.trailingAnchor, constant: 6),
+            titleStack.trailingAnchor.constraint(lessThanOrEqualTo: guideBtn.leadingAnchor, constant: -6),
             
             subLabel.topAnchor.constraint(equalTo: addBtn.bottomAnchor, constant: 12),
             subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
@@ -655,7 +888,12 @@ private extension MyAppsViewController {
             self.sideloadingProgressView.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
             self.sideloadingProgressView.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
             self.sideloadingProgressView.bottomAnchor.constraint(equalTo: heroCard.bottomAnchor, constant: -3),
-            self.sideloadingProgressView.heightAnchor.constraint(equalToConstant: 3)
+            self.sideloadingProgressView.heightAnchor.constraint(equalToConstant: 3),
+            
+            // Bước 1, Bước 2 và Video cùng căn lề 16pt hai bên (không có khung lồng bên trong) -> Ảnh và Video bằng chiều rộng 100%
+            guideStack.topAnchor.constraint(equalTo: heroCard.bottomAnchor, constant: 12),
+            guideStack.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor, constant: 16),
+            guideStack.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -16)
         ])
         
         heroCard.alpha = 0
@@ -663,6 +901,41 @@ private extension MyAppsViewController {
         UIView.animate(withDuration: 0.5, delay: 0.05, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.5, options: .curveEaseOut) {
             heroCard.alpha = 1
             heroCard.transform = .identity
+        }
+    }
+    
+    @objc func handleToggleStepsGuide(_ sender: UIButton) {
+        animateButtonBounce(sender)
+        self.isGuideExpanded.toggle()
+        UserDefaults.standard.set(self.isGuideExpanded, forKey: "MyApps_ShowStepsGuide")
+        
+        guard let guideStack = self.guideStackView else { return }
+        guideStack.isHidden = !self.isGuideExpanded
+        self.heroGuideToggleButton?.backgroundColor = CSSTheme.white.withAlphaComponent(self.isGuideExpanded ? 0.38 : 0.22)
+        
+        let newTopSpace = self.currentTopHeaderHeight
+        UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 0.86, initialSpringVelocity: 0.6, options: [.curveEaseInOut, .beginFromCurrentState]) {
+            guideStack.alpha = self.isGuideExpanded ? 1.0 : 0.0
+            self.collectionView.contentInset.top = newTopSpace
+            self.heroContainerView?.frame = CGRect(x: 0, y: -newTopSpace, width: self.collectionView.bounds.width, height: newTopSpace)
+            self.collectionView.contentOffset = CGPoint(x: 0, y: -newTopSpace)
+            self.view.layoutIfNeeded()
+        }
+    }
+    
+    func presentGuideVideoPlayer() {
+        if let videoURL = Bundle.main.url(forResource: "guide", withExtension: "mp4")
+            ?? Bundle.main.url(forResource: "tutorial", withExtension: "mp4") {
+            let playerVC = AVPlayerViewController()
+            playerVC.player = AVPlayer(url: videoURL)
+            self.present(playerVC, animated: true) {
+                playerVC.player?.play()
+            }
+        } else {
+            ToastView(
+                text: "Hướng dẫn nhanh",
+                detailText: "Bước 1: Bật StosVPN/WireGuard • Bước 2: Nhấn '+ IPA' hoặc 'Làm mới tất cả'."
+            ).show(in: self)
         }
     }
     

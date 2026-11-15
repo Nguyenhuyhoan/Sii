@@ -78,6 +78,9 @@ final class TabBarController: UITabBarController
         {
             settingsNav.tabBarItem.title = "Cài đặt"
         }
+        
+        // 6. Đặt tab My Apps ("Ứng dụng") làm tab active mặc định khi mở app
+        self.selectedIndex = Tab.myApps.rawValue
     }
     
     override func viewDidAppear(_ animated: Bool)

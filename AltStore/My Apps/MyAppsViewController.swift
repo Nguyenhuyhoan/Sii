@@ -119,6 +119,7 @@ class MyAppsViewController: UICollectionViewController
     private var heroGradientLayer: CAGradientLayer?
     private var heroSideloadButton: UIButton?
     private var heroSideloadSpinner: UIActivityIndicatorView?
+    private var heroLiveContainerButton: UIButton?
     private var heroRefreshAllButton: UIButton?
     private var floatingBackButton: UIButton?
     private let heroTopSpace: CGFloat = 104.0
@@ -172,6 +173,11 @@ class MyAppsViewController: UICollectionViewController
     override func viewDidLoad()
     {
         super.viewDidLoad()
+        
+        // Khởi tạo sẵn mảng leftBarButtonItems để hook của SideStoreHooks.m (LiveContainer) không bao giờ gặp nil khi chèn nút escape
+        if self.navigationItem.leftBarButtonItems == nil {
+            self.navigationItem.leftBarButtonItems = []
+        }
         
         // Cố định toàn bộ màn hình ở giao diện Sáng (Light Mode) để không bao giờ bị chuyển sang nền đen
         self.overrideUserInterfaceStyle = .light
@@ -477,7 +483,7 @@ private extension MyAppsViewController {
         self.collectionView.contentInset.top = self.heroTopSpace
         self.collectionView.contentInset.bottom = 40
         
-        // 3. Khởi tạo khối .hero Banner kèm nút "+ Cài IPA" và "Làm mới"
+        // 3. Khởi tạo khối .hero Banner kèm nút "+ Cài IPA", nút "LC" (LiveContainer) và "Làm mới"
         setupCSSHeroBanner()
         
         // 4. Đồng bộ màu Badge trên TabBar
@@ -520,12 +526,14 @@ private extension MyAppsViewController {
         titleStack.translatesAutoresizingMaskIntoConstraints = false
         titleStack.axis = .horizontal
         titleStack.alignment = .center
-        titleStack.spacing = 7
+        titleStack.spacing = 6
         
         let titleLabel = UILabel()
         titleLabel.text = "Ứng dụng của tôi"
-        titleLabel.font = UIFont.systemFont(ofSize: 21, weight: .heavy)
+        titleLabel.font = UIFont.systemFont(ofSize: 19, weight: .heavy)
         titleLabel.textColor = CSSTheme.white
+        titleLabel.adjustsFontSizeToFitWidth = true
+        titleLabel.minimumScaleFactor = 0.75
         titleLabel.layer.shadowColor = UIColor.black.cgColor
         titleLabel.layer.shadowOffset = CGSize(width: 1, height: 2)
         titleLabel.layer.shadowRadius = 4
@@ -562,15 +570,15 @@ private extension MyAppsViewController {
         // Nút "+ Cài IPA" bên trái Hero Card
         let addBtn = UIButton(type: .system)
         addBtn.translatesAutoresizingMaskIntoConstraints = false
-        let plusConfig = UIImage.SymbolConfiguration(pointSize: 12, weight: .bold)
+        let plusConfig = UIImage.SymbolConfiguration(pointSize: 11.5, weight: .bold)
         addBtn.setImage(UIImage(systemName: "plus.circle.fill", withConfiguration: plusConfig), for: .normal)
         addBtn.setTitle(" Cài IPA", for: .normal)
-        addBtn.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .bold)
+        addBtn.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
         addBtn.tintColor = CSSTheme.blue
         addBtn.setTitleColor(CSSTheme.blue, for: .normal)
         addBtn.backgroundColor = CSSTheme.white
         addBtn.layer.cornerRadius = 14
-        addBtn.contentEdgeInsets = UIEdgeInsets(top: 5, left: 10, bottom: 5, right: 11)
+        addBtn.contentEdgeInsets = UIEdgeInsets(top: 5, left: 9, bottom: 5, right: 10)
         addBtn.layer.shadowColor = UIColor.black.cgColor
         addBtn.layer.shadowOffset = CGSize(width: 0, height: 2)
         addBtn.layer.shadowRadius = 4
@@ -585,16 +593,41 @@ private extension MyAppsViewController {
         addBtn.addSubview(spinner)
         self.heroSideloadSpinner = spinner
         
+        // Nút "LC" (Chuyển nhanh sang LiveContainer) phong cách Glassmorphism gọn đẹp bên phải Hero Card
+        let lcBtn = UIButton(type: .system)
+        lcBtn.translatesAutoresizingMaskIntoConstraints = false
+        let lcIconConfig = UIImage.SymbolConfiguration(pointSize: 11.5, weight: .bold)
+        let lcIcon = UIImage(systemName: "escape", withConfiguration: lcIconConfig)
+            ?? UIImage(systemName: "arrow.up.forward.app.fill", withConfiguration: lcIconConfig)
+        lcBtn.setImage(lcIcon, for: .normal)
+        lcBtn.setTitle(" LC", for: .normal)
+        lcBtn.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .heavy)
+        lcBtn.tintColor = CSSTheme.white
+        lcBtn.setTitleColor(CSSTheme.white, for: .normal)
+        lcBtn.backgroundColor = CSSTheme.white.withAlphaComponent(0.24)
+        lcBtn.layer.cornerRadius = 14
+        lcBtn.layer.borderWidth = 1.0
+        lcBtn.layer.borderColor = CSSTheme.white.withAlphaComponent(0.55).cgColor
+        lcBtn.contentEdgeInsets = UIEdgeInsets(top: 5, left: 8, bottom: 5, right: 9)
+        lcBtn.layer.shadowColor = UIColor.black.cgColor
+        lcBtn.layer.shadowOffset = CGSize(width: 0, height: 2)
+        lcBtn.layer.shadowRadius = 4
+        lcBtn.layer.shadowOpacity = 0.12
+        lcBtn.accessibilityLabel = "Chuyển qua LiveContainer"
+        lcBtn.addTarget(self, action: #selector(handleHeroLiveContainerTap(_:)), for: .touchUpInside)
+        self.heroLiveContainerButton = lcBtn
+        
         // Nút "Làm mới" nhanh bên phải Hero Card
         let refreshBtn = UIButton(type: .system)
         refreshBtn.translatesAutoresizingMaskIntoConstraints = false
-        let refConfig = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
+        let refConfig = UIImage.SymbolConfiguration(pointSize: 12.5, weight: .bold)
         refreshBtn.setImage(UIImage(systemName: "arrow.clockwise", withConfiguration: refConfig), for: .normal)
         refreshBtn.tintColor = CSSTheme.white
         refreshBtn.backgroundColor = CSSTheme.white.withAlphaComponent(0.22)
         refreshBtn.layer.cornerRadius = 14
         refreshBtn.layer.borderWidth = 1.0
         refreshBtn.layer.borderColor = CSSTheme.white.withAlphaComponent(0.45).cgColor
+        refreshBtn.accessibilityLabel = "Làm mới tất cả ứng dụng"
         refreshBtn.addTarget(self, action: #selector(handleHeroRefreshAllTap(_:)), for: .touchUpInside)
         self.heroRefreshAllButton = refreshBtn
         
@@ -605,6 +638,7 @@ private extension MyAppsViewController {
         heroCard.addSubview(titleStack)
         heroCard.addSubview(subLabel)
         heroCard.addSubview(addBtn)
+        heroCard.addSubview(lcBtn)
         heroCard.addSubview(refreshBtn)
         heroCard.addSubview(self.sideloadingProgressView)
         headerContainer.addSubview(heroCard)
@@ -616,20 +650,26 @@ private extension MyAppsViewController {
             heroCard.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 4),
             heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -6),
             
-            addBtn.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
+            addBtn.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 10),
             addBtn.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 12),
             addBtn.heightAnchor.constraint(equalToConstant: 28),
             
             spinner.centerXAnchor.constraint(equalTo: addBtn.centerXAnchor),
             spinner.centerYAnchor.constraint(equalTo: addBtn.centerYAnchor),
             
-            refreshBtn.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
+            refreshBtn.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -10),
             refreshBtn.centerYAnchor.constraint(equalTo: addBtn.centerYAnchor),
-            refreshBtn.widthAnchor.constraint(equalToConstant: 32),
+            refreshBtn.widthAnchor.constraint(equalToConstant: 30),
             refreshBtn.heightAnchor.constraint(equalToConstant: 28),
             
-            titleStack.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor, constant: 14),
+            lcBtn.trailingAnchor.constraint(equalTo: refreshBtn.leadingAnchor, constant: -6),
+            lcBtn.centerYAnchor.constraint(equalTo: addBtn.centerYAnchor),
+            lcBtn.heightAnchor.constraint(equalToConstant: 28),
+            
+            titleStack.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
             titleStack.centerYAnchor.constraint(equalTo: addBtn.centerYAnchor),
+            titleStack.leadingAnchor.constraint(greaterThanOrEqualTo: addBtn.trailingAnchor, constant: 6),
+            titleStack.trailingAnchor.constraint(lessThanOrEqualTo: lcBtn.leadingAnchor, constant: -6),
             
             subLabel.topAnchor.constraint(equalTo: addBtn.bottomAnchor, constant: 12),
             subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
@@ -659,7 +699,7 @@ private extension MyAppsViewController {
             btn.isUserInteractionEnabled = false
         } else {
             spinner.stopAnimating()
-            let plusConfig = UIImage.SymbolConfiguration(pointSize: 12, weight: .bold)
+            let plusConfig = UIImage.SymbolConfiguration(pointSize: 11.5, weight: .bold)
             btn.setImage(UIImage(systemName: "plus.circle.fill", withConfiguration: plusConfig), for: .normal)
             btn.setTitle(" Cài IPA", for: .normal)
             btn.isUserInteractionEnabled = true
@@ -676,6 +716,49 @@ private extension MyAppsViewController {
         animateButtonBounce(sender)
         let barButton = self.navigationItem.rightBarButtonItem ?? UIBarButtonItem()
         self.refreshAllApps(barButton)
+    }
+    
+    // Kích hoạt chuyển sang LiveContainer tương thích 100% với SideStoreHooks.m mà không gây lỗi khi build IPA độc lập
+    @objc func handleHeroLiveContainerTap(_ sender: UIButton) {
+        animateButtonBounce(sender)
+        
+        // Ưu tiên 1: Gọi trực tiếp selector `escapeButtonTapped:` được SideStoreHooks.m gắn vào MyAppsViewController lúc runtime
+        let escapeSelector = NSSelectorFromString("escapeButtonTapped:")
+        if self.responds(to: escapeSelector) {
+            _ = self.perform(escapeSelector, with: sender)
+            return
+        }
+        
+        // Ưu tiên 2: Nếu button escape đã được SideStoreHooks.m thêm vào navigationItem.leftBarButtonItems, kích hoạt action của nó
+        if let leftItems = self.navigationItem.leftBarButtonItems {
+            for item in leftItems where item.action == escapeSelector {
+                if let target = item.target as? NSObject, target.responds(to: escapeSelector) {
+                    _ = target.perform(escapeSelector, with: item)
+                    return
+                }
+            }
+        }
+        
+        // Ưu tiên 3: Gọi trực tiếp `[LCSharedUtils launchToGuestAppWithClassicMode:0]` thông qua Objective-C Runtime
+        if let lcSharedUtilsClass = NSClassFromString("LCSharedUtils") as? NSObject.Type {
+            let launchSelector = NSSelectorFromString("launchToGuestAppWithClassicMode:")
+            if lcSharedUtilsClass.responds(to: launchSelector) {
+                typealias LaunchFunc = @convention(c) (AnyClass, Selector, Int) -> Void
+                let imp = lcSharedUtilsClass.method(for: launchSelector)
+                let launch = unsafeBitCast(imp, to: LaunchFunc.self)
+                launch(lcSharedUtilsClass, launchSelector, 0)
+                return
+            }
+        }
+        
+        // Ưu tiên 4 (Fallback khi cài SideStore rời): Mở ứng dụng LiveContainer qua URL Scheme
+        if let lcURL = URL(string: "livecontainer://") {
+            UIApplication.shared.open(lcURL, options: [:]) { [weak self] success in
+                if !success, let self = self {
+                    ToastView(text: "Không tìm thấy LiveContainer", detailText: "Bản cài đặt này chưa được gộp hoặc chưa cài đặt LiveContainer.").show(in: self)
+                }
+            }
+        }
     }
     
     func animateButtonBounce(_ sender: UIView) {

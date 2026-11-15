@@ -81,8 +81,8 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
                     optionButton(
                         icon: "shield.lefthalf.filled.badge.checkmark",
                         iconColor: PipelineCSSTheme.suiGreen,
-                        title: "Giữ tất cả (Dùng hồ sơ chính)",
-                        subtitle: "Giữ nguyên tiện ích, không tốn thêm App ID",
+                        title: "Giữ tất cả 1 cách thông minh",
+                        subtitle: "Giữ nguyên tất cả tiện ích chỉ dùng 1 App ID",
                         borderColor: PipelineCSSTheme.suiGreen.opacity(0.55)
                     ) {
                         onSelect(.keepAllMainProfile)
@@ -92,8 +92,8 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
                     optionButton(
                         icon: "key.radiowaves.forward.fill",
                         iconColor: PipelineCSSTheme.suiPrimary,
-                        title: "Giữ tất cả (Tạo App ID riêng)",
-                        subtitle: "Đăng ký từng App ID riêng cho mỗi tiện ích",
+                        title: "Giữ tất cả và tạo App ID riêng",
+                        subtitle: "Đăng ký từng App ID riêng cho mỗi tiện ích (Tốn nhiều ID)",
                         borderColor: PipelineCSSTheme.suiInnerBorder
                     ) {
                         onSelect(.keepAllSeparateAppIDs)
@@ -115,7 +115,7 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
                         icon: "trash.fill",
                         iconColor: PipelineCSSTheme.suiRed,
                         title: "Gỡ bỏ tất cả tiện ích",
-                        subtitle: "Chỉ cài ứng dụng chính để tiết kiệm App ID",
+                        subtitle: "Chỉ cài ứng dụng chính, chỉ dùng 1 App ID",
                         borderColor: PipelineCSSTheme.suiRed.opacity(0.38)
                     ) {
                         onSelect(.removeAll)

@@ -65,7 +65,6 @@ private enum ExtensionAlertChoice {
 }
 
 private struct ExtensionDecisionCenterModalView: SwiftUI.View {
-    let extensionCount: Int
     let onSelect: (ExtensionAlertChoice) -> Void
 
     var body: some SwiftUI.View {
@@ -84,8 +83,6 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
                         iconColor: PipelineCSSTheme.suiGreen,
                         title: "Giữ tất cả (Dùng hồ sơ chính)",
                         subtitle: "Giữ nguyên tiện ích, không tốn thêm App ID",
-                        badge: "★ Khuyên dùng",
-                        badgeColor: PipelineCSSTheme.suiGreen,
                         borderColor: PipelineCSSTheme.suiGreen.opacity(0.55)
                     ) {
                         onSelect(.keepAllMainProfile)
@@ -97,8 +94,6 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
                         iconColor: PipelineCSSTheme.suiPrimary,
                         title: "Giữ tất cả (Tạo App ID riêng)",
                         subtitle: "Đăng ký từng App ID riêng cho mỗi tiện ích",
-                        badge: nil,
-                        badgeColor: PipelineCSSTheme.suiPrimary,
                         borderColor: PipelineCSSTheme.suiInnerBorder
                     ) {
                         onSelect(.keepAllSeparateAppIDs)
@@ -110,8 +105,6 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
                         iconColor: PipelineCSSTheme.suiSecondary,
                         title: "Tùy chọn từng tiện ích...",
                         subtitle: "Chọn các tiện ích muốn giữ hoặc gỡ bỏ",
-                        badge: "\(extensionCount) mục",
-                        badgeColor: PipelineCSSTheme.suiSecondary,
                         borderColor: PipelineCSSTheme.suiInnerBorder
                     ) {
                         onSelect(.chooseCustom)
@@ -123,8 +116,6 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
                         iconColor: PipelineCSSTheme.suiRed,
                         title: "Gỡ bỏ tất cả tiện ích",
                         subtitle: "Chỉ cài ứng dụng chính để tiết kiệm App ID",
-                        badge: "Tiết kiệm ID",
-                        badgeColor: PipelineCSSTheme.suiRed,
                         borderColor: PipelineCSSTheme.suiRed.opacity(0.38)
                     ) {
                         onSelect(.removeAll)
@@ -184,8 +175,6 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
         iconColor: SwiftUI.Color,
         title: String,
         subtitle: String,
-        badge: String?,
-        badgeColor: SwiftUI.Color,
         borderColor: SwiftUI.Color,
         action: @escaping () -> Void
     ) -> some SwiftUI.View {
@@ -201,23 +190,11 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
                 }
 
                 VStack(alignment: .leading, spacing: 2.5) {
-                    HStack(spacing: 6) {
-                        SwiftUI.Text(title)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(PipelineCSSTheme.suiPureBlack)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.82)
-
-                        if let badge = badge {
-                            SwiftUI.Text(badge)
-                                .font(.system(size: 10, weight: .heavy))
-                                .padding(.horizontal, 6.5)
-                                .padding(.vertical, 2)
-                                .background(badgeColor.opacity(0.15))
-                                .foregroundColor(badgeColor)
-                                .clipShape(Capsule())
-                        }
-                    }
+                    SwiftUI.Text(title)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(PipelineCSSTheme.suiPureBlack)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
 
                     SwiftUI.Text(subtitle)
                         .font(.system(size: 12, weight: .medium))
@@ -349,9 +326,7 @@ final class PipelineHandler: PipelineExecutionHandler,
 
             var hostingController: UIHostingController<ExtensionDecisionCenterModalView>?
 
-            let modalView = ExtensionDecisionCenterModalView(
-                extensionCount: appBundle.appExtensions.count
-            ) { choice in
+            let modalView = ExtensionDecisionCenterModalView { choice in
                 if let hc = hostingController, hc.presentingViewController != nil {
                     hc.dismiss(animated: true) {
                         resumeOnce(choice)

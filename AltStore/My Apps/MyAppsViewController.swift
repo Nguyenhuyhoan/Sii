@@ -482,7 +482,7 @@ private extension MyAppsViewController {
         self.collectionView.contentInset.top = self.heroTopSpace
         self.collectionView.contentInset.bottom = 40
         
-        // 3. Khởi tạo khối .hero Banner kèm nút "+ Cài IPA" và nút Icon LiveContainer
+        // 3. Khởi tạo khối .hero Banner kèm nút "+ IPA" và nút Icon LiveContainer
         setupCSSHeroBanner()
         
         // 4. Đồng bộ màu Badge trên TabBar
@@ -566,7 +566,7 @@ private extension MyAppsViewController {
         subLabel.numberOfLines = 1
         subLabel.adjustsFontSizeToFitWidth = true
         
-        // Nút "+ Cài IPA" bên trái Hero Card
+        // Nút "+ IPA" bên trái Hero Card
         let addBtn = UIButton(type: .system)
         addBtn.translatesAutoresizingMaskIntoConstraints = false
         let plusConfig = UIImage.SymbolConfiguration(pointSize: 11.5, weight: .bold)
@@ -678,7 +678,7 @@ private extension MyAppsViewController {
             spinner.stopAnimating()
             let plusConfig = UIImage.SymbolConfiguration(pointSize: 11.5, weight: .bold)
             btn.setImage(UIImage(systemName: "plus.circle.fill", withConfiguration: plusConfig), for: .normal)
-            btn.setTitle(" Cài IPA", for: .normal)
+            btn.setTitle(" IPA", for: .normal)
             btn.isUserInteractionEnabled = true
         }
     }

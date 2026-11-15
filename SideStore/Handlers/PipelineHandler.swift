@@ -1,3 +1,4 @@
+
 //
 //  PipelineHandler.swift
 //  SideStore
@@ -7,7 +8,309 @@
 //
 
 import UIKit
+import SwiftUI
 import SideSign
+
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (Đồng bộ 100% với SettingsViewController)
+private struct PipelineCSSTheme {
+    static let white = UIColor.white
+    static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0) // #007bff
+    static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0) // #6f42c1
+    static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0) // #28a745
+    static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0) // #dc3545
+
+    static let cornerRadius: CGFloat = 15.0
+
+    // SwiftUI Colors
+    static let suiPrimary = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255)
+    static let suiSecondary = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)
+    static let suiGreen = SwiftUI.Color(red: 40/255, green: 167/255, blue: 69/255)
+    static let suiRed = SwiftUI.Color(red: 220/255, green: 53/255, blue: 69/255)
+    static let suiPureBlack = SwiftUI.Color.black
+    static let suiCardBackground = SwiftUI.Color.white
+    static let suiInnerRowBackground = SwiftUI.Color(red: 246/255, green: 248/255, blue: 251/255)
+    static let suiBorder = SwiftUI.Color(red: 218/255, green: 224/255, blue: 233/255)
+    static let suiInnerBorder = SwiftUI.Color(red: 222/255, green: 228/255, blue: 236/255)
+
+    static var suiPageGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                SwiftUI.Color(red: 243/255, green: 224/255, blue: 255/255),
+                SwiftUI.Color(red: 224/255, green: 247/255, blue: 255/255)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+private struct PipelineBounceButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some SwiftUI.View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .offset(x: configuration.isPressed ? 3 : 0, y: configuration.isPressed ? -1 : 0)
+            .animation(.spring(response: 0.28, dampingFraction: 0.62), value: configuration.isPressed)
+    }
+}
+
+// MARK: - 🧩 GIAO DIỆN HỘP THOẠI TIỆN ÍCH MỞ RỘNG (CHUẨN CSS THEME, KHÔNG BỊ CẮT CHỮ)
+private enum ExtensionAlertChoice {
+    case keepAllMainProfile
+    case keepAllSeparateAppIDs
+    case removeAll
+    case chooseCustom
+    case cancel
+}
+
+private struct ExtensionDecisionSheetView: SwiftUI.View {
+    let appName: String
+    let extensionCount: Int
+    let limitIncludesExtensions: Bool
+    let onSelect: (ExtensionAlertChoice) -> Void
+
+    private var limitDescription: String {
+        if limitIncludesExtensions {
+            return "ID Apple miễn phí giới hạn tối đa 3 ứng dụng và tiện ích hoạt động cùng lúc."
+        } else {
+            return "ID Apple miễn phí giới hạn đăng ký tối đa 10 App ID mỗi tuần."
+        }
+    }
+
+    var body: some SwiftUI.View {
+        NavigationView {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Khung thông tin tổng quan
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(PipelineCSSTheme.suiPrimary.opacity(0.14))
+                                .frame(width: 48, height: 48)
+                            SwiftUI.Image(systemName: "puzzlepiece.extension.fill")
+                                .font(.system(size: 22, weight: .bold))
+                                .foregroundColor(PipelineCSSTheme.suiPrimary)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            SwiftUI.Text("Phát Hiện \(extensionCount) Tiện Ích Mở Rộng")
+                                .font(.system(size: 16.5, weight: .bold))
+                                .foregroundColor(PipelineCSSTheme.suiPureBlack)
+                            SwiftUI.Text("Ứng dụng: \(appName)")
+                                .font(.system(size: 13.5, weight: .semibold))
+                                .foregroundColor(PipelineCSSTheme.suiSecondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                    }
+                    .padding(14)
+                    .background(PipelineCSSTheme.suiCardBackground)
+                    .cornerRadius(PipelineCSSTheme.cornerRadius)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous)
+                            .stroke(PipelineCSSTheme.suiBorder, lineWidth: 1.0)
+                    )
+                    .shadow(color: PipelineCSSTheme.suiPrimary.opacity(0.08), radius: 10, x: 0, y: 5)
+
+                    // Khung lựa chọn xử lý
+                    VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 8) {
+                                SwiftUI.Image(systemName: "slider.horizontal.3")
+                                    .font(.system(size: 14, weight: .heavy))
+                                    .foregroundColor(PipelineCSSTheme.suiPrimary)
+                                SwiftUI.Text("TÙY CHỌN XỬ LÝ TIỆN ÍCH (EXTENSIONS)")
+                                    .font(.system(size: 14.5, weight: .heavy))
+                                    .foregroundColor(PipelineCSSTheme.suiPrimary)
+                            }
+                            RoundedRectangle(cornerRadius: 1.5)
+                                .fill(PipelineCSSTheme.suiPrimary)
+                                .frame(width: 38, height: 3)
+                        }
+                        .padding(.horizontal, 4)
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            SwiftUI.Text("\(limitDescription) Bạn muốn xử lý \(extensionCount) tiện ích đi kèm ứng dụng này như thế nào?")
+                                .font(.system(size: 13.5, weight: .medium))
+                                .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.85))
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.bottom, 2)
+
+                            // Tùy chọn 1: Giữ tất cả (Dùng chung Profile chính)
+                            optionButton(
+                                icon: "shield.lefthalf.filled.badge.checkmark",
+                                iconColor: PipelineCSSTheme.suiGreen,
+                                title: "Giữ tất cả (Dùng hồ sơ chính)",
+                                subtitle: "Giữ nguyên tiện ích mà không tốn thêm lượt App ID",
+                                badge: "★ Khuyên dùng",
+                                badgeColor: PipelineCSSTheme.suiGreen,
+                                borderColor: PipelineCSSTheme.suiGreen.opacity(0.5)
+                            ) {
+                                onSelect(.keepAllMainProfile)
+                            }
+
+                            // Tùy chọn 2: Giữ tất cả (Đăng ký App ID riêng)
+                            optionButton(
+                                icon: "key.radiowaves.forward.fill",
+                                iconColor: PipelineCSSTheme.suiPrimary,
+                                title: "Giữ tất cả (Tạo App ID riêng)",
+                                subtitle: "Đăng ký từng App ID riêng cho mỗi tiện ích",
+                                badge: nil,
+                                badgeColor: PipelineCSSTheme.suiPrimary,
+                                borderColor: PipelineCSSTheme.suiInnerBorder
+                            ) {
+                                onSelect(.keepAllSeparateAppIDs)
+                            }
+
+                            // Tùy chọn 3: Tự chọn tiện ích
+                            optionButton(
+                                icon: "checklist",
+                                iconColor: PipelineCSSTheme.suiSecondary,
+                                title: "Tùy chọn từng tiện ích...",
+                                subtitle: "Xem danh sách và chọn tiện ích muốn giữ hoặc gỡ",
+                                badge: "\(extensionCount) mục",
+                                badgeColor: PipelineCSSTheme.suiSecondary,
+                                borderColor: PipelineCSSTheme.suiInnerBorder
+                            ) {
+                                onSelect(.chooseCustom)
+                            }
+
+                            // Tùy chọn 4: Gỡ bỏ toàn bộ tiện ích
+                            optionButton(
+                                icon: "trash.fill",
+                                iconColor: PipelineCSSTheme.suiRed,
+                                title: "Gỡ bỏ tất cả tiện ích",
+                                subtitle: "Chỉ cài ứng dụng chính để tiết kiệm tối đa giới hạn",
+                                badge: "Tiết kiệm ID",
+                                badgeColor: PipelineCSSTheme.suiRed,
+                                borderColor: PipelineCSSTheme.suiRed.opacity(0.35)
+                            ) {
+                                onSelect(.removeAll)
+                            }
+                        }
+                        .padding(14)
+                        .background(PipelineCSSTheme.suiCardBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous)
+                                .stroke(PipelineCSSTheme.suiBorder, lineWidth: 1.0)
+                        )
+                        .shadow(color: PipelineCSSTheme.suiPrimary.opacity(0.08), radius: 10, x: 0, y: 5)
+                    }
+
+                    // Nút Hủy cài đặt
+                    SwiftUI.Button {
+                        onSelect(.cancel)
+                    } label: {
+                        HStack(spacing: 8) {
+                            SwiftUI.Image(systemName: "xmark.circle.fill")
+                            SwiftUI.Text("Hủy cài đặt")
+                                .font(.system(size: 15.5, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .background(PipelineCSSTheme.suiRed)
+                        .cornerRadius(12)
+                        .shadow(color: PipelineCSSTheme.suiRed.opacity(0.3), radius: 5, x: 0, y: 3)
+                    }
+                    .buttonStyle(PipelineBounceButtonStyle())
+                }
+                .padding(16)
+            }
+            .background(PipelineCSSTheme.suiPageGradient.ignoresSafeArea())
+            .navigationTitle("Ứng Dụng Có Tiện Ích")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    SwiftUI.Text("Ứng Dụng Có Tiện Ích")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(PipelineCSSTheme.suiPrimary)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    SwiftUI.Button("Hủy") {
+                        onSelect(.cancel)
+                    }
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(PipelineCSSTheme.suiRed)
+                }
+            }
+        }
+        .preferredColorScheme(.light)
+    }
+
+    @ViewBuilder
+    private func optionButton(
+        icon: String,
+        iconColor: SwiftUI.Color,
+        title: String,
+        subtitle: String,
+        badge: String?,
+        badgeColor: SwiftUI.Color,
+        borderColor: SwiftUI.Color,
+        action: @escaping () -> Void
+    ) -> some SwiftUI.View {
+        SwiftUI.Button(action: action) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(iconColor.opacity(0.14))
+                        .frame(width: 40, height: 40)
+                    SwiftUI.Image(systemName: icon)
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(iconColor)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        SwiftUI.Text(title)
+                            .font(.system(size: 14.5, weight: .bold))
+                            .foregroundColor(PipelineCSSTheme.suiPureBlack)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+
+                        if let badge = badge {
+                            SwiftUI.Text(badge)
+                                .font(.system(size: 10.5, weight: .heavy))
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2.5)
+                                .background(badgeColor.opacity(0.15))
+                                .foregroundColor(badgeColor)
+                                .clipShape(Capsule())
+                        }
+                    }
+
+                    SwiftUI.Text(subtitle)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer(minLength: 4)
+
+                SwiftUI.Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(PipelineCSSTheme.suiPrimary.opacity(0.7))
+            }
+            .padding(12)
+            .background(PipelineCSSTheme.suiInnerRowBackground)
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1.2)
+            )
+        }
+        .buttonStyle(PipelineBounceButtonStyle())
+    }
+}
+
+// Bộ quản lý đóng mở Sheet an toàn (đảm bảo Continuation chỉ resume đúng 1 lần duy nhất)
+private final class ExtensionSheetDismissDelegate: NSObject, UIAdaptivePresentationControllerDelegate {
+    var onInteractiveDismiss: (() -> Void)?
+
+    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        onInteractiveDismiss?()
+    }
+}
 
 final class PipelineHandler: PipelineExecutionHandler, 
                              PreflightChecksHandler, 
@@ -52,15 +355,20 @@ final class PipelineHandler: PipelineExecutionHandler,
             return false
         }
         
-        let title = NSLocalizedString("Bundle ID Mismatch", comment: "")
-        let message = String(format: NSLocalizedString("The app you are installing has a bundle ID (%@) that does not match the active app (%@). Would you like to proceed?", comment: ""), targetID, activeEffectiveID)
+        let title = "Không Khớp Bundle ID"
+        let message = String(
+            format: "Ứng dụng bạn đang cài đặt có Bundle ID (%@) không khớp với ứng dụng đang hoạt động (%@). Bạn có muốn tiếp tục không?",
+            targetID,
+            activeEffectiveID
+        )
         
         return await withCheckedContinuation { continuation in
             let alertController = UIAlertController(title: title, message: message, preferredStyle: .alert)
-            alertController.addAction(UIAlertAction(title: UIAlertAction.cancel.title, style: UIAlertAction.cancel.style) { _ in
+            alertController.view.tintColor = PipelineCSSTheme.blue
+            alertController.addAction(UIAlertAction(title: "Hủy", style: .cancel) { _ in
                 continuation.resume(returning: false)
             })
-            alertController.addAction(UIAlertAction(title: NSLocalizedString("Proceed", comment: ""), style: .default) { _ in
+            alertController.addAction(UIAlertAction(title: "Tiếp tục", style: .default) { _ in
                 continuation.resume(returning: true)
             })
             presenter.present(alertController, animated: true)
@@ -70,7 +378,7 @@ final class PipelineHandler: PipelineExecutionHandler,
     @MainActor
     func reviewPermissions(_ permissions: [ALTEntitlement], for app: AppProtocol, mode: PermissionReviewMode) async throws {
         guard let presenter = self.activePresenter else {
-            throw OperationError.invalidParameters("PipelineHandler: Cannot review permissions because presenting view controller is unavailable")
+            throw OperationError.invalidParameters("PipelineHandler: Không thể kiểm tra quyền vì màn hình hiển thị không khả dụng")
         }
         let reviewPermissionsViewController = ReviewPermissionsViewController(app: app, permissions: permissions, mode: mode)
         let navigationController = UINavigationController(rootViewController: reviewPermissionsViewController)
@@ -88,6 +396,7 @@ final class PipelineHandler: PipelineExecutionHandler,
         }
     }
     
+    // MARK: - ✨ HỘP THOẠI TIỆN ÍCH MỞ RỘNG ĐÃ VIỆT HÓA & ĐỒNG BỘ CSS THEME ✨
     @MainActor
     func selectAppExtensionsToRemove(
         appBundle: ALTApplication,
@@ -98,61 +407,106 @@ final class PipelineHandler: PipelineExecutionHandler,
             return .removeSelected(excessExtensions)
         }
         
-        return try await withCheckedThrowingContinuation { continuation in
-            let firstSentence: String
-            if UserDefaults.standard.activeAppLimitIncludesExtensions {
-                firstSentence = NSLocalizedString("Non-developer Apple IDs are limited to 3 active apps and app extensions.", comment: "")
-            } else {
-                firstSentence = NSLocalizedString("Non-developer Apple IDs are limited to creating 10 App IDs per week.", comment: "")
+        let step1Choice: ExtensionAlertChoice = await withCheckedContinuation { continuation in
+            var hasResumed = false
+            let resumeOnce: (ExtensionAlertChoice) -> Void = { choice in
+                guard !hasResumed else { return }
+                hasResumed = true
+                continuation.resume(returning: choice)
             }
-            
-            let message = firstSentence + " " + NSLocalizedString("Would you like to remove this app's extensions so they don't count towards your limit? There are \(appBundle.appExtensions.count) Extensions", comment: "")
-            
-            let alertController = UIAlertController(title: NSLocalizedString("App Contains Extensions", comment: ""), message: message, preferredStyle: .alert)
-            alertController.addAction(UIAlertAction(title: UIAlertAction.cancel.title, style: UIAlertAction.cancel.style, handler: { _ in
-                continuation.resume(throwing: OperationError.cancelled)
-            }))
-            alertController.addAction(UIAlertAction(title: NSLocalizedString("Keep App Extensions (Use Main Profile)", comment: ""), style: .default) { _ in
-                continuation.resume(returning: .keepAll(useMainProfile: true))
-            })
-            alertController.addAction(UIAlertAction(title: NSLocalizedString("Keep App Extensions (Register App ID for Each Extension)", comment: ""), style: .default) { _ in
-                continuation.resume(returning: .keepAll(useMainProfile: false))
-            })
-            alertController.addAction(UIAlertAction(title: NSLocalizedString("Remove App Extensions", comment: ""), style: .destructive) { _ in
-                continuation.resume(returning: .removeAll)
-            })
-            
-            alertController.addAction(UIAlertAction(title: NSLocalizedString("Choose App Extensions", comment: ""), style: .default) { _ in
-                let popoverContentController = AppExtensionViewHostingController(extensions: appBundle.appExtensions) { selection in
-                    continuation.resume(returning: .removeSelected(Set(selection)))
-                }
-                
-                let suiview = popoverContentController.view!
-                suiview.translatesAutoresizingMaskIntoConstraints = false
-                #if !os(tvOS)
-                popoverContentController.modalPresentationStyle = .popover
-                
-                if let popoverPresentationController = popoverContentController.popoverPresentationController {
-                    popoverPresentationController.sourceView = presenter.view
-                    popoverPresentationController.sourceRect = CGRect(x: 50, y: 50, width: 4, height: 4)
-                    popoverPresentationController.delegate = popoverContentController
-                    presenter.present(popoverContentController, animated: true)
+
+            let dismissDelegate = ExtensionSheetDismissDelegate()
+            var hostingController: UIHostingController<ExtensionDecisionSheetView>?
+
+            let sheetView = ExtensionDecisionSheetView(
+                appName: appBundle.name,
+                extensionCount: appBundle.appExtensions.count,
+                limitIncludesExtensions: UserDefaults.standard.activeAppLimitIncludesExtensions
+            ) { choice in
+                if let hc = hostingController, hc.presentingViewController != nil {
+                    hc.dismiss(animated: true) {
+                        resumeOnce(choice)
+                    }
                 } else {
-                    continuation.resume(throwing: OperationError.invalidParameters("RemoveAppExtensionsOperation: popoverContentController.popoverPresentationController is nil"))
-                }
-                #else
-                popoverContentController.modalPresentationStyle = .blurOverFullScreen
-                presenter.present(popoverContentController, animated: true)
-                #endif
-            })
-            
-            presenter.present(alertController, animated: true) {
-                if presenter.presentedViewController == nil && !alertController.isViewLoaded {
-                    let errMsg = "RemoveAppExtensionsOperation: unable to present dialog, view context not available." +
-                                 "\nDid you move to different screen or background after starting the operation?"
-                    continuation.resume(throwing: OperationError.invalidParameters(errMsg))
+                    resumeOnce(choice)
                 }
             }
+
+            let hc = UIHostingController(rootView: sheetView)
+            hostingController = hc
+            hc.overrideUserInterfaceStyle = .light
+            #if !os(tvOS)
+            hc.modalPresentationStyle = .pageSheet
+            if #available(iOS 15.0, *), let sheet = hc.sheetPresentationController {
+                sheet.detents = [.medium(), .large()]
+                sheet.prefersGrabberVisible = true
+                sheet.preferredCornerRadius = 20
+            }
+            #else
+            hc.modalPresentationStyle = .blurOverFullScreen
+            #endif
+
+            dismissDelegate.onInteractiveDismiss = {
+                resumeOnce(.cancel)
+            }
+            hc.presentationController?.delegate = dismissDelegate
+            objc_setAssociatedObject(hc, "extDismissDelegate", dismissDelegate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+
+            presenter.present(hc, animated: true) {
+                if presenter.presentedViewController == nil && !hc.isViewLoaded {
+                    resumeOnce(.cancel)
+                }
+            }
+        }
+
+        switch step1Choice {
+        case .cancel:
+            throw OperationError.cancelled
+        case .keepAllMainProfile:
+            return .keepAll(useMainProfile: true)
+        case .keepAllSeparateAppIDs:
+            return .keepAll(useMainProfile: false)
+        case .removeAll:
+            return .removeAll
+        case .chooseCustom:
+            return try await presentCustomExtensionPicker(for: appBundle, from: presenter)
+        }
+    }
+
+    @MainActor
+    private func presentCustomExtensionPicker(
+        for appBundle: ALTApplication,
+        from presenter: UIViewController
+    ) async throws -> ExtensionRemovalDecision {
+        return try await withCheckedThrowingContinuation { continuation in
+            var hasResumed = false
+            let resumeOnce: (Result<ExtensionRemovalDecision, Error>) -> Void = { result in
+                guard !hasResumed else { return }
+                hasResumed = true
+                continuation.resume(with: result)
+            }
+
+            let popoverContentController = AppExtensionViewHostingController(extensions: appBundle.appExtensions) { selection in
+                resumeOnce(.success(.removeSelected(Set(selection))))
+            }
+            popoverContentController.overrideUserInterfaceStyle = .light
+
+            #if !os(tvOS)
+            popoverContentController.modalPresentationStyle = .pageSheet
+            if #available(iOS 15.0, *), let sheet = popoverContentController.sheetPresentationController {
+                sheet.detents = [.medium(), .large()]
+                sheet.prefersGrabberVisible = true
+                sheet.preferredCornerRadius = 20
+            }
+            presenter.present(popoverContentController, animated: true) {
+                if presenter.presentedViewController == nil && !popoverContentController.isViewLoaded {
+                    resumeOnce(.failure(OperationError.invalidParameters("Không thể mở danh sách tiện ích mở rộng.")))
+                }
+            }
+            #else
+            popoverContentController.modalPresentationStyle = .blurOverFullScreen
+            presenter.present(popoverContentController, animated: true)
+            #endif
         }
     }
     
@@ -162,15 +516,16 @@ final class PipelineHandler: PipelineExecutionHandler,
             return false
         }
         
-        let title = NSLocalizedString("Unsupported iOS Version", comment: "")
-        let message = errorDescription + "\n\n" + NSLocalizedString("Would you like to download the last version compatible with this device instead?", comment: "")
+        let title = "Phiên Bản iOS Không Hỗ Trợ"
+        let message = errorDescription + "\n\n" + "Bạn có muốn tải xuống phiên bản cuối cùng tương thích với thiết bị này không?"
         
         return await withCheckedContinuation { continuation in
             let alertController = UIAlertController(title: title, message: message, preferredStyle: .alert)
-            alertController.addAction(UIAlertAction(title: UIAlertAction.cancel.title, style: UIAlertAction.cancel.style) { _ in
+            alertController.view.tintColor = PipelineCSSTheme.blue
+            alertController.addAction(UIAlertAction(title: "Hủy", style: .cancel) { _ in
                 continuation.resume(returning: false)
             })
-            alertController.addAction(UIAlertAction(title: String(format: NSLocalizedString("Download %@ %@", comment: ""), appName, compatibleVersion), style: .default) { _ in
+            alertController.addAction(UIAlertAction(title: String(format: "Tải %@ %@", appName, compatibleVersion), style: .default) { _ in
                 continuation.resume(returning: true)
             })
             presenter.present(alertController, animated: true)
@@ -181,13 +536,14 @@ final class PipelineHandler: PipelineExecutionHandler,
         await withCheckedContinuation { continuation in
             Task { @MainActor in
                 let alert = UIAlertController(
-                    title: "Finish Refresh",
+                    title: "Hoàn Tất Làm Mới",
                     message: """
-                    To finish refreshing, SideStore must be moved to the background. To do this, you can either go to the Home Screen manually or by hitting Continue. Please reopen SideStore after doing this.
+                    Để hoàn tất quá trình làm mới, SideStore cần được chuyển xuống chạy nền. Bạn có thể tự thoát ra Màn hình chính hoặc bấm "Tiếp tục" bên dưới, sau đó mở lại SideStore.
                     """,
                     preferredStyle: .alert
                 )
-                alert.addAction(UIAlertAction(title: NSLocalizedString("Continue", comment: ""), style: .default, handler: { _ in
+                alert.view.tintColor = PipelineCSSTheme.blue
+                alert.addAction(UIAlertAction(title: "Tiếp tục", style: .default, handler: { _ in
                     continuation.resume()
                 }))
                 
@@ -318,7 +674,7 @@ final class PipelineHandler: PipelineExecutionHandler,
                 teamType: teamType
             )
         }
-        debugLog("[PipelineHandler] resolveEntitlementsCustomization result: \(result?.count) target(s) returned")
+        debugLog("[PipelineHandler] resolveEntitlementsCustomization result: \(result?.count ?? 0) target(s) returned")
         return result
     }
 
@@ -344,21 +700,22 @@ final class PipelineHandler: PipelineExecutionHandler,
             return (initialBundleID, true)
         }
         
-        let titleText = NSLocalizedString("AppID Customization", comment: "")
-        let messageText = NSLocalizedString("Customize the AppID if required and press 'Confirm' to proceed.", comment: "")
+        let titleText = "Tùy Chỉnh App ID"
+        let messageText = "Chỉnh sửa App ID nếu cần thiết và nhấn 'Xác nhận' để tiếp tục."
         
         let alert = UIAlertController(
             title: titleText,
             message: messageText,
             preferredStyle: .alert
         )
+        alert.view.tintColor = PipelineCSSTheme.blue
         
         let team = try await AuthManager.shared.getAuthenticatedTeam()
         debugLog("[PipelineHandler] resolveBundleIDOverride: initialBundleID='\(initialBundleID)', teamID='\(team.identifier)', isAuthenticated=\(AuthManager.shared.isAuthenticated)")
         let teamID = team.identifier
         guard !teamID.isEmpty else {
             debugLog("[PipelineHandler] resolveBundleIDOverride FAILED: teamID is empty")
-            throw OperationError.invalidParameters("Active developer team identifier is empty.")
+            throw OperationError.invalidParameters("Mã định danh nhóm nhà phát triển (Team ID) đang trống.")
         }
         let cleanInitialID: String = {
             let trimmed = initialBundleID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -403,14 +760,12 @@ final class PipelineHandler: PipelineExecutionHandler,
             tf1View.layer.masksToBounds = true
             tf1View.clipsToBounds = true
             
-            // Clear outer table grouping container so it doesn't draw flat bottom edges
             tf1View.superview?.backgroundColor = .clear
             tf1View.superview?.layer.borderWidth = 0
             tf1View.superview?.layer.borderColor = UIColor.clear.cgColor
         }
         
         if (alert.textFields?.count ?? 0) >= 2,
-           let tf1 = alert.textFields?.first,
            let tf2 = alert.textFields?[1],
            let container = tf2.superview {
             tf2.isHidden = true
@@ -432,7 +787,7 @@ final class PipelineHandler: PipelineExecutionHandler,
         }
         
         return await withCheckedContinuation { continuation in
-            let okAction = UIAlertAction(title: NSLocalizedString("Confirm", comment: ""), style: .default) { _ in
+            let okAction = UIAlertAction(title: "Xác nhận", style: .default) { _ in
                 let baseID = checkboxView.cleanBaseID()
                 let customID = InfoPlistParser.sanitizeBundleID(!baseID.isEmpty ? baseID : cleanInitialID)
                 let appendTeamID = checkboxView.isChecked
@@ -440,7 +795,7 @@ final class PipelineHandler: PipelineExecutionHandler,
                 continuation.resume(returning: (customID, appendTeamID))
             }
             
-            let cancelAction = UIAlertAction(title: NSLocalizedString("Cancel", comment: ""), style: .cancel) { _ in
+            let cancelAction = UIAlertAction(title: "Hủy", style: .cancel) { _ in
                 continuation.resume(returning: nil)
             }
             alert.addAction(cancelAction)
@@ -456,21 +811,26 @@ final class PipelineHandler: PipelineExecutionHandler,
             return .correctAndProceed(correctedGroup)
         }
         
-        let title = NSLocalizedString("App Group Discrepancy", comment: "")
-        let message = String(format: NSLocalizedString("The app group '%@' does not match the app's bundle ID casing. Would you like to correct it to '%@'?", comment: ""), originalGroup, correctedGroup)
+        let title = "Sai Lệch App Group"
+        let message = String(
+            format: "Nhóm ứng dụng '%@' không khớp kiểu chữ hoa/thường với Bundle ID. Bạn có muốn tự động sửa thành '%@' không?",
+            originalGroup,
+            correctedGroup
+        )
         
         return await withCheckedContinuation { continuation in
             let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+            alert.view.tintColor = PipelineCSSTheme.blue
             
-            alert.addAction(UIAlertAction(title: NSLocalizedString("Correct & Proceed", comment: ""), style: .default) { _ in
+            alert.addAction(UIAlertAction(title: "Sửa & Tiếp tục", style: .default) { _ in
                 continuation.resume(returning: .correctAndProceed(correctedGroup))
             })
             
-            alert.addAction(UIAlertAction(title: NSLocalizedString("Keep Original", comment: ""), style: .destructive) { _ in
+            alert.addAction(UIAlertAction(title: "Giữ nguyên gốc", style: .destructive) { _ in
                 continuation.resume(returning: .keepOriginal(originalGroup))
             })
             
-            alert.addAction(UIAlertAction(title: UIAlertAction.cancel.title, style: .cancel) { _ in
+            alert.addAction(UIAlertAction(title: "Hủy", style: .cancel) { _ in
                 continuation.resume(returning: .keepOriginal(originalGroup))
             })
             
@@ -485,12 +845,13 @@ final class PipelineHandler: PipelineExecutionHandler,
         }
 
         return try await withCheckedThrowingContinuation { continuation in
-            let title = NSLocalizedString("Customize App Icon", comment: "")
-            let message = String(format: NSLocalizedString("Would you like to choose a custom icon for '%@' or keep the original icon?", comment: ""), appName)
+            let title = "Tùy Chỉnh Biểu Tượng"
+            let message = String(format: "Bạn muốn chọn ảnh biểu tượng (Icon) mới cho '%@' hay giữ nguyên biểu tượng gốc?", appName)
 
             let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+            alert.view.tintColor = PipelineCSSTheme.blue
 
-            alert.addAction(UIAlertAction(title: NSLocalizedString("Choose from Photos", comment: ""), style: .default) { _ in
+            alert.addAction(UIAlertAction(title: "Chọn từ Thư viện ảnh", style: .default) { _ in
                 #if !os(tvOS)
                 let pickerDelegate = ImagePickerDelegateHandler { image in
                     guard let image = image,
@@ -518,7 +879,7 @@ final class PipelineHandler: PipelineExecutionHandler,
                 #else
                 TVWebFileTransferManager.shared.startImport(
                     acceptedExtensions: ["png", "jpg", "jpeg"],
-                    title: "Upload Custom App Icon",
+                    title: "Tải lên Biểu tượng Tùy chỉnh",
                     presentingVC: presenter
                 ) { fileURL in
                     guard let fileURL = fileURL,
@@ -540,11 +901,11 @@ final class PipelineHandler: PipelineExecutionHandler,
                 #endif
             })
 
-            alert.addAction(UIAlertAction(title: NSLocalizedString("Keep Original Icon", comment: ""), style: .default) { _ in
+            alert.addAction(UIAlertAction(title: "Giữ biểu tượng gốc", style: .default) { _ in
                 continuation.resume(returning: nil)
             })
 
-            alert.addAction(UIAlertAction(title: UIAlertAction.cancel.title, style: .cancel) { _ in
+            alert.addAction(UIAlertAction(title: "Hủy", style: .cancel) { _ in
                 continuation.resume(throwing: OperationError.cancelled)
             })
 
@@ -564,12 +925,13 @@ final class PipelineHandler: PipelineExecutionHandler,
         }
 
         return try await withCheckedThrowingContinuation { continuation in
-            let title = NSLocalizedString("Select Provisioning Profile", comment: "")
-            let message = String(format: NSLocalizedString("Choose a provisioning profile for '%@' (%@), or use the default automatic profile.", comment: ""), appName, bundleID)
+            let title = "Chọn Hồ Sơ Cấu Hình"
+            let message = String(format: "Chọn hồ sơ cấu hình (Provisioning Profile) cho '%@' (%@) hoặc dùng hồ sơ tự động mặc định.", appName, bundleID)
 
             let alert = UIAlertController(title: title, message: message, preferredStyle: .actionSheet)
+            alert.view.tintColor = PipelineCSSTheme.blue
 
-            alert.addAction(UIAlertAction(title: NSLocalizedString("Default (Automatic Team Profile)", comment: ""), style: .default) { _ in
+            alert.addAction(UIAlertAction(title: "Mặc định (Hồ sơ nhóm tự động)", style: .default) { _ in
                 continuation.resume(returning: .defaultProfile)
             })
 
@@ -579,15 +941,15 @@ final class PipelineHandler: PipelineExecutionHandler,
 
             for profile in allProfiles {
                 let isReady = ProfileManager.shared.isProfileReadyToSign(profile)
-                let certInfo = isReady ? "✓ Ready" : (profile.expirationDate < Date() ? "Expired" : "No Key")
-                let profileTitle = "\(profile.name) (\(certInfo), exp: \(formatter.string(from: profile.expirationDate)))"
+                let certInfo = isReady ? "✓ Sẵn sàng" : (profile.expirationDate < Date() ? "Hết hạn" : "Thiếu khóa")
+                let profileTitle = "\(profile.name) (\(certInfo), HSD: \(formatter.string(from: profile.expirationDate)))"
 
                 alert.addAction(UIAlertAction(title: profileTitle, style: .default) { _ in
                     continuation.resume(returning: .profile(profile))
                 })
             }
 
-            alert.addAction(UIAlertAction(title: UIAlertAction.cancel.title, style: .cancel) { _ in
+            alert.addAction(UIAlertAction(title: "Hủy", style: .cancel) { _ in
                 continuation.resume(throwing: OperationError.cancelled)
             })
 

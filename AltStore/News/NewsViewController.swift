@@ -1186,7 +1186,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
             icon: "bell.badge.fill",
             color: CSSTheme.secondary
         ) {
-            VStack(spacing: 20) {
+            VStack(spacing: 22) {
                 RemoteGuideImageView(
                     stepBadge: "BƯỚC 1",
                     urlString: "https://raw.githubusercontent.com/Nguyenhuyhoan/icons/main/IMG_2589.jpeg",
@@ -1693,7 +1693,7 @@ struct ShortcutLinkRow: SwiftUI.View {
     }
 }
 
-/// Hiển thị ảnh hướng dẫn với khung viền iPhone 14 giống hệt viền Video YouTube (Không phóng to khi chạm)
+/// Hiển thị ảnh hướng dẫn không có khung bao ngoài để chiều rộng ảnh bằng đúng 100% chiều rộng khung Video YouTube
 struct RemoteGuideImageView: SwiftUI.View {
     var stepBadge: String? = nil
     let urlString: String
@@ -1707,8 +1707,8 @@ struct RemoteGuideImageView: SwiftUI.View {
     private let frameCornerRadius: CGFloat = CSSTheme.mediaFrameCornerRadius
 
     var body: some SwiftUI.View {
-        VStack(alignment: .center, spacing: 12) {
-            // Tiêu đề bước & mô tả tách biệt rõ ràng từng ảnh
+        VStack(alignment: .leading, spacing: 14) {
+            // Thanh tiêu đề Bước 1 / Bước 2 đồng bộ kích thước với hộp chú thích của mục Video
             VStack(spacing: 6) {
                 if let badge = stepBadge {
                     HStack(spacing: 6) {
@@ -1738,9 +1738,16 @@ struct RemoteGuideImageView: SwiftUI.View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .center)
             }
-            .padding(.horizontal, 6)
+            .padding(13)
+            .frame(maxWidth: .infinity)
+            .background(CSSTheme.innerRowBackground)
+            .cornerRadius(CSSTheme.cornerRadius)
+            .overlay(
+                RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
+                    .stroke(CSSTheme.innerBorder, lineWidth: 1)
+            )
 
-            // Khung ảnh được đóng viền Gradient 4pt + Bo góc 47.33pt + Đổ bóng giống hệt khung Video YouTube
+            // Khung ảnh tràn rộng với padding(.horizontal, 4) giống hệt IPhone14VerticalVideoFrameView
             if let image = uiImage {
                 SwiftUI.Image(uiImage: image)
                     .resizable()
@@ -1801,13 +1808,6 @@ struct RemoteGuideImageView: SwiftUI.View {
                 .padding(.horizontal, 4)
             }
         }
-        .padding(14)
-        .background(CSSTheme.innerRowBackground)
-        .cornerRadius(22)
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(CSSTheme.innerBorder, lineWidth: 1.2)
-        )
         .task(id: urlString) {
             if let cached = GuideImageCacheManager.shared.cachedImage(for: urlString) {
                 self.uiImage = cached

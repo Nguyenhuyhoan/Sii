@@ -244,6 +244,7 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
     }
 }
 
+// MARK: - 🚀 PIPELINE HANDLER CHÍNH
 final class PipelineHandler: PipelineExecutionHandler,
                              PreflightChecksHandler,
                              EntitlementsReviewHandler,

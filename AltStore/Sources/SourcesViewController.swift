@@ -31,7 +31,7 @@ private struct SourcesCSSTheme {
     static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.88).cgColor
 
     static let cornerRadius: CGFloat = 15.0
-    static let iPhoneImageCornerRadius: CGFloat = 24.0
+    static let iPhoneImageCornerRadius: CGFloat = 22.0
 }
 
 // MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH (KHÔNG BỊ TRẮNG KHI CUỘN XUỐNG DƯỚI)
@@ -53,6 +53,35 @@ private final class SourcesGradientBackgroundView: UIView {
     private func setupGradient() {
         guard let gradientLayer = self.layer as? CAGradientLayer else { return }
         gradientLayer.colors = [SourcesCSSTheme.bgGradientStart, SourcesCSSTheme.bgGradientEnd]
+        gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+        gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+    }
+}
+
+// MARK: - 🖼️ LỚP KHUNG VIỀN GRADIENT TỰ ĐỘNG CO GIÃN 100% THEO KÍCH THƯỚC ẢNH (KHÔNG BAO GIỜ BỊ HỤT VIỀN)
+private final class GradientBorderContainerView: UIView {
+    override class var layerClass: AnyClass {
+        return CAGradientLayer.self
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupGradientBorder()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupGradientBorder()
+    }
+
+    private func setupGradientBorder() {
+        guard let gradientLayer = self.layer as? CAGradientLayer else { return }
+        gradientLayer.colors = [
+            SourcesCSSTheme.blue.cgColor,
+            SourcesCSSTheme.purple.cgColor,
+            SourcesCSSTheme.blue.cgColor
+        ]
+        gradientLayer.locations = [0.0, 0.5, 1.0]
         gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
         gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
     }
@@ -135,7 +164,6 @@ private enum GuideParser {
     /// Tự động chuẩn hóa mọi dạng link GitHub (`github.com/.../blob/...`, `github.com/.../raw/...`, `raw.githubusercontent.com/...`) để tải và hiển thị trực tiếp
     static func convertToRawGitHubURL(_ urlString: String) -> URL? {
         var cleaned = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Loại bỏ các dấu ngoặc hoặc dấu câu vô tình dính ở đầu/cuối link
         let trimChars = CharacterSet(charactersIn: "<>\"'()[]{}")
         cleaned = cleaned.trimmingCharacters(in: trimChars)
         guard !cleaned.isEmpty else { return nil }
@@ -184,7 +212,6 @@ private enum GuideParser {
 
     /// Kiểm tra một dòng (hoặc URL nằm trong dòng) có phải là link ảnh hợp lệ hay không
     private static func extractImageURL(from line: String) -> URL? {
-        // Loại bỏ số thứ tự hoặc dấu chấm ở đầu dòng nếu người viết vô tình gõ: "1. https://github.com/.../fix.jpeg"
         let strippedLine = stripLeadingNumberOrBullet(from: line)
         let candidate = strippedLine.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -292,7 +319,7 @@ private enum GuideParser {
                 continue
             }
 
-            // Trường hợp 2: Trong dòng văn bản có chứa link ảnh (ví dụ: "Xem hình: https://raw.githubusercontent.com/.../fix.jpeg")
+            // Trường hợp 2: Trong dòng văn bản có chứa link ảnh
             let nsLine = line as NSString
             let matches = inlineURLRegex?.matches(in: line, options: [], range: NSRange(location: 0, length: nsLine.length)) ?? []
 
@@ -659,11 +686,12 @@ private final class GuideTopicRowCell: UITableViewCell {
     }
 }
 
-// MARK: - 📱 KHUNG HIỂN THỊ ẢNH VIỀN ĐẬM GRADIENT ĐỒNG BỘ + HOÀN TOÀN SẠCH (KHÔNG CHỮ/ICON ĐÈ LÊN ẢNH)
+// MARK: - 📱 KHUNG HIỂN THỊ ẢNH VIỀN ĐẬM GRADIENT BAO TRỌN 100% 4 CẠNH ẢNH MỌI LÚC
 private final class GuideStyledImageView: UIView {
     private let outerShadowContainer = UIView()
-    private let borderContainer = UIView()
-    private let borderGradientLayer = CAGradientLayer()
+    // Sử dụng GradientBorderContainerView (layerClass = CAGradientLayer) để viền luôn tự động ôm trọn 100% kích thước thật của ảnh ngay tức thì
+    private let borderContainer = GradientBorderContainerView()
+    private let innerClipContainer = UIView()
     private let imageView = UIImageView()
     private let shimmerActivity = UIActivityIndicatorView(style: .medium)
     private let errorLabel = UILabel()
@@ -673,6 +701,9 @@ private final class GuideStyledImageView: UIView {
     private var aspectRatioConstraint: NSLayoutConstraint?
     private var defaultHeightConstraint: NSLayoutConstraint!
     var onTapImage: ((UIImage) -> Void)?
+
+    // Độ dày của viền Gradient bao quanh 4 cạnh ảnh
+    private let borderThickness: CGFloat = 4.0
 
     init(url: URL) {
         self.imageURL = GuideParser.convertToRawGitHubURL(url.absoluteString) ?? url
@@ -686,49 +717,41 @@ private final class GuideStyledImageView: UIView {
         setupViews()
     }
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        borderGradientLayer.frame = borderContainer.bounds
-    }
-
     private func setupViews() {
         translatesAutoresizingMaskIntoConstraints = false
         backgroundColor = .clear
 
-        // Lớp đổ bóng 3D bên ngoài đậm nét giúp tách biệt hẳn với thẻ văn bản
+        // 1. Lớp đổ bóng 3D bên ngoài tách biệt hoàn toàn với khung văn bản
         outerShadowContainer.translatesAutoresizingMaskIntoConstraints = false
         outerShadowContainer.backgroundColor = .clear
         outerShadowContainer.layer.shadowColor = SourcesCSSTheme.purple.cgColor
         outerShadowContainer.layer.shadowOffset = CGSize(width: 0, height: 8)
         outerShadowContainer.layer.shadowRadius = 16
-        outerShadowContainer.layer.shadowOpacity = 0.28
+        outerShadowContainer.layer.shadowOpacity = 0.26
 
-        // Khung viền đậm Gradient Xanh - Tím đồng bộ với Hero Banner
+        // 2. Lớp khung viền Gradient liền khối (nhờ layerClass = CAGradientLayer nên không bao giờ bị hụt viền khi ảnh co giãn)
+        let outerRadius = SourcesCSSTheme.iPhoneImageCornerRadius
         borderContainer.translatesAutoresizingMaskIntoConstraints = false
-        borderContainer.backgroundColor = SourcesCSSTheme.white
-        borderContainer.layer.cornerRadius = SourcesCSSTheme.iPhoneImageCornerRadius
+        borderContainer.layer.cornerRadius = outerRadius
         if #available(iOS 13.0, *) {
             borderContainer.layer.cornerCurve = .continuous
         }
-        borderContainer.layer.borderWidth = 1.5
-        borderContainer.layer.borderColor = SourcesCSSTheme.blue.withAlphaComponent(0.85).cgColor
         borderContainer.clipsToBounds = true
 
-        borderGradientLayer.colors = [SourcesCSSTheme.heroStart, SourcesCSSTheme.heroEnd]
-        borderGradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
-        borderGradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
-        borderContainer.layer.insertSublayer(borderGradientLayer, at: 0)
-
-        // ImageView bên trong bo góc đồng tâm + viền trắng tách lớp rõ ràng, không chứa bất kỳ chữ hay icon nào đè lên
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        imageView.contentMode = .scaleAspectFit
-        imageView.backgroundColor = SourcesCSSTheme.white
-        imageView.layer.cornerRadius = SourcesCSSTheme.iPhoneImageCornerRadius - 4.5
+        // 3. Khung cắt bo góc đồng tâm bên trong (nằm cách mép ngoài đúng bằng độ dày viền 4.0pt ở cả 4 cạnh Trên - Dưới - Trái - Phải)
+        let innerRadius = max(outerRadius - borderThickness, 8.0)
+        innerClipContainer.translatesAutoresizingMaskIntoConstraints = false
+        innerClipContainer.backgroundColor = SourcesCSSTheme.white
+        innerClipContainer.layer.cornerRadius = innerRadius
         if #available(iOS 13.0, *) {
-            imageView.layer.cornerCurve = .continuous
+            innerClipContainer.layer.cornerCurve = .continuous
         }
-        imageView.layer.borderWidth = 1.5
-        imageView.layer.borderColor = SourcesCSSTheme.white.withAlphaComponent(0.95).cgColor
+        innerClipContainer.clipsToBounds = true
+
+        // 4. ImageView lấp đầy 100% khung trong (.scaleAspectFill + tỷ lệ chuẩn của ảnh) -> đảm bảo 4 cạnh ảnh luôn chạm sát vào 4 cạnh viền
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.contentMode = .scaleAspectFill
+        imageView.backgroundColor = SourcesCSSTheme.white
         imageView.clipsToBounds = true
         imageView.isUserInteractionEnabled = true
 
@@ -755,18 +778,18 @@ private final class GuideStyledImageView: UIView {
         retryButton.isHidden = true
         retryButton.addTarget(self, action: #selector(loadImage), for: .touchUpInside)
 
-        borderContainer.addSubview(imageView)
-        borderContainer.addSubview(shimmerActivity)
-        borderContainer.addSubview(errorLabel)
-        borderContainer.addSubview(retryButton)
+        innerClipContainer.addSubview(imageView)
+        innerClipContainer.addSubview(shimmerActivity)
+        innerClipContainer.addSubview(errorLabel)
+        innerClipContainer.addSubview(retryButton)
+
+        borderContainer.addSubview(innerClipContainer)
         outerShadowContainer.addSubview(borderContainer)
         addSubview(outerShadowContainer)
 
-        defaultHeightConstraint = borderContainer.heightAnchor.constraint(equalToConstant: 230)
+        // Khi đang tải ảnh, giữ chiều cao khung tạm thời là 220pt
+        defaultHeightConstraint = innerClipContainer.heightAnchor.constraint(equalToConstant: 220)
         defaultHeightConstraint.priority = .defaultHigh
-
-        // Độ dày viền ảnh Gradient = 4.5pt giúp phân biệt cực rõ giữa khung ảnh và khung chữ
-        let borderThickness: CGFloat = 4.5
 
         NSLayoutConstraint.activate([
             outerShadowContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -778,22 +801,28 @@ private final class GuideStyledImageView: UIView {
             borderContainer.trailingAnchor.constraint(equalTo: outerShadowContainer.trailingAnchor),
             borderContainer.topAnchor.constraint(equalTo: outerShadowContainer.topAnchor),
             borderContainer.bottomAnchor.constraint(equalTo: outerShadowContainer.bottomAnchor),
+
+            // Khoảng cách đều 4 cạnh (top, bottom, leading, trailing = borderThickness) tạo nên đường viền bao kín 100% bức ảnh
+            innerClipContainer.leadingAnchor.constraint(equalTo: borderContainer.leadingAnchor, constant: borderThickness),
+            innerClipContainer.trailingAnchor.constraint(equalTo: borderContainer.trailingAnchor, constant: -borderThickness),
+            innerClipContainer.topAnchor.constraint(equalTo: borderContainer.topAnchor, constant: borderThickness),
+            innerClipContainer.bottomAnchor.constraint(equalTo: borderContainer.bottomAnchor, constant: -borderThickness),
             defaultHeightConstraint,
 
-            imageView.leadingAnchor.constraint(equalTo: borderContainer.leadingAnchor, constant: borderThickness),
-            imageView.trailingAnchor.constraint(equalTo: borderContainer.trailingAnchor, constant: -borderThickness),
-            imageView.topAnchor.constraint(equalTo: borderContainer.topAnchor, constant: borderThickness),
-            imageView.bottomAnchor.constraint(equalTo: borderContainer.bottomAnchor, constant: -borderThickness),
+            imageView.leadingAnchor.constraint(equalTo: innerClipContainer.leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: innerClipContainer.trailingAnchor),
+            imageView.topAnchor.constraint(equalTo: innerClipContainer.topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: innerClipContainer.bottomAnchor),
 
-            shimmerActivity.centerXAnchor.constraint(equalTo: borderContainer.centerXAnchor),
-            shimmerActivity.centerYAnchor.constraint(equalTo: borderContainer.centerYAnchor),
+            shimmerActivity.centerXAnchor.constraint(equalTo: innerClipContainer.centerXAnchor),
+            shimmerActivity.centerYAnchor.constraint(equalTo: innerClipContainer.centerYAnchor),
 
-            errorLabel.centerXAnchor.constraint(equalTo: borderContainer.centerXAnchor),
-            errorLabel.centerYAnchor.constraint(equalTo: borderContainer.centerYAnchor, constant: -14),
-            errorLabel.leadingAnchor.constraint(equalTo: borderContainer.leadingAnchor, constant: 16),
-            errorLabel.trailingAnchor.constraint(equalTo: borderContainer.trailingAnchor, constant: -16),
+            errorLabel.centerXAnchor.constraint(equalTo: innerClipContainer.centerXAnchor),
+            errorLabel.centerYAnchor.constraint(equalTo: innerClipContainer.centerYAnchor, constant: -14),
+            errorLabel.leadingAnchor.constraint(equalTo: innerClipContainer.leadingAnchor, constant: 16),
+            errorLabel.trailingAnchor.constraint(equalTo: innerClipContainer.trailingAnchor, constant: -16),
 
-            retryButton.centerXAnchor.constraint(equalTo: borderContainer.centerXAnchor),
+            retryButton.centerXAnchor.constraint(equalTo: innerClipContainer.centerXAnchor),
             retryButton.topAnchor.constraint(equalTo: errorLabel.bottomAnchor, constant: 8),
             retryButton.heightAnchor.constraint(equalToConstant: 28)
         ])
@@ -842,22 +871,27 @@ private final class GuideStyledImageView: UIView {
         imageView.alpha = 0
         imageView.image = image
 
-        // Tự động khớp tỷ lệ chiều cao/chiều rộng chuẩn của bức ảnh
+        // Khóa chính xác tỷ lệ Chiều Cao / Chiều Rộng của khung chứa bằng đúng tỷ lệ ảnh thật -> Viền ôm sát 100% 4 cạnh không thừa không thiếu
         if image.size.width > 0 && image.size.height > 0 {
             let ratio = image.size.height / image.size.width
             defaultHeightConstraint.isActive = false
             if let oldAspect = aspectRatioConstraint {
                 oldAspect.isActive = false
             }
-            let newAspect = imageView.heightAnchor.constraint(equalTo: imageView.widthAnchor, multiplier: ratio)
+            let newAspect = innerClipContainer.heightAnchor.constraint(equalTo: innerClipContainer.widthAnchor, multiplier: ratio)
             newAspect.priority = .required
             newAspect.isActive = true
             aspectRatioConstraint = newAspect
         }
 
-        UIView.animate(withDuration: 0.28) {
+        // Cập nhật khung ngay lập tức để viền bao trọn ảnh trước khi làm hiệu ứng hiện ảnh
+        self.setNeedsLayout()
+        self.layoutIfNeeded()
+        self.superview?.setNeedsLayout()
+        self.superview?.layoutIfNeeded()
+
+        UIView.animate(withDuration: 0.22) {
             self.imageView.alpha = 1
-            self.superview?.layoutIfNeeded()
         }
     }
 

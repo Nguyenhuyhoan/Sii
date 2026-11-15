@@ -18,14 +18,16 @@ private struct PipelineCSSTheme {
     static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0) // #6f42c1
     static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0) // #28a745
     static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0) // #dc3545
+    static let magenta = UIColor(red: 255/255, green: 0/255, blue: 255/255, alpha: 1.0) // #ff00ff
 
     static let cornerRadius: CGFloat = 15.0
 
-    // SwiftUI Colors
+    // SwiftUI Colors (Đồng bộ với SettingsViewController)
     static let suiPrimary = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255)
     static let suiSecondary = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)
     static let suiGreen = SwiftUI.Color(red: 40/255, green: 167/255, blue: 69/255)
     static let suiRed = SwiftUI.Color(red: 220/255, green: 53/255, blue: 69/255)
+    static let suiMagenta = SwiftUI.Color(red: 255/255, green: 0/255, blue: 255/255)
     static let suiPureBlack = SwiftUI.Color.black
     static let suiCardBackground = SwiftUI.Color.white
     static let suiInnerRowBackground = SwiftUI.Color(red: 246/255, green: 248/255, blue: 251/255)
@@ -53,7 +55,7 @@ private struct PipelineBounceButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - 🧩 GIAO DIỆN HỘP THOẠI TIỆN ÍCH MỞ RỘNG HIỆN GIỮA MÀN HÌNH (CHỈ GỒM 4 CÁCH XỬ LÝ & NÚT HỦY)
+// MARK: - 🧩 KHUNG LỰA CHỌN XỬ LÝ APP ID HIỆN Ở GIỮA MÀN HÌNH (CHỈ GỒM 4 CÁCH XỬ LÝ & NÚT HỦY)
 private enum ExtensionAlertChoice {
     case keepAllMainProfile
     case keepAllSeparateAppIDs
@@ -62,36 +64,34 @@ private enum ExtensionAlertChoice {
     case cancel
 }
 
-private struct ExtensionDecisionSheetView: SwiftUI.View {
-    let appName: String
+private struct ExtensionDecisionCenterModalView: SwiftUI.View {
     let extensionCount: Int
-    let limitIncludesExtensions: Bool
     let onSelect: (ExtensionAlertChoice) -> Void
 
     var body: some SwiftUI.View {
         ZStack {
-            // Nền mờ phía sau giúp nổi bật khung ở giữa màn hình
+            // Lớp nền tối mờ nhẹ phía sau khung giữa màn hình
             SwiftUI.Color.black.opacity(0.42)
                 .ignoresSafeArea()
 
-            // Khung chính nằm ngay giữa màn hình
+            // Khung chính nằm giữa màn hình (Đồng bộ chuẩn thẻ SettingsViewController)
             VStack(spacing: 12) {
-                // Khối thẻ trắng chứa đúng 4 tùy chọn xử lý App ID
-                VStack(alignment: .leading, spacing: 10) {
-                    // Tùy chọn 1: Giữ tất cả (Dùng chung Profile chính)
+                // Khối thẻ trắng chứa đúng 4 cách xử lý App ID
+                VStack(spacing: 9) {
+                    // Cách 1: Giữ tất cả (Dùng chung Profile chính)
                     optionButton(
                         icon: "shield.lefthalf.filled.badge.checkmark",
                         iconColor: PipelineCSSTheme.suiGreen,
                         title: "Giữ tất cả (Dùng hồ sơ chính)",
-                        subtitle: "Giữ nguyên tiện ích mà không tốn thêm lượt App ID",
+                        subtitle: "Giữ nguyên tiện ích, không tốn thêm App ID",
                         badge: "★ Khuyên dùng",
                         badgeColor: PipelineCSSTheme.suiGreen,
-                        borderColor: PipelineCSSTheme.suiGreen.opacity(0.5)
+                        borderColor: PipelineCSSTheme.suiGreen.opacity(0.55)
                     ) {
                         onSelect(.keepAllMainProfile)
                     }
 
-                    // Tùy chọn 2: Giữ tất cả (Đăng ký App ID riêng)
+                    // Cách 2: Giữ tất cả (Tạo App ID riêng)
                     optionButton(
                         icon: "key.radiowaves.forward.fill",
                         iconColor: PipelineCSSTheme.suiPrimary,
@@ -104,12 +104,12 @@ private struct ExtensionDecisionSheetView: SwiftUI.View {
                         onSelect(.keepAllSeparateAppIDs)
                     }
 
-                    // Tùy chọn 3: Tự chọn tiện ích
+                    // Cách 3: Tùy chọn từng tiện ích
                     optionButton(
                         icon: "checklist",
                         iconColor: PipelineCSSTheme.suiSecondary,
                         title: "Tùy chọn từng tiện ích...",
-                        subtitle: "Xem danh sách và chọn tiện ích muốn giữ hoặc gỡ",
+                        subtitle: "Chọn các tiện ích muốn giữ hoặc gỡ bỏ",
                         badge: "\(extensionCount) mục",
                         badgeColor: PipelineCSSTheme.suiSecondary,
                         borderColor: PipelineCSSTheme.suiInnerBorder
@@ -117,20 +117,20 @@ private struct ExtensionDecisionSheetView: SwiftUI.View {
                         onSelect(.chooseCustom)
                     }
 
-                    // Tùy chọn 4: Gỡ bỏ toàn bộ tiện ích
+                    // Cách 4: Gỡ bỏ tất cả tiện ích
                     optionButton(
                         icon: "trash.fill",
                         iconColor: PipelineCSSTheme.suiRed,
                         title: "Gỡ bỏ tất cả tiện ích",
-                        subtitle: "Chỉ cài ứng dụng chính để tiết kiệm tối đa giới hạn",
+                        subtitle: "Chỉ cài ứng dụng chính để tiết kiệm App ID",
                         badge: "Tiết kiệm ID",
                         badgeColor: PipelineCSSTheme.suiRed,
-                        borderColor: PipelineCSSTheme.suiRed.opacity(0.35)
+                        borderColor: PipelineCSSTheme.suiRed.opacity(0.38)
                     ) {
                         onSelect(.removeAll)
                     }
                 }
-                .padding(14)
+                .padding(12)
                 .background(PipelineCSSTheme.suiCardBackground)
                 .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous))
                 .overlay(
@@ -145,15 +145,22 @@ private struct ExtensionDecisionSheetView: SwiftUI.View {
                 } label: {
                     HStack(spacing: 8) {
                         SwiftUI.Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 16, weight: .bold))
                         SwiftUI.Text("Hủy cài đặt")
                             .font(.system(size: 15.5, weight: .bold))
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
-                    .background(PipelineCSSTheme.suiRed)
-                    .cornerRadius(12)
-                    .shadow(color: PipelineCSSTheme.suiRed.opacity(0.3), radius: 5, x: 0, y: 3)
+                    .padding(.vertical, 12.5)
+                    .background(
+                        LinearGradient(
+                            colors: [PipelineCSSTheme.suiRed, PipelineCSSTheme.suiMagenta.opacity(0.85)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .shadow(color: PipelineCSSTheme.suiRed.opacity(0.32), radius: 6, x: 0, y: 3)
                 }
                 .buttonStyle(PipelineBounceButtonStyle())
             }
@@ -164,9 +171,9 @@ private struct ExtensionDecisionSheetView: SwiftUI.View {
                 RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius + 3, style: .continuous)
                     .stroke(SwiftUI.Color.white.opacity(0.85), lineWidth: 1.5)
             )
-            .shadow(color: SwiftUI.Color.black.opacity(0.22), radius: 20, x: 0, y: 10)
+            .shadow(color: SwiftUI.Color.black.opacity(0.22), radius: 22, x: 0, y: 10)
             .frame(maxWidth: 380)
-            .padding(.horizontal, 18)
+            .padding(.horizontal, 20)
         }
         .preferredColorScheme(.light)
     }
@@ -183,29 +190,29 @@ private struct ExtensionDecisionSheetView: SwiftUI.View {
         action: @escaping () -> Void
     ) -> some SwiftUI.View {
         SwiftUI.Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: 11) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(iconColor.opacity(0.14))
-                        .frame(width: 40, height: 40)
+                        .frame(width: 38, height: 38)
                     SwiftUI.Image(systemName: icon)
-                        .font(.system(size: 18, weight: .bold))
+                        .font(.system(size: 17, weight: .bold))
                         .foregroundColor(iconColor)
                 }
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2.5) {
                     HStack(spacing: 6) {
                         SwiftUI.Text(title)
-                            .font(.system(size: 14.5, weight: .bold))
+                            .font(.system(size: 14, weight: .bold))
                             .foregroundColor(PipelineCSSTheme.suiPureBlack)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.85)
+                            .minimumScaleFactor(0.82)
 
                         if let badge = badge {
                             SwiftUI.Text(badge)
-                                .font(.system(size: 10.5, weight: .heavy))
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 2.5)
+                                .font(.system(size: 10, weight: .heavy))
+                                .padding(.horizontal, 6.5)
+                                .padding(.vertical, 2)
                                 .background(badgeColor.opacity(0.15))
                                 .foregroundColor(badgeColor)
                                 .clipShape(Capsule())
@@ -213,7 +220,7 @@ private struct ExtensionDecisionSheetView: SwiftUI.View {
                     }
 
                     SwiftUI.Text(subtitle)
-                        .font(.system(size: 12.5, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.72))
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)
@@ -222,12 +229,12 @@ private struct ExtensionDecisionSheetView: SwiftUI.View {
                 Spacer(minLength: 4)
 
                 SwiftUI.Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(PipelineCSSTheme.suiPrimary.opacity(0.7))
+                    .font(.system(size: 12.5, weight: .bold))
+                    .foregroundColor(PipelineCSSTheme.suiPrimary.opacity(0.75))
             }
-            .padding(12)
+            .padding(11)
             .background(PipelineCSSTheme.suiInnerRowBackground)
-            .cornerRadius(12)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(borderColor, lineWidth: 1.2)
@@ -237,21 +244,12 @@ private struct ExtensionDecisionSheetView: SwiftUI.View {
     }
 }
 
-// Bộ quản lý đóng mở Sheet an toàn (đảm bảo Continuation chỉ resume đúng 1 lần duy nhất)
-private final class ExtensionSheetDismissDelegate: NSObject, UIAdaptivePresentationControllerDelegate {
-    var onInteractiveDismiss: (() -> Void)?
-
-    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
-        onInteractiveDismiss?()
-    }
-}
-
-final class PipelineHandler: PipelineExecutionHandler, 
-                             PreflightChecksHandler, 
-                             EntitlementsReviewHandler, 
-                             ExtensionRemovalHandler, 
-                             UnsupportedVersionHandler, 
-                             InstallAppHandler, 
+final class PipelineHandler: PipelineExecutionHandler,
+                             PreflightChecksHandler,
+                             EntitlementsReviewHandler,
+                             ExtensionRemovalHandler,
+                             UnsupportedVersionHandler,
+                             InstallAppHandler,
                              UserCustomizationHandler,
                              Sendable
 {
@@ -261,10 +259,10 @@ final class PipelineHandler: PipelineExecutionHandler,
     var unsupportedVersionHandler: UnsupportedVersionHandler { self }
     var installAppHandler: InstallAppHandler { self }
     var userCustomizationHandler: UserCustomizationHandler { self }
-    
+
     let isResignActive: Bool
     private let presenterProvider: PresenterProvider?
-    
+
     init(
         isResignActive: Bool = false,
         presenterProvider: PresenterProvider? = nil
@@ -282,7 +280,7 @@ final class PipelineHandler: PipelineExecutionHandler,
     private var activePresenter: UIViewController? {
         return self.presenterProvider?()
     }
-    
+
     @MainActor
     func resolveBundleIDMismatch(targetID: String, activeEffectiveID: String) async -> Bool {
         guard let presenter = self.activePresenter else {
@@ -308,7 +306,7 @@ final class PipelineHandler: PipelineExecutionHandler,
             presenter.present(alertController, animated: true)
         }
     }
-    
+
     @MainActor
     func reviewPermissions(_ permissions: [ALTEntitlement], for app: AppProtocol, mode: PermissionReviewMode) async throws {
         guard let presenter = self.activePresenter else {
@@ -329,8 +327,8 @@ final class PipelineHandler: PipelineExecutionHandler,
             presenter.present(navigationController, animated: true)
         }
     }
-    
-    // MARK: - ✨ HỘP THOẠI TIỆN ÍCH MỞ RỘNG HIỆN GIỮA MÀN HÌNH ✨
+
+    // MARK: - ✨ KHUNG HIỆN Ở GIỮA MÀN HÌNH (CHỈ CHỨA 4 CÁCH XỬ LÝ APP ID & NÚT HỦY) ✨
     @MainActor
     func selectAppExtensionsToRemove(
         appBundle: ALTApplication,
@@ -349,13 +347,10 @@ final class PipelineHandler: PipelineExecutionHandler,
                 continuation.resume(returning: choice)
             }
 
-            let dismissDelegate = ExtensionSheetDismissDelegate()
-            var hostingController: UIHostingController<ExtensionDecisionSheetView>?
+            var hostingController: UIHostingController<ExtensionDecisionCenterModalView>?
 
-            let sheetView = ExtensionDecisionSheetView(
-                appName: appBundle.name,
-                extensionCount: appBundle.appExtensions.count,
-                limitIncludesExtensions: UserDefaults.standard.activeAppLimitIncludesExtensions
+            let modalView = ExtensionDecisionCenterModalView(
+                extensionCount: appBundle.appExtensions.count
             ) { choice in
                 if let hc = hostingController, hc.presentingViewController != nil {
                     hc.dismiss(animated: true) {
@@ -366,18 +361,12 @@ final class PipelineHandler: PipelineExecutionHandler,
                 }
             }
 
-            let hc = UIHostingController(rootView: sheetView)
+            let hc = UIHostingController(rootView: modalView)
             hostingController = hc
             hc.overrideUserInterfaceStyle = .light
             hc.view.backgroundColor = .clear
             hc.modalPresentationStyle = .overFullScreen
             hc.modalTransitionStyle = .crossDissolve
-
-            dismissDelegate.onInteractiveDismiss = {
-                resumeOnce(.cancel)
-            }
-            hc.presentationController?.delegate = dismissDelegate
-            objc_setAssociatedObject(hc, "extDismissDelegate", dismissDelegate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
 
             presenter.present(hc, animated: true) {
                 if presenter.presentedViewController == nil && !hc.isViewLoaded {
@@ -436,7 +425,7 @@ final class PipelineHandler: PipelineExecutionHandler,
             #endif
         }
     }
-    
+
     @MainActor
     func resolveUnsupportediOSVersion(errorDescription: String, appName: String, compatibleVersion: String) async throws -> Bool {
         guard let presenter = self.activePresenter else {
@@ -458,7 +447,7 @@ final class PipelineHandler: PipelineExecutionHandler,
             presenter.present(alertController, animated: true)
         }
     }
-    
+
     func requestBackgroundSuspension() async {
         await withCheckedContinuation { continuation in
             Task { @MainActor in
@@ -490,20 +479,20 @@ final class PipelineHandler: PipelineExecutionHandler,
             }
         }
     }
-    
+
     func suspendToHomeScreen() async {
         await CellularRefreshManager.shared.turnOnDataIfNeeded()
         await MainActor.run {
             _ = UIApplication.shared.perform(#selector(NSXPCConnection.suspend))
         }
     }
-    
+
     func isAppInForeground() async -> Bool {
         await MainActor.run {
             UIApplication.shared.applicationState == .active
         }
     }
-    
+
     @MainActor
     func resolveInfoPlistCustomization(
         targets: [InfoPlistTarget],
@@ -570,7 +559,6 @@ final class PipelineHandler: PipelineExecutionHandler,
         let plist = result.modifiedPlists[initialBundleID] ?? initialPlist
         return (plist, result.appendTeamID)
     }
-
 
     @MainActor
     func resolveEntitlementsCustomization(
@@ -730,7 +718,6 @@ final class PipelineHandler: PipelineExecutionHandler,
             presenter.present(alert, animated: true)
         }
     }
-
 
     @MainActor
     func resolveAppGroupMismatch(originalGroup: String, correctedGroup: String) async throws -> AppGroupResolution {

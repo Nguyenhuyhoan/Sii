@@ -571,7 +571,7 @@ private extension MyAppsViewController {
         addBtn.translatesAutoresizingMaskIntoConstraints = false
         let plusConfig = UIImage.SymbolConfiguration(pointSize: 11.5, weight: .bold)
         addBtn.setImage(UIImage(systemName: "plus.circle.fill", withConfiguration: plusConfig), for: .normal)
-        addBtn.setTitle(" Cài IPA", for: .normal)
+        addBtn.setTitle(" IPA", for: .normal)
         addBtn.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
         addBtn.tintColor = CSSTheme.blue
         addBtn.setTitleColor(CSSTheme.blue, for: .normal)

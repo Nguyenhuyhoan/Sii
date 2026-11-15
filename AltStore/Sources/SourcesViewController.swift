@@ -659,15 +659,15 @@ private final class GuideTopicRowCell: UITableViewCell {
     }
 }
 
-// MARK: - 📱 KHUNG HIỂN THỊ ẢNH BO GÓC CHUẨN IPHONE + VIỀN SANG TRỌNG + CHẠM ĐỂ PHÓNG TO
+// MARK: - 📱 KHUNG HIỂN THỊ ẢNH VIỀN ĐẬM GRADIENT ĐỒNG BỘ + HOÀN TOÀN SẠCH (KHÔNG CHỮ/ICON ĐÈ LÊN ẢNH)
 private final class GuideStyledImageView: UIView {
     private let outerShadowContainer = UIView()
     private let borderContainer = UIView()
+    private let borderGradientLayer = CAGradientLayer()
     private let imageView = UIImageView()
     private let shimmerActivity = UIActivityIndicatorView(style: .medium)
     private let errorLabel = UILabel()
     private let retryButton = UIButton(type: .system)
-    private let zoomBadge = UIView()
 
     private var imageURL: URL?
     private var aspectRatioConstraint: NSLayoutConstraint?
@@ -686,56 +686,54 @@ private final class GuideStyledImageView: UIView {
         setupViews()
     }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        borderGradientLayer.frame = borderContainer.bounds
+    }
+
     private func setupViews() {
         translatesAutoresizingMaskIntoConstraints = false
         backgroundColor = .clear
 
-        // Lớp đổ bóng 3D bên ngoài
+        // Lớp đổ bóng 3D bên ngoài đậm nét giúp tách biệt hẳn với thẻ văn bản
         outerShadowContainer.translatesAutoresizingMaskIntoConstraints = false
         outerShadowContainer.backgroundColor = .clear
-        outerShadowContainer.layer.shadowColor = SourcesCSSTheme.blue.cgColor
+        outerShadowContainer.layer.shadowColor = SourcesCSSTheme.purple.cgColor
         outerShadowContainer.layer.shadowOffset = CGSize(width: 0, height: 8)
-        outerShadowContainer.layer.shadowRadius = 18
-        outerShadowContainer.layer.shadowOpacity = 0.20
+        outerShadowContainer.layer.shadowRadius = 16
+        outerShadowContainer.layer.shadowOpacity = 0.28
 
-        // Khung viền kép bo góc chuẩn iPhone (Continuous Squircle)
+        // Khung viền đậm Gradient Xanh - Tím đồng bộ với Hero Banner
         borderContainer.translatesAutoresizingMaskIntoConstraints = false
         borderContainer.backgroundColor = SourcesCSSTheme.white
         borderContainer.layer.cornerRadius = SourcesCSSTheme.iPhoneImageCornerRadius
         if #available(iOS 13.0, *) {
             borderContainer.layer.cornerCurve = .continuous
         }
-        borderContainer.layer.borderWidth = 2.5
-        borderContainer.layer.borderColor = SourcesCSSTheme.blue.withAlphaComponent(0.28).cgColor
+        borderContainer.layer.borderWidth = 1.5
+        borderContainer.layer.borderColor = SourcesCSSTheme.blue.withAlphaComponent(0.85).cgColor
         borderContainer.clipsToBounds = true
 
-        // ImageView bên trong bo góc đồng tâm với khung ngoài
+        borderGradientLayer.colors = [SourcesCSSTheme.heroStart, SourcesCSSTheme.heroEnd]
+        borderGradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+        borderGradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+        borderContainer.layer.insertSublayer(borderGradientLayer, at: 0)
+
+        // ImageView bên trong bo góc đồng tâm + viền trắng tách lớp rõ ràng, không chứa bất kỳ chữ hay icon nào đè lên
         imageView.translatesAutoresizingMaskIntoConstraints = false
         imageView.contentMode = .scaleAspectFit
-        imageView.backgroundColor = SourcesCSSTheme.light
-        imageView.layer.cornerRadius = SourcesCSSTheme.iPhoneImageCornerRadius - 4
+        imageView.backgroundColor = SourcesCSSTheme.white
+        imageView.layer.cornerRadius = SourcesCSSTheme.iPhoneImageCornerRadius - 4.5
         if #available(iOS 13.0, *) {
             imageView.layer.cornerCurve = .continuous
         }
-        imageView.layer.borderWidth = 1.0
-        imageView.layer.borderColor = SourcesCSSTheme.border.cgColor
+        imageView.layer.borderWidth = 1.5
+        imageView.layer.borderColor = SourcesCSSTheme.white.withAlphaComponent(0.95).cgColor
         imageView.clipsToBounds = true
         imageView.isUserInteractionEnabled = true
 
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleImageTap))
         imageView.addGestureRecognizer(tapGesture)
-
-        // Huy hiệu kính lúp nhỏ góc dưới bên phải ảnh
-        zoomBadge.translatesAutoresizingMaskIntoConstraints = false
-        zoomBadge.backgroundColor = UIColor.black.withAlphaComponent(0.55)
-        zoomBadge.layer.cornerRadius = 13
-        zoomBadge.isHidden = true
-        zoomBadge.isUserInteractionEnabled = false
-
-        let zoomIcon = UIImageView(image: UIImage(systemName: "plus.magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .bold)))
-        zoomIcon.translatesAutoresizingMaskIntoConstraints = false
-        zoomIcon.tintColor = .white
-        zoomBadge.addSubview(zoomIcon)
 
         shimmerActivity.translatesAutoresizingMaskIntoConstraints = false
         shimmerActivity.color = SourcesCSSTheme.blue
@@ -758,7 +756,6 @@ private final class GuideStyledImageView: UIView {
         retryButton.addTarget(self, action: #selector(loadImage), for: .touchUpInside)
 
         borderContainer.addSubview(imageView)
-        borderContainer.addSubview(zoomBadge)
         borderContainer.addSubview(shimmerActivity)
         borderContainer.addSubview(errorLabel)
         borderContainer.addSubview(retryButton)
@@ -767,6 +764,9 @@ private final class GuideStyledImageView: UIView {
 
         defaultHeightConstraint = borderContainer.heightAnchor.constraint(equalToConstant: 230)
         defaultHeightConstraint.priority = .defaultHigh
+
+        // Độ dày viền ảnh Gradient = 4.5pt giúp phân biệt cực rõ giữa khung ảnh và khung chữ
+        let borderThickness: CGFloat = 4.5
 
         NSLayoutConstraint.activate([
             outerShadowContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -780,18 +780,10 @@ private final class GuideStyledImageView: UIView {
             borderContainer.bottomAnchor.constraint(equalTo: outerShadowContainer.bottomAnchor),
             defaultHeightConstraint,
 
-            imageView.leadingAnchor.constraint(equalTo: borderContainer.leadingAnchor, constant: 5),
-            imageView.trailingAnchor.constraint(equalTo: borderContainer.trailingAnchor, constant: -5),
-            imageView.topAnchor.constraint(equalTo: borderContainer.topAnchor, constant: 5),
-            imageView.bottomAnchor.constraint(equalTo: borderContainer.bottomAnchor, constant: -5),
-
-            zoomBadge.trailingAnchor.constraint(equalTo: imageView.trailingAnchor, constant: -10),
-            zoomBadge.bottomAnchor.constraint(equalTo: imageView.bottomAnchor, constant: -10),
-            zoomBadge.widthAnchor.constraint(equalToConstant: 26),
-            zoomBadge.heightAnchor.constraint(equalToConstant: 26),
-
-            zoomIcon.centerXAnchor.constraint(equalTo: zoomBadge.centerXAnchor),
-            zoomIcon.centerYAnchor.constraint(equalTo: zoomBadge.centerYAnchor),
+            imageView.leadingAnchor.constraint(equalTo: borderContainer.leadingAnchor, constant: borderThickness),
+            imageView.trailingAnchor.constraint(equalTo: borderContainer.trailingAnchor, constant: -borderThickness),
+            imageView.topAnchor.constraint(equalTo: borderContainer.topAnchor, constant: borderThickness),
+            imageView.bottomAnchor.constraint(equalTo: borderContainer.bottomAnchor, constant: -borderThickness),
 
             shimmerActivity.centerXAnchor.constraint(equalTo: borderContainer.centerXAnchor),
             shimmerActivity.centerYAnchor.constraint(equalTo: borderContainer.centerYAnchor),
@@ -846,7 +838,6 @@ private final class GuideStyledImageView: UIView {
         shimmerActivity.stopAnimating()
         errorLabel.isHidden = true
         retryButton.isHidden = true
-        zoomBadge.isHidden = false
 
         imageView.alpha = 0
         imageView.image = image

@@ -1184,8 +1184,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
         SkySectionCard(
             title: "HƯỚNG DẪN TỰ ĐỘNG HÓA",
             icon: "bell.badge.fill",
-            color: CSSTheme.secondary,
-            footerText: "Mẹo: Bạn có thể chạm trực tiếp vào từng ảnh hướng dẫn bên trên để phóng to toàn màn hình."
+            color: CSSTheme.secondary
         ) {
             VStack(spacing: 20) {
                 RemoteGuideImageView(
@@ -1694,7 +1693,7 @@ struct ShortcutLinkRow: SwiftUI.View {
     }
 }
 
-/// Hiển thị ảnh hướng dẫn với khung viền iPhone 14 giống hệt viền Video YouTube + Hỗ trợ chạm để phóng to ảnh
+/// Hiển thị ảnh hướng dẫn với khung viền iPhone 14 giống hệt viền Video YouTube (Không phóng to khi chạm)
 struct RemoteGuideImageView: SwiftUI.View {
     var stepBadge: String? = nil
     let urlString: String
@@ -1704,7 +1703,6 @@ struct RemoteGuideImageView: SwiftUI.View {
 
     @State private var uiImage: UIImage? = nil
     @State private var didFail: Bool = false
-    @State private var isShowingZoomSheet: Bool = false
 
     private let frameCornerRadius: CGFloat = CSSTheme.mediaFrameCornerRadius
 
@@ -1744,53 +1742,21 @@ struct RemoteGuideImageView: SwiftUI.View {
 
             // Khung ảnh được đóng viền Gradient 4pt + Bo góc 47.33pt + Đổ bóng giống hệt khung Video YouTube
             if let image = uiImage {
-                SwiftUI.Button {
-                    isShowingZoomSheet = true
-                } label: {
-                    ZStack(alignment: .bottomTrailing) {
-                        SwiftUI.Image(uiImage: image)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxWidth: .infinity)
-                            .background(SwiftUI.Color.black)
-                            .clipShape(RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous)
-                                    .strokeBorder(
-                                        CSSTheme.mediaFrameBorderGradient,
-                                        lineWidth: CSSTheme.mediaFrameLineWidth
-                                    )
+                SwiftUI.Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity)
+                    .background(SwiftUI.Color.black)
+                    .clipShape(RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous)
+                            .strokeBorder(
+                                CSSTheme.mediaFrameBorderGradient,
+                                lineWidth: CSSTheme.mediaFrameLineWidth
                             )
-                            .shadow(color: CSSTheme.secondary.opacity(0.22), radius: 12, x: 0, y: 6)
-
-                        // Nút gợi ý chạm để phóng to
-                        HStack(spacing: 5) {
-                            SwiftUI.Image(systemName: "plus.magnifyingglass")
-                                .font(.system(size: 12, weight: .bold))
-                            SwiftUI.Text("Chạm để phóng to")
-                                .font(.system(size: 11.5, weight: .bold))
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 6)
-                        .background(SwiftUI.Color.black.opacity(0.68))
-                        .clipShape(Capsule())
-                        .overlay(
-                            Capsule().stroke(SwiftUI.Color.white.opacity(0.35), lineWidth: 0.8)
-                        )
-                        .padding(.trailing, 18)
-                        .padding(.bottom, 16)
-                    }
-                    .padding(.horizontal, 4)
-                }
-                .buttonStyle(CSSBounceButtonStyle())
-                .sheet(isPresented: $isShowingZoomSheet) {
-                    GuideImageFullscreenZoomView(
-                        image: image,
-                        stepBadge: stepBadge,
-                        caption: caption
                     )
-                }
+                    .shadow(color: CSSTheme.secondary.opacity(0.22), radius: 12, x: 0, y: 6)
+                    .padding(.horizontal, 4)
             } else if didFail {
                 VStack(spacing: 8) {
                     SwiftUI.Image(systemName: "wifi.exclamationmark")
@@ -1854,132 +1820,6 @@ struct RemoteGuideImageView: SwiftUI.View {
                 self.didFail = true
             }
         }
-    }
-}
-
-/// Trình xem ảnh hướng dẫn toàn màn hình hỗ trợ Zoom 1x - 4x và kéo xem chi tiết
-private struct GuideImageFullscreenZoomView: SwiftUI.View {
-    let image: UIImage
-    let stepBadge: String?
-    let caption: String
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var scale: CGFloat = 1.0
-    @State private var lastScale: CGFloat = 1.0
-    @State private var offset: CGSize = .zero
-    @State private var lastOffset: CGSize = .zero
-
-    var body: some SwiftUI.View {
-        NavigationView {
-            ZStack {
-                CSSTheme.pageBackgroundGradient.ignoresSafeArea()
-
-                VStack(spacing: 14) {
-                    VStack(spacing: 4) {
-                        if let stepBadge = stepBadge {
-                            SwiftUI.Text(stepBadge)
-                                .font(.system(size: 12, weight: .heavy))
-                                .foregroundColor(CSSTheme.primary)
-                        }
-                        SwiftUI.Text(caption)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(CSSTheme.pureBlack)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 16)
-                    }
-                    .padding(.top, 6)
-
-                    GeometryReader { geo in
-                        SwiftUI.Image(uiImage: image)
-                            .resizable()
-                            .scaledToFit()
-                            .clipShape(RoundedRectangle(cornerRadius: CSSTheme.mediaFrameCornerRadius, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: CSSTheme.mediaFrameCornerRadius, style: .continuous)
-                                    .strokeBorder(
-                                        CSSTheme.mediaFrameBorderGradient,
-                                        lineWidth: CSSTheme.mediaFrameLineWidth
-                                    )
-                            )
-                            .shadow(color: CSSTheme.secondary.opacity(0.25), radius: 14, x: 0, y: 6)
-                            .padding(12)
-                            .frame(width: geo.size.width, height: geo.size.height)
-                            .scaleEffect(scale)
-                            .offset(offset)
-                            .gesture(
-                                MagnificationGesture()
-                                    .onChanged { value in
-                                        let delta = value / lastScale
-                                        lastScale = value
-                                        scale = min(max(scale * delta, 1.0), 4.0)
-                                    }
-                                    .onEnded { _ in
-                                        lastScale = 1.0
-                                        if scale <= 1.05 {
-                                            withAnimation(.spring()) {
-                                                scale = 1.0
-                                                offset = .zero
-                                                lastOffset = .zero
-                                            }
-                                        }
-                                    }
-                            )
-                            .simultaneousGesture(
-                                DragGesture()
-                                    .onChanged { value in
-                                        guard scale > 1.0 else { return }
-                                        offset = CGSize(
-                                            width: lastOffset.width + value.translation.width,
-                                            height: lastOffset.height + value.translation.height
-                                        )
-                                    }
-                                    .onEnded { _ in
-                                        if scale <= 1.0 {
-                                            withAnimation(.spring()) {
-                                                offset = .zero
-                                                lastOffset = .zero
-                                            }
-                                        } else {
-                                            lastOffset = offset
-                                        }
-                                    }
-                            )
-                            .onTapGesture(count: 2) {
-                                withAnimation(.spring()) {
-                                    if scale > 1.0 {
-                                        scale = 1.0
-                                        offset = .zero
-                                        lastOffset = .zero
-                                    } else {
-                                        scale = 2.2
-                                    }
-                                }
-                            }
-                    }
-
-                    SwiftUI.Text("Chạm đúp hoặc dùng 2 ngón tay để phóng to / thu nhỏ")
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundColor(CSSTheme.pureBlack)
-                        .padding(.bottom, 12)
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    SwiftUI.Text("Xem Chi Tiết Ảnh")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundColor(CSSTheme.primary)
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    SwiftUI.Button("Đóng") {
-                        dismiss()
-                    }
-                    .font(.headline)
-                    .foregroundColor(CSSTheme.primary)
-                }
-            }
-        }
-        .preferredColorScheme(.light)
     }
 }
 

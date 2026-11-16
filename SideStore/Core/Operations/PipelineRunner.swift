@@ -224,21 +224,45 @@ final class PipelineRunner: Sendable
                 return true
             }
             
-            do {
-                let preflightContext = StandaloneOperationContext(steps: .preflightChecks, dbBackgroundContext: group.dbContext)
-                let validateOp = try PreflightChecksOperation(
-                    operations: unhandledOperations,
-                    handler: handler.preflightChecksHandler,
-                    context: preflightContext
-                )
-                try await validateOp.execute()
-            } catch {
-                group.error = error
-                for operation in operations {
-                    let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
-                    operation.logSummary(status: "FAILED", elapsed: elapsed, error: error)
+            while true {
+                do {
+                    let preflightContext = StandaloneOperationContext(steps: .preflightChecks, dbBackgroundContext: group.dbContext)
+                    let validateOp = try PreflightChecksOperation(
+                        operations: unhandledOperations,
+                        handler: handler.preflightChecksHandler,
+                        context: preflightContext
+                    )
+                    try await validateOp.execute()
+                    break
+                } catch {
+                    if Task.isCancelled || error is CancellationError {
+                        group.error = OperationError.cancelled
+                        for operation in operations {
+                            let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
+                            operation.logSummary(status: "CANCELLED", elapsed: elapsed, error: error)
+                        }
+                        throw OperationError.cancelled
+                    }
+                    
+                    let targetAppName = operations.first?.app.name ?? "SideStore"
+                    let shouldContinue = await PipelineExecutor.presentDiagnosticErrorAlert(
+                        phase: .authorization,
+                        stepName: "preflightChecks",
+                        appName: targetAppName,
+                        error: error
+                    )
+                    if shouldContinue {
+                        continue
+                    } else {
+                        let cancelError = OperationError.cancelled
+                        group.error = cancelError
+                        for operation in operations {
+                            let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
+                            operation.logSummary(status: "CANCELLED", elapsed: elapsed, error: cancelError)
+                        }
+                        throw cancelError
+                    }
                 }
-                throw error
             }
         }
         

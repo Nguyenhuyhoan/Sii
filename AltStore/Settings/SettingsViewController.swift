@@ -9,6 +9,7 @@
 
 @preconcurrency import UIKit
 import SwiftUI
+import CoreData
 #if !os(tvOS)
 import MessageUI
 #endif
@@ -29,6 +30,7 @@ private struct CSSTheme {
     static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0) // #007bff
     static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0) // #6f42c1
     static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0) // #28a745
+    static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0) // #dc3545
     static let magenta = UIColor(red: 255/255, green: 0/255, blue: 255/255, alpha: 1.0) // #ff00ff
     static let dark = UIColor(red: 52/255, green: 58/255, blue: 64/255, alpha: 1.0) // #343a40
 
@@ -696,6 +698,12 @@ final class SettingsViewController: UITableViewController
     // Trạng thái ẩn/hiện khung thông tin Tài khoản (Mặc định: Ẩn)
     private var isAccountDetailsExpanded: Bool = false
 
+    // MARK: - 🚨 TRẠNG THÁI CẢNH BÁO LỖI HỆ THỐNG TRONG CÀI ĐẶT
+    private static let lastAcknowledgedErrorTimestampKey = "SideStore.LastAcknowledgedErrorTimestamp"
+    private var activeCriticalErrorCategory: String?
+    private var activeCriticalErrorDetail: String?
+    private var isPresentingCriticalErrorAlert: Bool = false
+
     private var prototypeHeaderFooterView: SettingsHeaderFooterView!
     private var heroGradientLayer: CAGradientLayer?
 
@@ -744,6 +752,7 @@ final class SettingsViewController: UITableViewController
         super.init(coder: aDecoder)
         NotificationCenter.default.addObserver(self, selector: #selector(SettingsViewController.openPatreonSettings(_:)), name: AppDelegate.openPatreonSettingsDeepLinkNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(SettingsViewController.openErrorLog(_:)), name: ToastView.openErrorLogNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(SettingsViewController.handleCriticalErrorNotification(_:)), name: ErrorProcessing.criticalErrorDetectedNotification, object: nil)
     }
 
     deinit
@@ -821,6 +830,7 @@ final class SettingsViewController: UITableViewController
         // Đảm bảo ẩn thanh màu trắng và chữ Cài đặt ở trên cùng để tràn viền toàn màn hình
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
         self.forceDisableRemovedSettings()
+        self.syncCriticalErrorState()
         self.update()
         self.restoreVisibleCellsWhiteBackground()
     }
@@ -828,6 +838,7 @@ final class SettingsViewController: UITableViewController
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         self.restoreVisibleCellsWhiteBackground()
+        self.checkAndPresentCriticalErrorAlertIfNeeded()
     }
 
     override func viewWillDisappear(_ animated: Bool)
@@ -852,11 +863,128 @@ final class SettingsViewController: UITableViewController
         controller.navigationItem.largeTitleDisplayMode = .never
         #endif
         
+        if segue.identifier == "showErrorLog" {
+            self.acknowledgeAndClearCriticalError()
+        }
+        
         if segue.identifier == "anisetteServers" || segue.identifier == "developerServices" || segue.identifier == "profileManagement" || segue.identifier == "certificateManagement" || segue.identifier == "diagnostics" {
             self.show(controller, sender: nil)
         } else {
             super.prepare(for: segue, sender: sender)
         }
+    }
+}
+
+// MARK: - 🚨 HỆ THỐNG KIỂM TRA, PHÂN LOẠI & HIỂN THỊ CẢNH BÁO LỖI HỆ THỐNG
+private extension SettingsViewController {
+
+    @objc private func handleCriticalErrorNotification(_ notification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.syncCriticalErrorState()
+            self.restoreVisibleCellsWhiteBackground()
+            if self.isViewLoaded && self.view.window != nil {
+                self.checkAndPresentCriticalErrorAlertIfNeeded()
+            }
+        }
+    }
+
+    // Đồng bộ trạng thái lỗi từ ErrorProcessing và quét dự phòng từ CoreData (LoggedError)
+    private func syncCriticalErrorState() {
+        let defaults = UserDefaults.standard
+        let lastAckTime = defaults.double(forKey: Self.lastAcknowledgedErrorTimestampKey)
+
+        // 1. Kiểm tra lỗi mới nhất trong CoreData (LoggedError) phòng trường hợp lỗi lưu trực tiếp vào DB
+        let fetchRequest = LoggedError.fetchRequest() as! NSFetchRequest<LoggedError>
+        fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \LoggedError.date, ascending: false)]
+        fetchRequest.fetchLimit = 1
+
+        if let latestLoggedError = try? DatabaseManager.shared.viewContext.fetch(fetchRequest).first {
+            let errorTimestamp = latestLoggedError.date.timeIntervalSince1970
+            if errorTimestamp > lastAckTime {
+                let nsError = latestLoggedError.error as NSError
+                if let category = ErrorProcessing.classifyCriticalError(nsError) {
+                    let currentRecordedTime = defaults.double(forKey: ErrorProcessing.pendingErrorTimestampKey)
+                    if errorTimestamp > currentRecordedTime {
+                        defaults.set(category.rawValue, forKey: ErrorProcessing.pendingErrorCategoryKey)
+                        defaults.set(nsError.localizedDescription, forKey: ErrorProcessing.pendingErrorDetailKey)
+                        defaults.set(errorTimestamp, forKey: ErrorProcessing.pendingErrorTimestampKey)
+                    }
+                }
+            }
+        }
+
+        // 2. Đọc trạng thái lỗi đang chờ xử lý từ UserDefaults
+        let pendingTimestamp = defaults.double(forKey: ErrorProcessing.pendingErrorTimestampKey)
+        if let category = defaults.string(forKey: ErrorProcessing.pendingErrorCategoryKey),
+           !category.isEmpty,
+           pendingTimestamp > lastAckTime {
+            self.activeCriticalErrorCategory = category
+            self.activeCriticalErrorDetail = defaults.string(forKey: ErrorProcessing.pendingErrorDetailKey)
+        } else {
+            self.activeCriticalErrorCategory = nil
+            self.activeCriticalErrorDetail = nil
+        }
+    }
+
+    // Đánh dấu đã xem lỗi và xóa cảnh báo đỏ
+    private func acknowledgeAndClearCriticalError() {
+        let now = Date().timeIntervalSince1970
+        UserDefaults.standard.set(now, forKey: Self.lastAcknowledgedErrorTimestampKey)
+        ErrorProcessing.clearRecordedCriticalError()
+        self.activeCriticalErrorCategory = nil
+        self.activeCriticalErrorDetail = nil
+        if self.isViewLoaded {
+            self.restoreVisibleCellsWhiteBackground()
+        }
+    }
+
+    // Hiển thị hộp thoại thông báo lỗi và dẫn người dùng vào "Xem nhật ký lỗi hệ thống"
+    private func checkAndPresentCriticalErrorAlertIfNeeded() {
+        self.syncCriticalErrorState()
+        guard let category = self.activeCriticalErrorCategory, !category.isEmpty else { return }
+        guard !self.isPresentingCriticalErrorAlert, self.presentedViewController == nil else { return }
+
+        self.isPresentingCriticalErrorAlert = true
+        let detailText = (self.activeCriticalErrorDetail ?? "Vui lòng kiểm tra lại cấu hình mạng, VPN hoặc tệp ghép nối.")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let message = """
+        Hệ thống phát hiện: \(category)
+
+        Chi tiết: \(detailText)
+
+        Bạn có muốn mở "Xem nhật ký lỗi hệ thống" để kiểm tra chi tiết không?
+        """
+
+        let alert = UIAlertController(
+            title: "⚠️ Cảnh Báo Lỗi Hệ Thống",
+            message: message,
+            preferredStyle: .alert
+        )
+
+        let ignoreAction = UIAlertAction(title: "Để sau", style: .cancel) { [weak self] _ in
+            guard let self = self else { return }
+            self.isPresentingCriticalErrorAlert = false
+            // Lưu mốc thời gian để không tự bật lại popup cho cùng 1 lỗi, nhưng vẫn giữ dòng cảnh báo đỏ ở mục Nhật ký lỗi
+            let pendingTime = UserDefaults.standard.double(forKey: ErrorProcessing.pendingErrorTimestampKey)
+            if pendingTime > 0 {
+                UserDefaults.standard.set(pendingTime, forKey: Self.lastAcknowledgedErrorTimestampKey)
+            }
+        }
+
+        let viewLogAction = UIAlertAction(title: "Xem nhật ký lỗi hệ thống", style: .default) { [weak self] _ in
+            guard let self = self else { return }
+            self.isPresentingCriticalErrorAlert = false
+            self.acknowledgeAndClearCriticalError()
+            self.performSegue(withIdentifier: "showErrorLog", sender: nil)
+        }
+
+        alert.addAction(ignoreAction)
+        alert.addAction(viewLogAction)
+        alert.preferredAction = viewLogAction
+
+        self.present(alert, animated: true, completion: nil)
     }
 }
 
@@ -1245,8 +1373,9 @@ private extension SettingsViewController {
             "Unknown": "Không xác định",
             
             // Công cụ kỹ thuật
-            "Error Log": "Nhật ký lỗi hệ thống",
+            "Error Log": "Xem nhật ký lỗi hệ thống",
             "View Error Log": "Xem nhật ký lỗi hệ thống",
+            "Nhật ký lỗi hệ thống": "Xem nhật ký lỗi hệ thống",
             "Clear Cache": "Xóa bộ nhớ đệm (Cache)",
             
             // Cài đặt nâng cao & Máy chủ Anisette
@@ -1267,6 +1396,7 @@ private extension SettingsViewController {
     private func translateAndStyleLabelsInside(view: UIView, section: Section, row: Int) {
         let activeItems = UnifiedSettingsItem.activeItems
         let isClearCacheRow = (section == .advancedSettings && activeItems.indices.contains(row) && activeItems[row] == .clearCache)
+        let isErrorLogRow = (section == .advancedSettings && activeItems.indices.contains(row) && activeItems[row] == .errorLog)
 
         for subview in view.subviews {
             if let label = subview as? UILabel {
@@ -1275,7 +1405,19 @@ private extension SettingsViewController {
                 }
                 
                 if let currentText = label.text, !currentText.isEmpty {
-                    label.text = translateStaticText(currentText)
+                    if isErrorLogRow {
+                        if let category = self.activeCriticalErrorCategory, !category.isEmpty {
+                            label.text = "⚠️ Xem nhật ký lỗi hệ thống • \(category)"
+                            label.numberOfLines = 2
+                            label.adjustsFontSizeToFitWidth = true
+                            label.minimumScaleFactor = 0.82
+                        } else {
+                            label.text = "Xem nhật ký lỗi hệ thống"
+                            label.numberOfLines = 1
+                        }
+                    } else {
+                        label.text = translateStaticText(currentText)
+                    }
                 }
                 
                 if label == self.accountNameLabel || label == self.accountEmailLabel || label == self.accountTypeLabel {
@@ -1287,6 +1429,14 @@ private extension SettingsViewController {
                 } else if section == .signIn {
                     label.textColor = CSSTheme.blue
                     label.font = UIFont.systemFont(ofSize: 17, weight: .bold)
+                } else if isErrorLogRow {
+                    if let category = self.activeCriticalErrorCategory, !category.isEmpty {
+                        label.textColor = CSSTheme.red
+                        label.font = UIFont.systemFont(ofSize: 15, weight: .bold)
+                    } else {
+                        label.textColor = .black
+                        label.font = UIFont.systemFont(ofSize: 16, weight: .medium)
+                    }
                 } else if isClearCacheRow {
                     label.textColor = CSSTheme.magenta
                     label.font = UIFont.systemFont(ofSize: 16, weight: .bold)
@@ -1403,6 +1553,8 @@ private extension SettingsViewController
 
     private func update()
     {
+        self.syncCriticalErrorState()
+        
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             let currentActiveTeam = try? await AuthManager.shared.getAuthenticatedTeam()
@@ -1622,6 +1774,7 @@ private extension SettingsViewController
                 debugLog("[SettingsVC] signIn() authentication cancelled by user")
             } catch {
                 debugLog("[SettingsVC] signIn() authentication failed with error: \(error)")
+                ErrorProcessing.recordCriticalErrorIfNeeded(error as NSError)
                 let toastView = ToastView(error: error)
                 toastView.show(in: self.view)
             }
@@ -1855,6 +2008,7 @@ private extension SettingsViewController
 
     @objc private func openErrorLog(_: Notification) {
         guard self.presentedViewController == nil else { return }
+        self.acknowledgeAndClearCriticalError()
         self.navigationController?.popViewController(animated: false)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             self.performSegue(withIdentifier: "showErrorLog", sender: nil)
@@ -2129,8 +2283,13 @@ extension SettingsViewController
             case .anisetteServers:
                 self.presentAnisetteSheet()
                 
-            case .refreshAttempts, .errorLog:
+            case .refreshAttempts:
                 // Được kích hoạt tự động qua Storyboard Segue gắn liền trên Cell gốc
+                break
+                
+            case .errorLog:
+                // Xóa trạng thái cảnh báo đỏ khi người dùng mở Xem nhật ký lỗi hệ thống
+                self.acknowledgeAndClearCriticalError()
                 break
                 
             case .refreshSideJITServer:

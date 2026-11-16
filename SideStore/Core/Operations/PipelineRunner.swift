@@ -167,11 +167,12 @@ final class PipelineRunner: Sendable
             return false
         }
         
-        // Hỗ trợ Refresh 4G cho cả 1 app đơn lẻ lẫn nhiều app (trong App hoặc qua Shortcut)
-        let isCellularRefreshGroup = (CellularRefreshManager.shared.isShortcutTwoStageMode || CellularRefreshManager.shared.isCellularMode) && allAreRefresh
+        let isCellularActive = CellularRefreshManager.shared.isShortcutTwoStageMode || CellularRefreshManager.shared.isCellularMode
+        let isCellularRefreshGroup = isCellularActive && allAreRefresh
         group.isCellularRefreshGroup = isCellularRefreshGroup
         
-        if !isCellularRefreshGroup {
+        // Không bắt buộc Wi-Fi ở đầu nếu đang ở chế độ 4G (cả khi Cài IPA lẫn Làm mới ứng dụng)
+        if !isCellularActive {
             while true {
                 do {
                     try await ensureMinimuxerReady()
@@ -198,7 +199,7 @@ final class PipelineRunner: Sendable
                 }
             }
         } else if (try? await fetchUDID(forceLive: false)) == nil {
-            // Đảm bảo luôn có UDID trước khi gọi Apple API để tránh lỗi 8220
+            // Đảm bảo luôn có UDID từ Keychain hoặc Minimuxer trước khi gọi Apple API
             _ = await CellularRefreshManager.shared.waitForMinimuxerReady(timeout: 5.0)
         }
         
@@ -212,7 +213,7 @@ final class PipelineRunner: Sendable
             group.progress.addChild(progress, withPendingUnitCount: 100)
         }
         
-        if !isCellularRefreshGroup {
+        if !isCellularActive {
             let unhandledOperations = operations.filter { operation in
                 let isSideStore = (operation.app as? ALTApplication)?.isAltStoreApp == true ||
                                    operation.bundleIdentifier.isAltStoreAppID
@@ -286,7 +287,7 @@ final class PipelineRunner: Sendable
                         let shouldContinue = await PipelineExecutor.presentDiagnosticErrorAlert(
                             phase: .systemPush,
                             stepName: "injectBatchProfiles",
-                            appName: "Làm mới gộp (\(orderedBatches.count) ứng dụng)",
+                            appName: "Làm mới (\(orderedBatches.count) ứng dụng)",
                             error: error
                         )
                         if shouldContinue {
@@ -299,7 +300,6 @@ final class PipelineRunner: Sendable
             }
         }
 
-        // Chỉ tải lại Widget đúng 1 lần duy nhất sau khi toàn bộ tác vụ hoàn tất
         let shouldReloadWidgets = !(isCellularRefreshGroup && CellularRefreshManager.shared.isShortcutTwoStageMode)
         let hasSuccessfulOperation = group.results.values.contains {
             if case .success = $0 { return true }

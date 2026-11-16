@@ -92,7 +92,7 @@ final class PipelineRunner: Sendable
                 debugLog("[AppManager] performSingleOperation executing task for: \(operation.bundleIdentifier)")
                 try await self.perform([operation], handler: handler, group: group)
             } catch {
-                if Task.isCancelled || error is CancellationError {
+                if PipelineExecutor.isCancellationError(error) {
                     debugLog("[AppManager] performSingleOperation task CANCELLED for: \(operation.bundleIdentifier)")
                     completionGate.complete(with: .failure(OperationError.cancelled))
                     return
@@ -177,7 +177,8 @@ final class PipelineRunner: Sendable
                 try await ensureMinimuxerReady()
             } catch {
                 let targetAppName = operations.first?.app.name ?? "SideStore"
-                await PipelineExecutor.presentDiagnosticErrorAlert(
+                await PipelineExecutor.presentDiagnosticErrorAlertOnce(
+                    for: group,
                     phase: .systemPush,
                     stepName: "ensureMinimuxerReady",
                     appName: targetAppName,
@@ -226,7 +227,7 @@ final class PipelineRunner: Sendable
                 )
                 try await validateOp.execute()
             } catch {
-                if Task.isCancelled || error is CancellationError {
+                if PipelineExecutor.isCancellationError(error) {
                     group.error = OperationError.cancelled
                     for operation in operations {
                         let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
@@ -236,7 +237,8 @@ final class PipelineRunner: Sendable
                 }
                 
                 let targetAppName = operations.first?.app.name ?? "SideStore"
-                await PipelineExecutor.presentDiagnosticErrorAlert(
+                await PipelineExecutor.presentDiagnosticErrorAlertOnce(
+                    for: group,
                     phase: .authorization,
                     stepName: "preflightChecks",
                     appName: targetAppName,
@@ -265,10 +267,18 @@ final class PipelineRunner: Sendable
         debugLog("[PipelineRunner] Configured fast pipeline for \(operationsCount) operation(s): isCellularRefreshGroup = \(isCellularRefreshGroup)")
 
         for operation in sortedOperations {
+            // Nếu người dùng đã nhấn "Tắt Thông Báo" ở ứng dụng trước đó trong cùng group -> dừng ngay lập tức, không chạy tiếp ứng dụng sau
+            if PipelineExecutor.hasPresentedAlert(for: group) || Task.isCancelled {
+                progress.set(nil, for: operation)
+                group.set(.failure(OperationError.cancelled), forAppWithBundleIdentifier: operation.bundleIdentifier)
+                continue
+            }
+            
             try await self.performOperation(for: operation, handler: handler, group: group, operationsCount: operationsCount)
         }
 
-        if isCellularRefreshGroup && !group.sharedContext.pendingProfiles.isEmpty {
+        // Chỉ thực hiện tiêm batch profile nếu chưa từng bị lỗi / bấm tắt thông báo
+        if isCellularRefreshGroup && !group.sharedContext.pendingProfiles.isEmpty && !PipelineExecutor.hasPresentedAlert(for: group) {
             let orderedBatches = sortedOperations.compactMap { group.sharedContext.pendingProfiles[$0.bundleIdentifier] }
             
             if CellularRefreshManager.shared.isShortcutTwoStageMode {
@@ -292,12 +302,14 @@ final class PipelineRunner: Sendable
                     )
                     try await injectOp.execute()
                 } catch {
-                    await PipelineExecutor.presentDiagnosticErrorAlert(
+                    await PipelineExecutor.presentDiagnosticErrorAlertOnce(
+                        for: group,
                         phase: .systemPush,
                         stepName: "injectBatchProfiles",
                         appName: "Làm mới (\(orderedBatches.count) ứng dụng)",
                         error: error
                     )
+                    group.error = OperationError.cancelled
                     throw OperationError.cancelled
                 }
             }
@@ -374,7 +386,8 @@ final class PipelineRunner: Sendable
             progress.set(nil, for: operation)
             
             let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
-            let isCancelled = Task.isCancelled || error is CancellationError
+            // Nhận diện đầy đủ cả OperationError.cancelled khi người dùng đã nhấn "Tắt Thông Báo"
+            let isCancelled = PipelineExecutor.isCancellationError(error) || PipelineExecutor.hasPresentedAlert(for: group)
             let status = isCancelled ? "CANCELLED" : "FAILED"
             if isCancelled {
                 debugLog("[AppManager] performOperation: Execution CANCELLED for app: \(operation.bundleIdentifier)")

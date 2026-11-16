@@ -83,7 +83,7 @@ private enum CSSTheme {
         )
     }
 
-    static let mediaFrameCornerRadius: CGFloat = 47.33
+    static let mediaFrameCornerRadius: CGFloat = 15.0
     static let mediaFrameLineWidth: CGFloat = 4.0
 
     static let cornerRadius: CGFloat = 15.0

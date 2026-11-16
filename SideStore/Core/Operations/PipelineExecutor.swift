@@ -347,17 +347,17 @@ final class PipelineExecutor: @unchecked Sendable {
     }
 }
 
-// MARK: - 🛡️ HỆ THỐNG CHẨN ĐOÁN CHÍNH XÁC (VPN / FILE PAIRING / THIẾT BỊ / APPLE)
+// MARK: - 🛡️ HỆ THỐNG CHẨN ĐOÁN CHÍNH XÁC 30 LỖI (15 LỖI XIN CẤP PHÉP + 15 LỖI ĐẨY HỆ THỐNG)
 extension PipelineExecutor {
     
     enum MonitoredPhase: Sendable {
-        case authorization  // Giai đoạn 1: Xin cấp phép Apple / Anisette
-        case systemPush     // Giai đoạn 2: Kết nối VPN / Pairing / Cài vào máy
+        case authorization  // PHẦN 1: Bước "Xin cấp phép" (Kẹt ở 10% - 30%): Giao tiếp Apple & Anisette
+        case systemPush     // PHẦN 2: Bước "Đẩy vào hệ thống" (Kẹt ở 70% - 85%): Giao tiếp nội bộ qua VPN
         
         var title: String {
             switch self {
-            case .authorization: return "XÁC THỰC APPLE & CHỨNG CHỈ"
-            case .systemPush:    return "KẾT NỐI NỘI BỘ & CÀI ĐẶT"
+            case .authorization: return "BƯỚC 1: XIN CẤP PHÉP (10% - 30%)"
+            case .systemPush:    return "BƯỚC 2: ĐẨY VÀO HỆ THỐNG (70% - 85%)"
             }
         }
         
@@ -372,7 +372,7 @@ extension PipelineExecutor {
     enum ErrorSourceBadge: String, Sendable {
         case vpn      = "LỖI VPN"
         case pairing  = "LỖI FILE PAIRING"
-        case device   = "LỖI THIẾT BỊ GHẾP NỐI"
+        case device   = "LỖI THIẾT BỊ GHÉP NỐI"
         case apple    = "LỖI APPLE / ANISETTE"
         case system   = "LỖI HỆ THỐNG iOS"
         
@@ -394,261 +394,531 @@ extension PipelineExecutor {
         let solution: String
     }
     
+    /// Trạng thái thực tế của card mạng VPN (`utun`) trên iOS
+    enum VPNHardwareState: Sendable {
+        case connectedLocalDevVPN   // Đã bật đúng StosVPN / LocalDevVPN (có IP 10.7.x.x)
+        case conflictOtherVPN       // Có utun VPN khác (1.1.1.1, AdGuard, Shadowrocket...) nhưng thiếu 10.7.x.x
+        case disconnected           // Hoàn toàn chưa bật VPN nào
+    }
+    
     static func monitoredPhase(for step: PipelineStep) -> MonitoredPhase? {
         switch step {
-        case .verifyCertificate, .fetchProvisioningProfiles, .prepareAppExtensionBundleIDs, .updateAppCertificate:
+        // PHẦN 1: Các bước kiểm tra điều kiện, xác thực Apple ID, Anisette, App ID & Chứng chỉ
+        case .preflightChecks,
+             .verifyCertificate,
+             .fetchProvisioningProfiles,
+             .prepareAppExtensionBundleIDs,
+             .updateAppCertificate,
+             .embedSigningCert:
             return .authorization
-        case .sendApp, .installApp, .refreshApp:
+            
+        // PHẦN 2: Các bước kiểm tra gói IPA, ký số và đẩy vào hệ điều hành iOS qua VPN
+        case .verifyApp,
+             .stageApp,
+             .resignApp,
+             .createIPA,
+             .sendApp,
+             .installApp,
+             .refreshApp:
             return .systemPush
+            
         default:
             return nil
         }
     }
     
-    /// Chẩn đoán chính xác tuyệt đối dựa trên kiểu dữ liệu `OperationError`, `MinimuxerError` và `PairingFileManager`
+    // MARK: - 🔍 QUÉT TRỰC TIẾP CARD MẠNG `utun` ĐỂ PHÂN BIỆT: TẮT VPN vs XUNG ĐỘT VPN vs ĐÃ BẬT VPN
+    static func inspectVPNHardwareState() -> VPNHardwareState {
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr else {
+            return .disconnected
+        }
+        defer { freeifaddrs(ifaddr) }
+        
+        var hasLocalDevIP = false
+        var hasOtherVPNTunnel = false
+        var ptr: UnsafeMutablePointer<ifaddrs>? = firstAddr
+        
+        while let current = ptr {
+            let interface = current.pointee
+            let name = String(cString: interface.ifa_name)
+            let flags = Int32(interface.ifa_flags)
+            let isUp = (flags & IFF_UP) != 0 && (flags & IFF_RUNNING) != 0
+            
+            if isUp, (name.hasPrefix("utun") || name.hasPrefix("ipsec") || name.hasPrefix("ppp")),
+               let addr = interface.ifa_addr {
+                let family = addr.pointee.sa_family
+                if family == UInt8(AF_INET) {
+                    var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                    if getnameinfo(addr, socklen_t(addr.pointee.sa_len),
+                                   &hostname, socklen_t(hostname.count),
+                                   nil, 0, NI_NUMERICHOST) == 0 {
+                        let ip = String(cString: hostname)
+                        // StosVPN / LocalDevVPN / SideStore WireGuard luôn dùng dải 10.7.x.x
+                        if ip.hasPrefix("10.7.") {
+                            hasLocalDevIP = true
+                        } else if !ip.hasPrefix("169.254.") && !ip.hasPrefix("127.") {
+                            // Đang có một VPN khác chiếm dụng giao diện utun (1.1.1.1, AdGuard, Shadowrocket...)
+                            hasOtherVPNTunnel = true
+                        }
+                    }
+                }
+            }
+            ptr = interface.ifa_next
+        }
+        
+        if hasLocalDevIP {
+            return .connectedLocalDevVPN
+        } else if hasOtherVPNTunnel {
+            return .conflictOtherVPN
+        } else {
+            return .disconnected
+        }
+    }
+    
+    /// Thu thập toàn bộ chuỗi mô tả lỗi sâu nhất (bao gồm cả `underlyingErrors` và `ALTWrappedError`)
+    private static func extractFullErrorInfo(_ error: Error) -> (code: Int, domain: String, text: String) {
+        let nsError = error as NSError
+        let deepDesc = ErrorProcessing(.fullError, unique: true, recur: true).getDescription(error: nsError)
+        let localDesc = ErrorProcessing(.localizedDescription, unique: true, recur: true).getDescription(error: nsError)
+        
+        var deepestCode = nsError.code
+        var deepestDomain = nsError.domain
+        var current: NSError? = nsError
+        while let underlying = (current as? ALTWrappedError)?.wrappedError ?? (current?.underlyingError as? NSError) {
+            deepestCode = underlying.code
+            deepestDomain = underlying.domain
+            current = underlying
+        }
+        
+        let combined = "\(nsError.domain) \(deepestDomain) \(nsError.code) \(deepestCode) \(error.localizedDescription) \(localDesc) \(deepDesc) \(String(describing: error))".lowercased()
+        return (deepestCode, deepestDomain.lowercased(), combined)
+    }
+    
+    // MARK: - 🧠 BỘ CHẨN ĐOÁN CHÍNH XÁC 30 KỊCH BẢN LỖI
     static func diagnoseError(_ error: Error, phase: MonitoredPhase) -> DiagnosticErrorItem {
-        // Bóc tách MinimuxerError sang OperationError nếu có
         let opError: OperationError? = {
             if let direct = error as? OperationError { return direct }
             if let minErr = error as? MinimuxerError { return minErr.asOperationError }
             return nil
         }()
         
-        let nsError = error as NSError
-        let code = nsError.code
-        let fullText = "\(nsError.domain) \(code) \(error.localizedDescription) \(String(describing: error))".lowercased()
+        let info = Self.extractFullErrorInfo(error)
+        let code = info.code
+        let fullText = info.text
+        
+        let hasPairingFile = PairingFileManager.shared.hasPairingFile()
+        let vpnState = Self.inspectVPNHardwareState()
+        let isConnectionReset = fullText.contains("connectionreset") ||
+                                fullText.contains("connection reset by peer") ||
+                                fullText.contains("code: 54") ||
+                                fullText.contains("os error 54")
         
         // =========================================================================
-        // 1. BẮT TRỰC TIẾP THEO ENUM `OperationError` (CHÍNH XÁC 100%)
+        // KIỂM TRA CÁC LỖI VERIFICATION (10. Mismatched Bundle ID, 12. Minimum OS, 15. Invalid Entitlements)
         // =========================================================================
-        if let opError {
-            switch opError {
-            case .noVPN(let reason), .invalidVPN(let reason):
-                let isWireGuard4G = reason.lowercased().contains("wireguard")
+        if let verifError = error as? VerificationError {
+            switch verifError.code {
+            case .iOSVersionNotSupported:
+                // [PHẦN 2 - LỖI 12]: Minimum OS Version Mismatch
                 return DiagnosticErrorItem(
-                    badge: .vpn,
-                    title: isWireGuard4G ? "WireGuard không hỗ trợ làm mới 4G" : "Chưa bật VPN hoặc sai cấu hình VPN",
-                    cause: isWireGuard4G ? "iOS tự ngắt hầm WireGuard khi tắt dữ liệu di động." : "SideStore không tìm thấy đường truyền LocalDevVPN / StosVPN.",
-                    solution: isWireGuard4G ? "Hãy đổi sang dùng StosVPN / LocalDevVPN rồi bấm Chạy tiếp." : "Mở StosVPN / LocalDevVPN bật kết nối lên (tắt các VPN khác) rồi bấm Chạy tiếp."
+                    badge: .system,
+                    title: "Không tương thích phiên bản iOS (Minimum OS Mismatch)",
+                    cause: "File IPA yêu cầu phiên bản iOS cao hơn (hoặc khác với) phiên bản iOS hiện tại trên máy của bạn.",
+                    solution: "Tải phiên bản IPA cũ hơn phù hợp với iOS của máy hoặc cập nhật iOS."
                 )
-                
-            case .pairingNotComplete:
+            case .mismatchedBundleIdentifiers:
+                // [PHẦN 2 - LỖI 10]: Mismatched Bundle ID
                 return DiagnosticErrorItem(
-                    badge: .pairing,
-                    title: "Chưa nạp File ghép đôi (Pairing File)",
-                    cause: "Trong SideStore hiện chưa có file ghép đôi (.mobiledevicepairing / rppairing).",
-                    solution: "Vào Cài đặt -> File ghép đôi để nạp file mới rồi bấm Chạy tiếp."
+                    badge: .system,
+                    title: "Lệch định danh ứng dụng (Mismatched Bundle ID)",
+                    cause: "Cố gắng Làm mới / Cài đè ứng dụng nhưng Bundle ID hoặc Apple ID khác với lúc cài đặt ban đầu.",
+                    solution: "Dùng đúng tài khoản Apple ID ban đầu hoặc gỡ ứng dụng cũ ra rồi cài mới lại."
                 )
-                
-            case .invalidPairingFile:
-                return DiagnosticErrorItem(
-                    badge: .pairing,
-                    title: "File ghép đôi (Pairing File) bị hỏng hoặc hết hạn",
-                    cause: "iOS từ chối ghép nối (thường do vừa cập nhật iOS, đổi mật khẩu máy hoặc nhấn 'Không tin cậy').",
-                    solution: "Cắm máy vào PC, tạo lại Pairing File mới bằng iloader / idevicepair và nạp lại."
-                )
-                
-            case .unknownUDID:
-                if !PairingFileManager.shared.hasPairingFile() {
-                    return DiagnosticErrorItem(
-                        badge: .pairing,
-                        title: "Chưa có File ghép đôi (Không lấy được UDID)",
-                        cause: "SideStore chưa có file ghép đôi để đọc mã UDID của máy.",
-                        solution: "Nạp file ghép đôi vào SideStore rồi bấm Chạy tiếp."
-                    )
-                }
-                return DiagnosticErrorItem(
-                    badge: .device,
-                    title: "Không đọc được mã UDID từ thiết bị",
-                    cause: "Kết nối tới thiết bị bị nghẽn hoặc File Pairing đã mất hiệu lực.",
-                    solution: "Tắt bật lại StosVPN rồi bấm Chạy tiếp. Nếu vẫn lỗi, hãy tạo lại File Pairing."
-                )
-                
-            case .minimuxerNotStarted:
-                if !PairingFileManager.shared.hasPairingFile() {
-                    return DiagnosticErrorItem(
-                        badge: .pairing,
-                        title: "Chưa nạp File ghép đôi để khởi động dịch vụ",
-                        cause: "Minimuxer không thể chạy vì thiếu File Pairing.",
-                        solution: "Vào Cài đặt nạp lại File Pairing rồi bấm Chạy tiếp."
-                    )
-                }
-                return DiagnosticErrorItem(
-                    badge: .device,
-                    title: "Dịch vụ ghép nối (Minimuxer) chưa sẵn sàng",
-                    cause: "Tiến trình kết nối nội bộ chưa khởi chạy xong.",
-                    solution: "Đảm bảo đã bật StosVPN rồi bấm Chạy tiếp."
-                )
-                
-            case .noDevice, .notReachable, .noConnection:
-                // Phân tích sâu xem lỗi là do thiếu Pairing, chưa bật VPN hay do Thiết bị
-                if !PairingFileManager.shared.hasPairingFile() {
-                    return DiagnosticErrorItem(
-                        badge: .pairing,
-                        title: "Thiếu File ghép đôi (Pairing File)",
-                        cause: "Không tìm thấy file ghép đôi hợp lệ trong SideStore.",
-                        solution: "Nạp lại file ghép đôi (.mobiledevicepairing) rồi bấm Chạy tiếp."
-                    )
-                }
-                if fullText.contains("lockdown") || fullText.contains("hostid") || fullText.contains("invalid host") || fullText.contains("pairing") {
-                    return DiagnosticErrorItem(
-                        badge: .pairing,
-                        title: "File ghép đôi bị thiết bị từ chối",
-                        cause: "File Pairing hiện tại không còn khớp với iOS trên máy.",
-                        solution: "Tạo và nạp lại File Pairing mới từ máy tính."
-                    )
-                }
-                return DiagnosticErrorItem(
-                    badge: .device,
-                    title: "Không thể kết nối tới thiết bị ghép nối",
-                    cause: "VPN chưa bật, hoặc đang dùng 4G nhưng chưa ngắt IP di động sang hầm VPN.",
-                    solution: "Bật StosVPN (nếu dùng 4G hãy bật chế độ Làm mới 4G trong Cài đặt) rồi bấm Chạy tiếp."
-                )
-                
-            case .timedOut:
-                return DiagnosticErrorItem(
-                    badge: .vpn,
-                    title: "Quá thời gian truyền dữ liệu (Timeout)",
-                    cause: "Đường truyền VPN nội bộ bị nghẽn khi đang đẩy dữ liệu vào máy.",
-                    solution: "Tắt bật lại StosVPN, giữ sáng màn hình rồi bấm Chạy tiếp."
-                )
-                
-            case .certificateExpired, .certificateRevoked, .customCertificateExpired, .customCertificateRevoked:
+            case .undeclaredPermissions, .addedPermissions:
+                // [PHẦN 1 - LỖI 15]: Invalid Entitlements
                 return DiagnosticErrorItem(
                     badge: .apple,
-                    title: "Chứng chỉ ký (Certificate) đã hết hạn hoặc bị thu hồi",
-                    cause: "Chứng chỉ trên Apple Developer không còn hiệu lực.",
-                    solution: "Bấm Chạy tiếp để làm mới chứng chỉ, hoặc vào Cài đặt -> Chứng chỉ để tạo lại."
+                    title: "Quyền hệ thống đặc biệt không hợp lệ (Invalid Entitlements)",
+                    cause: "IPA yêu cầu quyền hệ thống cao cấp (Siri, iCloud đặc biệt...) mà tài khoản Apple miễn phí không được cấp.",
+                    solution: "Chọn giữ/loại bỏ quyền mở rộng khi cài đặt hoặc dùng tài khoản Developer trả phí."
                 )
-                
-            case .notAuthenticated:
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Chưa đăng nhập tài khoản Apple ID",
-                    cause: "Phiên đăng nhập Apple ID đã thoát hoặc hết hạn.",
-                    solution: "Vào Cài đặt đăng nhập lại Apple ID rồi thử lại."
-                )
-                
             default:
-                break
+                // [PHẦN 2 - LỖI 14]: Corrupted IPA Payload
+                return DiagnosticErrorItem(
+                    badge: .system,
+                    title: "Gói cài đặt IPA bị lỗi cấu trúc (Corrupted IPA Payload)",
+                    cause: verifError.localizedDescription,
+                    solution: "Tải lại file IPA từ nguồn uy tín rồi bấm Chạy tiếp."
+                )
             }
         }
         
         // =========================================================================
-        // 2. PHÂN TÍCH CHI TIẾT THEO GIAI ĐOẠN (NẾU LÀ LỖI TỪ BÊN NGOÀI / iOS / APPLE)
+        // PHẦN 1: 15 LỖI BƯỚC “XIN CẤP PHÉP” (Kẹt ở 10% - 30%)
+        // Giao tiếp với máy chủ Apple và Anisette
         // =========================================================================
-        switch phase {
-        case .authorization:
-            if fullText.contains("anisette") || fullText.contains("500") || fullText.contains("502") || fullText.contains("503") || code == -22421 {
+        if phase == .authorization {
+            // [1.2] Anisette Error (500/502/503)
+            if fullText.contains("anisette") && (fullText.contains("500") || fullText.contains("502") || fullText.contains("503") || fullText.contains("504") || fullText.contains("overload") || fullText.contains("bad gateway")) {
                 return DiagnosticErrorItem(
                     badge: .apple,
-                    title: "Lỗi máy chủ Anisette (Mã \(code))",
-                    cause: "Máy chủ Anisette đang quá tải hoặc dữ liệu giả lập máy Mac bị lỗi.",
-                    solution: "Vào Cài đặt đổi máy chủ Anisette khác (hoặc tắt On-Device Anisette) rồi bấm Chạy tiếp."
+                    title: "Máy chủ Anisette quá tải (Error 500/502/503)",
+                    cause: "Server Anisette đang bị quá tải do có quá nhiều người dùng cùng lúc.",
+                    solution: "Chờ vài giây rồi bấm Chạy tiếp, hoặc vào Cài đặt đổi sang Server Anisette khác."
                 )
             }
-            if code == -29004 || fullText.contains("session has expired") {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Phiên đăng nhập Apple ID hết hạn (-29004)",
-                    cause: "Phiên làm việc với máy chủ Apple đã hết hiệu lực.",
-                    solution: "Bấm Chạy tiếp để thử lại, hoặc đăng nhập lại Apple ID trong Cài đặt."
-                )
-            }
-            if fullText.contains("maximum number of app ids") || code == 9412 {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Đã hết lượt đăng ký 10 App ID trong tuần",
-                    cause: "Tài khoản Apple miễn phí chỉ cấp tối đa 10 App ID mỗi 7 ngày.",
-                    solution: "Chờ App ID cũ hết hạn hoặc đổi sang tài khoản Apple ID phụ khác."
-                )
-            }
-            if fullText.contains("locked") || code == -20209 {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Tài khoản Apple ID bị khóa bảo mật",
-                    cause: "Apple tạm khóa tài khoản do đăng nhập qua IP của máy chủ Anisette.",
-                    solution: "Mở khóa tại iforgot.apple.com rồi quay lại bấm Chạy tiếp."
-                )
-            }
-            if code == -1009 || code == -1200 || fullText.contains("ssl") || fullText.contains("network") {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Mất kết nối mạng khi liên hệ máy chủ Apple",
-                    cause: "Điện thoại đang tắt mạng Internet (4G/Wi-Fi) hoặc bị chặn kết nối tới Apple.",
-                    solution: "Bật mạng Internet lên rồi bấm Chạy tiếp."
-                )
-            }
-            return DiagnosticErrorItem(
-                badge: .apple,
-                title: "Gián đoạn xin cấp phép từ Apple (Mã \(code))",
-                cause: error.localizedDescription,
-                solution: "Kiểm tra kết nối mạng và bấm Chạy tiếp để thử lại bước này."
-            )
             
-        case .systemPush:
-            // Kiểm tra trực tiếp file pairing trên máy trước tiên
-            if !PairingFileManager.shared.hasPairingFile() {
+            // [1.3] Invalid Anisette Data (-22421)
+            if code == -22421 || fullText.contains("-22421") || fullText.contains("invalid anisette") || fullText.contains("machine data") {
                 return DiagnosticErrorItem(
-                    badge: .pairing,
-                    title: "Chưa tìm thấy File ghép đôi (Pairing File)",
-                    cause: "SideStore chưa được nạp file ghép đôi để giao tiếp với iOS.",
-                    solution: "Nạp file ghép đôi vào SideStore rồi bấm Chạy tiếp."
+                    badge: .apple,
+                    title: "Dữ liệu Anisette không hợp lệ (Mã -22421)",
+                    cause: "Dữ liệu giả lập máy Mac bị lỗi hoặc quá hạn, máy chủ Apple từ chối nhận.",
+                    solution: "Vào Cài đặt -> Đặt lại dữ liệu ADI (Reset adi.pb) hoặc đổi Server Anisette khác rồi bấm Chạy tiếp."
                 )
             }
-            if fullText.contains("lockdown") || fullText.contains("invalid pairing") || fullText.contains("hostid") || fullText.contains("pair") {
+            
+            // [1.1] Failed to fetch Anisette data
+            if fullText.contains("anisette") || fullText.contains("adi.pb") || fullText.contains("provisioning session") {
                 return DiagnosticErrorItem(
-                    badge: .pairing,
-                    title: "File ghép đôi (Pairing File) hết hiệu lực",
-                    cause: "Thiết bị từ chối xác thực Lockdown với File Pairing hiện tại.",
-                    solution: "Tạo lại File Pairing mới trên máy tính rồi nạp lại vào SideStore."
+                    badge: .apple,
+                    title: "Không lấy được dữ liệu Anisette (Failed to fetch Anisette)",
+                    cause: "Server Anisette đang chọn bị sập hoặc không phản hồi.",
+                    solution: "Vào Cài đặt đổi sang Server Anisette khác rồi bấm Chạy tiếp."
                 )
             }
-            if fullText.contains("local network") || fullText.contains("necperror") || fullText.contains("permission denied") {
+            
+            // [1.4] Your session has expired (-29004)
+            if opError == .notAuthenticated || code == -29004 || fullText.contains("-29004") || fullText.contains("session has expired") || fullText.contains("not signed in") {
                 return DiagnosticErrorItem(
-                    badge: .vpn,
-                    title: "Chưa cấp quyền Mạng cục bộ (Local Network)",
-                    cause: "Quyền Mạng cục bộ của SideStore trong Cài đặt iOS đang bị tắt.",
-                    solution: "Vào Cài đặt iOS -> SideStore -> Bật 'Mạng cục bộ' rồi bấm Chạy tiếp."
+                    badge: .apple,
+                    title: "Phiên đăng nhập Apple ID đã hết hạn (-29004)",
+                    cause: "Phiên đăng nhập Apple ID đã hết hạn hoặc bị đăng xuất, cần xác thực lại.",
+                    solution: "Vào Cài đặt đăng nhập lại Apple ID rồi bấm Chạy tiếp."
                 )
             }
-            if fullText.contains("vpn") || fullText.contains("tunnel") {
+            
+            // [1.5] Maximum number of App IDs reached
+            if code == 9412 || fullText.contains("maximum number of app ids") || fullText.contains("10 app ids") || fullText.contains("max quantity of app ids") {
                 return DiagnosticErrorItem(
-                    badge: .vpn,
-                    title: "Lỗi kết nối hầm VPN nội bộ",
-                    cause: "Chưa bật StosVPN/LocalDevVPN hoặc đang xung đột với ứng dụng VPN khác.",
-                    solution: "Chỉ bật duy nhất StosVPN/LocalDevVPN rồi bấm Chạy tiếp."
+                    badge: .apple,
+                    title: "Hết 10 lượt đăng ký App ID trong tuần (Max App IDs)",
+                    cause: "Đã dùng hết sạch 10 lượt đăng ký App ID trong 7 ngày của tài khoản Apple miễn phí.",
+                    solution: "Chờ App ID cũ hết hạn sau 7 ngày hoặc đổi sang tài khoản Apple ID phụ khác."
                 )
             }
-            if fullText.contains("timed out") || fullText.contains("timeout") || fullText.contains("afc") || fullText.contains("broken pipe") {
+            
+            // [1.6] Maximum number of apps installed (3 apps)
+            if fullText.contains("maximum number of installed apps") || fullText.contains("3 apps") || fullText.contains("more than 3") || fullText.contains("deactivate") || fullText.contains("active apps limit") {
                 return DiagnosticErrorItem(
-                    badge: .vpn,
-                    title: "Ngắt quãng đường truyền VPN khi đẩy gói cài đặt",
-                    cause: "Kết nối tới thiết bị bị nghẽn hoặc ứng dụng bị đưa xuống nền.",
-                    solution: "Tắt bật lại StosVPN, giữ sáng màn hình rồi bấm Chạy tiếp."
+                    badge: .apple,
+                    title: "Đã kịch trần 3 ứng dụng hoạt động (Max 3 Apps)",
+                    cause: "Tài khoản Apple miễn phí chỉ cho phép tối đa 3 ứng dụng hoạt động cùng lúc trên máy.",
+                    solution: "Huỷ kích hoạt (Deactivate) hoặc gỡ bớt 1 ứng dụng đang cài rồi bấm Chạy tiếp."
                 )
             }
-            if fullText.contains("verification failed") || fullText.contains("applicationverificationfailed") || fullText.contains("0xe80080") {
+            
+            // [1.7] Apple ID Locked
+            if code == -20209 || fullText.contains("-20209") || fullText.contains("locked") || fullText.contains("disabled for security") {
                 return DiagnosticErrorItem(
-                    badge: .system,
-                    title: "iOS từ chối xác minh chữ ký ứng dụng",
-                    cause: "Chữ ký hoặc Provisioning Profile không khớp với thiết bị (lỗi installd).",
-                    solution: "Bấm Chạy tiếp để cài lại, hoặc làm mới lại chứng chỉ trong Cài đặt."
+                    badge: .apple,
+                    title: "Tài khoản Apple ID bị khóa bảo mật (Apple ID Locked)",
+                    cause: "Tài khoản Apple bị khóa bảo mật do đăng nhập từ địa chỉ IP lạ (của máy chủ Anisette).",
+                    solution: "Truy cập iforgot.apple.com để mở khóa tài khoản, sau đó đăng nhập lại và bấm Chạy tiếp."
                 )
             }
-            if fullText.contains("storage") || fullText.contains("disk") || fullText.contains("no space") || code == 28 {
+            
+            // [1.8] Incorrect Credentials (-20101)
+            if code == -20101 || code == -22406 || fullText.contains("-20101") || fullText.contains("incorrect") || fullText.contains("invalid username or password") || fullText.contains("bad password") {
                 return DiagnosticErrorItem(
-                    badge: .system,
-                    title: "Bộ nhớ thiết bị đã đầy",
-                    cause: "Không đủ dung lượng trống để iOS giải nén và cài đặt ứng dụng.",
-                    solution: "Xóa bớt dữ liệu không cần thiết rồi bấm Chạy tiếp."
+                    badge: .apple,
+                    title: "Sai mật khẩu Apple ID (Incorrect Credentials -20101)",
+                    cause: "Nhập sai mật khẩu Apple ID hoặc bạn vừa đổi mật khẩu nhưng chưa cập nhật trong ứng dụng.",
+                    solution: "Vào Cài đặt đăng xuất và đăng nhập lại bằng mật khẩu Apple ID mới."
                 )
             }
+            
+            // [1.9] 2FA Failed / Verification Code Error
+            if code == -21669 || fullText.contains("verification code") || fullText.contains("two-factor") || fullText.contains("2fa") || fullText.contains("security code") {
+                return DiagnosticErrorItem(
+                    badge: .apple,
+                    title: "Lỗi mã xác thực 2 bước (2FA Verification Error)",
+                    cause: "Nhập sai mã xác thực 2 yếu tố (2FA) hoặc mã xác thực đã hết hạn.",
+                    solution: "Thử lại và nhập chính xác mã 6 số mới nhất vừa gửi về thiết bị."
+                )
+            }
+            
+            // [1.10] License Agreement Updated
+            if fullText.contains("license agreement") || fullText.contains("terms") || fullText.contains("pla") || fullText.contains("accept the updated") {
+                return DiagnosticErrorItem(
+                    badge: .apple,
+                    title: "Cần đồng ý Điều khoản Apple mới (License Agreement)",
+                    cause: "Apple vừa cập nhật điều khoản Developer mới, bắt buộc phải đồng ý trước khi ký ứng dụng.",
+                    solution: "Truy cập developer.apple.com, đăng nhập Apple ID để bấm Đồng ý điều khoản rồi bấm Chạy tiếp."
+                )
+            }
+            
+            // [1.11] Certificate Revoked
+            if case .certificateRevoked = opError {
+                return DiagnosticErrorItem(
+                    badge: .apple,
+                    title: "Chứng chỉ đã bị thu hồi (Certificate Revoked)",
+                    cause: "Chứng chỉ hiện tại bị thu hồi hoặc bạn vừa bấm 'Revoke' trên một thiết bị/máy tính khác.",
+                    solution: "Vào Cài đặt -> Chứng chỉ để làm mới/tạo lại chứng chỉ mới rồi bấm Chạy tiếp."
+                )
+            }
+            if case .customCertificateRevoked = opError {
+                return DiagnosticErrorItem(
+                    badge: .apple,
+                    title: "Chứng chỉ đã bị thu hồi (Certificate Revoked)",
+                    cause: "Chứng chỉ hiện tại đã bị thu hồi trên cổng Apple Developer.",
+                    solution: "Vào Cài đặt -> Chứng chỉ để tạo lại hoặc đặt lại chứng chỉ rồi bấm Chạy tiếp."
+                )
+            }
+            if fullText.contains("revoked") || fullText.contains("certificate expired") || fullText.contains("no signing certificate") {
+                return DiagnosticErrorItem(
+                    badge: .apple,
+                    title: "Chứng chỉ bị thu hồi hoặc hết hạn (Certificate Revoked)",
+                    cause: "Chứng chỉ hiện tại bị thu hồi hoặc bạn vừa bấm 'Revoke' trên thiết bị khác.",
+                    solution: "Vào Cài đặt -> Chứng chỉ bấm Tạo lại chứng chỉ rồi bấm Chạy tiếp."
+                )
+            }
+            
+            // [1.12] App ID not available
+            if code == 9401 || fullText.contains("not available") || fullText.contains("bundle identifier is not available") || fullText.contains("already in use") {
+                return DiagnosticErrorItem(
+                    badge: .apple,
+                    title: "Tên định danh bị trùng (App ID Not Available)",
+                    cause: "Tên định danh (Bundle ID) của ứng dụng bị trùng với một người khác đã đăng ký trước trên Apple.",
+                    solution: "Đổi Bundle ID tuỳ chỉnh khác khi cài đặt ứng dụng rồi thử lại."
+                )
+            }
+            
+            // [1.13] SSL / TLS Handshake Failed
+            if code == -1200 || code == -1202 || code == -9806 || fullText.contains("ssl") || fullText.contains("tls") || fullText.contains("handshake") || fullText.contains("secure connection") {
+                return DiagnosticErrorItem(
+                    badge: .apple,
+                    title: "Lỗi kết nối bảo mật (SSL / TLS Handshake Failed)",
+                    cause: "Mạng Wi-Fi / DNS đang dùng chặn kết nối bảo mật tới máy chủ Apple hoặc Anisette.",
+                    solution: "Đổi sang mạng 4G hoặc mạng Wi-Fi khác (tắt các trình chặn quảng cáo/DNS) rồi bấm Chạy tiếp."
+                )
+            }
+            
+            // [1.14] Apple Developer Maintenance
+            if fullText.contains("maintenance") || fullText.contains("unavailable") || fullText.contains("down for maintenance") || code == 503 {
+                return DiagnosticErrorItem(
+                    badge: .apple,
+                    title: "Máy chủ Apple đang bảo trì (Developer Maintenance)",
+                    cause: "Hệ thống máy chủ dành cho lập trình viên của Apple đang bảo trì định kỳ.",
+                    solution: "Vui lòng đợi Apple hoàn tất bảo trì sau ít phút rồi bấm Chạy tiếp."
+                )
+            }
+            
+            // [1.15] Invalid Entitlements
+            if fullText.contains("entitlement") || (fullText.contains("provisioning profile") && fullText.contains("capability")) {
+                return DiagnosticErrorItem(
+                    badge: .apple,
+                    title: "Quyền hệ thống không được cấp (Invalid Entitlements)",
+                    cause: "IPA yêu cầu quyền hệ thống cao cấp (như Siri, iCloud đặc biệt) mà tài khoản Free không được cấp.",
+                    solution: "Xoá các quyền Entitlement đặc biệt của IPA hoặc tắt App Extensions rồi bấm Chạy tiếp."
+                )
+            }
+        }
+        
+        // =========================================================================
+        // PHẦN 2: 15 LỖI BƯỚC “ĐẨY VÀO HỆ THỐNG” (Kẹt ở 70% - 85%)
+        // Giao tiếp nội bộ giữa SideStore và hệ điều hành iOS qua VPN
+        // =========================================================================
+        
+        // [2.3] Pairing File Not Found (Kiểm tra trực tiếp file pairing trong máy)
+        if !hasPairingFile || (opError != nil && { if case .pairingNotComplete = opError! { return true }; return false }()) {
+            return DiagnosticErrorItem(
+                badge: .pairing,
+                title: "Chưa nạp File ghép đôi (Pairing File Not Found)",
+                cause: "Chưa nạp file ghép đôi (.mobiledevicepairing / rppairing) vào SideStore hoặc bạn vừa xoá file.",
+                solution: "Vào Cài đặt -> File ghép đôi để nạp file ghép đôi vào máy rồi bấm Chạy tiếp."
+            )
+        }
+        
+        // [2.4] Local Network Permission Denied
+        if fullText.contains("local network") || fullText.contains("necperror") || fullText.contains("permission denied") || fullText.contains("no route to host") || code == 65 {
+            return DiagnosticErrorItem(
+                badge: .vpn,
+                title: "Chưa bật quyền Mạng cục bộ (Local Network Denied)",
+                cause: "Quên bật quyền 'Mạng cục bộ' (Local Network) cho SideStore trong Cài đặt iOS.",
+                solution: "Vào Cài đặt iOS -> SideStore -> Gạt bật 'Mạng cục bộ' rồi bấm Chạy tiếp."
+            )
+        }
+        
+        // [2.5] VPN Conflict (Quét thấy có VPN khác như 1.1.1.1/AdGuard/Shadowrocket đang bật đè làm mất IP 10.7.x.x)
+        if vpnState == .conflictOtherVPN {
+            return DiagnosticErrorItem(
+                badge: .vpn,
+                title: "Xung đột ứng dụng VPN (VPN Conflict)",
+                cause: "Đang bật đè một VPN khác (1.1.1.1, AdGuard, Shadowrocket...) làm mất tác dụng của StosVPN / LocalDevVPN.",
+                solution: "Tắt toàn bộ các VPN khác (kể cả chế độ Kết nối theo yêu cầu), chỉ bật duy nhất StosVPN / LocalDevVPN rồi bấm Chạy tiếp."
+            )
+        }
+        
+        // [2.8] Wi-Fi AP Isolation (Cellular Fallback)
+        if let opError, case .invalidVPN(let reason) = opError, reason.lowercased().contains("wireguard") {
+            return DiagnosticErrorItem(
+                badge: .vpn,
+                title: "Lỗi mạng 4G / Cách ly Wi-Fi (Cellular / AP Isolation)",
+                cause: "Đang dùng mạng 4G với WireGuard hoặc dùng mạng Wi-Fi công cộng chặn giao tiếp nội bộ.",
+                solution: "Kết nối mạng Wi-Fi cá nhân và dùng StosVPN / LocalDevVPN (hoặc bật chế độ Làm mới 4G) rồi bấm Chạy tiếp."
+            )
+        }
+        if let opError, case .noConnection = opError {
+            return DiagnosticErrorItem(
+                badge: .vpn,
+                title: "Chưa kết nối Wi-Fi hoặc bị chặn mạng nội bộ (AP Isolation)",
+                cause: "Đang dùng mạng 4G khi chưa bật chế độ 4G, hoặc mạng Wi-Fi công cộng chặn giao tiếp nội bộ.",
+                solution: "Kết nối Wi-Fi ổn định (hoặc bật chế độ 4G trong Cài đặt), bật StosVPN rồi bấm Chạy tiếp."
+            )
+        }
+        
+        // [2.1] Unable to connect to device (Quét phần cứng thấy hoàn toàn chưa bật LocalDevVPN / StosVPN)
+        if vpnState == .disconnected {
+            return DiagnosticErrorItem(
+                badge: .vpn,
+                title: "Chưa bật VPN (Unable to connect to device)",
+                cause: "Quên chưa bật LocalDevVPN / StosVPN nên SideStore không tìm thấy đường truyền nội bộ (10.7.0.1).",
+                solution: "Mở ứng dụng StosVPN hoặc LocalDevVPN, gạt bật kết nối lên rồi bấm Chạy tiếp."
+            )
+        }
+        
+        // [2.2] Invalid Pairing File / Lockdown Error (VPN ĐÃ BẬT nhưng bị Connection Reset OS code 54 hoặc Lockdown từ chối)
+        if isConnectionReset ||
+           fullText.contains("lockdown") ||
+           fullText.contains("invalid pairing") ||
+           fullText.contains("invalid hostid") ||
+           fullText.contains("pair record") ||
+           (opError != nil && { if case .invalidPairingFile = opError! { return true }; return false }()) {
             return DiagnosticErrorItem(
                 badge: .device,
-                title: "Không thể giao tiếp với thiết bị (Mã \(code))",
-                cause: "Kết nối giữa SideStore và hệ thống iOS bị gián đoạn.",
-                solution: "Kiểm tra lại StosVPN (hoặc nạp lại File Pairing nếu đã bật VPN) rồi bấm Chạy tiếp."
+                title: "Thiết bị đã huỷ liên kết (Invalid Pairing / Lockdown Error)",
+                cause: "VPN đã bật nhưng iOS từ chối kết nối (Code 54: Connection reset). Do bạn đã xoá thiết bị đã liên kết, đổi mật khẩu màn hình khóa hoặc mới cập nhật iOS.",
+                solution: "Cắm iPhone vào máy tính, bấm 'Tin cậy', tạo lại File Pairing mới bằng iloader / idevicepair và nạp lại."
+            )
+        }
+        
+        // [2.6] Connection Timed Out (mux error)
+        if opError == .timedOut || fullText.contains("timed out") || fullText.contains("timeout") || fullText.contains("mux error") || (fullText.contains("afc") && fullText.contains("broken pipe")) {
+            return DiagnosticErrorItem(
+                badge: .vpn,
+                title: "Nghẽn đường truyền nội bộ (Connection Timed Out)",
+                cause: "Mạng nội bộ bị nghẽn hoặc quá hạn khi đang đẩy gói cài đặt IPA dung lượng lớn.",
+                solution: "Tắt rồi bật lại StosVPN / LocalDevVPN, giữ sáng màn hình rồi bấm Chạy tiếp."
+            )
+        }
+        
+        // [2.7] Background Task Killed
+        if fullText.contains("background") || fullText.contains("interrupted") || fullText.contains("connection abort") || code == 53 || code == -997 {
+            return DiagnosticErrorItem(
+                badge: .system,
+                title: "Bị ngắt do thoát ứng dụng (Background Task Killed)",
+                cause: "Thoát SideStore ra ngoài hoặc để màn hình tự tắt khiến iOS ngắt kết nối truyền dữ liệu ngầm.",
+                solution: "Giữ nguyên màn hình ứng dụng luôn sáng trong suốt quá trình cài đặt và bấm Chạy tiếp."
+            )
+        }
+        
+        // [2.10] Mismatched Bundle ID (Bắt từ thông báo lỗi của installd iOS)
+        if fullText.contains("mismatchedbundleid") || fullText.contains("mismatchedapplicationidentifierentitlement") || fullText.contains("upgrade's application-identifier") || fullText.contains("already installed") {
+            return DiagnosticErrorItem(
+                badge: .system,
+                title: "Trùng ứng dụng khác tài khoản (Mismatched Bundle ID)",
+                cause: "Cố gắng Refresh / Cài đè một ứng dụng nhưng lại dùng Apple ID khác với lúc cài đặt ban đầu.",
+                solution: "Sao lưu dữ liệu, xoá ứng dụng cũ trên màn hình chính đi rồi cài đặt lại."
+            )
+        }
+        
+        // [2.11] Storage Full (Disk Quota Exceeded)
+        if code == 28 || fullText.contains("disk quota") || fullText.contains("no space left") || fullText.contains("storage") || fullText.contains("not enough space") {
+            return DiagnosticErrorItem(
+                badge: .system,
+                title: "Bộ nhớ iPhone đã đầy (Storage Full)",
+                cause: "Bộ nhớ iPhone bị đầy ở những giây cuối khi hệ điều hành giải nén gói IPA ra để cài đặt.",
+                solution: "Dọn dẹp bớt dung lượng trống trên iPhone (tối thiểu 2-3 GB) rồi bấm Chạy tiếp."
+            )
+        }
+        
+        // [2.12] Minimum OS Version Mismatch (Bắt từ thông báo lỗi của installd iOS)
+        if fullText.contains("minimumosversion") || fullText.contains("deviceosversiontoohigh") || fullText.contains("deviceosversiontoolow") || fullText.contains("requires ios") {
+            return DiagnosticErrorItem(
+                badge: .system,
+                title: "Không hỗ trợ phiên bản iOS hiện tại (OS Version Mismatch)",
+                cause: "File IPA yêu cầu phiên bản iOS cao hơn phiên bản iOS hiện tại trên máy của bạn.",
+                solution: "Tải phiên bản IPA thấp hơn tương thích với máy hoặc cập nhật iOS."
+            )
+        }
+        
+        // [2.13] Device Not Registered in Profile
+        if fullText.contains("not included in profile") || fullText.contains("device not registered") || fullText.contains("provisioneddevices") || fullText.contains("0xe800801c") || fullText.contains("no provisioning profile") {
+            return DiagnosticErrorItem(
+                badge: .device,
+                title: "Thiết bị chưa có trong hồ sơ cấp phép (Device Not Registered)",
+                cause: "File cấp phép (Provisioning Profile) tải về bị lỗi, không chứa mã UDID của chiếc iPhone hiện tại.",
+                solution: "Kiểm tra lại File Pairing đúng của máy này, xoá Cache trong Cài đặt rồi bấm Chạy tiếp."
+            )
+        }
+        
+        // [2.14] Corrupted IPA Payload
+        if fullText.contains("corrupt") || fullText.contains("invalid bundle") || fullText.contains("missing info.plist") || fullText.contains("missingappbundle") || fullText.contains("packageextractionfailed") || fullText.contains("zip") {
+            return DiagnosticErrorItem(
+                badge: .system,
+                title: "Gói cài đặt IPA bị hỏng (Corrupted IPA Payload)",
+                cause: "File IPA bị hỏng cấu trúc bên trong, khi đẩy vào tiến trình installd của iOS thì bị từ chối.",
+                solution: "Kiểm tra hoặc tải lại file IPA nguyên vẹn khác rồi thử cài lại."
+            )
+        }
+        
+        // [2.15] Developer Mode Disabled (iOS 16+)
+        if fullText.contains("developer mode") || fullText.contains("chế độ nhà phát triển") || fullText.contains("requires developer mode") {
+            return DiagnosticErrorItem(
+                badge: .system,
+                title: "Chưa bật Chế độ nhà phát triển (Developer Mode Disabled)",
+                cause: "Đẩy ứng dụng thành công nhưng bị chặn do quên bật 'Chế độ nhà phát triển' trên iOS 16+.",
+                solution: "Vào Cài đặt iOS -> Quyền riêng tư & Bảo mật -> Bật 'Chế độ nhà phát triển' và khởi động lại máy."
+            )
+        }
+        
+        // [2.9] ApplicationVerificationFailed
+        if fullText.contains("applicationverificationfailed") || fullText.contains("verification failed") || fullText.contains("0xe80080") || fullText.contains("code signature") {
+            return DiagnosticErrorItem(
+                badge: .system,
+                title: "Lỗi xác minh chữ ký số (ApplicationVerificationFailed)",
+                cause: "Chữ ký số ở bước trước bị sai lệch hoặc chứng chỉ bị lỗi, iOS kiểm tra phát hiện ra và từ chối cài.",
+                solution: "Vào Cài đặt -> Chứng chỉ để làm mới lại chứng chỉ ký, sau đó bấm Chạy tiếp."
+            )
+        }
+        
+        // Bắt mã lỗi Minimuxer 39 (ProfileInstall) hoặc các lỗi kết nối thiết bị khi VPN đã bật
+        if code == 39 || code == 8 || fullText.contains("profileinstall") || opError != nil {
+            return DiagnosticErrorItem(
+                badge: .device,
+                title: "Thiết bị từ chối giao tiếp (Invalid Pairing / Lockdown Error)",
+                cause: "VPN đã bật nhưng iOS từ chối lệnh cài đặt (Mã \(code)). Thường do bạn đã xoá thiết bị đã liên kết hoặc phiên ghép đôi bị kẹt.",
+                solution: "Tắt bật lại LocalDevVPN / StosVPN rồi bấm Chạy tiếp. Nếu vẫn lỗi, hãy tạo lại File Pairing mới trên máy tính."
+            )
+        }
+        
+        // Nhánh dự phòng cuối cùng theo từng Giai đoạn
+        switch phase {
+        case .authorization:
+            return DiagnosticErrorItem(
+                badge: .apple,
+                title: "Gián đoạn bước Xin cấp phép (Mã \(code))",
+                cause: error.localizedDescription,
+                solution: "Kiểm tra kết nối mạng / Server Anisette rồi bấm Chạy tiếp."
+            )
+        case .systemPush:
+            return DiagnosticErrorItem(
+                badge: .device,
+                title: "Gián đoạn đẩy ứng dụng vào hệ thống (Mã \(code))",
+                cause: error.localizedDescription,
+                solution: "Kiểm tra lại LocalDevVPN / StosVPN và File Pairing rồi bấm Chạy tiếp."
             )
         }
     }

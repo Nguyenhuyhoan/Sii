@@ -1,3 +1,4 @@
+
 //
 //  ErrorProcessing.swift
 //  SideStore
@@ -6,6 +7,7 @@
 //  Copyright © 2025 SideStore. All rights reserved.
 //
 
+import Foundation
 
 class ErrorProcessing {
     
@@ -14,10 +16,21 @@ class ErrorProcessing {
         case localizedDescription
     }
     
+    // MARK: - 🚨 PHÂN LOẠI 3 LỖI HỆ THỐNG QUAN TRỌNG CHO CÀI ĐẶT
+    enum CriticalErrorCategory: String {
+        case pairingFile = "Lỗi Pairing File (Tệp ghép nối)"
+        case pairedDevice = "Lỗi Thiết bị đã ghép nối (Minimuxer / VPN)"
+        case server = "Lỗi Máy chủ (Anisette / Apple Server)"
+    }
+    
+    static let pendingErrorCategoryKey = "SideStore.PendingCriticalErrorCategory"
+    static let pendingErrorDetailKey = "SideStore.PendingCriticalErrorDetail"
+    static let pendingErrorTimestampKey = "SideStore.PendingCriticalErrorTimestamp"
+    static let criticalErrorDetectedNotification = Notification.Name("SideStore.CriticalErrorDetectedNotification")
+    
     let info: InfoMode
     let unique: Bool
     let recur: Bool
-    
     
     var errors: Set<String> = []
     
@@ -26,6 +39,114 @@ class ErrorProcessing {
         self.info = mode
         self.unique = unique
         self.recur = recur
+    }
+    
+    // MARK: - 🔍 NHẬN DIỆN & LƯU TRẠNG THÁI LỖI HỆ THỐNG
+    static func classifyCriticalError(_ error: NSError) -> CriticalErrorCategory? {
+        var visited = Set<String>()
+        return inspectErrorNode(error, visited: &visited)
+    }
+    
+    private static func inspectErrorNode(_ error: NSError, visited: inout Set<String>) -> CriticalErrorCategory? {
+        let signature = "\(error.domain)#\(error.code)#\(error.localizedDescription)"
+        guard !visited.contains(signature) else { return nil }
+        visited.insert(signature)
+        
+        let domain = error.domain.lowercased()
+        let desc = error.localizedDescription.lowercased()
+        let failureReason = (error.localizedFailureReason ?? "").lowercased()
+        let recovery = (error.localizedRecoverySuggestion ?? "").lowercased()
+        let debugText = "\(error)".lowercased()
+        let combined = "\(domain) \(desc) \(failureReason) \(recovery) \(debugText)"
+        
+        // 1. Kiểm tra Lỗi Pairing File (Tệp ghép nối bị thiếu, sai định dạng, hết hạn hoặc sai UDID)
+        let pairingKeywords = [
+            "pairing file", "pairingfile", "mobiledevicepairing", "pair_record",
+            "pairing record", "invalid pairing", "missing pairing", "no pairing",
+            "plist", "escrowbag", "hostid", "systembuid", "tệp ghép nối"
+        ]
+        if domain.contains("pairing") || pairingKeywords.contains(where: { combined.contains($0) }) {
+            return .pairingFile
+        }
+        
+        // 2. Kiểm tra Lỗi Thiết bị đã ghép nối (Minimuxer, LocalDevVPN, mất kết nối tới thiết bị)
+        let deviceKeywords = [
+            "minimuxer", "muxer", "idevice", "lockdownd", "instproxy",
+            "misagent", "afc", "heartbeat", "no device", "device not found",
+            "connect to device", "connection to device", "localdevvpn",
+            "wireguard", "stovpn", "vpn", "jit", "debugserver", "thiết bị ghép nối"
+        ]
+        if domain.contains("minimuxer") || domain.contains("muxer") || domain.contains("device") ||
+           deviceKeywords.contains(where: { combined.contains($0) }) {
+            return .pairedDevice
+        }
+        
+        // 3. Kiểm tra Lỗi Máy chủ (Anisette Server, Apple Developer Portal, lỗi kết nối mạng)
+        let serverKeywords = [
+            "anisette", "altanisette", "apple", "developer portal", "gsa.apple.com",
+            "idms", "502 bad gateway", "503 service", "504 gateway", "500 internal",
+            "timed out", "timeout", "cannot connect to host", "could not connect to the server",
+            "network connection was lost", "offline", "ssl", "tls", "server", "máy chủ"
+        ]
+        if domain == NSURLErrorDomain.lowercased() ||
+           domain.contains("anisette") ||
+           domain.contains("altapple") ||
+           domain.contains("altserver") ||
+           domain.contains("cfnetwork") ||
+           serverKeywords.contains(where: { combined.contains($0) }) {
+            return .server
+        }
+        
+        // Đệ quy kiểm tra các lỗi bọc bên trong (ALTWrappedError & underlyingErrors)
+        if let wrappedError = (error as? ALTWrappedError)?.wrappedError {
+            if let found = inspectErrorNode(wrappedError, visited: &visited) {
+                return found
+            }
+        }
+        
+        for underlying in error.underlyingErrors {
+            if let found = inspectErrorNode(underlying as NSError, visited: &visited) {
+                return found
+            }
+        }
+        
+        if let singleUnderlying = error.underlyingError as NSError? {
+            if let found = inspectErrorNode(singleUnderlying, visited: &visited) {
+                return found
+            }
+        }
+        
+        return nil
+    }
+    
+    static func recordCriticalErrorIfNeeded(_ error: NSError, formattedDescription: String? = nil) {
+        guard let category = classifyCriticalError(error) else { return }
+        
+        let detail = (formattedDescription?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
+            ?? error.localizedDescription
+        
+        let defaults = UserDefaults.standard
+        defaults.set(category.rawValue, forKey: pendingErrorCategoryKey)
+        defaults.set(detail, forKey: pendingErrorDetailKey)
+        defaults.set(Date().timeIntervalSince1970, forKey: pendingErrorTimestampKey)
+        
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+                name: criticalErrorDetectedNotification,
+                object: nil,
+                userInfo: [
+                    "category": category.rawValue,
+                    "detail": detail
+                ]
+            )
+        }
+    }
+    
+    static func clearRecordedCriticalError() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: pendingErrorCategoryKey)
+        defaults.removeObject(forKey: pendingErrorDetailKey)
+        defaults.removeObject(forKey: pendingErrorTimestampKey)
     }
     
     private func userFriendlyDescription(for error: NSError) -> String {
@@ -69,11 +190,17 @@ class ErrorProcessing {
 
     func getDescription(error: NSError) -> String{
         errors = []  // reinit for each request
-        return getDescriptionText(error: error)
+        let finalDescription = getDescriptionText(error: error)
+        ErrorProcessing.recordCriticalErrorIfNeeded(error, formattedDescription: finalDescription)
+        return finalDescription
     }
     
     
     func getDescriptionText(error: NSError,_ depth: Int = 0) -> String{
+        if depth == 0 {
+            ErrorProcessing.recordCriticalErrorIfNeeded(error)
+        }
+        
         // closure
         let recurseErrors = { error in
             self.getDescriptionText(error: error, depth+1)

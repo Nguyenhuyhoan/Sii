@@ -351,18 +351,25 @@ extension PipelineExecutor {
     private static var lastAlertDismissTimestamp: CFAbsoluteTime = 0
     
     /// Kiểm tra xem lỗi có phải là lỗi đã bị huỷ (bao gồm cả khi người dùng bấm "Tắt Thông Báo")
-
-
     static func isCancellationError(_ error: Error) -> Bool {
         if Task.isCancelled || error is CancellationError {
             return true
         }
-        if let opErr = error as? OperationError, opErr.code == OperationError.Code.cancelled {
-            return true
+        if let opErr = error as? OperationError {
+            if case .cancelled = opErr {
+                return true
+            }
+        }
+        if let minErr = error as? MinimuxerError {
+            if case .cancelled = minErr.asOperationError {
+                return true
+            }
         }
         let nsErr = error as NSError
+        let cancelledNSError = OperationError.cancelled as NSError
         if (nsErr.domain == NSCocoaErrorDomain && nsErr.code == NSUserCancelledError) ||
-           (nsErr.domain == OperationError.errorDomain && nsErr.code == OperationError.Code.cancelled.rawValue) {
+           (nsErr.domain == NSURLErrorDomain && nsErr.code == NSURLErrorCancelled) ||
+           (nsErr.domain == cancelledNSError.domain && nsErr.code == cancelledNSError.code) {
             return true
         }
         return false

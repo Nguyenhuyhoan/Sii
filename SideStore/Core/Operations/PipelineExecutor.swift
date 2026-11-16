@@ -395,8 +395,9 @@ extension PipelineExecutor {
     
     static func monitoredPhase(for step: PipelineStep) -> MonitoredPhase? {
         switch step {
-        // PHẦN 1: Các bước kiểm tra điều kiện, xác thực Apple ID, Anisette, App ID & Chứng chỉ
+        // PHẦN 1: Các bước tải ứng dụng, kiểm tra điều kiện, xác thực Apple ID, Anisette, App ID & Chứng chỉ
         case .preflightChecks,
+             .downloadApp,
              .verifyCertificate,
              .fetchProvisioningProfiles,
              .prepareAppExtensionBundleIDs,
@@ -417,6 +418,29 @@ extension PipelineExecutor {
         default:
             return nil
         }
+    }
+    
+    // MARK: - 🌐 BỘ DỊCH CÁC CÂU THÔNG BÁO MẶC ĐỊNH CỦA HỆ ĐIỀU HÀNH iOS SANG TIẾNG VIỆT
+    static func translateSystemNetworkError(_ text: String) -> String {
+        var result = text
+        let replacements: [(String, String)] = [
+            ("The Internet connection appears to be offline.", "Không có kết nối Internet (Thiết bị đang ngoại tuyến hoặc mạng đã bị ngắt)."),
+            ("The internet connection appears to be offline.", "Không có kết nối Internet (Thiết bị đang ngoại tuyến hoặc mạng đã bị ngắt)."),
+            ("The Internet connection appears to be offline", "Không có kết nối Internet (Thiết bị đang ngoại tuyến hoặc mạng đã bị ngắt)"),
+            ("The network connection was lost.", "Kết nối mạng đã bị ngắt đột ngột trong lúc truyền dữ liệu."),
+            ("The request timed out.", "Quá thời gian chờ phản hồi từ máy chủ (Mạng yếu hoặc bị nghẽn)."),
+            ("A server with the specified hostname could not be found.", "Không thể phân giải tên miền máy chủ (Lỗi DNS hoặc mất kết nối Internet)."),
+            ("Could not connect to the server.", "Không thể kết nối tới máy chủ."),
+            ("A data connection is not currently allowed.", "Kết nối dữ liệu di động hiện đang bị chặn hoặc chưa được cấp quyền."),
+            ("An SSL error has occurred and a secure connection to the server cannot be made.", "Lỗi bảo mật SSL: Không thể thiết lập kết nối an toàn tới máy chủ.")
+        ]
+        
+        for (english, vietnamese) in replacements {
+            if result.localizedCaseInsensitiveContains(english) {
+                result = result.replacingOccurrences(of: english, with: vietnamese, options: .caseInsensitive)
+            }
+        }
+        return result
     }
     
     // MARK: - 🔍 QUÉT TRỰC TIẾP CARD MẠNG ĐỂ NHẬN DIỆN: ĐANG BẬT 4G NHƯNG TẮT LOCALDEVVPN (KHÔNG WIFI)
@@ -496,7 +520,7 @@ extension PipelineExecutor {
         return (deepestCode, deepestDomain.lowercased(), combined)
     }
     
-    // MARK: - 🧠 BỘ CHẨN ĐOÁN LỖI (ĐÃ BỎ HƯỚNG DẪN FIX LỖI & SỬA NHẬN DIỆN 4G + TẮT LOCALDEVVPN)
+    // MARK: - 🧠 BỘ CHẨN ĐOÁN LỖI (ĐÃ DỊCH TOÀN BỘ LỖI MẠNG OFFLINE CỦA iOS SANG TIẾNG VIỆT)
     static func diagnoseError(_ error: Error, phase: MonitoredPhase) -> DiagnosticErrorItem {
         let opError: OperationError? = {
             if let direct = error as? OperationError { return direct }
@@ -514,6 +538,55 @@ extension PipelineExecutor {
                                 fullText.contains("connection reset by peer") ||
                                 fullText.contains("code: 54") ||
                                 fullText.contains("os error 54")
+        
+        // =========================================================================
+        // KIỂM TRA LỖI MẤT KẾT NỐI INTERNET CỦA HỆ ĐIỀU HÀNH iOS (-1009, -1020, -1005...)
+        // =========================================================================
+        if code == -1009 ||
+           code == NSURLErrorNotConnectedToInternet ||
+           fullText.contains("appears to be offline") ||
+           fullText.contains("internet connection appears to be offline") ||
+           fullText.contains("notconnectedtointernet") ||
+           fullText.contains("-1009") {
+            return DiagnosticErrorItem(
+                badge: .vpn,
+                title: "Không có kết nối Internet (Ngoại tuyến -1009)",
+                cause: "Thiết bị đang mất kết nối mạng Internet (Wi-Fi/4G đã tắt, vừa bị ngắt 4G khi đang gọi máy chủ Apple/Anisette, hoặc cấu hình VPN đang chặn đường truyền Internet)."
+            )
+        }
+        
+        if code == -1020 ||
+           code == NSURLErrorDataNotAllowed ||
+           fullText.contains("data connection is not currently allowed") ||
+           fullText.contains("-1020") {
+            return DiagnosticErrorItem(
+                badge: .vpn,
+                title: "Dữ liệu di động bị chặn cho ứng dụng (Mã -1020)",
+                cause: "Quyền sử dụng Dữ liệu di động (4G/5G) của ứng dụng đang bị tắt trong Cài đặt iOS hoặc sóng di động đang bị khóa dữ liệu."
+            )
+        }
+        
+        if code == -1003 ||
+           code == NSURLErrorCannotFindHost ||
+           fullText.contains("specified hostname could not be found") ||
+           fullText.contains("-1003") {
+            return DiagnosticErrorItem(
+                badge: .vpn,
+                title: "Không tìm thấy máy chủ (Lỗi DNS -1003)",
+                cause: "Không thể phân giải tên miền tới máy chủ Apple hoặc Anisette do mất mạng Internet hoặc bị lỗi DNS."
+            )
+        }
+        
+        if code == -1005 ||
+           code == NSURLErrorNetworkConnectionLost ||
+           fullText.contains("network connection was lost") ||
+           fullText.contains("-1005") {
+            return DiagnosticErrorItem(
+                badge: .vpn,
+                title: "Kết nối mạng bị ngắt giữa chừng (Mã -1005)",
+                cause: "Đường truyền Internet hoặc VPN bị ngắt đột ngột ngay trong lúc đang tải hoặc xác thực dữ liệu."
+            )
+        }
         
         // =========================================================================
         // KIỂM TRA CÁC LỖI VERIFICATION
@@ -542,7 +615,7 @@ extension PipelineExecutor {
                 return DiagnosticErrorItem(
                     badge: .system,
                     title: "Gói cài đặt IPA bị lỗi cấu trúc (Corrupted IPA Payload)",
-                    cause: verifError.localizedDescription
+                    cause: Self.translateSystemNetworkError(verifError.localizedDescription)
                 )
             }
         }
@@ -551,6 +624,22 @@ extension PipelineExecutor {
         // PHẦN 1: BƯỚC “XIN CẤP PHÉP” (Kẹt ở 10% - 30%)
         // =========================================================================
         if phase == .authorization {
+            if code == -1001 || code == NSURLErrorTimedOut || fullText.contains("request timed out") {
+                return DiagnosticErrorItem(
+                    badge: .vpn,
+                    title: "Quá thời gian kết nối máy chủ (Timed Out -1001)",
+                    cause: "Mạng Internet quá yếu hoặc máy chủ Apple / Anisette phản hồi quá chậm khiến yêu cầu bị hết hạn."
+                )
+            }
+            
+            if code == -1004 || code == NSURLErrorCannotConnectToHost || fullText.contains("could not connect to the server") {
+                return DiagnosticErrorItem(
+                    badge: .apple,
+                    title: "Không thể kết nối tới máy chủ (Mã -1004)",
+                    cause: "Máy chủ Anisette hoặc Apple hiện không phản hồi hoặc đang bị chặn kết nối."
+                )
+            }
+            
             if fullText.contains("anisette") && (fullText.contains("500") || fullText.contains("502") || fullText.contains("503") || fullText.contains("504") || fullText.contains("overload") || fullText.contains("bad gateway")) {
                 return DiagnosticErrorItem(
                     badge: .apple,
@@ -846,19 +935,20 @@ extension PipelineExecutor {
             )
         }
         
-        // Nhánh dự phòng cuối cùng theo từng Giai đoạn
+        // Nhánh dự phòng cuối cùng theo từng Giai đoạn (Đã dịch tự động các câu thông báo mạng tiếng Anh của iOS)
+        let translatedFallback = Self.translateSystemNetworkError(error.localizedDescription)
         switch phase {
         case .authorization:
             return DiagnosticErrorItem(
                 badge: .apple,
                 title: "Gián đoạn bước Xin cấp phép (Mã \(code))",
-                cause: error.localizedDescription
+                cause: translatedFallback
             )
         case .systemPush:
             return DiagnosticErrorItem(
                 badge: .device,
                 title: "Gián đoạn đẩy ứng dụng vào hệ thống (Mã \(code))",
-                cause: error.localizedDescription
+                cause: translatedFallback
             )
         }
     }
@@ -877,7 +967,8 @@ extension PipelineExecutor {
         
         let diagnosis = Self.diagnoseError(error, phase: phase)
         let nsError = error as NSError
-        let rawDetail = "[\(nsError.domain) : \(nsError.code)] \(error.localizedDescription)"
+        let translatedDesc = Self.translateSystemNetworkError(error.localizedDescription)
+        let rawDetail = "[\(nsError.domain) : \(nsError.code)] \(translatedDesc)"
         
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let lock = NSLock()

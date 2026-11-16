@@ -788,11 +788,12 @@ final class SettingsViewController: UITableViewController
         self.prototypeHeaderFooterView = nib.instantiate(withOwner: nil, options: nil)[0] as? SettingsHeaderFooterView
         self.tableView.register(nib, forHeaderFooterViewReuseIdentifier: "HeaderFooterView")
         
-        // ĐÃ XÓA VÀ ẨN HOÀN TOÀN NHÃN PHIÊN BẢN
-        self.versionLabel?.text = ""
-        self.versionLabel?.attributedText = nil
-        self.versionLabel?.isHidden = true
-        self.versionLabel?.isUserInteractionEnabled = false
+        self.versionLabel.attributedText = getVersionAttributedString()
+        self.versionLabel.isUserInteractionEnabled = true
+        self.versionLabel.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(copyVersionLabelTapped)))
+        self.versionLabel.numberOfLines = 0
+        self.versionLabel.lineBreakMode = .byWordWrapping
+        self.versionLabel.setNeedsUpdateConstraints()
         
         self.tableView.contentInset.top = 0
         self.tableView.contentInset.bottom = 50
@@ -934,7 +935,7 @@ private extension SettingsViewController {
         // 2. Tạo khối .hero Banner nằm sát phía trên
         setupCSSHeroBanner()
         
-        // 3. Tạo Footer hiển thị Lời cảm ơn gọn gàng (Đã xóa phần phiên bản)
+        // 3. Tạo Footer hiển thị Lời cảm ơn gọn gàng + Phiên bản
         setupVersionTableFooterView()
         
         // 4. Cấu hình TabBar đồng bộ màu
@@ -1050,9 +1051,9 @@ private extension SettingsViewController {
         return btn
     }
 
-    // Chân trang gọn đẹp: Chỉ giữ lại Thẻ Lời cảm ơn, đã xóa sạch dòng chữ phiên bản ở dưới
+    // Chân trang gọn đẹp: Thẻ Lời cảm ơn rút gọn + Phiên bản ứng dụng
     private func setupVersionTableFooterView() {
-        let footerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 135))
+        let footerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 190))
         footerContainer.backgroundColor = .clear
 
         // Khung Card Lời cảm ơn nhỏ gọn
@@ -1112,7 +1113,17 @@ private extension SettingsViewController {
         thanksCard.addSubview(bodyLabel)
         thanksCard.addSubview(chipStack)
 
+        let vLabel = UILabel()
+        vLabel.tag = 7771
+        vLabel.translatesAutoresizingMaskIntoConstraints = false
+        vLabel.attributedText = getVersionAttributedString()
+        vLabel.numberOfLines = 0
+        vLabel.textAlignment = .center
+        vLabel.isUserInteractionEnabled = true
+        vLabel.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(copyVersionLabelTapped)))
+
         footerContainer.addSubview(thanksCard)
+        footerContainer.addSubview(vLabel)
 
         NSLayoutConstraint.activate([
             thanksCard.topAnchor.constraint(equalTo: footerContainer.topAnchor, constant: 6),
@@ -1129,7 +1140,11 @@ private extension SettingsViewController {
 
             chipStack.topAnchor.constraint(equalTo: bodyLabel.bottomAnchor, constant: 8),
             chipStack.centerXAnchor.constraint(equalTo: thanksCard.centerXAnchor),
-            chipStack.bottomAnchor.constraint(equalTo: thanksCard.bottomAnchor, constant: -10)
+            chipStack.bottomAnchor.constraint(equalTo: thanksCard.bottomAnchor, constant: -10),
+
+            vLabel.topAnchor.constraint(equalTo: thanksCard.bottomAnchor, constant: 12),
+            vLabel.leadingAnchor.constraint(equalTo: footerContainer.leadingAnchor, constant: 16),
+            vLabel.trailingAnchor.constraint(equalTo: footerContainer.trailingAnchor, constant: -16)
         ])
 
         self.tableView.tableFooterView = footerContainer
@@ -1314,13 +1329,76 @@ private extension SettingsViewController {
 
 private extension SettingsViewController
 {
-    // Trả về chuỗi rỗng hoàn toàn
     private func getVersionAttributedString() -> NSAttributedString {
-        return NSAttributedString(string: "")
+        var appVersion = Bundle.Info.activeBundleVersion
+        appVersion = appVersion.replacingOccurrences(of: "Version ", with: "Phiên bản ")
+        let iosVersion = "iOS \(UIDevice.current.systemVersion) (Bản dựng \(ProcessInfo.processInfo.operatingSystemBuild))"
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        paragraphStyle.lineSpacing = 4
+        
+        let fullString = NSMutableAttributedString()
+        
+        let appVersionAttr = NSAttributedString(
+            string: appVersion,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 13.5, weight: .bold),
+                .foregroundColor: CSSTheme.blue,
+                .paragraphStyle: paragraphStyle
+            ]
+        )
+        
+        let iosVersionAttr = NSAttributedString(
+            string: "\n" + iosVersion,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 11.5, weight: .semibold),
+                .foregroundColor: CSSTheme.purple.withAlphaComponent(0.85),
+                .paragraphStyle: paragraphStyle
+            ]
+        )
+        
+        fullString.append(appVersionAttr)
+        fullString.append(iosVersionAttr)
+        return fullString
     }
 
     @objc private func copyVersionLabelTapped() {
-        // Không làm gì cả vì đã xóa hiển thị phiên bản
+        let appVersion = Bundle.Info.activeBundleVersion
+        let iosVersion = "iOS \(UIDevice.current.systemVersion) (\(ProcessInfo.processInfo.operatingSystemBuild))"
+        let fullText = "\(appVersion)\n\(iosVersion)"
+        #if !os(tvOS)
+        UIPasteboard.general.string = fullText.hasPrefix("Version ") ? String(fullText.dropFirst("Version ".count)) : fullText
+        #endif
+        
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        let attributed = NSMutableAttributedString(
+            string: "Đã sao chép phiên bản! ",
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 14, weight: .bold),
+                .foregroundColor: CSSTheme.blue,
+                .paragraphStyle: paragraphStyle
+            ]
+        )
+        attributed.append(NSAttributedString(string: "✓", attributes: [
+            .font: UIFont.systemFont(ofSize: 14, weight: .bold),
+            .foregroundColor: CSSTheme.green
+        ]))
+        
+        self.versionLabel?.attributedText = attributed
+        if let footerLabel = self.tableView.tableFooterView?.viewWithTag(7771) as? UILabel {
+            footerLabel.attributedText = attributed
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self = self else { return }
+            let normalAttr = self.getVersionAttributedString()
+            self.versionLabel?.attributedText = normalAttr
+            if let footerLabel = self.tableView.tableFooterView?.viewWithTag(7771) as? UILabel {
+                footerLabel.attributedText = normalAttr
+            }
+        }
     }
 
     private func update()

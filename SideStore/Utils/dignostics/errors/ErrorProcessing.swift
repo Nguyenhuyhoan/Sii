@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import UIKit
 
 class ErrorProcessing {
     
@@ -22,44 +23,135 @@ class ErrorProcessing {
     
     var errors: Set<String> = []
     
-    // by default we will process only the localDesc on first level errors
-    init(_ mode: InfoMode = .localizedDescription, unique: Bool = false, recur: Bool = false){
+    // Biến chống hiện trùng lặp nhiều bảng thông báo cùng lúc khi bấm Refresh All
+    private static var isShowingAlert = false
+    private static var lastAlertTime: Date = .distantPast
+    
+    // Mặc định kích hoạt bộ chặn toàn cục ngay khi lớp này được gọi lần đầu
+    private static let activateGlobalInterceptor: Void = {
+        UIAlertController.swizzleErrorAlert()
+    }()
+    
+    init(_ mode: InfoMode = .localizedDescription, unique: Bool = false, recur: Bool = false) {
+        _ = ErrorProcessing.activateGlobalInterceptor
         self.info = mode
         self.unique = unique
         self.recur = recur
     }
     
+    // MARK: - HÀM TỰ ĐỘNG BẬT THÔNG BÁO LỖI LÊN MÀN HÌNH (BẤT CHẤP FILE KHÁC ẨN LỖI)
+    static func showGlobalErrorPopup(title: String = "⚠️ Thông báo lỗi SideStore", message: String) {
+        DispatchQueue.main.async {
+            // Chống spam bảng thông báo liên tục trong vòng 1.5 giây (ví dụ khi Refresh All 5 app cùng lỗi VPN)
+            if isShowingAlert || Date().timeIntervalSince(lastAlertTime) < 1.5 {
+                return
+            }
+            
+            guard let topVC = Self.getTopViewController() else { return }
+            
+            // Nếu đang có sẵn một UIAlertController khác trên màn hình, đóng nó đi để hiện bảng của mình
+            if let existingAlert = topVC as? UIAlertController {
+                existingAlert.dismiss(animated: false) {
+                    Self.presentCustomAlert(on: Self.getTopViewController(), title: title, message: message)
+                }
+            } else {
+                Self.presentCustomAlert(on: topVC, title: title, message: message)
+            }
+        }
+    }
+    
+    private static func presentCustomAlert(on vc: UIViewController?, title: String, message: String) {
+        guard let vc = vc else { return }
+        isShowingAlert = true
+        lastAlertTime = Date()
+        
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        
+        // Căn lề trái cho nội dung lỗi để đọc đẹp và rõ ràng hơn
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .left
+        paragraphStyle.lineSpacing = 3
+        let attributedMessage = NSAttributedString(
+            string: message,
+            attributes: [
+                .paragraphStyle: paragraphStyle,
+                .font: UIFont.systemFont(ofSize: 13.5),
+                .foregroundColor: UIColor.label
+            ]
+        )
+        alert.setValue(attributedMessage, forKey: "attributedMessage")
+        
+        // Nút Sao chép lỗi
+        alert.addAction(UIAlertAction(title: "📋 Sao chép lỗi", style: .default) { _ in
+            UIPasteboard.general.string = message
+            isShowingAlert = false
+        })
+        
+        // Nút Đóng
+        alert.addAction(UIAlertAction(title: "Đã hiểu", style: .cancel) { _ in
+            isShowingAlert = false
+        })
+        
+        vc.present(alert, animated: true)
+    }
+    
+    // Tìm màn hình đang hiển thị trên cùng của iPhone
+    private static func getTopViewController(base: UIViewController? = nil) -> UIViewController? {
+        let baseVC = base ?? UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }?.rootViewController
+        
+        if let nav = baseVC as? UINavigationController {
+            return getTopViewController(base: nav.visibleViewController)
+        }
+        if let tab = baseVC as? UITabBarController, let selected = tab.selectedViewController {
+            return getTopViewController(base: selected)
+        }
+        if let presented = baseVC?.presentedViewController {
+            return getTopViewController(base: presented)
+        }
+        return baseVC
+    }
+    
     // MARK: - HỆ THỐNG PHÂN TÍCH 30 LỖI TRỰC QUAN CHO NGƯỜI DÙNG
-    private func userFriendlyDescription(for error: NSError) -> String {
-        let domain = error.domain.lowercased()
+    func userFriendlyDescription(for error: NSError) -> String {
+        // Quét sâu toàn bộ chuỗi lỗi cha, lỗi con (underlyingError), userInfo và debugDescription
+        let fullHierarchyText = Self.extractFullErrorText(from: error).lowercased()
+        
+        let domain = error.domain
         let code = error.code
         let rawDesc = error.localizedDescription
-        let desc = rawDesc.lowercased()
-        let failureReason = (error.localizedFailureReason ?? "").lowercased()
-        let recovery = (error.localizedRecoverySuggestion ?? "").lowercased()
-        let text = "\(domain) \(code) \(desc) \(failureReason) \(recovery)"
+        let failureReason = error.localizedFailureReason ?? ""
 
         // Hàm hỗ trợ tạo khung thông báo trực quan, đồng bộ
         func formatGuide(title: String, cause: String, fix: String) -> String {
             return """
             🔴 \(title)
-            💡 Nguyên nhân: \(cause)
-            🛠️ Cách sửa: \(fix)
+            
+            💡 Nguyên nhân:
+            \(cause)
+            
+            🛠️ Cách khắc phục:
+            \(fix)
             ────────────────────
-            📝 Gốc: \(rawDesc) [\(error.domain): \(code)]
+            📝 Gốc: \(rawDesc)
+            [\(domain) : \(code)]
             """
         }
+
+        let text = fullHierarchyText
 
         // =========================================================================
         // NHÓM 1: LỖI KẾT NỐI VPN, MẠNG WI-FI & THIẾT BỊ (LỖI SỐ 1 -> 5)
         // =========================================================================
 
         // Lỗi 1: Chưa bật VPN (LocalDevVPN / WireGuard / StosVPN)
-        if text.contains("localdevvpn") || text.contains("novpn") || text.contains("invalidvpn") || text.contains("vpn connection error") {
+        if text.contains("localdevvpn") || text.contains("novpn") || text.contains("invalidvpn") || text.contains("vpn connection error") || text.contains("stosvpn") {
             return formatGuide(
                 title: "LỖI KẾT NỐI VPN (CHƯA BẬT VPN)",
                 cause: "VPN của SideStore chưa được bật hoặc bị xung đột với VPN/DNS khác (như AdGuard, 1.1.1.1, Shadowrocket).",
-                fix: "1. Tắt các ứng dụng VPN/DNS chặn quảng cáo khác.\n2. Mở app LocalDevVPN (hoặc WireGuard/StosVPN) và bật kết nối lên rồi thử lại."
+                fix: "1. Tắt các ứng dụng VPN/DNS chặn quảng cáo khác.\n2. Mở app StosVPN / LocalDevVPN / WireGuard và bật kết nối lên rồi thử lại."
             )
         }
 
@@ -68,56 +160,39 @@ class ErrorProcessing {
             return formatGuide(
                 title: "CHƯA KẾT NỐI MẠNG WI-FI",
                 cause: "Thiết bị đang tắt mạng hoặc chỉ dùng dữ liệu di động (4G/5G thông thường không thể định tuyến nội bộ cho SideStore).",
-                fix: "Hãy kết nối vào một mạng Wi-Fi ổn định (hoặc dùng mẹo bật Điểm truy cập cá nhân) trước khi làm mới/cài đặt."
+                fix: "Hãy kết nối vào một mạng Wi-Fi ổn định trước khi làm mới hoặc cài đặt ứng dụng."
             )
         }
 
-        // Lỗi 3: Không tìm thấy điểm cuối thiết bị (No Device / Not Reachable / Connection Refused)
-        if text.contains("nodevice") || text.contains("not reachable") || text.contains("connection refused") || text.contains("could not connect to device") {
-            return formatGuide(
-                title: "KHÔNG THỂ KẾT NỐI TỚI THIẾT BỊ",
-                cause: "Đường truyền VPN nội bộ bị kẹt hoặc cấu hình IP trong cài đặt bị sai.",
-                fix: "1. Tắt đi bật lại công tắc VPN.\n2. Vuốt đóng hẳn SideStore từ đa nhiệm rồi mở lại.\n3. Kiểm tra mục Settings -> Connection Configuration."
-            )
-        }
-
-        // Lỗi 4: Minimuxer chưa khởi động
+        // Lỗi 4: Minimuxer chưa khởi động (Đặt trước lỗi 3 để bắt chính xác hơn)
         if text.contains("minimuxernotstarted") || text.contains("minimuxer has not been started") {
             return formatGuide(
                 title: "DỊCH VỤ MINIMUXER CHƯA CHẠY",
-                cause: "Trình giả lập kết nối máy tính bên trong SideStore chưa được kích hoạt.",
-                fix: "Đảm bảo đã nhập file Pairing hợp lệ, bật VPN, sau đó đóng hoàn toàn ứng dụng SideStore và mở lại."
-            )
-        }
-
-        // Lỗi 5: Quá thời gian chờ (Timed Out)
-        if text.contains("timed out") || text.contains("timedout") || code == -1001 {
-            return formatGuide(
-                title: "QUÁ THỜI GIAN PHẢN HỒI (TIMED OUT)",
-                cause: "Mạng Wi-Fi quá chậm, máy chủ Apple phản hồi lâu, hoặc bạn đã tắt màn hình làm ngắt kết nối ngầm.",
-                fix: "Giữ màn hình iPhone luôn sáng, kiểm tra lại mạng Wi-Fi và bấm làm mới từng ứng dụng một (tránh bấm Refresh All)."
+                cause: "Trình giả lập kết nối máy tính bên trong SideStore chưa được kích hoạt (do thiếu Pairing File hoặc chưa bật VPN).",
+                fix: "Đảm bảo đã nhập file Pairing hợp lệ, bật VPN, sau đó vuốt đóng hoàn toàn ứng dụng SideStore và mở lại."
             )
         }
 
         // =========================================================================
         // NHÓM 2: LỖI FILE GHÉP ĐÔI - PAIRING FILE (LỖI SỐ 6 -> 8)
+        // (Đặt ưu tiên kiểm tra trước lỗi kết nối thiết bị chung)
         // =========================================================================
 
-        // Lỗi 6: Chưa có Pairing File
-        if text.contains("pairingnotcomplete") || text.contains("pairing required") {
+        // Lỗi 6: Chưa có Pairing File hoặc đã xóa Pairing File
+        if text.contains("pairingnotcomplete") || text.contains("pairing required") || text.contains("nopairingfile") || text.contains("missing pairing") || text.contains("pairing file does not exist") {
             return formatGuide(
                 title: "CHƯA CÓ FILE GHÉP ĐÔI (PAIRING FILE)",
-                cause: "SideStore chưa được cấp file ghép đôi để giao tiếp với hệ thống iOS.",
-                fix: "Kết nối iPhone với máy tính, dùng công cụ 'idevice_pair' hoặc 'iloader' để tạo file ghép đôi và nhập vào SideStore."
+                cause: "SideStore chưa có file ghép đôi (hoặc bạn đã xóa mất) nên không thể giao tiếp với hệ thống iOS.",
+                fix: "Kết nối iPhone với máy tính, dùng công cụ 'idevice_pair' hoặc 'jitterbugpair' để tạo file ghép đôi và nhập lại vào SideStore."
             )
         }
 
-        // Lỗi 7: Pairing File bị hỏng hoặc hết hiệu lực (Do cập nhật iOS / Đổi mật khẩu máy)
-        if text.contains("invalidpairingfile") || text.contains("current pairing file is invalid") || text.contains("lockdown") || text.contains("muxerror") || text.contains("invalid host id") {
+        // Lỗi 7: Pairing File bị hỏng hoặc hết hiệu lực
+        if text.contains("invalidpairingfile") || text.contains("current pairing file is invalid") || text.contains("lockdown") || text.contains("muxerror") || text.contains("invalid host id") || text.contains("pair record") {
             return formatGuide(
                 title: "FILE GHÉP ĐÔI BỊ HỎNG HOẶC VÔ HIỆU HÓA",
-                cause: "File ghép đôi hiện tại không còn tác dụng (thường xảy ra sau khi bạn cập nhật iOS, đặt lại cài đặt hoặc đổi mật khẩu màn hình khóa).",
-                fix: "Cắm iPhone vào máy tính, bấm 'Tin cậy' lại và tạo file Pairing mới bằng idevice_pair / jitterbugpair / iloader."
+                cause: "File ghép đôi hiện tại không còn tác dụng (thường xảy ra sau khi bạn cập nhật iOS, đặt lại cài đặt hoặc tắt/bật mật khẩu màn hình khóa).",
+                fix: "Cắm iPhone vào máy tính, bấm 'Tin cậy' lại và tạo file Pairing mới bằng idevice_pair / jitterbugpair."
             )
         }
 
@@ -125,8 +200,26 @@ class ErrorProcessing {
         if text.contains("unknownudid") || text.contains("determine this device's udid") {
             return formatGuide(
                 title: "KHÔNG ĐỌC ĐƯỢC UDID THIẾT BỊ",
-                cause: "File ghép đôi bị thiếu thông tin định danh thiết bị hoặc kết nối VPN chưa thông suốt.",
-                fix: "Bật lại VPN và thử lại. Nếu vẫn bị, hãy tạo lại file Pairing mới trên máy tính."
+                cause: "File ghép đôi bị thiếu thông tin định danh thiết bị hoặc đã bị xóa.",
+                fix: "Vào Settings của SideStore kiểm tra lại mục Pairing File hoặc tạo lại file Pairing mới trên máy tính."
+            )
+        }
+
+        // Lỗi 3: Không tìm thấy điểm cuối thiết bị (No Device / Not Reachable / Connection Refused / Code -4, -3)
+        if text.contains("nodevice") || text.contains("not reachable") || text.contains("connection refused") || text.contains("could not connect to device") || text.contains("device Could Not Be Found".lowercased()) || text.contains("failed to connect to device") {
+            return formatGuide(
+                title: "KHÔNG THỂ KẾT NỐI TỚI THIẾT BỊ (VPN / PAIRING)",
+                cause: "Đường truyền VPN nội bộ chưa bật, bị kẹt, hoặc File ghép đôi (Pairing File) đã bị xóa/hỏng.",
+                fix: "1. Kiểm tra đã bật StosVPN / WireGuard chưa.\n2. Kiểm tra đã nạp Pairing File trong Settings chưa.\n3. Đóng hẳn SideStore từ đa nhiệm rồi mở lại."
+            )
+        }
+
+        // Lỗi 5: Quá thời gian chờ (Timed Out)
+        if text.contains("timed out") || text.contains("timedout") || code == -1001 {
+            return formatGuide(
+                title: "QUÁ THỜI GIAN PHẢN HỒI (TIMED OUT)",
+                cause: "Mạng Wi-Fi quá chậm, máy chủ Apple/Anisette phản hồi lâu, hoặc bạn đã tắt màn hình làm ngắt kết nối ngầm.",
+                fix: "Giữ màn hình iPhone luôn sáng, kiểm tra lại mạng Wi-Fi/VPN và bấm làm mới từng ứng dụng một."
             )
         }
 
@@ -134,12 +227,12 @@ class ErrorProcessing {
         // NHÓM 3: LỖI TÀI KHOẢN APPLE ID, CHỨNG CHỈ & ANISETTE (LỖI SỐ 9 -> 16)
         // =========================================================================
 
-        // Lỗi 9: Lỗi máy chủ Anisette (-22421, -29004)
-        if code == -22421 || code == -29004 || text.contains("anisette") {
+        // Lỗi 9: Lỗi máy chủ Anisette (-22421, -29004, hoặc không kết nối được máy chủ)
+        if code == -22421 || code == -29004 || text.contains("anisette") || text.contains("cannot connect to host") || code == -1004 || code == -1003 {
             return formatGuide(
-                title: "LỖI MÁY CHỦ ANISETTE (MÃ \(code))",
-                cause: "Máy chủ Anisette đang dùng bị quá tải, bảo trì hoặc bị Apple chặn xác thực.",
-                fix: "Vào mục Settings (Cài đặt) -> Anisette Server -> Đổi sang một địa chỉ máy chủ khác trong danh sách."
+                title: "LỖI MÁY CHỦ ANISETTE / MÁY CHỦ SẬP",
+                cause: "Máy chủ Anisette đang dùng bị sập, quá tải, bảo trì hoặc không thể kết nối tới máy chủ xác thực.",
+                fix: "Vào mục Settings (Cài đặt) -> Anisette Server -> Đổi sang một địa chỉ máy chủ (Server) khác đang hoạt động."
             )
         }
 
@@ -148,12 +241,12 @@ class ErrorProcessing {
             return formatGuide(
                 title: "ĐẠT GIỚI HẠN TÀI KHOẢN APPLE MIỄN PHÍ",
                 cause: "Tài khoản miễn phí chỉ cho phép tạo tối đa 10 App ID trong 7 ngày và kích hoạt tối đa 3 ứng dụng cùng lúc.",
-                fix: "1. Khi cài IPA mới, hãy chọn 'Remove App Extensions' để tiết kiệm App ID.\n2. Nếu đã hết sạch 10 ID, bạn phải đợi 7 ngày để các ID cũ tự hết hạn."
+                fix: "1. Khi cài IPA mới, hãy chọn 'Remove App Extensions' để tiết kiệm App ID.\n2. Nếu đã hết sạch 10 ID, bạn phải đợi đủ 7 ngày để các ID cũ tự mở lại."
             )
         }
 
         // Lỗi 11: Chưa đăng nhập hoặc hết hạn phiên đăng nhập (-1100, -20101, -36607)
-        if code == -1100 || code == -20101 || code == -36607 || text.contains("not signed in") || text.contains("notauthenticated") || text.contains("session has expired") {
+        if code == -1100 || code == -20101 || code == -36607 || text.contains("not signed in") || text.contains("notauthenticated") || text.contains("session has expired") || text.contains("authentication failed") {
             return formatGuide(
                 title: "PHIÊN ĐĂNG NHẬP APPLE ID HẾT HẠN",
                 cause: "Bạn chưa đăng nhập Apple ID, vừa đổi mật khẩu, hoặc phiên làm việc với máy chủ Apple đã hết hạn.",
@@ -174,8 +267,8 @@ class ErrorProcessing {
         if text.contains("certificateexpired") || text.contains("certificaterevoked") || (text.contains("certificate") && (text.contains("revoked") || text.contains("expired"))) {
             return formatGuide(
                 title: "CHỨNG CHỈ ĐÃ HẾT HẠN HOẶC BỊ THU HỒI",
-                cause: "Chứng chỉ phát triển dùng để ký ứng dụng đã hết hạn 7 ngày hoặc bị thu hồi từ một thiết bị/công cụ Sideload khác.",
-                fix: "Nếu bạn dùng chứng chỉ bên thứ 3 (Custom Cert), hãy vào Settings -> Advanced -> Certificates để Reset lại. Sau đó bấm Refresh ứng dụng."
+                cause: "Chứng chỉ phát triển dùng để ký ứng dụng đã hết hạn 7 ngày hoặc bị thu hồi từ một công cụ Sideload khác.",
+                fix: "Vào Settings -> Đăng xuất và đăng nhập lại Apple ID, sau đó bấm Refresh lại ứng dụng."
             )
         }
 
@@ -189,7 +282,8 @@ class ErrorProcessing {
         }
 
         // Lỗi 15: Lỗi Keychain của iOS (-25300, -25299, -25293)
-        if domain == "kcerrordomain" || domain == NSOSStatusErrorDomain.lowercased() {
+        let keychainCodes = [-25300, -25299, -25293, -25291, -25308, -34018]
+        if domain.lowercased() == "kcerrordomain" || (domain.lowercased() == NSOSStatusErrorDomain.lowercased() && keychainCodes.contains(code)) {
             let kcDetail: String
             switch code {
             case -25300: kcDetail = "Không tìm thấy thông tin xác thực trong chuỗi khóa (Item not found)."
@@ -355,66 +449,116 @@ class ErrorProcessing {
         \(rawDesc)
         ────────────────────
         🔍 Thông tin kỹ thuật:
-        • Nguồn (Domain): \(error.domain)
+        • Nguồn (Domain): \(domain)
         • Mã số (Code): \(code)
-        \(failureReason.isEmpty ? "" : "• Lý do: \(error.localizedFailureReason!)")
+        \(failureReason.isEmpty ? "" : "• Lý do: \(failureReason)")
         """
     }
-
-    private func processError(_ error: NSError, ignoreTitle: Bool = false, getMoreErrors: (_ error: NSError)->String) -> String{
-        // if unique was requested and if this error is duplicate, ignore processing it
-        let serializedError = "\(error)"
-        if unique && errors.contains(serializedError) {
-            return ""
-        }
-        errors.insert(serializedError)    // mark this as processed
+    
+    // Hàm đệ quy gom toàn bộ thông tin từ lỗi gốc xuống mọi lỗi con bên trong (underlyingError)
+    private static func extractFullErrorText(from error: NSError, depth: Int = 0) -> String {
+        guard depth < 6 else { return "" }
+        var parts: [String] = [
+            error.domain,
+            "\(error.code)",
+            error.localizedDescription,
+            error.localizedFailureReason ?? "",
+            error.localizedRecoverySuggestion ?? "",
+            "\(error)",
+            "\(error.userInfo)"
+        ]
         
-        var title = ""
-        var desc = ""
-        switch (info){
-            case .localizedDescription:
-                title = !ignoreTitle ? (error.localizedTitle.map{$0+"\n"} ?? "") : ""
-                desc = userFriendlyDescription(for: error)
-            case .fullError:
-                desc = serializedError
+        if let wrapped = (error as? ALTWrappedError)?.wrappedError {
+            parts.append(extractFullErrorText(from: wrapped as NSError, depth: depth + 1))
         }
-        var moreErrors = getMoreErrors(error)
-        moreErrors = moreErrors == "" ? "" : "\n" + moreErrors
-        return title + desc + moreErrors
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+            parts.append(extractFullErrorText(from: underlying, depth: depth + 1))
+        }
+        for subError in error.underlyingErrors {
+            parts.append(extractFullErrorText(from: subError as NSError, depth: depth + 1))
+        }
+        return parts.joined(separator: " | ")
     }
 
-    func getDescription(error: NSError) -> String{
-        errors = []  // reinit for each request
-        return getDescriptionText(error: error)
+    func getDescription(error: NSError) -> String {
+        errors = []
+        let finalMessage = getDescriptionText(error: error)
+        
+        // TỰ ĐỘNG HIỆN BẢNG THÔNG BÁO LỖI LÊN MÀN HÌNH NGAY KHI HÀM NÀY ĐƯỢC GỌI
+        // (Dù cho Refresh All hay bất kỳ file nào khác cố tình im lặng chỉ ghi log)
+        ErrorProcessing.showGlobalErrorPopup(message: finalMessage)
+        
+        return finalMessage
     }
     
+    func getDescriptionText(error: NSError, _ depth: Int = 0) -> String {
+        switch info {
+        case .localizedDescription:
+            return userFriendlyDescription(for: error)
+        case .fullError:
+            return "\(error)"
+        }
+    }
+}
+
+// MARK: - BỘ ĐÁNH CHẶN TOÀN CỤC (CHẶN MỌI THÔNG BÁO LỖI TỪ CÁC FILE KHÁC)
+extension UIAlertController {
+    private static var hasSwizzled = false
     
-    func getDescriptionText(error: NSError,_ depth: Int = 0) -> String{
-        // closure
-        let recurseErrors = { error in
-            self.getDescriptionText(error: error, depth+1)
+    static func swizzleErrorAlert() {
+        guard !hasSwizzled else { return }
+        hasSwizzled = true
+        
+        let originalSelector = #selector(UIViewController.present(_:animated:completion:))
+        let swizzledSelector = #selector(UIViewController.ss_interceptPresent(_:animated:completion:))
+        
+        if let originalMethod = class_getInstanceMethod(UIViewController.self, originalSelector),
+           let swizzledMethod = class_getInstanceMethod(UIViewController.self, swizzledSelector) {
+            method_exchangeImplementations(originalMethod, swizzledMethod)
+        }
+    }
+}
+
+extension UIViewController {
+    @objc func ss_interceptPresent(_ viewControllerToPresent: UIViewController, animated flag: Bool, completion: (() -> Void)? = nil) {
+        // Nếu bất kỳ file nào khác trong dự án cố hiện một UIAlertController báo lỗi kiểu cũ
+        if let alert = viewControllerToPresent as? UIAlertController,
+           alert.preferredStyle == .alert,
+           let msg = alert.message,
+           !msg.contains("🔴"), !msg.contains("⚠️ LỖI CHƯA PHÂN LOẠI") {
+            
+            let lowerTitle = (alert.title ?? "").lowercased()
+            let lowerMsg = msg.lowercased()
+            
+            // Nhận diện nếu đây là bảng báo lỗi từ các file khác
+            let isErrorAlert = lowerTitle.contains("error") || lowerTitle.contains("lỗi") || lowerTitle.contains("failed") || lowerTitle.contains("unable") || lowerTitle.contains("could not") || lowerMsg.contains("error") || lowerMsg.contains("failed") || lowerMsg.contains("could not") || lowerMsg.contains("invalid") || lowerMsg.contains("anisette") || lowerMsg.contains("vpn") || lowerMsg.contains("pairing")
+            
+            if isErrorAlert {
+                // Biến thông báo thô của file khác thành NSError và đẩy qua bộ lọc 30 lỗi của ErrorProcessing
+                let fakeError = NSError(domain: "SideStore.Intercepted", code: -1, userInfo: [
+                    NSLocalizedDescriptionKey: "\(alert.title ?? ""): \(msg)"
+                ])
+                let formattedMsg = ErrorProcessing().userFriendlyDescription(for: fakeError)
+                alert.title = "⚠️ Thông báo lỗi SideStore"
+                alert.message = formattedMsg
+                
+                // Căn lề trái cho dễ đọc
+                let paragraphStyle = NSMutableParagraphStyle()
+                paragraphStyle.alignment = .left
+                paragraphStyle.lineSpacing = 3
+                let attributedMessage = NSAttributedString(
+                    string: formattedMsg,
+                    attributes: [
+                        .paragraphStyle: paragraphStyle,
+                        .font: UIFont.systemFont(ofSize: 13.5),
+                        .foregroundColor: UIColor.label
+                    ]
+                )
+                alert.setValue(attributedMessage, forKey: "attributedMessage")
+            }
         }
         
-        var description = ""
-        // process current error only if recur was not requested
-        let processMoreErrors = recur ? recurseErrors : {_ in ""}
-        
-        let underlyingErrors = error.underlyingErrors
-        if let wrappedError = (error as? ALTWrappedError)?.wrappedError {
-            description += getDescriptionText(error: wrappedError, depth + 1)
-        } else if !underlyingErrors.isEmpty {
-            description += underlyingErrors.map{ error in
-                let error = error as NSError
-                return processError(error, getMoreErrors: processMoreErrors)
-            }.joined(separator: "\n")
-        } else if let underlyingError = error.underlyingError as? NSError {
-            let error = underlyingError as NSError
-            description += processError(error, getMoreErrors: processMoreErrors)
-        } else {
-            // ignore the title for the base error since we wanted this to be description
-            let isBaseError = (depth == 0)
-            description += processError(error, ignoreTitle: isBaseError, getMoreErrors: processMoreErrors)
-        }
-        return description
+        // Gọi hàm hiển thị gốc
+        self.ss_interceptPresent(viewControllerToPresent, animated: flag, completion: completion)
     }
 }

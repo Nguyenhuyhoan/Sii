@@ -172,15 +172,30 @@ final class PipelineRunner: Sendable
         group.isCellularRefreshGroup = isCellularRefreshGroup
         
         if !isCellularRefreshGroup {
-            do {
-                try await ensureMinimuxerReady()
-            } catch let opError as OperationError {
-                group.error = opError
-                for operation in operations {
-                    let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
-                    operation.logSummary(status: "FAILED", elapsed: elapsed, error: opError)
+            while true {
+                do {
+                    try await ensureMinimuxerReady()
+                    break
+                } catch {
+                    let targetAppName = operations.first?.app.name ?? "SideStore"
+                    let shouldContinue = await PipelineExecutor.presentDiagnosticErrorAlert(
+                        phase: .systemPush,
+                        stepName: "ensureMinimuxerReady",
+                        appName: targetAppName,
+                        error: error
+                    )
+                    if shouldContinue {
+                        continue
+                    } else {
+                        let cancelError = OperationError.cancelled
+                        group.error = cancelError
+                        for operation in operations {
+                            let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
+                            operation.logSummary(status: "CANCELLED", elapsed: elapsed, error: cancelError)
+                        }
+                        throw cancelError
+                    }
                 }
-                throw opError
             }
         } else if (try? await fetchUDID(forceLive: false)) == nil {
             // Đảm bảo luôn có UDID trước khi gọi Apple API để tránh lỗi 8220
@@ -253,18 +268,34 @@ final class PipelineRunner: Sendable
                 }
             } else {
                 debugLog("[PipelineRunner] Starting batch profile injection for \(group.sharedContext.pendingProfiles.count) app(s)...")
-                let injectContext = StandaloneOperationContext(steps: .injectBatchProfiles, dbBackgroundContext: group.dbContext)
-                
-                let injectOp = try InjectBatchProfilesOperation(
-                    batches: orderedBatches,
-                    context: injectContext,
-                    onAppCompleted: { [weak self] bundleID in
-                        if let op = sortedOperations.first(where: { $0.bundleIdentifier == bundleID }) {
-                            self?.progress.progress(for: op)?.completedUnitCount = 100
+                while true {
+                    do {
+                        let injectContext = StandaloneOperationContext(steps: .injectBatchProfiles, dbBackgroundContext: group.dbContext)
+                        let injectOp = try InjectBatchProfilesOperation(
+                            batches: orderedBatches,
+                            context: injectContext,
+                            onAppCompleted: { [weak self] bundleID in
+                                if let op = sortedOperations.first(where: { $0.bundleIdentifier == bundleID }) {
+                                    self?.progress.progress(for: op)?.completedUnitCount = 100
+                                }
+                            }
+                        )
+                        try await injectOp.execute()
+                        break
+                    } catch {
+                        let shouldContinue = await PipelineExecutor.presentDiagnosticErrorAlert(
+                            phase: .systemPush,
+                            stepName: "injectBatchProfiles",
+                            appName: "Làm mới gộp (\(orderedBatches.count) ứng dụng)",
+                            error: error
+                        )
+                        if shouldContinue {
+                            continue
+                        } else {
+                            throw OperationError.cancelled
                         }
                     }
-                )
-                try await injectOp.execute()
+                }
             }
         }
 

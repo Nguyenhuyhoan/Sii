@@ -49,12 +49,13 @@ final class PipelineExecutor: @unchecked Sendable {
                     finalApp = result
                 }
             } catch {
-                if Task.isCancelled || error is CancellationError {
-                    throw error
+                if Self.isCancellationError(error) {
+                    throw OperationError.cancelled
                 }
                 
                 if let phase = Self.monitoredPhase(for: step) {
-                    await Self.presentDiagnosticErrorAlert(
+                    await Self.presentDiagnosticErrorAlertOnce(
+                        for: group,
                         phase: phase,
                         stepName: "\(step)",
                         appName: operation.app.name,
@@ -340,8 +341,73 @@ final class PipelineExecutor: @unchecked Sendable {
     }
 }
 
-// MARK: - 🛡️ HỆ THỐNG CHẨN ĐOÁN LỖI
+// MARK: - 🛡️ HỆ THỐNG CHẨN ĐOÁN LỖI (CHỈ HIỆN ĐÚNG 1 LẦN DUY NHẤT)
 extension PipelineExecutor {
+    
+    // MARK: - 🔒 CHỐT CHẶN HIỂN THỊ 1 LẦN DUY NHẤT
+    private static let alertStateLock = NSLock()
+    private static var alertedGroupIDs: Set<ObjectIdentifier> = []
+    private static var isPresentingDiagnosticAlert: Bool = false
+    private static var lastAlertDismissTimestamp: CFAbsoluteTime = 0
+    
+    /// Kiểm tra xem lỗi có phải là lỗi đã bị huỷ (bao gồm cả khi người dùng bấm "Tắt Thông Báo")
+    static func isCancellationError(_ error: Error) -> Bool {
+        if Task.isCancelled || error is CancellationError {
+            return true
+        }
+        if let opErr = error as? OperationError, case .cancelled = opErr {
+            return true
+        }
+        let nsErr = error as NSError
+        if nsErr.domain == NSCocoaErrorDomain && nsErr.code == NSUserCancelledError {
+            return true
+        }
+        return false
+    }
+    
+    /// Kiểm tra xem `RefreshGroup` này đã từng hiển thị bảng thông báo lỗi hay chưa
+    static func hasPresentedAlert(for group: RefreshGroup) -> Bool {
+        let groupID = ObjectIdentifier(group)
+        return alertStateLock.withLock {
+            alertedGroupIDs.contains(groupID)
+        }
+    }
+    
+    /// Đánh dấu và kiểm tra quyền hiển thị thông báo cho 1 `RefreshGroup` (Chỉ cho phép đúng 1 lần)
+    private static func tryAcquireAlertPresentation(for group: RefreshGroup?) -> Bool {
+        return alertStateLock.withLock {
+            // 1. Nếu đang có 1 bảng thông báo hiện trên màn hình -> chặn tuyệt đối
+            if isPresentingDiagnosticAlert {
+                return false
+            }
+            // 2. Nếu group này đã từng hiện thông báo rồi -> chặn tuyệt đối
+            if let group = group {
+                let groupID = ObjectIdentifier(group)
+                if alertedGroupIDs.contains(groupID) {
+                    return false
+                }
+                if alertedGroupIDs.count > 64 {
+                    alertedGroupIDs.removeAll()
+                }
+                alertedGroupIDs.insert(groupID)
+            } else {
+                // Nếu không truyền group, chống hiện trùng lặp trong khoảng 2.5 giây sau khi vừa bấm tắt
+                let now = CFAbsoluteTimeGetCurrent()
+                if now - lastAlertDismissTimestamp < 2.5 {
+                    return false
+                }
+            }
+            isPresentingDiagnosticAlert = true
+            return true
+        }
+    }
+    
+    private static func releaseAlertPresentation() {
+        alertStateLock.withLock {
+            isPresentingDiagnosticAlert = false
+            lastAlertDismissTimestamp = CFAbsoluteTimeGetCurrent()
+        }
+    }
     
     enum MonitoredPhase: Sendable {
         case authorization  // PHẦN 1: Bước "Xin cấp phép" (Kẹt ở 10% - 30%): Giao tiếp Apple & Anisette
@@ -953,14 +1019,30 @@ extension PipelineExecutor {
         }
     }
     
-    /// Hiển thị Bảng Thông Báo Lỗi gọn đẹp với 1 nút: Tắt Thông Báo
+    /// Hiển thị Bảng Thông Báo Lỗi **CHỈ 1 LẦN DUY NHẤT** cho mỗi `RefreshGroup`
     @MainActor
-    static func presentDiagnosticErrorAlert(
+    static func presentDiagnosticErrorAlertOnce(
+        for group: RefreshGroup?,
         phase: MonitoredPhase,
         stepName: String,
         appName: String,
         error: Error
     ) async {
+        // Nếu lỗi là Cancelled thì không bao giờ hiện bảng báo lỗi
+        guard !Self.isCancellationError(error) else {
+            return
+        }
+        
+        // Chốt chặn: Đảm bảo chỉ hiện 1 lần duy nhất cho mỗi đợt thao tác (group)
+        guard Self.tryAcquireAlertPresentation(for: group) else {
+            debugLog("[PipelineExecutor] Suppressed duplicate diagnostic alert for step: \(stepName)")
+            return
+        }
+        
+        defer {
+            Self.releaseAlertPresentation()
+        }
+        
         guard let topVC = Self.topViewController() else {
             return
         }
@@ -1010,6 +1092,23 @@ extension PipelineExecutor {
             
             topVC.present(hc, animated: true)
         }
+    }
+    
+    /// Giữ hàm tương thích nếu được gọi từ nơi không truyền `group`
+    @MainActor
+    static func presentDiagnosticErrorAlert(
+        phase: MonitoredPhase,
+        stepName: String,
+        appName: String,
+        error: Error
+    ) async {
+        await presentDiagnosticErrorAlertOnce(
+            for: nil,
+            phase: phase,
+            stepName: stepName,
+            appName: appName,
+            error: error
+        )
     }
     
     @MainActor
@@ -1085,6 +1184,7 @@ private struct CSSErrorPromptModalView: SwiftUI.View {
     let onDismiss: () -> Void
     
     @State private var showRawDetails: Bool = false
+    @State private var didTapDismiss: Bool = false
     
     var body: some SwiftUI.View {
         ZStack {
@@ -1184,7 +1284,11 @@ private struct CSSErrorPromptModalView: SwiftUI.View {
                 )
                 
                 // 3. Một nút duy nhất: Tắt Thông Báo
-                SwiftUI.Button(action: onDismiss) {
+                SwiftUI.Button {
+                    guard !didTapDismiss else { return }
+                    didTapDismiss = true
+                    onDismiss()
+                } label: {
                     HStack(spacing: 6) {
                         SwiftUI.Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 15, weight: .bold))
@@ -1198,6 +1302,7 @@ private struct CSSErrorPromptModalView: SwiftUI.View {
                     .cornerRadius(11)
                 }
                 .buttonStyle(CSSErrorBounceButtonStyle())
+                .disabled(didTapDismiss)
             }
             .padding(14)
             .background(CSSErrorTheme.pageGradient)

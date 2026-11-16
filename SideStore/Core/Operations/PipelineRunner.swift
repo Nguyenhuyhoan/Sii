@@ -173,30 +173,23 @@ final class PipelineRunner: Sendable
         
         // Không bắt buộc Wi-Fi ở đầu nếu đang ở chế độ 4G (cả khi Cài IPA lẫn Làm mới ứng dụng)
         if !isCellularActive {
-            while true {
-                do {
-                    try await ensureMinimuxerReady()
-                    break
-                } catch {
-                    let targetAppName = operations.first?.app.name ?? "SideStore"
-                    let shouldContinue = await PipelineExecutor.presentDiagnosticErrorAlert(
-                        phase: .systemPush,
-                        stepName: "ensureMinimuxerReady",
-                        appName: targetAppName,
-                        error: error
-                    )
-                    if shouldContinue {
-                        continue
-                    } else {
-                        let cancelError = OperationError.cancelled
-                        group.error = cancelError
-                        for operation in operations {
-                            let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
-                            operation.logSummary(status: "CANCELLED", elapsed: elapsed, error: cancelError)
-                        }
-                        throw cancelError
-                    }
+            do {
+                try await ensureMinimuxerReady()
+            } catch {
+                let targetAppName = operations.first?.app.name ?? "SideStore"
+                await PipelineExecutor.presentDiagnosticErrorAlert(
+                    phase: .systemPush,
+                    stepName: "ensureMinimuxerReady",
+                    appName: targetAppName,
+                    error: error
+                )
+                let cancelError = OperationError.cancelled
+                group.error = cancelError
+                for operation in operations {
+                    let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
+                    operation.logSummary(status: "CANCELLED", elapsed: elapsed, error: cancelError)
                 }
+                throw cancelError
             }
         } else if (try? await fetchUDID(forceLive: false)) == nil {
             // Đảm bảo luôn có UDID từ Keychain hoặc Minimuxer trước khi gọi Apple API
@@ -224,45 +217,38 @@ final class PipelineRunner: Sendable
                 return true
             }
             
-            while true {
-                do {
-                    let preflightContext = StandaloneOperationContext(steps: .preflightChecks, dbBackgroundContext: group.dbContext)
-                    let validateOp = try PreflightChecksOperation(
-                        operations: unhandledOperations,
-                        handler: handler.preflightChecksHandler,
-                        context: preflightContext
-                    )
-                    try await validateOp.execute()
-                    break
-                } catch {
-                    if Task.isCancelled || error is CancellationError {
-                        group.error = OperationError.cancelled
-                        for operation in operations {
-                            let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
-                            operation.logSummary(status: "CANCELLED", elapsed: elapsed, error: error)
-                        }
-                        throw OperationError.cancelled
+            do {
+                let preflightContext = StandaloneOperationContext(steps: .preflightChecks, dbBackgroundContext: group.dbContext)
+                let validateOp = try PreflightChecksOperation(
+                    operations: unhandledOperations,
+                    handler: handler.preflightChecksHandler,
+                    context: preflightContext
+                )
+                try await validateOp.execute()
+            } catch {
+                if Task.isCancelled || error is CancellationError {
+                    group.error = OperationError.cancelled
+                    for operation in operations {
+                        let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
+                        operation.logSummary(status: "CANCELLED", elapsed: elapsed, error: error)
                     }
-                    
-                    let targetAppName = operations.first?.app.name ?? "SideStore"
-                    let shouldContinue = await PipelineExecutor.presentDiagnosticErrorAlert(
-                        phase: .authorization,
-                        stepName: "preflightChecks",
-                        appName: targetAppName,
-                        error: error
-                    )
-                    if shouldContinue {
-                        continue
-                    } else {
-                        let cancelError = OperationError.cancelled
-                        group.error = cancelError
-                        for operation in operations {
-                            let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
-                            operation.logSummary(status: "CANCELLED", elapsed: elapsed, error: cancelError)
-                        }
-                        throw cancelError
-                    }
+                    throw OperationError.cancelled
                 }
+                
+                let targetAppName = operations.first?.app.name ?? "SideStore"
+                await PipelineExecutor.presentDiagnosticErrorAlert(
+                    phase: .authorization,
+                    stepName: "preflightChecks",
+                    appName: targetAppName,
+                    error: error
+                )
+                let cancelError = OperationError.cancelled
+                group.error = cancelError
+                for operation in operations {
+                    let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
+                    operation.logSummary(status: "CANCELLED", elapsed: elapsed, error: cancelError)
+                }
+                throw cancelError
             }
         }
         
@@ -293,33 +279,26 @@ final class PipelineRunner: Sendable
                 }
             } else {
                 debugLog("[PipelineRunner] Starting batch profile injection for \(group.sharedContext.pendingProfiles.count) app(s)...")
-                while true {
-                    do {
-                        let injectContext = StandaloneOperationContext(steps: .injectBatchProfiles, dbBackgroundContext: group.dbContext)
-                        let injectOp = try InjectBatchProfilesOperation(
-                            batches: orderedBatches,
-                            context: injectContext,
-                            onAppCompleted: { [weak self] bundleID in
-                                if let op = sortedOperations.first(where: { $0.bundleIdentifier == bundleID }) {
-                                    self?.progress.progress(for: op)?.completedUnitCount = 100
-                                }
+                do {
+                    let injectContext = StandaloneOperationContext(steps: .injectBatchProfiles, dbBackgroundContext: group.dbContext)
+                    let injectOp = try InjectBatchProfilesOperation(
+                        batches: orderedBatches,
+                        context: injectContext,
+                        onAppCompleted: { [weak self] bundleID in
+                            if let op = sortedOperations.first(where: { $0.bundleIdentifier == bundleID }) {
+                                self?.progress.progress(for: op)?.completedUnitCount = 100
                             }
-                        )
-                        try await injectOp.execute()
-                        break
-                    } catch {
-                        let shouldContinue = await PipelineExecutor.presentDiagnosticErrorAlert(
-                            phase: .systemPush,
-                            stepName: "injectBatchProfiles",
-                            appName: "Làm mới (\(orderedBatches.count) ứng dụng)",
-                            error: error
-                        )
-                        if shouldContinue {
-                            continue
-                        } else {
-                            throw OperationError.cancelled
                         }
-                    }
+                    )
+                    try await injectOp.execute()
+                } catch {
+                    await PipelineExecutor.presentDiagnosticErrorAlert(
+                        phase: .systemPush,
+                        stepName: "injectBatchProfiles",
+                        appName: "Làm mới (\(orderedBatches.count) ứng dụng)",
+                        error: error
+                    )
+                    throw OperationError.cancelled
                 }
             }
         }

@@ -1145,7 +1145,7 @@ extension PipelineExecutor {
         userInfo[NSUnderlyingErrorKey] = nsError
         
         let enrichedError = NSError(domain: nsError.domain, code: nsError.code, userInfo: userInfo)
-        let fallbackApp = AnyApp(operation.app)
+        let fallbackApp = AnyApp(from: operation.app)
         
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             DatabaseManager.shared.persistentContainer.performBackgroundTask { bgContext in

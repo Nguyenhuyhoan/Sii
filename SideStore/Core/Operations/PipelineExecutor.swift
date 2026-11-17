@@ -11,6 +11,7 @@
 import SwiftUI
 import Foundation
 import CoreData
+import Darwin
 import SideSign
 import Minimuxer
 
@@ -395,11 +396,9 @@ extension PipelineExecutor {
     /// Đánh dấu và kiểm tra quyền hiển thị thông báo cho 1 `RefreshGroup` (Chỉ cho phép đúng 1 lần)
     private static func tryAcquireAlertPresentation(for group: RefreshGroup?) -> Bool {
         return alertStateLock.withLock {
-            // 1. Nếu đang có 1 bảng thông báo hiện trên màn hình -> chặn tuyệt đối
             if isPresentingDiagnosticAlert {
                 return false
             }
-            // 2. Nếu group này đã từng hiện thông báo rồi -> chặn tuyệt đối
             if let group = group {
                 let groupID = ObjectIdentifier(group)
                 if alertedGroupIDs.contains(groupID) {
@@ -410,7 +409,6 @@ extension PipelineExecutor {
                 }
                 alertedGroupIDs.insert(groupID)
             } else {
-                // Nếu không truyền group, chống hiện trùng lặp trong khoảng 2.5 giây sau khi vừa bấm tắt
                 let now = CFAbsoluteTimeGetCurrent()
                 if now - lastAlertDismissTimestamp < 2.5 {
                     return false
@@ -496,7 +494,6 @@ extension PipelineExecutor {
     
     static func monitoredPhase(for step: PipelineStep) -> MonitoredPhase? {
         switch step {
-        // PHẦN 1: Các bước tải ứng dụng, kiểm tra điều kiện, xác thực Apple ID, Anisette, App ID & Chứng chỉ
         case .preflightChecks,
              .downloadApp,
              .verifyCertificate,
@@ -506,7 +503,6 @@ extension PipelineExecutor {
              .embedSigningCert:
             return .authorization
             
-        // PHẦN 2: Các bước kiểm tra gói IPA, ký số và đẩy vào hệ điều hành iOS qua VPN
         case .verifyApp,
              .stageApp,
              .resignApp,
@@ -572,18 +568,15 @@ extension PipelineExecutor {
                                    nil, 0, NI_NUMERICHOST) == 0 {
                         let ip = String(cString: hostname)
                         
-                        // Kiểm tra LocalDevVPN / StosVPN (luôn cấp IP 10.7.x.x trên utun)
                         if (name.hasPrefix("utun") || name.hasPrefix("ipsec") || name.hasPrefix("ppp")),
                            ip.hasPrefix("10.7.") {
                             hasLocalDevIP = true
                         }
                         
-                        // Kiểm tra Wi-Fi (en0)
                         if name == "en0" && family == UInt8(AF_INET) && !ip.hasPrefix("169.254.") {
                             hasWiFiIP = true
                         }
                         
-                        // Kiểm tra dữ liệu di động 4G/5G (pdp_ip0, pdp_ip1...)
                         if name.hasPrefix("pdp_ip") && !ip.hasPrefix("169.254.") && !ip.hasPrefix("fe80") {
                             hasCellularIP = true
                         }
@@ -611,14 +604,47 @@ extension PipelineExecutor {
         var deepestCode = nsError.code
         var deepestDomain = nsError.domain
         var current: NSError? = nsError
-        while let underlying = (current as? ALTWrappedError)?.wrappedError ?? (current?.underlyingError as? NSError) {
-            deepestCode = underlying.code
-            deepestDomain = underlying.domain
-            current = underlying
+        while let currentError = current {
+            if let wrapped = (currentError as? ALTWrappedError)?.wrappedError {
+                deepestCode = wrapped.code
+                deepestDomain = wrapped.domain
+                current = wrapped
+            } else if let underlying = currentError.underlyingError as NSError? {
+                deepestCode = underlying.code
+                deepestDomain = underlying.domain
+                current = underlying
+            } else {
+                break
+            }
         }
         
         let combined = "\(nsError.domain) \(deepestDomain) \(nsError.code) \(deepestCode) \(error.localizedDescription) \(localDesc) \(deepDesc) \(String(describing: error))".lowercased()
         return (deepestCode, deepestDomain.lowercased(), combined)
+    }
+    
+    // MARK: - 🧩 CÁC HÀM HELPER KIỂM TRA PATTERN CỦA `OperationError` (TRÁNH LỖI TYPE CHECKER)
+    private static func isNotAuthenticatedOperationError(_ opError: OperationError?) -> Bool {
+        guard let opError = opError else { return false }
+        if case .notAuthenticated = opError { return true }
+        return false
+    }
+    
+    private static func isPairingNotCompleteOperationError(_ opError: OperationError?) -> Bool {
+        guard let opError = opError else { return false }
+        if case .pairingNotComplete = opError { return true }
+        return false
+    }
+    
+    private static func isInvalidPairingFileOperationError(_ opError: OperationError?) -> Bool {
+        guard let opError = opError else { return false }
+        if case .invalidPairingFile = opError { return true }
+        return false
+    }
+    
+    private static func isTimedOutOperationError(_ opError: OperationError?) -> Bool {
+        guard let opError = opError else { return false }
+        if case .timedOut = opError { return true }
+        return false
     }
     
     // MARK: - 🧠 BỘ CHẨN ĐOÁN LỖI (ĐÃ DỊCH TOÀN BỘ LỖI MẠNG OFFLINE CỦA iOS SANG TIẾNG VIỆT)
@@ -643,12 +669,12 @@ extension PipelineExecutor {
         // =========================================================================
         // KIỂM TRA LỖI MẤT KẾT NỐI INTERNET CỦA HỆ ĐIỀU HÀNH iOS (-1009, -1020, -1005...)
         // =========================================================================
-        if code == -1009 ||
-           code == NSURLErrorNotConnectedToInternet ||
-           fullText.contains("appears to be offline") ||
-           fullText.contains("internet connection appears to be offline") ||
-           fullText.contains("notconnectedtointernet") ||
-           fullText.contains("-1009") {
+        let isOfflineError = (code == -1009) ||
+                             (code == NSURLErrorNotConnectedToInternet) ||
+                             fullText.contains("appears to be offline") ||
+                             fullText.contains("notconnectedtointernet") ||
+                             fullText.contains("-1009")
+        if isOfflineError {
             return DiagnosticErrorItem(
                 badge: .vpn,
                 title: "Không có kết nối Internet (Ngoại tuyến -1009)",
@@ -656,10 +682,11 @@ extension PipelineExecutor {
             )
         }
         
-        if code == -1020 ||
-           code == NSURLErrorDataNotAllowed ||
-           fullText.contains("data connection is not currently allowed") ||
-           fullText.contains("-1020") {
+        let isDataNotAllowed = (code == -1020) ||
+                               (code == NSURLErrorDataNotAllowed) ||
+                               fullText.contains("data connection is not currently allowed") ||
+                               fullText.contains("-1020")
+        if isDataNotAllowed {
             return DiagnosticErrorItem(
                 badge: .vpn,
                 title: "Dữ liệu di động bị chặn cho ứng dụng (Mã -1020)",
@@ -667,10 +694,11 @@ extension PipelineExecutor {
             )
         }
         
-        if code == -1003 ||
-           code == NSURLErrorCannotFindHost ||
-           fullText.contains("specified hostname could not be found") ||
-           fullText.contains("-1003") {
+        let isCannotFindHost = (code == -1003) ||
+                               (code == NSURLErrorCannotFindHost) ||
+                               fullText.contains("specified hostname could not be found") ||
+                               fullText.contains("-1003")
+        if isCannotFindHost {
             return DiagnosticErrorItem(
                 badge: .vpn,
                 title: "Không tìm thấy máy chủ (Lỗi DNS -1003)",
@@ -678,10 +706,11 @@ extension PipelineExecutor {
             )
         }
         
-        if code == -1005 ||
-           code == NSURLErrorNetworkConnectionLost ||
-           fullText.contains("network connection was lost") ||
-           fullText.contains("-1005") {
+        let isNetworkLost = (code == -1005) ||
+                            (code == NSURLErrorNetworkConnectionLost) ||
+                            fullText.contains("network connection was lost") ||
+                            fullText.contains("-1005")
+        if isNetworkLost {
             return DiagnosticErrorItem(
                 badge: .vpn,
                 title: "Kết nối mạng bị ngắt giữa chừng (Mã -1005)",
@@ -741,7 +770,9 @@ extension PipelineExecutor {
                 )
             }
             
-            if fullText.contains("anisette") && (fullText.contains("500") || fullText.contains("502") || fullText.contains("503") || fullText.contains("504") || fullText.contains("overload") || fullText.contains("bad gateway")) {
+            let isAnisetteOverload = fullText.contains("anisette") &&
+                (fullText.contains("500") || fullText.contains("502") || fullText.contains("503") || fullText.contains("504") || fullText.contains("overload") || fullText.contains("bad gateway"))
+            if isAnisetteOverload {
                 return DiagnosticErrorItem(
                     badge: .apple,
                     title: "Máy chủ Anisette quá tải (Error 500/502/503)",
@@ -765,7 +796,7 @@ extension PipelineExecutor {
                 )
             }
             
-            if opError == .notAuthenticated || code == -29004 || fullText.contains("-29004") || fullText.contains("session has expired") || fullText.contains("not signed in") {
+            if Self.isNotAuthenticatedOperationError(opError) || code == -29004 || fullText.contains("-29004") || fullText.contains("session has expired") || fullText.contains("not signed in") {
                 return DiagnosticErrorItem(
                     badge: .apple,
                     title: "Phiên đăng nhập Apple ID đã hết hạn (-29004)",
@@ -821,14 +852,14 @@ extension PipelineExecutor {
                 )
             }
             
-            if case .certificateRevoked = opError {
+            if let opError = opError, case .certificateRevoked = opError {
                 return DiagnosticErrorItem(
                     badge: .apple,
                     title: "Chứng chỉ đã bị thu hồi (Certificate Revoked)",
                     cause: "Chứng chỉ hiện tại bị thu hồi hoặc bạn vừa bấm 'Revoke' trên một thiết bị/máy tính khác."
                 )
             }
-            if case .customCertificateRevoked = opError {
+            if let opError = opError, case .customCertificateRevoked = opError {
                 return DiagnosticErrorItem(
                     badge: .apple,
                     title: "Chứng chỉ đã bị thu hồi (Certificate Revoked)",
@@ -881,7 +912,7 @@ extension PipelineExecutor {
         // =========================================================================
         
         // [2.3] Pairing File Not Found
-        if !hasPairingFile || (opError != nil && { if case .pairingNotComplete = opError! { return true }; return false }()) {
+        if !hasPairingFile || Self.isPairingNotCompleteOperationError(opError) {
             return DiagnosticErrorItem(
                 badge: .pairing,
                 title: "Chưa nạp File ghép đôi (Pairing File Not Found)",
@@ -917,14 +948,14 @@ extension PipelineExecutor {
         }
         
         // [2.8] Lỗi mạng 4G / Cách ly Wi-Fi
-        if let opError, case .invalidVPN(let reason) = opError, reason.lowercased().contains("wireguard") {
+        if let opError = opError, case .invalidVPN(let reason) = opError, reason.lowercased().contains("wireguard") {
             return DiagnosticErrorItem(
                 badge: .vpn,
                 title: "Đang bật 4G nhưng thiếu kết nối LocalDevVPN",
                 cause: "Đang dùng mạng 4G nhưng chưa chuyển sang đường truyền nội bộ LocalDevVPN để đẩy ứng dụng."
             )
         }
-        if let opError, case .noConnection = opError {
+        if let opError = opError, case .noConnection = opError {
             return DiagnosticErrorItem(
                 badge: .vpn,
                 title: "Đang bật 4G (Không Wi-Fi) hoặc tắt LocalDevVPN",
@@ -933,12 +964,13 @@ extension PipelineExecutor {
         }
         
         // [2.2] Invalid Pairing File / Lockdown Error
-        if isConnectionReset ||
-           fullText.contains("lockdown") ||
-           fullText.contains("invalid pairing") ||
-           fullText.contains("invalid hostid") ||
-           fullText.contains("pair record") ||
-           (opError != nil && { if case .invalidPairingFile = opError! { return true }; return false }()) {
+        let isLockdownOrPairingError = isConnectionReset ||
+                                       fullText.contains("lockdown") ||
+                                       fullText.contains("invalid pairing") ||
+                                       fullText.contains("invalid hostid") ||
+                                       fullText.contains("pair record") ||
+                                       Self.isInvalidPairingFileOperationError(opError)
+        if isLockdownOrPairingError {
             return DiagnosticErrorItem(
                 badge: .device,
                 title: "Thiết bị đã huỷ liên kết (Invalid Pairing / Lockdown Error)",
@@ -947,7 +979,12 @@ extension PipelineExecutor {
         }
         
         // [2.6] Connection Timed Out (mux error)
-        if opError == .timedOut || fullText.contains("timed out") || fullText.contains("timeout") || fullText.contains("mux error") || (fullText.contains("afc") && fullText.contains("broken pipe")) {
+        let isMuxTimeout = Self.isTimedOutOperationError(opError) ||
+                           fullText.contains("timed out") ||
+                           fullText.contains("timeout") ||
+                           fullText.contains("mux error") ||
+                           (fullText.contains("afc") && fullText.contains("broken pipe"))
+        if isMuxTimeout {
             return DiagnosticErrorItem(
                 badge: .vpn,
                 title: "Nghẽn đường truyền nội bộ (Connection Timed Out)",
@@ -1036,7 +1073,7 @@ extension PipelineExecutor {
             )
         }
         
-        // Nhánh dự phòng cuối cùng theo từng Giai đoạn (Đã dịch tự động các câu thông báo mạng tiếng Anh của iOS)
+        // Nhánh dự phòng cuối cùng theo từng Giai đoạn
         let translatedFallback = Self.translateSystemNetworkError(error.localizedDescription)
         switch phase {
         case .authorization:
@@ -1108,27 +1145,33 @@ extension PipelineExecutor {
         userInfo[NSUnderlyingErrorKey] = nsError
         
         let enrichedError = NSError(domain: nsError.domain, code: nsError.code, userInfo: userInfo)
+        let fallbackApp = AnyApp(operation.app)
         
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             DatabaseManager.shared.persistentContainer.performBackgroundTask { bgContext in
                 bgContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
                 
-                // Tìm InstalledApp hoặc StoreApp tương ứng trong bgContext để gán đúng relationship & Icon ứng dụng
-                let installedFetch = InstalledApp.fetchRequest() as NSFetchRequest<InstalledApp>
+                // Tìm InstalledApp hoặc StoreApp tương ứng trong bgContext bằng câu lệnh if-let tường minh
+                // (Tuyệt đối không dùng ?? giữa các kiểu NSManagedObject khác nhau và struct AnyApp)
+                let installedFetch: NSFetchRequest<InstalledApp> = InstalledApp.fetchRequest()
                 installedFetch.predicate = NSPredicate(format: "%K == %@", #keyPath(InstalledApp.bundleIdentifier), appBundleID)
                 installedFetch.fetchLimit = 1
-                let matchedInstalledApp = try? bgContext.fetch(installedFetch).first
+                let matchedInstalledApp = (try? bgContext.fetch(installedFetch))?.first
                 
-                let storeFetch = StoreApp.fetchRequest() as NSFetchRequest<StoreApp>
+                let storeFetch: NSFetchRequest<StoreApp> = StoreApp.fetchRequest()
                 storeFetch.predicate = NSPredicate(format: "%K == %@", #keyPath(StoreApp.bundleIdentifier), appBundleID)
                 storeFetch.fetchLimit = 1
-                let matchedStoreApp = try? bgContext.fetch(storeFetch).first
+                let matchedStoreApp = (try? bgContext.fetch(storeFetch))?.first
                 
-                let resolvedApp: AppProtocol = matchedInstalledApp
-                    ?? matchedStoreApp
-                    ?? AnyApp(name: appName, bundleIdentifier: appBundleID, url: nil, storeApp: nil)
+                let resolvedApp: any AppProtocol
+                if let installed = matchedInstalledApp {
+                    resolvedApp = installed
+                } else if let store = matchedStoreApp {
+                    resolvedApp = store
+                } else {
+                    resolvedApp = fallbackApp
+                }
                 
-                // Khởi tạo bản ghi LoggedError theo đúng chữ ký init(error:app:date:operation:context:)
                 _ = LoggedError(
                     error: enrichedError,
                     app: resolvedApp,
@@ -1158,12 +1201,10 @@ extension PipelineExecutor {
         appName: String,
         error: Error
     ) async {
-        // Nếu lỗi là Cancelled thì không bao giờ hiện bảng báo lỗi
         guard !Self.isCancellationError(error) else {
             return
         }
         
-        // Chốt chặn: Đảm bảo chỉ hiện 1 lần duy nhất cho mỗi đợt thao tác (group)
         guard Self.tryAcquireAlertPresentation(for: group) else {
             debugLog("[PipelineExecutor] Suppressed duplicate diagnostic alert for step: \(stepName)")
             return
@@ -1274,8 +1315,8 @@ private enum CSSErrorTheme {
     static let border = SwiftUI.Color(red: 218/255, green: 224/255, blue: 233/255)
     static let innerBorder = SwiftUI.Color(red: 222/255, green: 228/255, blue: 236/255)
     
-    static var pageGradient: LinearGradient {
-        LinearGradient(
+    static var pageGradient: SwiftUI.LinearGradient {
+        SwiftUI.LinearGradient(
             colors: [
                 SwiftUI.Color(red: 243/255, green: 224/255, blue: 255/255),
                 SwiftUI.Color(red: 224/255, green: 247/255, blue: 255/255)
@@ -1285,8 +1326,8 @@ private enum CSSErrorTheme {
         )
     }
     
-    static var heroGradient: LinearGradient {
-        LinearGradient(
+    static var heroGradient: SwiftUI.LinearGradient {
+        SwiftUI.LinearGradient(
             colors: [
                 SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.94),
                 SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.90)
@@ -1297,7 +1338,7 @@ private enum CSSErrorTheme {
     }
 }
 
-private struct CSSErrorBounceButtonStyle: ButtonStyle {
+private struct CSSErrorBounceButtonStyle: SwiftUI.ButtonStyle {
     func makeBody(configuration: Configuration) -> some SwiftUI.View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
@@ -1317,132 +1358,136 @@ private struct CSSErrorPromptModalView: SwiftUI.View {
     @State private var didTapDismiss: Bool = false
     
     var body: some SwiftUI.View {
-        ZStack {
+        SwiftUI.ZStack {
             SwiftUI.Color.black.opacity(0.45)
                 .ignoresSafeArea()
             
-            VStack(spacing: 12) {
-                // 1. Header gọn gàng
-                HStack(spacing: 8) {
-                    SwiftUI.Image(systemName: phase.icon)
-                        .font(.system(size: 16, weight: .heavy))
-                        .foregroundColor(.white)
-                    
-                    SwiftUI.Text(phase.title)
-                        .font(.system(size: 15, weight: .heavy))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                }
-                .padding(.vertical, 11)
-                .padding(.horizontal, 14)
-                .frame(maxWidth: .infinity)
-                .background(CSSErrorTheme.heroGradient)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                
-                // 2. Nội dung chẩn đoán rõ ràng (Không có hướng dẫn fix lỗi)
-                VStack(alignment: .leading, spacing: 10) {
-                    // Tên App + Nhãn phân loại lỗi
-                    HStack {
-                        SwiftUI.Text(appName)
-                            .font(.system(size: 15, weight: .heavy))
-                            .foregroundColor(CSSErrorTheme.primary)
-                            .lineLimit(1)
-                        
-                        Spacer()
-                        
-                        SwiftUI.Text(diagnosis.badge.rawValue)
-                            .font(.system(size: 11, weight: .heavy))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(diagnosis.badge.color)
-                            .cornerRadius(6)
-                    }
-                    
-                    Divider()
-                    
-                    // Lỗi & Nguyên nhân
-                    VStack(alignment: .leading, spacing: 4) {
-                        SwiftUI.Text(diagnosis.title)
-                            .font(.system(size: 14.5, weight: .bold))
-                            .foregroundColor(CSSErrorTheme.pureBlack)
-                        
-                        SwiftUI.Text(diagnosis.cause)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(CSSErrorTheme.pureBlack.opacity(0.78))
-                    }
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(CSSErrorTheme.innerRowBackground)
-                    .cornerRadius(10)
-                    
-                    // Chi tiết kỹ thuật (ẩn mặc định cho gọn)
-                    SwiftUI.Button {
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            showRawDetails.toggle()
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            SwiftUI.Image(systemName: showRawDetails ? "chevron.down" : "chevron.right")
-                                .font(.system(size: 11, weight: .bold))
-                            SwiftUI.Text("Mã lỗi kỹ thuật (.\(stepName))")
-                                .font(.system(size: 12, weight: .semibold))
-                            Spacer()
-                        }
-                        .foregroundColor(CSSErrorTheme.secondary)
-                    }
-                    
-                    if showRawDetails {
-                        ScrollView {
-                            SwiftUI.Text(rawErrorText)
-                                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                                .foregroundColor(CSSErrorTheme.pureBlack.opacity(0.8))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .frame(maxHeight: 65)
-                        .padding(8)
-                        .background(CSSErrorTheme.innerRowBackground)
-                        .cornerRadius(8)
-                    }
-                }
-                .padding(13)
-                .background(CSSErrorTheme.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: CSSErrorTheme.cornerRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: CSSErrorTheme.cornerRadius, style: .continuous)
-                        .stroke(CSSErrorTheme.border, lineWidth: 1)
-                )
-                
-                // 3. Một nút duy nhất: Tắt Thông Báo
-                SwiftUI.Button {
-                    guard !didTapDismiss else { return }
-                    didTapDismiss = true
-                    onDismiss()
-                } label: {
-                    HStack(spacing: 6) {
-                        SwiftUI.Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 15, weight: .bold))
-                        SwiftUI.Text("Tắt Thông Báo")
-                            .font(.system(size: 15, weight: .bold))
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(CSSErrorTheme.red)
-                    .cornerRadius(11)
-                }
-                .buttonStyle(CSSErrorBounceButtonStyle())
-                .disabled(didTapDismiss)
+            SwiftUI.VStack(spacing: 12) {
+                headerBannerView
+                diagnosticCardView
+                dismissButtonView
             }
             .padding(14)
             .background(CSSErrorTheme.pageGradient)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .clipShape(SwiftUI.RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                SwiftUI.RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(CSSErrorTheme.border, lineWidth: 1.2)
             )
             .shadow(color: SwiftUI.Color.black.opacity(0.22), radius: 18, x: 0, y: 8)
             .padding(.horizontal, 20)
         }
+    }
+    
+    private var headerBannerView: some SwiftUI.View {
+        SwiftUI.HStack(spacing: 8) {
+            SwiftUI.Image(systemName: phase.icon)
+                .font(.system(size: 16, weight: .heavy))
+                .foregroundColor(.white)
+            
+            SwiftUI.Text(phase.title)
+                .font(.system(size: 15, weight: .heavy))
+                .foregroundColor(.white)
+                .lineLimit(1)
+        }
+        .padding(.vertical, 11)
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity)
+        .background(CSSErrorTheme.heroGradient)
+        .clipShape(SwiftUI.RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+    
+    private var diagnosticCardView: some SwiftUI.View {
+        SwiftUI.VStack(alignment: .leading, spacing: 10) {
+            SwiftUI.HStack {
+                SwiftUI.Text(appName)
+                    .font(.system(size: 15, weight: .heavy))
+                    .foregroundColor(CSSErrorTheme.primary)
+                    .lineLimit(1)
+                
+                SwiftUI.Spacer()
+                
+                SwiftUI.Text(diagnosis.badge.rawValue)
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(diagnosis.badge.color)
+                    .cornerRadius(6)
+            }
+            
+            SwiftUI.Divider()
+            
+            SwiftUI.VStack(alignment: .leading, spacing: 4) {
+                SwiftUI.Text(diagnosis.title)
+                    .font(.system(size: 14.5, weight: .bold))
+                    .foregroundColor(CSSErrorTheme.pureBlack)
+                
+                SwiftUI.Text(diagnosis.cause)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(CSSErrorTheme.pureBlack.opacity(0.78))
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(CSSErrorTheme.innerRowBackground)
+            .cornerRadius(10)
+            
+            SwiftUI.Button {
+                SwiftUI.withAnimation(.easeInOut(duration: 0.18)) {
+                    showRawDetails.toggle()
+                }
+            } label: {
+                SwiftUI.HStack(spacing: 4) {
+                    SwiftUI.Image(systemName: showRawDetails ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 11, weight: .bold))
+                    SwiftUI.Text("Mã lỗi kỹ thuật (.\(stepName))")
+                        .font(.system(size: 12, weight: .semibold))
+                    SwiftUI.Spacer()
+                }
+                .foregroundColor(CSSErrorTheme.secondary)
+            }
+            
+            if showRawDetails {
+                SwiftUI.ScrollView {
+                    SwiftUI.Text(rawErrorText)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundColor(CSSErrorTheme.pureBlack.opacity(0.8))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 65)
+                .padding(8)
+                .background(CSSErrorTheme.innerRowBackground)
+                .cornerRadius(8)
+            }
+        }
+        .padding(13)
+        .background(CSSErrorTheme.cardBackground)
+        .clipShape(SwiftUI.RoundedRectangle(cornerRadius: CSSErrorTheme.cornerRadius, style: .continuous))
+        .overlay(
+            SwiftUI.RoundedRectangle(cornerRadius: CSSErrorTheme.cornerRadius, style: .continuous)
+                .stroke(CSSErrorTheme.border, lineWidth: 1)
+        )
+    }
+    
+    private var dismissButtonView: some SwiftUI.View {
+        SwiftUI.Button {
+            guard !didTapDismiss else { return }
+            didTapDismiss = true
+            onDismiss()
+        } label: {
+            SwiftUI.HStack(spacing: 6) {
+                SwiftUI.Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 15, weight: .bold))
+                SwiftUI.Text("Tắt Thông Báo")
+                    .font(.system(size: 15, weight: .bold))
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(CSSErrorTheme.red)
+            .cornerRadius(11)
+        }
+        .buttonStyle(CSSErrorBounceButtonStyle())
+        .disabled(didTapDismiss)
     }
 }

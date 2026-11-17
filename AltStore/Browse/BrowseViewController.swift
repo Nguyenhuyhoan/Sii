@@ -20,7 +20,7 @@ private struct BrowseCSSTheme {
     static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0) // #007bff
     static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0) // #6f42c1
     static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0) // #28a745
-    static let magenta = UIColor(red: 255/255, green: 0/255, blue: 255/255, alpha: 1.0) // #ff00ff
+    static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0) // #dc3545
     static let dark = UIColor(red: 52/255, green: 58/255, blue: 64/255, alpha: 1.0) // #343a40
     
     // Gradient Background (#f3e0ff -> #e0f7ff)
@@ -33,6 +33,41 @@ private struct BrowseCSSTheme {
     
     static let cornerRadius: CGFloat = 15.0
 }
+
+// MARK: - 📦 DANH SÁCH KHO NGUỒN UY TÍN LỚN ĐƯỢC TÍCH HỢP SẴN
+private struct TrustedRepoItem {
+    let name: String
+    let subtitle: String
+    let urlString: String
+}
+
+private let kTrustedRepos: [TrustedRepoItem] = [
+    TrustedRepoItem(
+        name: "🌟 Kho Sii Store (Chọn Lọc)",
+        subtitle: "Kho ứng dụng tuyển chọn ổn định từ GitHub",
+        urlString: "https://raw.githubusercontent.com/Nguyenhuyhoan/Sii/main/khoapp.json"
+    ),
+    TrustedRepoItem(
+        name: "🔥 Kho WuXu Library++ (Cực Lớn)",
+        subtitle: "YouTube, Spotify, TikTok, Locket, Tiện ích Mod...",
+        urlString: "https://wuxu1.github.io/wuxu-complete-plus.json"
+    ),
+    TrustedRepoItem(
+        name: "💎 Kho Cypwn IPA Library",
+        subtitle: "Hàng trăm Game & Ứng dụng Tweaked cao cấp",
+        urlString: "https://ipa.cypwn.xyz/cypwn.json"
+    ),
+    TrustedRepoItem(
+        name: "🚀 Kho SideStore Community",
+        subtitle: "Công cụ hệ thống, giả lập & ứng dụng chuẩn",
+        urlString: "https://community-apps.sidestore.io/sidecommunity.json"
+    ),
+    TrustedRepoItem(
+        name: "🎮 Kho AltStore Official",
+        subtitle: "Delta Emulator, Clip & các ứng dụng gốc",
+        urlString: "https://cdn.altstore.io/file/altstore/apps.json"
+    )
+]
 
 // MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH (KHÔNG BỊ TRẮNG KHI CUỘN HOẶC XOAY MÀN HÌNH)
 private final class BrowseCSSGradientBackgroundView: UIView {
@@ -60,13 +95,24 @@ private final class BrowseCSSGradientBackgroundView: UIView {
 
 class BrowseViewController: UICollectionViewController
 {
-    // Nil == Hiển thị ứng dụng từ tất cả các nguồn.
+    // Nguồn khởi tạo cố định (nếu mở từ màn hình chi tiết nguồn)
     let source: Source?
+    
+    // Bộ lọc nguồn linh hoạt ngay trên trang Kho App (nil == Tất cả nguồn)
+    private var selectedSourceFilter: Source? {
+        didSet {
+            self.cachedItemSizes.removeAll()
+            self.updateDataSource()
+            self.update()
+        }
+    }
     
     private(set) var category: StoreCategory? {
         didSet {
+            self.cachedItemSizes.removeAll()
             self.updateDataSource()
             self.update()
+            self.updateQuickCategoryPillsSelection()
         }
     }
     
@@ -85,25 +131,30 @@ class BrowseViewController: UICollectionViewController
     private var preferredAppSorting: AppSorting = UserDefaults.standard.preferredAppSorting
     
     private var cancellables = Set<AnyCancellable>()
+    private var searchDebounceWorkItem: DispatchWorkItem?
     
     private var titleStackView: UIStackView!
     private var titleSourceIconView: AppIconImageView!
     private var titleCategoryIconView: UIImageView!
     private var titleLabel: UILabel!
     
-    // MARK: - Thành phần Giao diện Hero Banner & Điều hướng nổi (Giống Settings)
+    // MARK: - Thành phần Giao diện Hero Banner & Điều hướng nổi
     private var heroContainerView: UIView?
     private var heroCardView: UIView?
     private var heroGradientLayer: CAGradientLayer?
     private var heroTitleButton: UIButton?
     private var heroSubtitleLabel: UILabel?
     private var heroSortPopupButton: UIButton?
+    private var heroManageSourcesButton: UIButton?
     private var heroSearchBar: UISearchBar?
+    private var categoryScrollView: UIScrollView?
+    private var categoryPillsStack: UIStackView?
     private var floatingBackButton: UIButton?
-    private let heroHeaderHeight: CGFloat = 152.0
+    private let heroHeaderHeight: CGFloat = 196.0
     
     // Theo dõi các cell đã chạy animation để không bị lặp lại gây rối mắt
     private var animatedIndexPaths = Set<IndexPath>()
+    private static var didAutoBootstrapTrustedSources = false
     
     #if !os(tvOS)
     override var preferredStatusBarStyle: UIStatusBarStyle {
@@ -143,6 +194,10 @@ class BrowseViewController: UICollectionViewController
     {
         super.viewDidLoad()
         
+        // Đảm bảo tên trên thanh TabBar luôn là "Apps"
+        self.navigationController?.tabBarItem.title = "Apps"
+        self.tabBarItem.title = "Apps"
+        
         // Ẩn hoàn toàn thanh điều hướng mặc định để tràn viền giống hệt tab Cài đặt
         self.title = nil
         self.navigationItem.title = nil
@@ -171,8 +226,8 @@ class BrowseViewController: UICollectionViewController
         self.dataSource.contentView = self.collectionView
         
         let collectionViewLayout = self.collectionViewLayout as! UICollectionViewFlowLayout
-        collectionViewLayout.minimumLineSpacing = 22
-        // Dành khoảng trống phía trên cho khối Hero Banner chuẩn CSS
+        collectionViewLayout.minimumLineSpacing = 20
+        // Dành khoảng trống phía trên cho khối Hero Banner + Thanh Lọc Danh Mục
         collectionViewLayout.sectionInset = UIEdgeInsets(top: self.heroHeaderHeight + 14, left: 0, bottom: 45, right: 0)
         
         #if !os(tvOS)
@@ -182,6 +237,7 @@ class BrowseViewController: UICollectionViewController
             self?.updateSources()
         })
         refreshControl.tintColor = BrowseCSSTheme.purple
+        refreshControl.layer.zPosition = 200
         self.collectionView.refreshControl = refreshControl
         #endif
         
@@ -191,7 +247,7 @@ class BrowseViewController: UICollectionViewController
         self.titleCategoryIconView.contentMode = .scaleAspectFit
         
         self.titleLabel = UILabel()
-        self.titleLabel.font = UIFont.systemFont(ofSize: 22, weight: .heavy)
+        self.titleLabel.font = UIFont.systemFont(ofSize: 21, weight: .heavy)
         self.titleLabel.textColor = BrowseCSSTheme.white
         self.titleLabel.layer.shadowColor = UIColor.black.cgColor
         self.titleLabel.layer.shadowOffset = CGSize(width: 1, height: 2)
@@ -204,10 +260,10 @@ class BrowseViewController: UICollectionViewController
         self.titleStackView.translatesAutoresizingMaskIntoConstraints = false
         
         NSLayoutConstraint.activate([
-            self.titleSourceIconView.heightAnchor.constraint(equalToConstant: 26),
+            self.titleSourceIconView.heightAnchor.constraint(equalToConstant: 24),
             self.titleSourceIconView.widthAnchor.constraint(equalTo: self.titleSourceIconView.heightAnchor),
-            self.titleCategoryIconView.heightAnchor.constraint(equalToConstant: 24),
-            self.titleCategoryIconView.widthAnchor.constraint(equalToConstant: 24)
+            self.titleCategoryIconView.heightAnchor.constraint(equalToConstant: 22),
+            self.titleCategoryIconView.widthAnchor.constraint(equalToConstant: 22)
         ])
         
         // ✨ KÍCH HOẠT GIAO DIỆN WEB CSS & VIỆT HÓA ĐỒNG BỘ VỚI CÀI ĐẶT ✨
@@ -218,27 +274,42 @@ class BrowseViewController: UICollectionViewController
         
         self.updateDataSource()
         self.update()
+        
+        // Tự động nạp nguồn uy tín lần đầu nếu kho đang trống
+        self.bootstrapDefaultTrustedSourcesIfNeeded()
     }
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        // Đảm bảo khối Hero Banner luôn khớp chiều rộng màn hình và nằm cố định ở đầu danh sách
         if let heroContainer = self.heroContainerView {
             let targetFrame = CGRect(x: 0, y: 0, width: self.collectionView.bounds.width, height: self.heroHeaderHeight)
             if heroContainer.frame != targetFrame {
                 heroContainer.frame = targetFrame
                 heroContainer.layoutIfNeeded()
             }
+            // Luôn đảm bảo Hero Banner nổi lên trên PlaceholderView để không bao giờ bị kẹt nút bấm
+            heroContainer.layer.zPosition = 100
+            self.collectionView.bringSubviewToFront(heroContainer)
         }
         if let heroCard = self.heroCardView {
             self.heroGradientLayer?.frame = heroCard.bounds
         }
+        
+        // Căn chỉnh PlaceholderView nằm gọn bên dưới Hero Banner để không đè chữ
+        self.placeholderView.layoutMargins = UIEdgeInsets(top: self.heroHeaderHeight + 24, left: 24, bottom: 24, right: 24)
+    }
+    
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        self.cachedItemSizes.removeAll()
+        coordinator.animate(alongsideTransition: { _ in
+            self.collectionView.collectionViewLayout.invalidateLayout()
+        })
     }
     
     override func viewWillAppear(_ animated: Bool)
     {
         super.viewWillAppear(animated)
-        // Đảm bảo ẩn thanh màu trắng ở trên cùng để tràn viền toàn màn hình
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
         if let nav = self.navigationController {
             let isRoot = (self === nav.viewControllers.first)
@@ -257,7 +328,6 @@ class BrowseViewController: UICollectionViewController
 // MARK: - 🧭 QUẢN LÝ ẨN THANH ĐIỀU HƯỚNG & NÚT QUAY LẠI NHỎ CỐ ĐỊNH Ở MỤC CON
 extension BrowseViewController: UINavigationControllerDelegate, UIGestureRecognizerDelegate {
     func navigationController(_ navigationController: UINavigationController, willShow viewController: UIViewController, animated: Bool) {
-        // Luôn ẩn thanh điều hướng và tiêu đề ở cả trang Duyệt lẫn trang Chi tiết ứng dụng
         navigationController.setNavigationBarHidden(true, animated: false)
         viewController.title = nil
         viewController.navigationItem.title = nil
@@ -279,7 +349,6 @@ extension BrowseViewController: UINavigationControllerDelegate, UIGestureRecogni
             btn.tintColor = BrowseCSSTheme.blue
             btn.backgroundColor = BrowseCSSTheme.white.withAlphaComponent(0.92)
             
-            // Nút tròn nhỏ 34x34 cố định giống hệt bên Settings
             btn.layer.cornerRadius = 17
             btn.layer.borderWidth = 1.0
             btn.layer.borderColor = BrowseCSSTheme.border.cgColor
@@ -324,20 +393,28 @@ extension BrowseViewController: UINavigationControllerDelegate, UIGestureRecogni
     }
 }
 
-// MARK: - ✨ HỆ THỐNG RENDER CSS THÔNG MINH & VIỆT HÓA TOÀN DIỆN
+// MARK: - ✨ HỆ THỐNG RENDER CSS THÔNG MINH, QUẢN LÝ NGUỒN UY TÍN & BỘ LỌC NHANH
 private extension BrowseViewController {
     
+    var activeSourceFilter: Source? {
+        return self.source ?? self.selectedSourceFilter
+    }
+    
     func applySmartWebCSSTheme() {
-        // 1. Nền Body cố định: Không bao giờ bị trắng khi cuộn xuống dưới
+        // 1. Nền Body cố định
         let bgView = BrowseCSSGradientBackgroundView(frame: UIScreen.main.bounds)
         bgView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         self.collectionView.backgroundView = bgView
         self.collectionView.backgroundColor = .clear
         
-        // 2. Tạo khối .hero Banner nằm sát phía trên (Tích hợp Tìm kiếm & Sắp xếp)
+        // 2. Tạo khối .hero Banner nằm sát phía trên (Tích hợp Tìm kiếm, Lọc nhanh & Quản lý Nguồn)
         setupCSSHeroBanner()
         
-        // 3. Làm đẹp PlaceholderView (Khi đang tải hoặc không có ứng dụng)
+        // 3. Làm đẹp PlaceholderView (Khi kho trống hoặc tìm kiếm không thấy)
+        let placeholderBg = BrowseCSSGradientBackgroundView(frame: UIScreen.main.bounds)
+        placeholderBg.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        self.placeholderView.insertSubview(placeholderBg, at: 0)
+        self.placeholderView.backgroundColor = .clear
         self.placeholderView.textLabel.textColor = BrowseCSSTheme.blue
         self.placeholderView.textLabel.font = UIFont.systemFont(ofSize: 20, weight: .heavy)
         self.placeholderView.detailTextLabel.textColor = BrowseCSSTheme.dark.withAlphaComponent(0.78)
@@ -353,12 +430,12 @@ private extension BrowseViewController {
         #endif
     }
     
-    // Tạo khối .hero nằm sát phía trên, tích hợp Tiêu đề, Sắp xếp và Thanh tìm kiếm tiếng Việt
     func setupCSSHeroBanner() {
         self.heroContainerView?.removeFromSuperview()
         
         let headerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.collectionView.bounds.width, height: self.heroHeaderHeight))
         headerContainer.backgroundColor = .clear
+        headerContainer.layer.zPosition = 100
         
         let heroCard = UIView()
         heroCard.translatesAutoresizingMaskIntoConstraints = false
@@ -378,92 +455,514 @@ private extension BrowseViewController {
         self.heroGradientLayer = gradient
         self.heroCardView = heroCard
         
-        // Nút chọn Danh mục ẩn phía trên tiêu đề (nếu đang ở chế độ xem theo Danh mục)
+        // Bấm vào Tiêu đề Hero sẽ mở nhanh menu lọc theo từng Nguồn hoặc Reset về Tất cả
         let titleOverlayButton = UIButton(type: .system)
         titleOverlayButton.translatesAutoresizingMaskIntoConstraints = false
         titleOverlayButton.backgroundColor = .clear
+        titleOverlayButton.addTarget(self, action: #selector(presentTrustedSourcesSheet), for: .touchUpInside)
         self.heroTitleButton = titleOverlayButton
         
-        // Phụ đề tiếng Việt
         let subLabel = UILabel()
         subLabel.translatesAutoresizingMaskIntoConstraints = false
-        subLabel.text = "Khám phá, tìm kiếm & cài đặt kho ứng dụng phong phú"
-        subLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .medium)
+        subLabel.text = "Kho ứng dụng chọn lọc • Bấm + Nguồn để nạp thêm kho lớn"
+        subLabel.font = UIFont.systemFont(ofSize: 12.0, weight: .medium)
         subLabel.textColor = BrowseCSSTheme.white.withAlphaComponent(0.92)
         subLabel.numberOfLines = 1
         self.heroSubtitleLabel = subLabel
         
-        // Nút Sắp xếp dạng viên thuốc (Giống nút chọn kênh Beta ở Settings)
+        // Nút Quản lý / Nạp Nguồn Uy Tín / Cài IPA từ Link
+        let sourceBtn = UIButton(type: .system)
+        sourceBtn.translatesAutoresizingMaskIntoConstraints = false
+        self.heroManageSourcesButton = sourceBtn
+        styleManageSourcesButton()
+        sourceBtn.addTarget(self, action: #selector(presentTrustedSourcesSheet), for: .touchUpInside)
+        
+        // Nút Sắp xếp dạng viên thuốc
         let sortBtn = UIButton(type: .system)
         sortBtn.translatesAutoresizingMaskIntoConstraints = false
         self.heroSortPopupButton = sortBtn
         styleSortPopupButton()
         
+        let topButtonsStack = UIStackView(arrangedSubviews: [sourceBtn, sortBtn])
+        topButtonsStack.translatesAutoresizingMaskIntoConstraints = false
+        topButtonsStack.spacing = 6
+        topButtonsStack.alignment = .center
+        
         // Thanh tìm kiếm tích hợp gọn trong Hero Card
         let searchBar = UISearchBar()
         searchBar.translatesAutoresizingMaskIntoConstraints = false
         searchBar.searchBarStyle = .minimal
-        searchBar.placeholder = "Tìm kiếm ứng dụng, nhà phát triển..."
+        searchBar.placeholder = "Tìm nhanh tên app, công cụ, game..."
         searchBar.delegate = self
         searchBar.tintColor = BrowseCSSTheme.purple
         #if !os(tvOS)
         let textField = searchBar.searchTextField
         textField.backgroundColor = BrowseCSSTheme.white.withAlphaComponent(0.95)
         textField.textColor = BrowseCSSTheme.dark
-        textField.font = UIFont.systemFont(ofSize: 14, weight: .medium)
+        textField.font = UIFont.systemFont(ofSize: 13.5, weight: .medium)
         textField.layer.cornerRadius = 10
         textField.layer.masksToBounds = true
         textField.leftView?.tintColor = BrowseCSSTheme.blue
+        textField.clearButtonMode = .whileEditing
+        textField.returnKeyType = .done
         textField.attributedPlaceholder = NSAttributedString(
-            string: "Tìm kiếm ứng dụng, nhà phát triển...",
+            string: "Tìm nhanh tên app, công cụ, game...",
             attributes: [.foregroundColor: BrowseCSSTheme.dark.withAlphaComponent(0.5)]
         )
         #endif
         self.heroSearchBar = searchBar
         
+        // Thanh trượt chọn nhanh Danh mục (Category Pills)
+        let catScroll = UIScrollView()
+        catScroll.translatesAutoresizingMaskIntoConstraints = false
+        catScroll.showsHorizontalScrollIndicator = false
+        catScroll.showsVerticalScrollIndicator = false
+        
+        let catStack = UIStackView()
+        catStack.translatesAutoresizingMaskIntoConstraints = false
+        catStack.axis = .horizontal
+        catStack.spacing = 8
+        catStack.alignment = .center
+        catScroll.addSubview(catStack)
+        self.categoryScrollView = catScroll
+        self.categoryPillsStack = catStack
+        
         heroCard.addSubview(self.titleStackView)
         heroCard.addSubview(titleOverlayButton)
         heroCard.addSubview(subLabel)
-        heroCard.addSubview(sortBtn)
+        heroCard.addSubview(topButtonsStack)
         heroCard.addSubview(searchBar)
+        heroCard.addSubview(catScroll)
         headerContainer.addSubview(heroCard)
         self.collectionView.addSubview(headerContainer)
         self.heroContainerView = headerContainer
         
         NSLayoutConstraint.activate([
-            heroCard.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor, constant: 16),
-            heroCard.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -16),
+            heroCard.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor, constant: 14),
+            heroCard.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -14),
             heroCard.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 4),
             heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -4),
             
-            self.titleStackView.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 16),
-            self.titleStackView.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 14),
-            self.titleStackView.trailingAnchor.constraint(lessThanOrEqualTo: sortBtn.leadingAnchor, constant: -8),
+            self.titleStackView.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 14),
+            self.titleStackView.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 12),
+            self.titleStackView.trailingAnchor.constraint(lessThanOrEqualTo: topButtonsStack.leadingAnchor, constant: -6),
             
             titleOverlayButton.leadingAnchor.constraint(equalTo: self.titleStackView.leadingAnchor),
             titleOverlayButton.trailingAnchor.constraint(equalTo: self.titleStackView.trailingAnchor),
             titleOverlayButton.topAnchor.constraint(equalTo: self.titleStackView.topAnchor),
             titleOverlayButton.bottomAnchor.constraint(equalTo: self.titleStackView.bottomAnchor),
             
-            sortBtn.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -14),
-            sortBtn.centerYAnchor.constraint(equalTo: self.titleStackView.centerYAnchor),
+            topButtonsStack.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
+            topButtonsStack.centerYAnchor.constraint(equalTo: self.titleStackView.centerYAnchor),
             
-            subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 16),
-            subLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -16),
-            subLabel.topAnchor.constraint(equalTo: self.titleStackView.bottomAnchor, constant: 4),
+            subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 14),
+            subLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -14),
+            subLabel.topAnchor.constraint(equalTo: self.titleStackView.bottomAnchor, constant: 3),
             
-            searchBar.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 8),
-            searchBar.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -8),
-            searchBar.topAnchor.constraint(equalTo: subLabel.bottomAnchor, constant: 4),
-            searchBar.bottomAnchor.constraint(equalTo: heroCard.bottomAnchor, constant: -8),
-            searchBar.heightAnchor.constraint(equalToConstant: 44)
+            searchBar.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 6),
+            searchBar.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -6),
+            searchBar.topAnchor.constraint(equalTo: subLabel.bottomAnchor, constant: 2),
+            searchBar.heightAnchor.constraint(equalToConstant: 40),
+            
+            catScroll.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
+            catScroll.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
+            catScroll.topAnchor.constraint(equalTo: searchBar.bottomAnchor, constant: 2),
+            catScroll.bottomAnchor.constraint(equalTo: heroCard.bottomAnchor, constant: -8),
+            catScroll.heightAnchor.constraint(equalToConstant: 30),
+            
+            catStack.leadingAnchor.constraint(equalTo: catScroll.contentLayoutGuide.leadingAnchor),
+            catStack.trailingAnchor.constraint(equalTo: catScroll.contentLayoutGuide.trailingAnchor),
+            catStack.topAnchor.constraint(equalTo: catScroll.contentLayoutGuide.topAnchor),
+            catStack.bottomAnchor.constraint(equalTo: catScroll.contentLayoutGuide.bottomAnchor),
+            catStack.heightAnchor.constraint(equalTo: catScroll.frameLayoutGuide.heightAnchor)
         ])
+        
+        buildQuickCategoryPills()
         
         heroCard.alpha = 0
         heroCard.transform = CGAffineTransform(translationX: 0, y: -10)
-        UIView.animate(withDuration: 0.5, delay: 0.05, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.5, options: .curveEaseOut) {
+        UIView.animate(withDuration: 0.45, delay: 0.03, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.5, options: .curveEaseOut) {
             heroCard.alpha = 1
             heroCard.transform = .identity
+        }
+    }
+    
+    func buildQuickCategoryPills() {
+        guard let stack = self.categoryPillsStack else { return }
+        stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        
+        let items: [(title: String, category: StoreCategory?)] = [
+            ("✨ Tất cả", nil),
+            ("🛠 Tiện ích", .utilities),
+            ("💬 Mạng xã hội", .social),
+            ("🎬 Giải trí", .entertainment),
+            ("🎮 Trò chơi", .games),
+            ("🕹 Giả lập", .emulators),
+            ("📸 Ảnh & Video", .photoAndVideo),
+            ("📦 Khác", .other)
+        ]
+        
+        for (index, item) in items.enumerated() {
+            let pill = UIButton(type: .system)
+            pill.tag = index
+            pill.setTitle(item.title, for: .normal)
+            pill.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .bold)
+            pill.layer.cornerRadius = 13
+            pill.contentEdgeInsets = UIEdgeInsets(top: 5, left: 11, bottom: 5, right: 11)
+            pill.addAction(UIAction { [weak self] _ in
+                guard let self else { return }
+                #if !os(tvOS)
+                UISelectionFeedbackGenerator().selectionChanged()
+                #endif
+                if item.category == nil {
+                    // Nếu bấm vào "✨ Tất cả" thì xóa luôn cả lọc nguồn để hiện toàn bộ kho
+                    self.selectedSourceFilter = nil
+                }
+                self.category = item.category
+            }, for: .touchUpInside)
+            stack.addArrangedSubview(pill)
+        }
+        
+        updateQuickCategoryPillsSelection()
+    }
+    
+    func updateQuickCategoryPillsSelection() {
+        guard let stack = self.categoryPillsStack else { return }
+        let categories: [StoreCategory?] = [nil, .utilities, .social, .entertainment, .games, .emulators, .photoAndVideo, .other]
+        
+        for (idx, view) in stack.arrangedSubviews.enumerated() {
+            guard let btn = view as? UIButton, idx < categories.count else { continue }
+            let isSelected = (categories[idx] == self.category)
+            UIView.animate(withDuration: 0.2) {
+                if isSelected {
+                    btn.backgroundColor = BrowseCSSTheme.white
+                    btn.setTitleColor(BrowseCSSTheme.purple, for: .normal)
+                    btn.layer.borderWidth = 0
+                } else {
+                    btn.backgroundColor = BrowseCSSTheme.white.withAlphaComponent(0.18)
+                    btn.setTitleColor(BrowseCSSTheme.white, for: .normal)
+                    btn.layer.borderWidth = 1.0
+                    btn.layer.borderColor = BrowseCSSTheme.white.withAlphaComponent(0.35).cgColor
+                }
+            }
+        }
+    }
+    
+    func styleManageSourcesButton() {
+        guard let btn = self.heroManageSourcesButton else { return }
+        if #available(iOS 15.0, tvOS 15.0, *) {
+            var config = UIButton.Configuration.filled()
+            config.baseBackgroundColor = BrowseCSSTheme.green
+            config.baseForegroundColor = BrowseCSSTheme.white
+            config.cornerStyle = .capsule
+            config.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10)
+            
+            var attrTitle = AttributedString("+ Nguồn")
+            attrTitle.font = UIFont.systemFont(ofSize: 12, weight: .bold)
+            config.attributedTitle = attrTitle
+            btn.configuration = config
+        } else {
+            btn.backgroundColor = BrowseCSSTheme.green
+            btn.setTitle("+ Nguồn", for: .normal)
+            btn.setTitleColor(.white, for: .normal)
+            btn.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .bold)
+            btn.layer.cornerRadius = 14
+            btn.contentEdgeInsets = UIEdgeInsets(top: 5, left: 10, bottom: 5, right: 10)
+        }
+        btn.layer.shadowColor = UIColor.black.cgColor
+        btn.layer.shadowOffset = CGSize(width: 0, height: 2)
+        btn.layer.shadowRadius = 4
+        btn.layer.shadowOpacity = 0.2
+    }
+    
+    // MARK: - 🚀 TRUNG TÂM QUẢN LÝ NGUỒN, LỌC THEO NGUỒN & CÀI TRỰC TIẾP IPA TỪ URL
+    func fetchInstalledSources() -> [Source] {
+        let request = Source.fetchRequest() as NSFetchRequest<Source>
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \Source.name, ascending: true)]
+        return (try? DatabaseManager.shared.viewContext.fetch(request)) ?? []
+    }
+    
+    func bootstrapDefaultTrustedSourcesIfNeeded() {
+        guard !Self.didAutoBootstrapTrustedSources else { return }
+        Self.didAutoBootstrapTrustedSources = true
+        
+        // Nếu người dùng chưa có bất kỳ ứng dụng nào trong kho -> Tự động nạp nguồn mặc định
+        let countRequest = StoreApp.fetchRequest() as NSFetchRequest<StoreApp>
+        let currentCount = (try? DatabaseManager.shared.viewContext.count(for: countRequest)) ?? 0
+        guard currentCount == 0 else { return }
+        
+        let starterURLs = [
+            "https://raw.githubusercontent.com/Nguyenhuyhoan/Sii/main/khoapp.json",
+            "https://wuxu1.github.io/wuxu-complete-plus.json",
+            "https://community-apps.sidestore.io/sidecommunity.json"
+        ]
+        
+        Task {
+            for urlString in starterURLs {
+                guard let url = URL(string: urlString) else { continue }
+                _ = try? await AppManager.shared.addSource(sourceURL: url)
+            }
+            await MainActor.run {
+                self.updateSources()
+            }
+        }
+    }
+    
+    @objc func presentTrustedSourcesSheet() {
+        let installedSources = fetchInstalledSources()
+        let installedURLs = Set(installedSources.map { $0.sourceURL.absoluteString.lowercased() })
+        
+        let alert = UIAlertController(
+            title: "📦 Trung Tâm Kho Ứng Dụng",
+            message: "Bạn có thể lọc xem riêng từng kho, bật thêm kho lớn, hoặc cài trực tiếp file .IPA từ đường dẫn:",
+            preferredStyle: .actionSheet
+        )
+        
+        // 1. Tùy chọn Lọc theo Nguồn đã có trong máy (nếu có > 1 nguồn)
+        if !installedSources.isEmpty {
+            let filterTitle = (self.selectedSourceFilter == nil)
+                ? "🔍 Lọc theo từng Nguồn đang có (\(installedSources.count) nguồn)..."
+                : "🔄 Bỏ lọc nguồn (Hiện tất cả \(installedSources.count) nguồn)"
+            
+            alert.addAction(UIAlertAction(title: filterTitle, style: .default) { [weak self] _ in
+                guard let self else { return }
+                if self.selectedSourceFilter != nil {
+                    self.selectedSourceFilter = nil
+                } else {
+                    self.presentFilterByInstalledSourceSheet(installedSources)
+                }
+            })
+        }
+        
+        // 2. Bật nhanh các Kho Nguồn Uy Tín Lớn
+        for repo in kTrustedRepos {
+            let isAdded = installedURLs.contains(repo.urlString.lowercased())
+            let prefix = isAdded ? "✅ " : "➕ "
+            let action = UIAlertAction(title: prefix + repo.name, style: .default) { [weak self] _ in
+                self?.addTrustedSourceURL(repo.urlString, name: repo.name)
+            }
+            alert.addAction(action)
+        }
+        
+        // 3. Nút bật toàn bộ kho lớn 1 chạm
+        alert.addAction(UIAlertAction(title: "⚡ Bật Tất Cả Kho Uy Tín Lớn", style: .default) { [weak self] _ in
+            self?.addAllTrustedRepos()
+        })
+        
+        // 4. Nhập link nguồn JSON tùy chỉnh
+        alert.addAction(UIAlertAction(title: "🔗 Dán Link Nguồn JSON bất kỳ...", style: .default) { [weak self] _ in
+            self?.promptCustomSourceURL()
+        })
+        
+        // 5. Cài trực tiếp file .IPA qua URL
+        alert.addAction(UIAlertAction(title: "📲 Cài đặt trực tiếp từ Link .IPA...", style: .default) { [weak self] _ in
+            self?.promptDirectIPAURLInstall()
+        })
+        
+        // 6. Làm mới toàn bộ kho
+        alert.addAction(UIAlertAction(title: "🔄 Làm Mới Toàn Bộ Kho App", style: .default) { [weak self] _ in
+            self?.collectionView.refreshControl?.beginRefreshing()
+            self?.updateSources()
+        })
+        
+        alert.addAction(UIAlertAction(title: "Đóng", style: .cancel))
+        
+        if let popover = alert.popoverPresentationController, let btn = self.heroManageSourcesButton {
+            popover.sourceView = btn
+            popover.sourceRect = btn.bounds
+        }
+        
+        self.present(alert, animated: true)
+    }
+    
+    func presentFilterByInstalledSourceSheet(_ sources: [Source]) {
+        let sheet = UIAlertController(
+            title: "🔍 Chọn Nguồn Muốn Xem",
+            message: "Bấm vào tên nguồn để chỉ hiển thị ứng dụng của nguồn đó, hoặc quản lý xóa nguồn:",
+            preferredStyle: .actionSheet
+        )
+        
+        sheet.addAction(UIAlertAction(title: "✨ Hiện Tất Cả Các Nguồn", style: .default) { [weak self] _ in
+            self?.selectedSourceFilter = nil
+        })
+        
+        for src in sources {
+            let count = src.apps.count
+            let isCurrent = (self.selectedSourceFilter == src)
+            let prefix = isCurrent ? "✓ " : "📦 "
+            sheet.addAction(UIAlertAction(title: "\(prefix)\(src.name) (\(count) apps)", style: .default) { [weak self] _ in
+                self?.selectedSourceFilter = src
+            })
+        }
+        
+        if sources.count > 1 {
+            sheet.addAction(UIAlertAction(title: "🗑 Xóa bớt nguồn không dùng...", style: .destructive) { [weak self] _ in
+                self?.presentRemoveSourceSheet(sources)
+            })
+        }
+        
+        sheet.addAction(UIAlertAction(title: "Quay lại", style: .cancel))
+        
+        if let popover = sheet.popoverPresentationController, let btn = self.heroManageSourcesButton {
+            popover.sourceView = btn
+            popover.sourceRect = btn.bounds
+        }
+        self.present(sheet, animated: true)
+    }
+    
+    func presentRemoveSourceSheet(_ sources: [Source]) {
+        let sheet = UIAlertController(
+            title: "🗑 Xóa Nguồn Ứng Dụng",
+            message: "Chọn nguồn bạn muốn gỡ khỏi Kho App:",
+            preferredStyle: .actionSheet
+        )
+        
+        for src in sources where src.identifier != Source.altStoreIdentifier {
+            sheet.addAction(UIAlertAction(title: "Xóa: \(src.name)", style: .destructive) { [weak self] _ in
+                guard let self else { return }
+                let srcName = src.name
+                if self.selectedSourceFilter == src {
+                    self.selectedSourceFilter = nil
+                }
+                Task {
+                    try? await AppManager.shared.remove(src)
+                    await MainActor.run {
+                        self.heroSubtitleLabel?.text = "🗑 Đã xóa nguồn \(srcName)"
+                        self.updateDataSource()
+                        self.update()
+                    }
+                }
+            })
+        }
+        
+        sheet.addAction(UIAlertAction(title: "Hủy", style: .cancel))
+        if let popover = sheet.popoverPresentationController, let btn = self.heroManageSourcesButton {
+            popover.sourceView = btn
+            popover.sourceRect = btn.bounds
+        }
+        self.present(sheet, animated: true)
+    }
+    
+    func addTrustedSourceURL(_ urlString: String, name: String) {
+        guard let url = URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
+        
+        self.heroSubtitleLabel?.text = "⏳ Đang nạp \(name)..."
+        Task {
+            do {
+                _ = try await AppManager.shared.addSource(sourceURL: url)
+                await MainActor.run {
+                    self.heroSubtitleLabel?.text = "✅ Đã nạp thành công \(name)!"
+                    self.updateSources()
+                }
+            } catch {
+                await MainActor.run {
+                    self.heroSubtitleLabel?.text = "🔄 Đang làm mới \(name)..."
+                    self.updateSources()
+                }
+            }
+        }
+    }
+    
+    func addAllTrustedRepos() {
+        self.heroSubtitleLabel?.text = "⏳ Đang nạp toàn bộ kho ứng dụng lớn..."
+        Task {
+            for repo in kTrustedRepos {
+                guard let url = URL(string: repo.urlString) else { continue }
+                _ = try? await AppManager.shared.addSource(sourceURL: url)
+            }
+            await MainActor.run {
+                self.heroSubtitleLabel?.text = "✅ Đã kích hoạt toàn bộ kho ứng dụng!"
+                self.updateSources()
+            }
+        }
+    }
+    
+    func promptCustomSourceURL() {
+        let alert = UIAlertController(
+            title: "🔗 Thêm Nguồn Ứng Dụng",
+            message: "Dán đường dẫn nguồn (.json) để nạp thêm ứng dụng vào kho:",
+            preferredStyle: .alert
+        )
+        alert.addTextField { tf in
+            tf.placeholder = "https://.../apps.json"
+            tf.keyboardType = .URL
+            tf.autocapitalizationType = .none
+            tf.autocorrectionType = .no
+            if let clip = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+               clip.hasPrefix("http"), !clip.lowercased().hasSuffix(".ipa") {
+                tf.text = clip
+            }
+        }
+        alert.addAction(UIAlertAction(title: "Hủy", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Thêm Nguồn", style: .default) { [weak self] _ in
+            guard let text = alert.textFields?.first?.text, !text.isEmpty else { return }
+            self?.addTrustedSourceURL(text, name: "Nguồn mới")
+        })
+        self.present(alert, animated: true)
+    }
+    
+    // Tính năng cài đặt trực tiếp từ đường dẫn .IPA trên mạng
+    func promptDirectIPAURLInstall() {
+        let alert = UIAlertController(
+            title: "📲 Cài Trực Tiếp Từ Link .IPA",
+            message: "Dán đường dẫn tải trực tiếp file .ipa để hệ thống tự tải về và ký cài đặt:",
+            preferredStyle: .alert
+        )
+        alert.addTextField { tf in
+            tf.placeholder = "https://.../app.ipa"
+            tf.keyboardType = .URL
+            tf.autocapitalizationType = .none
+            tf.autocorrectionType = .no
+            if let clip = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+               clip.hasPrefix("http") {
+                tf.text = clip
+            }
+        }
+        alert.addAction(UIAlertAction(title: "Hủy", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Tải & Cài Đặt", style: .default) { [weak self] _ in
+            guard let self,
+                  let text = alert.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  let remoteURL = URL(string: text) else { return }
+            self.downloadAndInstallRemoteIPA(from: remoteURL)
+        })
+        self.present(alert, animated: true)
+    }
+    
+    func downloadAndInstallRemoteIPA(from remoteURL: URL) {
+        self.heroSubtitleLabel?.text = "⬇️ Đang tải file IPA từ đường dẫn..."
+        
+        Task {
+            do {
+                let (tempLocation, _) = try await URLSession.shared.download(from: remoteURL)
+                let fileName = remoteURL.lastPathComponent.hasSuffix(".ipa") ? remoteURL.lastPathComponent : "DirectInstallApp.ipa"
+                let destinationURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "_" + fileName)
+                try? FileManager.default.removeItem(at: destinationURL)
+                try FileManager.default.moveItem(at: tempLocation, to: destinationURL)
+                
+                await MainActor.run {
+                    self.heroSubtitleLabel?.text = "⚙️ Đang ký và cài đặt ứng dụng..."
+                    _ = AppManager.shared.install(.url(destinationURL), presentingViewController: self) { [weak self] result in
+                        DispatchQueue.main.async {
+                            try? FileManager.default.removeItem(at: destinationURL)
+                            guard let self else { return }
+                            switch result {
+                            case .success(let installedApp):
+                                self.heroSubtitleLabel?.text = "✅ Đã cài đặt thành công \(installedApp.name)!"
+                            case .failure(let error):
+                                self.heroSubtitleLabel?.text = "⚠️ Cài đặt thất bại: \(error.localizedDescription)"
+                                let toastView = ToastView(error: error, opensLog: true)
+                                toastView.show(in: self)
+                            }
+                        }
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.heroSubtitleLabel?.text = "⚠️ Không thể tải file IPA từ link này."
+                    let toastView = ToastView(error: error)
+                    toastView.show(in: self)
+                }
+            }
         }
     }
     
@@ -476,12 +975,12 @@ private extension BrowseViewController {
             config.baseBackgroundColor = BrowseCSSTheme.white.withAlphaComponent(0.95)
             config.baseForegroundColor = BrowseCSSTheme.blue
             config.cornerStyle = .capsule
-            config.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 10)
+            config.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 9)
             
-            let iconConfig = UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)
+            let iconConfig = UIImage.SymbolConfiguration(pointSize: 10, weight: .bold)
             config.image = UIImage(systemName: "arrow.up.arrow.down", withConfiguration: iconConfig)
             config.imagePlacement = .trailing
-            config.imagePadding = 5
+            config.imagePadding = 4
             
             config.background.strokeColor = BrowseCSSTheme.white
             config.background.strokeWidth = 1.0
@@ -511,7 +1010,7 @@ private extension BrowseViewController {
         
         if #available(iOS 15.0, tvOS 15.0, *), var config = btn.configuration {
             var attrTitle = AttributedString(displayTitle)
-            attrTitle.font = UIFont.systemFont(ofSize: 12, weight: .bold)
+            attrTitle.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
             attrTitle.foregroundColor = BrowseCSSTheme.blue
             config.attributedTitle = attrTitle
             btn.configuration = config
@@ -525,16 +1024,16 @@ private extension BrowseViewController {
     func translateStaticText(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let dictionary: [String: String] = [
-            "Browse": "Khám Phá",
-            "No Apps": "Không có ứng dụng",
-            "Loading...": "Đang tải danh sách ứng dụng...",
-            "Loading…": "Đang tải danh sách ứng dụng…",
-            "Unable to Fetch Apps": "Không thể tải danh sách ứng dụng",
-            "Please make sure your spelling is correct, or try searching for another app.": "Vui lòng kiểm tra lại chính tả từ khóa, hoặc thử tìm kiếm một ứng dụng khác.",
+            "Browse": "Kho App",
+            "No Apps": "Chưa có ứng dụng phù hợp",
+            "Loading...": "Đang đồng bộ kho ứng dụng...",
+            "Loading…": "Đang đồng bộ kho ứng dụng…",
+            "Unable to Fetch Apps": "Chưa thể tải hết kho ứng dụng",
+            "Please make sure your spelling is correct, or try searching for another app.": "Kiểm tra lại từ khóa tìm kiếm, hoặc bấm nút '+ Nguồn' ở góc trên để nạp thêm kho ứng dụng lớn.",
             "Sort by…": "Sắp xếp theo…",
             "Sort by...": "Sắp xếp theo...",
-            "FREE": "NHẬN",
-            "GET": "NHẬN",
+            "FREE": "CÀI ĐẶT",
+            "GET": "CÀI ĐẶT",
             "OPEN": "MỞ",
             "UPDATE": "CẬP NHẬT",
             "INSTALL": "CÀI ĐẶT",
@@ -546,9 +1045,9 @@ private extension BrowseViewController {
     func translateSortingName(_ sorting: AppSorting) -> String {
         switch sorting {
         case .default: return "Mặc định"
-        case .name: return "Tên ứng dụng"
-        case .developer: return "Nhà phát triển"
-        case .lastUpdated: return "Mới cập nhật"
+        case .name: return "Tên A-Z"
+        case .developer: return "Tác giả"
+        case .lastUpdated: return "Mới nhất"
         }
     }
     
@@ -589,20 +1088,17 @@ private extension BrowseViewController {
     }
     
     func styleAppCardCell(_ cell: AppCardCollectionViewCell, with tintColor: UIColor) {
-        // Bo góc 15px và viền trắng sáng cho Banner
         cell.bannerView.layer.cornerRadius = BrowseCSSTheme.cornerRadius
         cell.bannerView.layer.masksToBounds = true
         cell.bannerView.layer.borderWidth = 1.5
         cell.bannerView.layer.borderColor = BrowseCSSTheme.white.withAlphaComponent(0.85).cgColor
         
-        // Đổ bóng phát sáng theo màu của App
         cell.layer.masksToBounds = false
         cell.layer.shadowColor = tintColor.cgColor
         cell.layer.shadowOffset = CGSize(width: 0, height: 8)
         cell.layer.shadowRadius = 16
         cell.layer.shadowOpacity = 0.22
         
-        // Đổ bóng phát sáng và gắn hiệu ứng nhún cho nút Nhận/Mở (PillButton)
         if let btn = cell.bannerView.button {
             btn.layer.shadowColor = tintColor.cgColor
             btn.layer.shadowOffset = CGSize(width: 0, height: 4)
@@ -615,7 +1111,6 @@ private extension BrowseViewController {
             btn.addTarget(self, action: #selector(animatePillButtonRelease(_:)), for: [.touchUpInside, .touchUpOutside, .touchCancel])
         }
         
-        // Việt hóa chữ trên nút hành động (FREE -> NHẬN, OPEN -> MỞ, UPDATE -> CẬP NHẬT)
         translateLabelsInsideCard(cell.bannerView)
     }
     
@@ -632,9 +1127,11 @@ private extension BrowseViewController {
     }
 }
 
-// MARK: - 🔍 XỬ LÝ TÌM KIẾM TRỰC TIẾP TRÊN KHỐI HERO BANNER
+// MARK: - 🔍 XỬ LÝ TÌM KIẾM TRỰC TIẾP TRÊN KHỐI HERO BANNER (CÓ DEBOUNCE CHỐNG LAG)
 extension BrowseViewController: UISearchBarDelegate {
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        self.searchDebounceWorkItem?.cancel()
+        
         let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             self.searchPredicate = nil
@@ -642,14 +1139,20 @@ extension BrowseViewController: UISearchBarDelegate {
             return
         }
         
-        let subpredicates = [
-            NSPredicate(format: "%K CONTAINS[cd] %@", #keyPath(StoreApp.name), trimmed),
-            NSPredicate(format: "%K CONTAINS[cd] %@", #keyPath(StoreApp.subtitle), trimmed),
-            NSPredicate(format: "%K CONTAINS[cd] %@", #keyPath(StoreApp.developerName), trimmed),
-            NSPredicate(format: "%K CONTAINS[cd] %@", #keyPath(StoreApp.bundleIdentifier), trimmed)
-        ]
-        self.searchPredicate = NSCompoundPredicate(orPredicateWithSubpredicates: subpredicates)
-        self.update()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let subpredicates = [
+                NSPredicate(format: "%K CONTAINS[cd] %@", #keyPath(StoreApp.name), trimmed),
+                NSPredicate(format: "%K CONTAINS[cd] %@", #keyPath(StoreApp.subtitle), trimmed),
+                NSPredicate(format: "%K CONTAINS[cd] %@", #keyPath(StoreApp.developerName), trimmed),
+                NSPredicate(format: "%K CONTAINS[cd] %@", #keyPath(StoreApp.bundleIdentifier), trimmed)
+            ]
+            self.searchPredicate = NSCompoundPredicate(orPredicateWithSubpredicates: subpredicates)
+            self.update()
+        }
+        
+        self.searchDebounceWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: workItem)
     }
     
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
@@ -670,7 +1173,7 @@ private extension BrowseViewController
     {
         AppManager.shared.$updateSourcesResult
             .receive(on: RunLoop.main)
-            .sink { [weak self] result in
+            .sink { [weak self] _ in
                 self?.update()
             }
             .store(in: &self.cancellables)
@@ -680,26 +1183,26 @@ private extension BrowseViewController
     {
         let fetchRequest = StoreApp.fetchRequest() as NSFetchRequest<StoreApp>
         fetchRequest.returnsObjectsAsFaults = false
+        // Giới hạn batch size để nếu nguồn có 2000 apps cũng không bao giờ gây lag RAM
+        fetchRequest.fetchBatchSize = 25
         
-        let predicate = StoreApp.visibleAppsPredicate
+        var predicates: [NSPredicate] = [StoreApp.visibleAppsPredicate]
         
-        if let source = self.source
+        if let activeSource = self.activeSourceFilter
         {
-            let filterPredicate = NSPredicate(format: "%K == %@", #keyPath(StoreApp._source), source)
-            fetchRequest.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [filterPredicate, predicate])
+            predicates.append(NSPredicate(format: "%K == %@", #keyPath(StoreApp._source), activeSource))
         }
-        else if let category = self.category
+        
+        if let category = self.category
         {
             let categoryPredicate = switch category {
             case .other: StoreApp.otherCategoryPredicate
             default: NSPredicate(format: "%K == %@", #keyPath(StoreApp._category), category.rawValue)
             }
-            fetchRequest.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, predicate])
+            predicates.append(categoryPredicate)
         }
-        else
-        {
-            fetchRequest.predicate = predicate
-        }
+        
+        fetchRequest.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
         
         var sortDescriptors = [NSSortDescriptor(keyPath: \StoreApp.name, ascending: true),
                                NSSortDescriptor(keyPath: \StoreApp.bundleIdentifier, ascending: true),
@@ -732,7 +1235,7 @@ private extension BrowseViewController
     {
         let fetchRequest = self.makeFetchRequest()
         
-        let context = self.source?.managedObjectContext ?? DatabaseManager.shared.viewContext
+        let context = self.activeSourceFilter?.managedObjectContext ?? DatabaseManager.shared.viewContext
         let dataSource = FetchedResultsCollectionViewPrefetchingDataSource<StoreApp, UIImage>(fetchRequest: fetchRequest, managedObjectContext: context)
         dataSource.placeholderView = self.placeholderView
         dataSource.cellConfigurationHandler = { [weak self] (cell, app, indexPath) in
@@ -742,7 +1245,7 @@ private extension BrowseViewController
             cell.layoutMargins.left = self.view.layoutMargins.left
             cell.layoutMargins.right = self.view.layoutMargins.right
             
-            let showSourceIcon = (self.source == nil)
+            let showSourceIcon = (self.activeSourceFilter == nil)
             cell.configure(for: app, showSourceIcon: showSourceIcon)
             
             cell.bannerView.iconImageView.image = nil
@@ -755,7 +1258,6 @@ private extension BrowseViewController
             let tintColor = app.tintColor ?? BrowseCSSTheme.blue
             cell.tintColor = tintColor
             
-            // ✨ Áp dụng hiệu ứng Card CSS, Đổ bóng & Việt hóa cho thẻ ứng dụng ✨
             self.styleAppCardCell(cell, with: tintColor)
         }
         dataSource.prefetchHandler = { (storeApp, indexPath) in
@@ -785,26 +1287,32 @@ private extension BrowseViewController
     {
         let fetchRequest = self.makeFetchRequest()
         
-        let context = self.source?.managedObjectContext ?? DatabaseManager.shared.viewContext
+        let context = self.activeSourceFilter?.managedObjectContext ?? DatabaseManager.shared.viewContext
         let fetchedResultsController = NSFetchedResultsController(fetchRequest: fetchRequest, managedObjectContext: context, sectionNameKeyPath: nil, cacheName: nil)
         self.dataSource.fetchedResultsController = fetchedResultsController
         
         self.dataSource.predicate = self.searchPredicate
+        
+        if let heroContainer = self.heroContainerView {
+            self.collectionView.bringSubviewToFront(heroContainer)
+        }
     }
     
     func updateSources()
     {
-        AppManager.shared.updateAllSources { result in
+        AppManager.shared.updateAllSources { [weak self] result in
+            guard let self else { return }
             #if !os(tvOS)
             self.collectionView.refreshControl?.endRefreshing()
             #endif
+            
+            self.update()
             
             guard case .failure(let error) = result else { return }
             
             if self.dataSource.itemCount > 0
             {
                 let toastView = ToastView(error: error)
-                toastView.addTarget(nil, action: #selector(TabBarController.presentSources), for: .touchUpInside)
                 toastView.show(in: self)
             }
         }
@@ -814,10 +1322,10 @@ private extension BrowseViewController
     {
         if self.searchPredicate != nil
         {
-            self.placeholderView.textLabel.text = "Không có ứng dụng"
+            self.placeholderView.textLabel.text = "Không tìm thấy ứng dụng"
             self.placeholderView.textLabel.isHidden = false
             
-            self.placeholderView.detailTextLabel.text = "Vui lòng kiểm tra lại chính tả từ khóa, hoặc thử tìm kiếm một ứng dụng khác."
+            self.placeholderView.detailTextLabel.text = "Thử tìm từ khóa khác hoặc bấm '+ Nguồn' ở góc trên để nạp thêm kho ứng dụng lớn."
             self.placeholderView.detailTextLabel.isHidden = false
             
             self.placeholderView.activityIndicatorView.stopAnimating()
@@ -829,20 +1337,21 @@ private extension BrowseViewController
             case nil:
                 self.placeholderView.textLabel.isHidden = true
                 self.placeholderView.detailTextLabel.isHidden = false
-                self.placeholderView.detailTextLabel.text = "Đang tải danh sách ứng dụng..."
+                self.placeholderView.detailTextLabel.text = "Đang đồng bộ kho ứng dụng..."
                 self.placeholderView.activityIndicatorView.startAnimating()
                 
             case .failure(let error):
                 self.placeholderView.textLabel.isHidden = false
                 self.placeholderView.detailTextLabel.isHidden = false
-                self.placeholderView.textLabel.text = "Không thể tải danh sách ứng dụng"
-                self.placeholderView.detailTextLabel.text = error.localizedDescription
+                self.placeholderView.textLabel.text = "Kho ứng dụng đang trống"
+                self.placeholderView.detailTextLabel.text = "Bấm nút '+ Nguồn' màu xanh ở góc trên để bật Kho App Uy Tín ngay!\n(\(error.localizedDescription))"
                 self.placeholderView.activityIndicatorView.stopAnimating()
                 
             case .success:
-                self.placeholderView.textLabel.text = "Không có ứng dụng"
+                self.placeholderView.textLabel.text = "Chưa có ứng dụng trong mục này"
                 self.placeholderView.textLabel.isHidden = false
-                self.placeholderView.detailTextLabel.isHidden = true
+                self.placeholderView.detailTextLabel.text = "Bấm vào '✨ Tất cả' hoặc bấm nút '+ Nguồn' màu xanh ở góc trên để nạp Kho App Uy Tín!"
+                self.placeholderView.detailTextLabel.isHidden = false
                 self.placeholderView.activityIndicatorView.stopAnimating()
             }
         }
@@ -851,17 +1360,19 @@ private extension BrowseViewController
         let headerTitle: String
         let headerSubtitle: String
         
-        if let source = self.source
+        let totalCount = self.dataSource.itemCount
+        
+        if let activeSource = self.activeSourceFilter
         {
-            tintColor = source.effectiveTintColor?.adjustedForDisplay ?? BrowseCSSTheme.blue
-            headerTitle = source.name
-            headerSubtitle = "Danh sách các ứng dụng được cung cấp từ nguồn \(source.name)"
+            tintColor = activeSource.effectiveTintColor?.adjustedForDisplay ?? BrowseCSSTheme.blue
+            headerTitle = activeSource.name
+            headerSubtitle = "Đang lọc \(totalCount) ứng dụng từ \(activeSource.name) • Bấm tiêu đề để đổi"
             
             self.titleSourceIconView.backgroundColor = tintColor
             self.titleSourceIconView.isHidden = false
             self.titleCategoryIconView.isHidden = true
             
-            if let iconURL = source.effectiveIconURL
+            if let iconURL = activeSource.effectiveIconURL
             {
                 Task { [weak self] in
                     do
@@ -881,37 +1392,26 @@ private extension BrowseViewController
         else if let category = self.category
         {
             tintColor = category.tintColor
-            headerTitle = translateCategoryName(category) + " ▾"
-            headerSubtitle = "Chạm vào tên danh mục ở trên để chuyển nhanh sang danh mục khác"
+            headerTitle = translateCategoryName(category)
+            headerSubtitle = "Đang lọc \(totalCount) ứng dụng mục \(translateCategoryName(category))"
             
             let image = UIImage(systemName: category.filledSymbolName)?.withTintColor(.white, renderingMode: .alwaysOriginal)
             self.titleCategoryIconView.image = image
             self.titleCategoryIconView.isHidden = false
             self.titleSourceIconView.isHidden = true
-            
-            // Gắn menu chuyển đổi nhanh Danh mục lên tiêu đề Hero Banner
-            #if !os(tvOS)
-            let categoriesMenu = UIMenu(title: "Chọn danh mục ứng dụng", children: [
-                UIDeferredMenuElement.uncached { [weak self] completion in
-                    let actions = self?.makeCategoryActions() ?? []
-                    completion(actions)
-                }
-            ])
-            self.heroTitleButton?.menu = categoriesMenu
-            self.heroTitleButton?.showsMenuAsPrimaryAction = true
-            #endif
         }
         else
         {
             tintColor = BrowseCSSTheme.blue
-            headerTitle = "Khám Phá"
-            headerSubtitle = "Khám phá, tìm kiếm & cài đặt kho ứng dụng phong phú"
+            headerTitle = "Kho App"
+            headerSubtitle = totalCount > 0
+                ? "Sẵn sàng \(totalCount) ứng dụng • Bấm + Nguồn để nạp thêm hoặc cài IPA"
+                : "Bấm '+ Nguồn' góc phải để bật kho ứng dụng uy tín"
             
             self.titleSourceIconView.isHidden = true
             self.titleCategoryIconView.isHidden = true
         }
         
-        // Không gán self.title để tránh làm xuất hiện chữ trên thanh điều hướng hệ thống
         self.title = nil
         self.navigationItem.title = nil
         
@@ -920,57 +1420,15 @@ private extension BrowseViewController
         self.heroSubtitleLabel?.text = headerSubtitle
         self.view.tintColor = tintColor
         self.updateSortButtonTitle()
-    }
-    
-    func makeCategoryActions() -> [UIAction]
-    {
-        let handler = { [weak self] (category: StoreCategory) in
-            self?.category = category
-        }
         
-        let fetchRequest = NSFetchRequest(entityName: StoreApp.entity().name!) as NSFetchRequest<NSDictionary>
-        fetchRequest.resultType = .dictionaryResultType
-        fetchRequest.returnsDistinctResults = true
-        fetchRequest.propertiesToFetch = [#keyPath(StoreApp._category)]
-        fetchRequest.predicate = StoreApp.visibleAppsPredicate
-        
-        do
-        {
-            let dictionaries = try DatabaseManager.shared.viewContext.fetch(fetchRequest)
-            
-            let categories = dictionaries.map { $0[#keyPath(StoreApp._category)] as? String? ?? nil }.map { rawCategory -> StoreCategory in
-                guard let rawCategory else { return .other }
-                return StoreCategory(rawValue: rawCategory) ?? .other
-            }
-            
-            var sortedCategories = Set(categories).sorted(by: {
-                self.translateCategoryName($0).localizedStandardCompare(self.translateCategoryName($1)) == .orderedAscending
-            })
-            if let otherIndex = sortedCategories.firstIndex(of: .other)
-            {
-                sortedCategories.move(fromOffsets: [otherIndex], toOffset: sortedCategories.count)
-            }
-            
-            let actions = sortedCategories.map { category in
-                let state: UIAction.State = (category == self.category) ? .on : .off
-                let image = UIImage(systemName: category.filledSymbolName)?.withTintColor(category.tintColor, renderingMode: .alwaysOriginal)
-                return UIAction(title: self.translateCategoryName(category), image: image, state: state) { _ in
-                    handler(category)
-                }
-            }
-            
-            return actions
-        }
-        catch
-        {
-            debugLog("Không thể tải danh sách danh mục. \(error.localizedDescription)")
-            return []
+        if let heroContainer = self.heroContainerView {
+            self.collectionView.bringSubviewToFront(heroContainer)
         }
     }
     
     func prepareAppSorting()
     {
-        if self.preferredAppSorting == .default && self.source == nil
+        if self.preferredAppSorting == .default && self.activeSourceFilter == nil
         {
             self.preferredAppSorting = .lastUpdated
         }
@@ -979,7 +1437,7 @@ private extension BrowseViewController
             guard let self else { return completion([]) }
             
             var sortingOptions = AppSorting.allCases
-            if self.source == nil
+            if self.activeSourceFilter == nil
             {
                 sortingOptions = sortingOptions.filter { $0 != .default }
             }
@@ -1005,14 +1463,13 @@ private extension BrowseViewController
             menuOptions.insert(.singleSelection)
         }
         
-        let sortMenu = UIMenu(title: "Sắp xếp ứng dụng theo…", options: menuOptions, children: [children])
+        let sortMenu = UIMenu(title: "Sắp xếp kho ứng dụng…", options: menuOptions, children: [children])
         let sortIcon = UIImage(systemName: "arrow.up.arrow.down.circle.fill")
         
         let sortButton = UIBarButtonItem(title: "Sắp xếp theo…", image: sortIcon, primaryAction: nil, menu: sortMenu)
         self.sortButton = sortButton
         self.navigationItem.rightBarButtonItems = [sortButton]
         
-        // Gắn menu Sắp xếp trực tiếp vào nút viên thuốc trên Hero Banner
         #if !os(tvOS)
         self.heroSortPopupButton?.menu = sortMenu
         self.heroSortPopupButton?.showsMenuAsPrimaryAction = true
@@ -1131,7 +1588,6 @@ extension BrowseViewController: UICollectionViewDelegateFlowLayout
         return itemSize
     }
     
-    // ✨ HIỆU ỨNG TRƯỢT LÊN (SLIDE-IN) MƯỢT MÀ KHI CUỘN DANH SÁCH ✨
     override func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath)
     {
         if !self.animatedIndexPaths.contains(indexPath) {
@@ -1140,14 +1596,13 @@ extension BrowseViewController: UICollectionViewDelegateFlowLayout
             cell.alpha = 0
             cell.transform = CGAffineTransform(translationX: 0, y: 25).scaledBy(x: 0.97, y: 0.97)
             
-            UIView.animate(withDuration: 0.5, delay: 0.03, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.5, options: [.curveEaseOut, .allowUserInteraction]) {
+            UIView.animate(withDuration: 0.45, delay: 0.02, usingSpringWithDamping: 0.82, initialSpringVelocity: 0.5, options: [.curveEaseOut, .allowUserInteraction]) {
                 cell.alpha = 1
                 cell.transform = .identity
             }
         }
     }
     
-    // ✨ HIỆU ỨNG NHÚN KHI BẤM VÀO THẺ ỨNG DỤNG ✨
     override func collectionView(_ collectionView: UICollectionView, didHighlightItemAt indexPath: IndexPath) {
         if let cell = collectionView.cellForItem(at: indexPath) {
             UIView.animate(withDuration: 0.15, delay: 0, options: .curveEaseOut) {

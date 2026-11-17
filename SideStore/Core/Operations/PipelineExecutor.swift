@@ -18,7 +18,7 @@ import Minimuxer
 final class PipelineExecutor: @unchecked Sendable {
     static let shared = PipelineExecutor()
     private init() {}
-    
+
     // Executes a flat list of `PipelineExecutionStep` items sequentially.
     // NOTE: Each pipeline step is an atomic operation unit and CANNOT execute another pipeline step
     //       nor trigger any standalone steps. Recursive step nesting or sub-pipeline invocation is strictly disallowed.
@@ -86,7 +86,7 @@ final class PipelineExecutor: @unchecked Sendable {
         }
         return resultApp
     }
-    
+
     private func executeStep(
         _ step: PipelineStep,
         context: InstallAppOperationContext,
@@ -336,7 +336,7 @@ final class PipelineExecutor: @unchecked Sendable {
             throw error
         }
     }
-    
+
     private func logOperationResult(result: Any?, loggerType: any OperationLogging.Type, operation: any OperationStep) {
         if UserDefaults.standard.isVerboseOperationsLoggingEnabled &&
            OperationsLoggingControl.isLoggingEnabled(for: loggerType.self)
@@ -356,14 +356,16 @@ final class PipelineExecutor: @unchecked Sendable {
 
 // MARK: - 🛡️ HỆ THỐNG CHẨN ĐOÁN LỖI (CHỈ HIỆN ĐÚNG 1 LẦN DUY NHẤT & TỰ LƯU VÀO NHẬT KÝ LỖI)
 extension PipelineExecutor {
-    
+
     // MARK: - 🔒 CHỐT CHẶN HIỂN THỊ & LƯU LOG 1 LẦN DUY NHẤT
     private static let alertStateLock = NSLock()
     private static var alertedGroupIDs: Set<ObjectIdentifier> = []
+    private static var loggedDatabaseGroupIDs: Set<ObjectIdentifier> = []
     private static var loggedDatabaseGroupKeys: Set<String> = []
     private static var isPresentingDiagnosticAlert: Bool = false
     private static var lastAlertDismissTimestamp: CFAbsoluteTime = 0
-    
+    private static var lastDatabaseLogTimestamp: CFAbsoluteTime = 0
+
     /// Kiểm tra xem lỗi có phải là lỗi đã bị huỷ (bao gồm cả `OperationError.cancelled` vốn trả về `CancellationError`)
     static func isCancellationError(_ error: Error) -> Bool {
         if Task.isCancelled || error is CancellationError {
@@ -384,7 +386,7 @@ extension PipelineExecutor {
         }
         return false
     }
-    
+
     /// Kiểm tra xem `RefreshGroup` này đã từng hiển thị bảng thông báo lỗi hay chưa
     static func hasPresentedAlert(for group: RefreshGroup) -> Bool {
         let groupID = ObjectIdentifier(group)
@@ -392,7 +394,7 @@ extension PipelineExecutor {
             alertedGroupIDs.contains(groupID)
         }
     }
-    
+
     /// Đánh dấu và kiểm tra quyền hiển thị thông báo cho 1 `RefreshGroup` (Chỉ cho phép đúng 1 lần)
     private static func tryAcquireAlertPresentation(for group: RefreshGroup?) -> Bool {
         return alertStateLock.withLock {
@@ -418,30 +420,44 @@ extension PipelineExecutor {
             return true
         }
     }
-    
+
     private static func releaseAlertPresentation() {
         alertStateLock.withLock {
             isPresentingDiagnosticAlert = false
             lastAlertDismissTimestamp = CFAbsoluteTimeGetCurrent()
         }
     }
-    
-    /// Đảm bảo mỗi ứng dụng trong 1 `RefreshGroup` chỉ ghi 1 bản ghi lỗi duy nhất vào CoreData
-    private static func tryAcquireDatabaseLog(for group: RefreshGroup?, bundleID: String) -> Bool {
+
+    /// Đảm bảo mỗi `RefreshGroup` hoặc mỗi ứng dụng chỉ ghi 1 bản ghi lỗi duy nhất vào CoreData
+    private static func tryAcquireDatabaseLog(for group: RefreshGroup?, identifierKey: String) -> Bool {
         return alertStateLock.withLock {
-            let groupPart = group.map { String(describing: ObjectIdentifier($0)) } ?? "no_group"
-            let key = "\(groupPart)_\(bundleID)"
-            if loggedDatabaseGroupKeys.contains(key) {
-                return false
+            if let group = group {
+                let groupID = ObjectIdentifier(group)
+                // Nếu cả group này đã từng lưu lỗi (ví dụ ở bước batch hoặc bước pipeline trước đó) thì không lưu trùng
+                if loggedDatabaseGroupIDs.contains(groupID) {
+                    return false
+                }
+                if loggedDatabaseGroupIDs.count > 64 {
+                    loggedDatabaseGroupIDs.removeAll()
+                }
+                loggedDatabaseGroupIDs.insert(groupID)
+                return true
+            } else {
+                let now = CFAbsoluteTimeGetCurrent()
+                let key = "no_group_\(identifierKey)"
+                if loggedDatabaseGroupKeys.contains(key) && (now - lastDatabaseLogTimestamp < 3.0) {
+                    return false
+                }
+                if loggedDatabaseGroupKeys.count > 128 {
+                    loggedDatabaseGroupKeys.removeAll()
+                }
+                loggedDatabaseGroupKeys.insert(key)
+                lastDatabaseLogTimestamp = now
+                return true
             }
-            if loggedDatabaseGroupKeys.count > 128 {
-                loggedDatabaseGroupKeys.removeAll()
-            }
-            loggedDatabaseGroupKeys.insert(key)
-            return true
         }
     }
-    
+
     enum MonitoredPhase: Sendable {
         case authorization  // PHẦN 1: Bước "Xin cấp phép" (Kẹt ở 10% - 30%): Giao tiếp Apple & Anisette
         case systemPush     // PHẦN 2: Bước "Đẩy vào hệ thống" (Kẹt ở 70% - 85%): Giao tiếp nội bộ qua VPN
@@ -460,7 +476,7 @@ extension PipelineExecutor {
             }
         }
     }
-    
+
     enum ErrorSourceBadge: String, Sendable {
         case vpn      = "LỖI VPN / MẠNG"
         case pairing  = "LỖI FILE PAIRING"
@@ -478,20 +494,20 @@ extension PipelineExecutor {
             }
         }
     }
-    
+
     struct DiagnosticErrorItem: Sendable {
         let badge: ErrorSourceBadge
         let title: String
         let cause: String
     }
-    
+
     /// Trạng thái thực tế của card mạng (`utun`, `pdp_ip`, `en0`) trên iOS
     enum VPNHardwareState: Sendable {
         case connectedLocalDevVPN           // Đã bật đúng LocalDevVPN / StosVPN (có IP 10.7.x.x)
         case disconnectedOnCellularOnly     // Đang bật 4G/5G (không Wi-Fi) nhưng đã tắt LocalDevVPN
         case disconnected                   // Đã tắt LocalDevVPN (đang dùng Wi-Fi hoặc mất mạng)
     }
-    
+
     static func monitoredPhase(for step: PipelineStep) -> MonitoredPhase? {
         switch step {
         case .preflightChecks,
@@ -516,7 +532,7 @@ extension PipelineExecutor {
             return nil
         }
     }
-    
+
     // MARK: - 🌐 BỘ DỊCH CÁC CÂU THÔNG BÁO MẶC ĐỊNH CỦA HỆ ĐIỀU HÀNH iOS SANG TIẾNG VIỆT
     static func translateSystemNetworkError(_ text: String) -> String {
         var result = text
@@ -539,7 +555,7 @@ extension PipelineExecutor {
         }
         return result
     }
-    
+
     // MARK: - 🔍 QUÉT TRỰC TIẾP CARD MẠNG ĐỂ NHẬN DIỆN: ĐANG BẬT 4G NHƯNG TẮT LOCALDEVVPN (KHÔNG WIFI)
     static func inspectVPNHardwareState() -> VPNHardwareState {
         var ifaddr: UnsafeMutablePointer<ifaddrs>?
@@ -594,7 +610,7 @@ extension PipelineExecutor {
             return .disconnected
         }
     }
-    
+
     /// Thu thập toàn bộ chuỗi mô tả lỗi sâu nhất (bao gồm cả `underlyingErrors` và `ALTWrappedError`)
     private static func extractFullErrorInfo(_ error: Error) -> (code: Int, domain: String, text: String) {
         let nsError = error as NSError
@@ -621,32 +637,32 @@ extension PipelineExecutor {
         let combined = "\(nsError.domain) \(deepestDomain) \(nsError.code) \(deepestCode) \(error.localizedDescription) \(localDesc) \(deepDesc) \(String(describing: error))".lowercased()
         return (deepestCode, deepestDomain.lowercased(), combined)
     }
-    
+
     // MARK: - 🧩 CÁC HÀM HELPER KIỂM TRA PATTERN CỦA `OperationError` (TRÁNH LỖI TYPE CHECKER)
     private static func isNotAuthenticatedOperationError(_ opError: OperationError?) -> Bool {
         guard let opError = opError else { return false }
         if case .notAuthenticated = opError { return true }
         return false
     }
-    
+
     private static func isPairingNotCompleteOperationError(_ opError: OperationError?) -> Bool {
         guard let opError = opError else { return false }
         if case .pairingNotComplete = opError { return true }
         return false
     }
-    
+
     private static func isInvalidPairingFileOperationError(_ opError: OperationError?) -> Bool {
         guard let opError = opError else { return false }
         if case .invalidPairingFile = opError { return true }
         return false
     }
-    
+
     private static func isTimedOutOperationError(_ opError: OperationError?) -> Bool {
         guard let opError = opError else { return false }
         if case .timedOut = opError { return true }
         return false
     }
-    
+
     // MARK: - 🧠 BỘ CHẨN ĐOÁN LỖI (ĐÃ DỊCH TOÀN BỘ LỖI MẠNG OFFLINE CỦA iOS SANG TIẾNG VIỆT)
     static func diagnoseError(_ error: Error, phase: MonitoredPhase) -> DiagnosticErrorItem {
         let opError: OperationError? = {
@@ -1090,7 +1106,7 @@ extension PipelineExecutor {
             )
         }
     }
-    
+
     // MARK: - 💾 LƯU TRỰC TIẾP LỖI CHẨN ĐOÁN VÀO COREDATA (`LoggedError`) CHO `ErrorLogViewController`
     static func recordDiagnosticErrorToDatabase(
         for group: RefreshGroup?,
@@ -1099,22 +1115,10 @@ extension PipelineExecutor {
         stepName: String,
         operation: AppOperation
     ) async {
-        guard !Self.isCancellationError(error) else { return }
-        
         let appBundleID = operation.bundleIdentifier
         let appName = operation.app.name
         let loggedOp = operation.loggedErrorOperation
         
-        // Chống lưu trùng lặp nhiều lần cho cùng 1 ứng dụng trong cùng 1 lượt chạy
-        guard Self.tryAcquireDatabaseLog(for: group, bundleID: appBundleID) else {
-            return
-        }
-        
-        let diagnosis = Self.diagnoseError(error, phase: phase)
-        let nsError = error as NSError
-        let translatedRaw = Self.translateSystemNetworkError(nsError.localizedDescription)
-        
-        // Tiêu đề lỗi hiển thị theo đúng các case của AppOperation
         let failureTitle: String = {
             switch operation {
             case .install, .reinstall:
@@ -1138,51 +1142,128 @@ extension PipelineExecutor {
             }
         }()
         
-        var userInfo = nsError.userInfo
-        userInfo[NSLocalizedFailureErrorKey] = failureTitle
-        userInfo[NSLocalizedDescriptionKey] = "[\(diagnosis.badge.rawValue)] \(diagnosis.title)"
-        userInfo[NSLocalizedRecoverySuggestionErrorKey] = "Nguyên nhân: \(diagnosis.cause)\nChi tiết kỹ thuật (.\(stepName)): \(translatedRaw)"
-        userInfo[NSUnderlyingErrorKey] = nsError
-        
-        let enrichedError = NSError(domain: nsError.domain, code: nsError.code, userInfo: userInfo)
         let fallbackApp = AnyApp(from: operation.app)
+        
+        await Self.recordDiagnosticErrorToDatabaseCore(
+            for: group,
+            error: error,
+            phase: phase,
+            stepName: stepName,
+            appName: appName,
+            bundleIdentifier: appBundleID,
+            failureTitle: failureTitle,
+            loggedOperation: loggedOp,
+            fallbackApp: fallbackApp
+        )
+    }
+
+    /// Hàm lưu lỗi tổng quát (Dùng cho cả `executePipeline` và các bước ngoài Pipeline như `.injectBatchProfiles`)
+    private static func recordDiagnosticErrorToDatabaseCore(
+        for group: RefreshGroup?,
+        error: Error,
+        phase: MonitoredPhase,
+        stepName: String,
+        appName: String,
+        bundleIdentifier: String?,
+        failureTitle: String,
+        loggedOperation: LoggedErrorOperation,
+        fallbackApp: AnyApp?
+    ) async {
+        guard !Self.isCancellationError(error) else { return }
+        
+        let identifierKey = bundleIdentifier ?? appName
+        guard Self.tryAcquireDatabaseLog(for: group, identifierKey: identifierKey) else {
+            return
+        }
+        
+        let diagnosis = Self.diagnoseError(error, phase: phase)
+        let nsError = error as NSError
+        let info = Self.extractFullErrorInfo(error)
+        let translatedRaw = Self.translateSystemNetworkError(nsError.localizedDescription)
+        
+        // QUAN TRỌNG: Chỉ lưu các kiểu dữ liệu chuẩn NSSecureCoding (String) vào userInfo
+        // Tuyệt đối không gắn Swift Error (như MinimuxerError) vào NSUnderlyingErrorKey vì sẽ làm NSSecureUnarchiveFromDataTransformer lỗi khi save()
+        let cleanDomain = nsError.domain.isEmpty ? "SideStore.DiagnosticError" : nsError.domain
+        let cleanCode = (nsError.code != 0) ? nsError.code : info.code
+        let cleanUserInfo: [String: Any] = [
+            NSLocalizedFailureErrorKey: failureTitle,
+            NSLocalizedFailureReasonErrorKey: failureTitle,
+            NSLocalizedDescriptionKey: "[\(diagnosis.badge.rawValue)] \(diagnosis.title)",
+            NSLocalizedRecoverySuggestionErrorKey: "Nguyên nhân: \(diagnosis.cause)\nChi tiết kỹ thuật (.\(stepName)): \(translatedRaw)"
+        ]
+        
+        let enrichedError = NSError(domain: cleanDomain, code: cleanCode, userInfo: cleanUserInfo)
         
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             DatabaseManager.shared.persistentContainer.performBackgroundTask { bgContext in
                 bgContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
                 
-                // Tìm InstalledApp hoặc StoreApp tương ứng trong bgContext bằng câu lệnh if-let tường minh
-                // (Tuyệt đối không dùng ?? giữa các kiểu NSManagedObject khác nhau và struct AnyApp)
-                let installedFetch: NSFetchRequest<InstalledApp> = InstalledApp.fetchRequest()
-                installedFetch.predicate = NSPredicate(format: "%K == %@", #keyPath(InstalledApp.bundleIdentifier), appBundleID)
-                installedFetch.fetchLimit = 1
-                let matchedInstalledApp = (try? bgContext.fetch(installedFetch))?.first
+                var matchedInstalledApp: InstalledApp? = nil
+                var matchedStoreApp: StoreApp? = nil
                 
-                let storeFetch: NSFetchRequest<StoreApp> = StoreApp.fetchRequest()
-                storeFetch.predicate = NSPredicate(format: "%K == %@", #keyPath(StoreApp.bundleIdentifier), appBundleID)
-                storeFetch.fetchLimit = 1
-                let matchedStoreApp = (try? bgContext.fetch(storeFetch))?.first
+                // 1. Tìm chính xác theo bundleIdentifier nếu có
+                if let bundleID = bundleIdentifier, !bundleID.isEmpty {
+                    let installedFetch: NSFetchRequest<InstalledApp> = InstalledApp.fetchRequest()
+                    installedFetch.predicate = NSPredicate(format: "%K == %@", #keyPath(InstalledApp.bundleIdentifier), bundleID)
+                    installedFetch.fetchLimit = 1
+                    matchedInstalledApp = (try? bgContext.fetch(installedFetch))?.first
+                    
+                    if matchedInstalledApp == nil {
+                        let storeFetch: NSFetchRequest<StoreApp> = StoreApp.fetchRequest()
+                        storeFetch.predicate = NSPredicate(format: "%K == %@", #keyPath(StoreApp.bundleIdentifier), bundleID)
+                        storeFetch.fetchLimit = 1
+                        matchedStoreApp = (try? bgContext.fetch(storeFetch))?.first
+                    }
+                }
+                
+                // 2. Nếu chưa tìm thấy (ví dụ gọi từ .injectBatchProfiles chỉ có appName), tìm theo tên hoặc lấy InstalledApp đầu tiên
+                if matchedInstalledApp == nil && matchedStoreApp == nil {
+                    let byNameFetch: NSFetchRequest<InstalledApp> = InstalledApp.fetchRequest()
+                    byNameFetch.predicate = NSPredicate(format: "%K ==[c] %@", #keyPath(InstalledApp.name), appName)
+                    byNameFetch.fetchLimit = 1
+                    matchedInstalledApp = (try? bgContext.fetch(byNameFetch))?.first
+                    
+                    if matchedInstalledApp == nil {
+                        let anyInstalledFetch: NSFetchRequest<InstalledApp> = InstalledApp.fetchRequest()
+                        anyInstalledFetch.predicate = NSPredicate(format: "%K == YES", #keyPath(InstalledApp.isActive))
+                        anyInstalledFetch.fetchLimit = 1
+                        matchedInstalledApp = (try? bgContext.fetch(anyInstalledFetch))?.first
+                    }
+                    
+                    if matchedInstalledApp == nil {
+                        let firstInstalledFetch: NSFetchRequest<InstalledApp> = InstalledApp.fetchRequest()
+                        firstInstalledFetch.fetchLimit = 1
+                        matchedInstalledApp = (try? bgContext.fetch(firstInstalledFetch))?.first
+                    }
+                }
                 
                 let resolvedApp: any AppProtocol
                 if let installed = matchedInstalledApp {
                     resolvedApp = installed
                 } else if let store = matchedStoreApp {
                     resolvedApp = store
+                } else if let fallback = fallbackApp {
+                    resolvedApp = fallback
                 } else {
-                    resolvedApp = fallbackApp
+                    resolvedApp = AnyApp(
+                        name: appName,
+                        bundleIdentifier: bundleIdentifier ?? "com.sidestore.batch.operation",
+                        url: URL(fileURLWithPath: "/"),
+                        storeApp: nil
+                    )
                 }
                 
                 _ = LoggedError(
                     error: enrichedError,
                     app: resolvedApp,
                     date: Date(),
-                    operation: loggedOp,
+                    operation: loggedOperation,
                     context: bgContext
                 )
                 
                 do {
                     try bgContext.save()
-                    debugLog("[PipelineExecutor] ✅ Đã lưu lỗi của '\(appName)' (\(appBundleID)) vào Nhật Ký Lỗi Hệ Thống.")
+                    debugLog("[PipelineExecutor] ✅ Đã lưu lỗi '\(failureTitle)' (.\(stepName)) vào Nhật Ký Lỗi Hệ Thống.")
                 } catch {
                     debugLog("[PipelineExecutor] ❌ Không thể lưu LoggedError vào CoreData: \(error)")
                 }
@@ -1191,8 +1272,9 @@ extension PipelineExecutor {
             }
         }
     }
-    
+
     /// Hiển thị Bảng Thông Báo Lỗi **CHỈ 1 LẦN DUY NHẤT** cho mỗi `RefreshGroup`
+    /// Đồng thời tự động đảm bảo lỗi (kể cả `.injectBatchProfiles`) luôn được lưu vào Nhật Ký Lỗi Hệ Thống.
     @MainActor
     static func presentDiagnosticErrorAlertOnce(
         for group: RefreshGroup?,
@@ -1204,6 +1286,37 @@ extension PipelineExecutor {
         guard !Self.isCancellationError(error) else {
             return
         }
+        
+        // Tự động đảm bảo lỗi từ các bước ngoài executePipeline (như .injectBatchProfiles khi Làm mới 3 ứng dụng)
+        // cũng được lưu đầy đủ vào CoreData trước khi hiện bảng thông báo!
+        let inferredTitle: String = {
+            if appName.lowercased().hasPrefix("làm mới") || appName.lowercased().hasPrefix("cài đặt") || appName.lowercased().hasPrefix("lỗi") {
+                return "Lỗi \(appName)"
+            }
+            if stepName.lowercased().contains("refresh") || stepName.lowercased().contains("batch") {
+                return "Lỗi làm mới \(appName)"
+            }
+            return "Lỗi thao tác \(appName)"
+        }()
+        
+        let inferredOperation: LoggedErrorOperation = {
+            if stepName.lowercased().contains("refresh") || stepName.lowercased().contains("batch") || appName.lowercased().contains("làm mới") {
+                return .refresh
+            }
+            return .install
+        }()
+        
+        await Self.recordDiagnosticErrorToDatabaseCore(
+            for: group,
+            error: error,
+            phase: phase,
+            stepName: stepName,
+            appName: appName,
+            bundleIdentifier: nil,
+            failureTitle: inferredTitle,
+            loggedOperation: inferredOperation,
+            fallbackApp: nil
+        )
         
         guard Self.tryAcquireAlertPresentation(for: group) else {
             debugLog("[PipelineExecutor] Suppressed duplicate diagnostic alert for step: \(stepName)")
@@ -1264,7 +1377,7 @@ extension PipelineExecutor {
             topVC.present(hc, animated: true)
         }
     }
-    
+
     /// Giữ hàm tương thích nếu được gọi từ nơi không truyền `group`
     @MainActor
     static func presentDiagnosticErrorAlert(
@@ -1281,7 +1394,7 @@ extension PipelineExecutor {
             error: error
         )
     }
-    
+
     @MainActor
     private static func topViewController(base: UIViewController? = nil) -> UIViewController? {
         let baseVC = base ?? UIApplication.shared.connectedScenes
@@ -1302,7 +1415,7 @@ extension PipelineExecutor {
     }
 }
 
-// MARK: - 🎨 GIAO DIỆN BẢNG THÔNG BÁO GỌN ĐẸP (1 NÚT "TẮT THÔNG BÁO", KHÔNG HƯỚNG DẪN FIX LỖI)
+// MARK: - 🎨 GIAO DIỆN BẢNG THÔNG BÁO GỌN ĐẸP (1 NÚT “TẮT THÔNG BÁO”, KHÔNG HƯỚNG DẪN FIX LỖI)
 private enum CSSErrorTheme {
     static let cornerRadius: CGFloat = 15.0
     static let primary = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255)       // #007bff
@@ -1314,7 +1427,7 @@ private enum CSSErrorTheme {
     static let innerRowBackground = SwiftUI.Color(red: 246/255, green: 248/255, blue: 251/255)
     static let border = SwiftUI.Color(red: 218/255, green: 224/255, blue: 233/255)
     static let innerBorder = SwiftUI.Color(red: 222/255, green: 228/255, blue: 236/255)
-    
+
     static var pageGradient: SwiftUI.LinearGradient {
         SwiftUI.LinearGradient(
             colors: [
@@ -1325,7 +1438,7 @@ private enum CSSErrorTheme {
             endPoint: .bottomTrailing
         )
     }
-    
+
     static var heroGradient: SwiftUI.LinearGradient {
         SwiftUI.LinearGradient(
             colors: [
@@ -1353,10 +1466,10 @@ private struct CSSErrorPromptModalView: SwiftUI.View {
     let diagnosis: PipelineExecutor.DiagnosticErrorItem
     let rawErrorText: String
     let onDismiss: () -> Void
-    
+
     @State private var showRawDetails: Bool = false
     @State private var didTapDismiss: Bool = false
-    
+
     var body: some SwiftUI.View {
         SwiftUI.ZStack {
             SwiftUI.Color.black.opacity(0.45)
@@ -1378,7 +1491,7 @@ private struct CSSErrorPromptModalView: SwiftUI.View {
             .padding(.horizontal, 20)
         }
     }
-    
+
     private var headerBannerView: some SwiftUI.View {
         SwiftUI.HStack(spacing: 8) {
             SwiftUI.Image(systemName: phase.icon)
@@ -1396,7 +1509,7 @@ private struct CSSErrorPromptModalView: SwiftUI.View {
         .background(CSSErrorTheme.heroGradient)
         .clipShape(SwiftUI.RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
-    
+
     private var diagnosticCardView: some SwiftUI.View {
         SwiftUI.VStack(alignment: .leading, spacing: 10) {
             SwiftUI.HStack {
@@ -1468,7 +1581,7 @@ private struct CSSErrorPromptModalView: SwiftUI.View {
                 .stroke(CSSErrorTheme.border, lineWidth: 1)
         )
     }
-    
+
     private var dismissButtonView: some SwiftUI.View {
         SwiftUI.Button {
             guard !didTapDismiss else { return }

@@ -1,4 +1,3 @@
-
 //
 //  ErrorLogViewController.swift
 //  AltStore
@@ -68,10 +67,10 @@ final class ErrorLogViewController: UITableViewController
 {
     private lazy var dataSource = self.makeDataSource()
     private var expandedErrorIDs = Set<NSManagedObjectID>()
-    
+
     private var heroGradientLayer: CAGradientLayer?
     private var floatingClearAllButton: UIButton?
-    
+
     private var isScrolling = false {
         didSet {
             guard self.isScrolling != oldValue else { return }
@@ -86,19 +85,19 @@ final class ErrorLogViewController: UITableViewController
         dateFormatter.timeStyle = .short
         return dateFormatter
     }()
-    
+
     // Giữ nguyên @IBOutlet để Storyboard không bao giờ bị lỗi runtime
     @IBOutlet private var exportLogButton: UIBarButtonItem?
     @IBOutlet private var clearLogButton: UIBarButtonItem!
-    
+
     private var _exportedLogURL: URL?
-    
+
     #if !os(tvOS)
     override var preferredStatusBarStyle: UIStatusBarStyle {
         return .darkContent
     }
     #endif
-    
+
     override func viewDidLoad()
     {
         super.viewDidLoad()
@@ -144,21 +143,27 @@ final class ErrorLogViewController: UITableViewController
         // ✨ KÍCH HOẠT GIAO DIỆN CSS THEME & NÚT XOÁ TẤT CẢ GÓC TRÊN PHẢI ✨
         self.applySmartWebCSSTheme()
     }
-    
+
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
+        
+        // Làm mới dữ liệu từ viewContext để các lỗi vừa ghi từ backgroundContext hiện lên ngay lập tức
+        DatabaseManager.shared.viewContext.refreshAllObjects()
+        try? self.dataSource.fetchedResultsController.performFetch()
+        self.tableView.reloadData()
+        
         self.enforceBrightGradientBackground()
         self.setupFloatingClearAllButton()
         self.updateFloatingClearAllButtonState()
     }
-    
+
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         self.floatingClearAllButton?.removeFromSuperview()
         self.floatingClearAllButton = nil
     }
-    
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         if let heroHeader = self.tableView.tableHeaderView,
@@ -168,7 +173,7 @@ final class ErrorLogViewController: UITableViewController
         self.enforceBrightGradientBackground()
         self.updateFloatingClearAllButtonState()
     }
-    
+
     override func prepare(for segue: UIStoryboardSegue, sender: Any?)
     {
         guard let loggedError = sender as? LoggedError, segue.identifier == "showErrorDetails" else { return }
@@ -178,7 +183,7 @@ final class ErrorLogViewController: UITableViewController
         let errorDetailsViewController = navigationController.viewControllers.first as! ErrorDetailsViewController
         errorDetailsViewController.loggedError = loggedError
     }
-    
+
     @IBAction private func unwindFromErrorDetails(_ segue: UIStoryboardSegue)
     {
     }
@@ -191,11 +196,11 @@ private extension ErrorLogViewController
         // 1. Đảm bảo nền Gradient sáng luôn hoạt động kể cả khi có hay không có dữ liệu
         self.enforceBrightGradientBackground()
         self.tableView.separatorStyle = .none
-        
+
         // 2. Tạo Hero Banner kèm nút mở Nhật ký Console
         self.setupCSSHeroBanner()
     }
-    
+
     /// Hàm giữ cho nền sáng Gradient không bao giờ bị biến thành nền đen khi xóa hết nhật ký
     func enforceBrightGradientBackground() {
         // Màu nền fallback sáng phòng trường hợp backgroundView bị thay thế tạm thời
@@ -224,7 +229,7 @@ private extension ErrorLogViewController
             self.tableView.backgroundView = bgView
         }
     }
-    
+
     /// Trang trí giao diện Placeholder (khi xóa hết nhật ký) hài hòa với nền sáng CSS
     func styleBrightPlaceholderView(_ placeholderView: PlaceholderView) {
         placeholderView.overrideUserInterfaceStyle = .light
@@ -275,7 +280,7 @@ private extension ErrorLogViewController
             }
         }
     }
-    
+
     func setupCSSHeroBanner() {
         let headerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 148))
         headerContainer.backgroundColor = .clear
@@ -363,7 +368,7 @@ private extension ErrorLogViewController
         
         self.tableView.tableHeaderView = headerContainer
     }
-    
+
     // MARK: - 🗑️ NÚT ICON XOÁ TẤT CẢ TRÊN CÙNG BÊN PHẢI (ĐỐI XỨNG VỚI NÚT BACK TRÁI)
     func setupFloatingClearAllButton() {
         guard let nav = self.navigationController else { return }
@@ -402,7 +407,7 @@ private extension ErrorLogViewController
             nav.view.bringSubviewToFront(btn)
         }
     }
-    
+
     func updateFloatingClearAllButtonState() {
         guard let btn = self.floatingClearAllButton else { return }
         let hasErrors = (self.dataSource.fetchedResultsController.fetchedObjects?.isEmpty == false)
@@ -410,7 +415,7 @@ private extension ErrorLogViewController
         btn.tintColor = hasErrors ? ErrorLogCSSTheme.danger : UIColor.systemGray3
         btn.alpha = 1.0
     }
-    
+
     @objc func handleFloatingClearAllTapped(_ sender: UIButton) {
         UIView.animate(withDuration: 0.12, animations: {
             sender.transform = CGAffineTransform(scaleX: 0.88, y: 0.88)
@@ -439,11 +444,11 @@ private extension ErrorLogViewController
         })
         self.present(alertController, animated: true)
     }
-    
+
     @objc func handleConsoleButtonTapped() {
         self.showConsoleLogs(self.clearLogButton)
     }
-    
+
     // MARK: - 🇻🇳 BỘ DỊCH THÔNG MINH CÁC LỖI CÀI IPA & REFRESH SANG TIẾNG VIỆT
     func translateErrorFailureTitle(_ text: String?) -> String {
         guard let text = text, !text.isEmpty else {
@@ -499,7 +504,7 @@ private extension ErrorLogViewController
         
         return translated
     }
-    
+
     func translateErrorDescriptionText(_ text: String) -> String {
         var result = text
         let phraseReplacements: [(String, String)] = [
@@ -528,7 +533,7 @@ private extension ErrorLogViewController
         }
         return result
     }
-    
+
     // MARK: - 🃏 BÓC TÁCH VÀ ÁP DỤNG CARD CSS CHO TỪNG DÒNG LỖI (RỘNG BẰNG BANNER + CĂN LỀ ĐẸP)
     func styleInnerCardOfErrorCell(_ cell: ErrorLogTableViewCell, at indexPath: IndexPath, totalRows: Int) {
         cell.backgroundColor = .clear
@@ -562,7 +567,6 @@ private extension ErrorLogViewController
         }
         
         // Neo trực tiếp chiều rộng của khung lỗi theo tableView.frameLayoutGuide (cách lề 16pt)
-        // Giúp khung lỗi luôn rộng bằng hệt khung Banner "Nhật Ký Lỗi Hệ Thống" bất kể kiểu bảng là .insetGrouped hay .plain
         let widthConstraintID = "ErrorCardExactBannerWidth"
         if !self.tableView.constraints.contains(where: { $0.identifier == widthConstraintID && ($0.firstItem === cardView || $0.secondItem === cardView) }) {
             let lead = cardView.leadingAnchor.constraint(equalTo: self.tableView.frameLayoutGuide.leadingAnchor, constant: ErrorLogCSSTheme.cardHorizontalInset)
@@ -661,8 +665,13 @@ private extension ErrorLogViewController
         let fetchRequest = LoggedError.fetchRequest() as NSFetchRequest<LoggedError>
         fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \LoggedError.date, ascending: false)]
         fetchRequest.returnsObjectsAsFaults = false
-        
-        let fetchedResultsController = NSFetchedResultsController(fetchRequest: fetchRequest, managedObjectContext: DatabaseManager.shared.viewContext, sectionNameKeyPath: #keyPath(LoggedError.localizedDateString), cacheName: nil)
+
+        let fetchedResultsController = NSFetchedResultsController(
+            fetchRequest: fetchRequest,
+            managedObjectContext: DatabaseManager.shared.viewContext,
+            sectionNameKeyPath: #keyPath(LoggedError.localizedDateString),
+            cacheName: nil
+        )
         
         let dataSource = FetchedResultsTableViewPrefetchingDataSource<LoggedError, UIImage>(fetchedResultsController: fetchedResultsController)
         dataSource.proxy = self
@@ -739,7 +748,7 @@ private extension ErrorLogViewController
     {
         let point = self.tableView.convert(sender.center, from: sender.superview)
         guard let indexPath = self.tableView.indexPathForRow(at: point), let cell = self.tableView.cellForRow(at: indexPath) as? ErrorLogTableViewCell else { return }
-        
+
         let loggedError = self.dataSource.item(at: indexPath)
         
         if cell.errorDescriptionTextView.isCollapsed
@@ -755,7 +764,7 @@ private extension ErrorLogViewController
             cell.layoutIfNeeded()
         }
     }
-    
+
     enum LogView: String {
         case consoleLog = "console-log"
 
@@ -764,7 +773,7 @@ private extension ErrorLogViewController
             return appDelegate.consoleLog.logFileURL
         }
     }
-    
+
     @IBAction func showConsoleLogs(_ sender: UIBarButtonItem) {
         let consoleLogView = ConsoleLogView(logURL: (UIApplication.shared.delegate as! AppDelegate).consoleLog.logFileURL)
         let consoleLogController = UIHostingController(rootView: consoleLogView)
@@ -801,7 +810,7 @@ private extension ErrorLogViewController
         })
         self.present(alertController, animated: true)
     }
-    
+
     func clearLoggedErrors() async
     {
         do
@@ -819,7 +828,7 @@ private extension ErrorLogViewController
             self.present(alertController, animated: true)
         }
     }
-    
+
     func copyErrorMessage(for loggedError: LoggedError)
     {
         #if !os(tvOS)
@@ -829,7 +838,7 @@ private extension ErrorLogViewController
         UIPasteboard.general.string = errorMessage
         #endif
     }
-    
+
     func copyErrorCode(for loggedError: LoggedError)
     {
         #if !os(tvOS)
@@ -837,7 +846,7 @@ private extension ErrorLogViewController
         UIPasteboard.general.string = errorCode
         #endif
     }
-    
+
     func searchFAQ(for loggedError: LoggedError)
     {
         let staticURL = AppConstants.URLs.errorCodesDocumentation
@@ -856,11 +865,11 @@ extension ErrorLogViewController
         let totalRows = tableView.numberOfRows(inSection: indexPath.section)
         self.styleInnerCardOfErrorCell(errorCell, at: indexPath, totalRows: totalRows)
     }
-    
+
     override func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
         return 38.0
     }
-    
+
     override func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
         let headerTitle = self.tableView(tableView, titleForHeaderInSection: section) ?? ""
         
@@ -939,7 +948,7 @@ extension ErrorLogViewController
             self.viewMoreDetails(for: loggedError)
         }
     }
-    
+
     #if !os(tvOS)
     override func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration?
     {
@@ -978,7 +987,7 @@ extension ErrorLogViewController
         return configuration
     }
     #endif
-    
+
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String?
     {
         let indexPath = IndexPath(row: 0, section: section)
@@ -1005,15 +1014,18 @@ extension ErrorLogViewController
     {
         self.isScrolling = true
     }
+
     override func scrollViewDidEndDecelerating(_ scrollView: UIScrollView)
     {
         self.isScrolling = false
     }
+
     override func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool)
     {
         guard !decelerate else { return }
         self.isScrolling = false
     }
+
     private func updateButtonInteractivity()
     {
         if #available(tvOS 17.0, *) {

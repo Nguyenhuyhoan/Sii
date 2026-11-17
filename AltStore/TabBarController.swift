@@ -1,4 +1,3 @@
-
 //  AltStore/TabBarController.swift
 //  TabBarController.swift
 //  AltStore
@@ -65,7 +64,6 @@ final class TabBarController: UITabBarController
         // 3. Bật lại tab Browse (2), đổi tên thành "Apps" và trỏ thẳng vào BrowseViewController
         if let browseNav = self.viewControllers?[Tab.browse.rawValue] as? UINavigationController
         {
-            // Nếu Storyboard đang trỏ vào FeaturedViewController thì tự động thay bằng BrowseViewController
             if !(browseNav.viewControllers.first is BrowseViewController),
                let storyboard = self.storyboard,
                let browseVC = storyboard.instantiateViewController(withIdentifier: "browseViewController") as? BrowseViewController
@@ -131,16 +129,10 @@ extension TabBarController
             
             return
         }
-        
-        // Nếu người dùng mở DeepLink thêm nguồn (sidestore://source?url=...) -> Tự động nạp nguồn và mở tab "Apps"
+                
         if let notification = (sender as? Notification), let sourceURL = notification.userInfo?[AppDelegate.addSourceDeepLinkURLKey] as? URL
         {
-            Task {
-                _ = try? await AppManager.shared.addSource(sourceURL: sourceURL)
-                AppManager.shared.updateAllSources { _ in }
-            }
-            self.selectedIndex = Tab.browse.rawValue
-            return
+            self.sourcesViewController?.deepLinkSourceURL = sourceURL
         }
         
         self.selectedIndex = Tab.browse.rawValue

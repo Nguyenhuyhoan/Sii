@@ -11,13 +11,14 @@
 
 extension TabBarController
 {
-    // Đã xóa case browse để index của myApps (2) và settings (3) khớp với mảng viewControllers sau khi xóa
+    // Đầy đủ 5 tab tương ứng với 5 nhánh trên Main.storyboard
     private enum Tab: Int, CaseIterable
     {
         case news      // 0: Tổng quan
         case sources   // 1: Sửa lỗi
-        case myApps    // 2: Ứng dụng
-        case settings  // 3: Cài đặt
+        case browse    // 2: Apps (Kho ứng dụng)
+        case myApps    // 3: Ứng dụng (Đã cài)
+        case settings  // 4: Cài đặt
     }
 }
 
@@ -43,13 +44,7 @@ final class TabBarController: UITabBarController
         super.viewDidLoad()
         debugLog("[TabBarController] viewDidLoad()")
         
-        // 1. Xóa tab Browse (nằm ở vị trí index 2 trên Storyboard gốc)
-        if var viewControllers = self.viewControllers, viewControllers.count == 5 {
-            viewControllers.remove(at: 2)
-            self.viewControllers = viewControllers
-        }
-        
-        // 2. Đổi tab News thành "Tổng quan"
+        // 1. Đổi tab News (0) thành "Tổng quan"
         if let newsNav = self.viewControllers?[Tab.news.rawValue] as? UINavigationController
         {
             newsNav.tabBarItem.title = "Tổng quan"
@@ -57,7 +52,7 @@ final class TabBarController: UITabBarController
             newsNav.tabBarItem.selectedImage = UIImage(systemName: "checkmark.shield.fill")
         }
         
-        // 3. Đổi tab Sources (Nguồn) thành "Sửa lỗi" và cập nhật icon
+        // 2. Đổi tab Sources (1) thành "Sửa lỗi" và cập nhật icon
         if let sourcesNav = self.viewControllers?[Tab.sources.rawValue] as? UINavigationController
         {
             sourcesNav.tabBarItem.title = "Sửa lỗi"
@@ -67,13 +62,29 @@ final class TabBarController: UITabBarController
             self.sourcesViewController = sourcesNav.viewControllers.first as? SourcesViewController
         }
         
-        // 4. Đổi tab My Apps thành "Ứng dụng"
+        // 3. Bật lại tab Browse (2), đổi tên thành "Apps" và trỏ thẳng vào BrowseViewController
+        if let browseNav = self.viewControllers?[Tab.browse.rawValue] as? UINavigationController
+        {
+            // Nếu Storyboard đang trỏ vào FeaturedViewController thì tự động thay bằng BrowseViewController
+            if !(browseNav.viewControllers.first is BrowseViewController),
+               let storyboard = self.storyboard,
+               let browseVC = storyboard.instantiateViewController(withIdentifier: "browseViewController") as? BrowseViewController
+            {
+                browseNav.viewControllers = [browseVC]
+            }
+            
+            browseNav.tabBarItem.title = "Apps"
+            browseNav.tabBarItem.image = UIImage(systemName: "square.grid.2x2")
+            browseNav.tabBarItem.selectedImage = UIImage(systemName: "square.grid.2x2.fill")
+        }
+        
+        // 4. Đổi tab My Apps (3) thành "Ứng dụng"
         if let myAppsNav = self.viewControllers?[Tab.myApps.rawValue] as? UINavigationController
         {
             myAppsNav.tabBarItem.title = "Ứng dụng"
         }
         
-        // 5. Đổi tab Settings thành "Cài đặt"
+        // 5. Đổi tab Settings (4) thành "Cài đặt"
         if let settingsNav = self.viewControllers?[Tab.settings.rawValue] as? UINavigationController
         {
             settingsNav.tabBarItem.title = "Cài đặt"
@@ -120,13 +131,19 @@ extension TabBarController
             
             return
         }
-                
+        
+        // Nếu người dùng mở DeepLink thêm nguồn (sidestore://source?url=...) -> Tự động nạp nguồn và mở tab "Apps"
         if let notification = (sender as? Notification), let sourceURL = notification.userInfo?[AppDelegate.addSourceDeepLinkURLKey] as? URL
         {
-            self.sourcesViewController?.deepLinkSourceURL = sourceURL
+            Task {
+                _ = try? await AppManager.shared.addSource(sourceURL: sourceURL)
+                AppManager.shared.updateAllSources { _ in }
+            }
+            self.selectedIndex = Tab.browse.rawValue
+            return
         }
         
-        self.selectedIndex = Tab.sources.rawValue
+        self.selectedIndex = Tab.browse.rawValue
     }
 }
 

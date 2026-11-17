@@ -54,6 +54,16 @@ final class PipelineExecutor: @unchecked Sendable {
                 }
                 
                 if let phase = Self.monitoredPhase(for: step) {
+                    // 1. Lưu lỗi trực tiếp vào CoreData (LoggedError) để hiển thị trong ErrorLogViewController
+                    await Self.recordDiagnosticErrorToDatabase(
+                        for: group,
+                        error: error,
+                        phase: phase,
+                        stepName: "\(step)",
+                        operation: operation
+                    )
+                    
+                    // 2. Hiển thị bảng chẩn đoán lỗi CSS duy nhất 1 lần
                     await Self.presentDiagnosticErrorAlertOnce(
                         for: group,
                         phase: phase,
@@ -61,6 +71,8 @@ final class PipelineExecutor: @unchecked Sendable {
                         appName: operation.app.name,
                         error: error
                     )
+                    
+                    // 3. Ném lỗi cancelled để chặn Alert mặc định của hệ thống hiện trùng lặp
                     throw OperationError.cancelled
                 } else {
                     throw error
@@ -341,12 +353,13 @@ final class PipelineExecutor: @unchecked Sendable {
     }
 }
 
-// MARK: - 🛡️ HỆ THỐNG CHẨN ĐOÁN LỖI (CHỈ HIỆN ĐÚNG 1 LẦN DUY NHẤT)
+// MARK: - 🛡️ HỆ THỐNG CHẨN ĐOÁN LỖI (CHỈ HIỆN ĐÚNG 1 LẦN DUY NHẤT & TỰ LƯU VÀO NHẬT KÝ LỖI)
 extension PipelineExecutor {
     
-    // MARK: - 🔒 CHỐT CHẶN HIỂN THỊ 1 LẦN DUY NHẤT
+    // MARK: - 🔒 CHỐT CHẶN HIỂN THỊ & LƯU LOG 1 LẦN DUY NHẤT
     private static let alertStateLock = NSLock()
     private static var alertedGroupIDs: Set<ObjectIdentifier> = []
+    private static var loggedDatabaseGroupKeys: Set<String> = []
     private static var isPresentingDiagnosticAlert: Bool = false
     private static var lastAlertDismissTimestamp: CFAbsoluteTime = 0
     
@@ -412,6 +425,22 @@ extension PipelineExecutor {
         alertStateLock.withLock {
             isPresentingDiagnosticAlert = false
             lastAlertDismissTimestamp = CFAbsoluteTimeGetCurrent()
+        }
+    }
+    
+    /// Đảm bảo mỗi ứng dụng trong 1 `RefreshGroup` chỉ ghi 1 bản ghi lỗi duy nhất vào CoreData
+    private static func tryAcquireDatabaseLog(for group: RefreshGroup?, bundleID: String) -> Bool {
+        return alertStateLock.withLock {
+            let groupPart = group.map { String(describing: ObjectIdentifier($0)) } ?? "no_group"
+            let key = "\(groupPart)_\(bundleID)"
+            if loggedDatabaseGroupKeys.contains(key) {
+                return false
+            }
+            if loggedDatabaseGroupKeys.count > 128 {
+                loggedDatabaseGroupKeys.removeAll()
+            }
+            loggedDatabaseGroupKeys.insert(key)
+            return true
         }
     }
     
@@ -1022,6 +1051,87 @@ extension PipelineExecutor {
                 title: "Gián đoạn đẩy ứng dụng vào hệ thống (Mã \(code))",
                 cause: translatedFallback
             )
+        }
+    }
+    
+    // MARK: - 💾 LƯU TRỰC TIẾP LỖI CHẨN ĐOÁN VÀO COREDATA (`LoggedError`) CHO `ErrorLogViewController`
+    static func recordDiagnosticErrorToDatabase(
+        for group: RefreshGroup?,
+        error: Error,
+        phase: MonitoredPhase,
+        stepName: String,
+        operation: AppOperation
+    ) async {
+        guard !Self.isCancellationError(error) else { return }
+        
+        let appBundleID = operation.app.bundleIdentifier
+        let appName = operation.app.name
+        
+        // Chống lưu trùng lặp nhiều lần cho cùng 1 ứng dụng trong cùng 1 lượt chạy
+        guard Self.tryAcquireDatabaseLog(for: group, bundleID: appBundleID) else {
+            return
+        }
+        
+        let diagnosis = Self.diagnoseError(error, phase: phase)
+        let nsError = error as NSError
+        let translatedRaw = Self.translateSystemNetworkError(nsError.localizedDescription)
+        
+        // Tiêu đề lỗi hiển thị ở dòng in đậm trong ErrorLogViewController
+        let failureTitle: String = {
+            switch operation {
+            case .install:    return "Lỗi cài đặt \(appName)"
+            case .refresh:    return "Lỗi làm mới \(appName)"
+            case .update:     return "Lỗi cập nhật \(appName)"
+            case .activate:   return "Lỗi kích hoạt \(appName)"
+            case .deactivate: return "Lỗi tắt kích hoạt \(appName)"
+            case .backup:     return "Lỗi sao lưu \(appName)"
+            case .restore:    return "Lỗi khôi phục \(appName)"
+            case .remove:     return "Lỗi gỡ cài đặt \(appName)"
+            case .export:     return "Lỗi xuất IPA \(appName)"
+            }
+        }()
+        
+        var userInfo = nsError.userInfo
+        userInfo[NSLocalizedFailureErrorKey] = failureTitle
+        userInfo[NSLocalizedDescriptionKey] = "[\(diagnosis.badge.rawValue)] \(diagnosis.title)"
+        userInfo[NSLocalizedRecoverySuggestionErrorKey] = "Nguyên nhân: \(diagnosis.cause)\nChi tiết kỹ thuật (.\(stepName)): \(translatedRaw)"
+        userInfo[NSUnderlyingErrorKey] = nsError
+        
+        let enrichedError = NSError(domain: nsError.domain, code: nsError.code, userInfo: userInfo)
+        
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DatabaseManager.shared.persistentContainer.performBackgroundTask { bgContext in
+                bgContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+                
+                // Tìm InstalledApp hoặc StoreApp tương ứng để ErrorLogViewController hiển thị đúng Icon ứng dụng
+                let installedFetch = InstalledApp.fetchRequest() as NSFetchRequest<InstalledApp>
+                installedFetch.predicate = NSPredicate(format: "%K == %@", #keyPath(InstalledApp.bundleIdentifier), appBundleID)
+                installedFetch.fetchLimit = 1
+                let matchedInstalledApp = try? bgContext.fetch(installedFetch).first
+                
+                let storeFetch = StoreApp.fetchRequest() as NSFetchRequest<StoreApp>
+                storeFetch.predicate = NSPredicate(format: "%K == %@", #keyPath(StoreApp.bundleIdentifier), appBundleID)
+                storeFetch.fetchLimit = 1
+                let matchedStoreApp = try? bgContext.fetch(storeFetch).first
+                
+                // Khởi tạo bản ghi LoggedError trong CoreData
+                let loggedError = LoggedError(
+                    error: enrichedError,
+                    installedApp: matchedInstalledApp,
+                    storeApp: matchedStoreApp ?? matchedInstalledApp?.storeApp,
+                    context: bgContext
+                )
+                loggedError.date = Date()
+                
+                do {
+                    try bgContext.save()
+                    debugLog("[PipelineExecutor] ✅ Đã lưu lỗi của '\(appName)' (\(appBundleID)) vào Nhật Ký Lỗi Hệ Thống.")
+                } catch {
+                    debugLog("[PipelineExecutor] ❌ Không thể lưu LoggedError vào CoreData: \(error)")
+                }
+                
+                continuation.resume()
+            }
         }
     }
     

@@ -450,6 +450,16 @@ private extension ErrorLogViewController
     }
 
     // MARK: - 🇻🇳 BỘ DỊCH THÔNG MINH CÁC LỖI CÀI IPA & REFRESH SANG TIẾNG VIỆT
+    func resolveVietnameseFailureTitle(for loggedError: LoggedError) -> String {
+        // Ưu tiên tiêu đề tiếng Việt đã được PipelineExecutor lưu sẵn trong userInfo
+        if let customFailure = (loggedError.userInfo[NSLocalizedFailureErrorKey] as? String) ??
+                               (loggedError.userInfo[NSLocalizedFailureReasonErrorKey] as? String),
+           !customFailure.isEmpty {
+            return self.translateErrorFailureTitle(customFailure)
+        }
+        return self.translateErrorFailureTitle(loggedError.localizedFailure)
+    }
+
     func translateErrorFailureTitle(_ text: String?) -> String {
         guard let text = text, !text.isEmpty else {
             return "Thao tác thất bại"
@@ -478,6 +488,29 @@ private extension ErrorLogViewController
         
         if let exact = exactDictionary[translated] {
             return exact
+        }
+        
+        // Xử lý mẫu "<Action> <AppName> Failed" từ LoggedError.localizedFailure
+        if translated.hasSuffix(" Failed") {
+            let withoutSuffix = String(translated.dropLast(" Failed".count))
+            let actionPrefixes: [(String, String)] = [
+                ("Install ", "Lỗi cài đặt "),
+                ("Resign ", "Lỗi ký lại "),
+                ("Update ", "Lỗi cập nhật "),
+                ("Refresh ", "Lỗi làm mới "),
+                ("Activate ", "Lỗi kích hoạt "),
+                ("Deactivate ", "Lỗi tắt kích hoạt "),
+                ("Backup ", "Lỗi sao lưu "),
+                ("Restore ", "Lỗi khôi phục "),
+                ("Remove ", "Lỗi gỡ cài đặt "),
+                ("Enable JIT for ", "Lỗi bật JIT cho ")
+            ]
+            for (enPrefix, viPrefix) in actionPrefixes {
+                if withoutSuffix.hasPrefix(enPrefix) {
+                    let appName = withoutSuffix.dropFirst(enPrefix.count)
+                    return viPrefix + appName
+                }
+            }
         }
         
         let prefixReplacements: [(String, String)] = [
@@ -681,7 +714,7 @@ private extension ErrorLogViewController
             
             let cell = cell as! ErrorLogTableViewCell
             cell.dateLabel.text = self.timeFormatter.string(from: loggedError.date)
-            cell.errorFailureLabel.text = self.translateErrorFailureTitle(loggedError.localizedFailure)
+            cell.errorFailureLabel.text = self.resolveVietnameseFailureTitle(for: loggedError)
             cell.errorCodeLabel.text = "  \(loggedError.error.localizedErrorCode)  "
             
             let nsError = loggedError.error as NSError
@@ -1043,3 +1076,7 @@ extension ErrorLogViewController
         }
     }
 }
+
+
+
+

@@ -1,4 +1,3 @@
-
 //
 //  PipelineExecutor.swift
 //  SideStore
@@ -1117,7 +1116,7 @@ extension PipelineExecutor {
     ) async {
         let appBundleID = operation.bundleIdentifier
         let appName = operation.app.name
-        let loggedOp = operation.loggedErrorOperation
+        let loggedOp: LoggedError.Operation = operation.loggedErrorOperation
         
         let failureTitle: String = {
             switch operation {
@@ -1166,7 +1165,7 @@ extension PipelineExecutor {
         appName: String,
         bundleIdentifier: String?,
         failureTitle: String,
-        loggedOperation: LoggedErrorOperation,
+        loggedOperation: LoggedError.Operation,
         fallbackApp: AnyApp?
     ) async {
         guard !Self.isCancellationError(error) else { return }
@@ -1299,7 +1298,7 @@ extension PipelineExecutor {
             return "Lỗi thao tác \(appName)"
         }()
         
-        let inferredOperation: LoggedErrorOperation = {
+        let inferredOperation: LoggedError.Operation = {
             if stepName.lowercased().contains("refresh") || stepName.lowercased().contains("batch") || appName.lowercased().contains("làm mới") {
                 return .refresh
             }

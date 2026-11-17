@@ -1064,8 +1064,9 @@ extension PipelineExecutor {
     ) async {
         guard !Self.isCancellationError(error) else { return }
         
-        let appBundleID = operation.app.bundleIdentifier
+        let appBundleID = operation.bundleIdentifier
         let appName = operation.app.name
+        let loggedOp = operation.loggedErrorOperation
         
         // Chống lưu trùng lặp nhiều lần cho cùng 1 ứng dụng trong cùng 1 lượt chạy
         guard Self.tryAcquireDatabaseLog(for: group, bundleID: appBundleID) else {
@@ -1076,18 +1077,27 @@ extension PipelineExecutor {
         let nsError = error as NSError
         let translatedRaw = Self.translateSystemNetworkError(nsError.localizedDescription)
         
-        // Tiêu đề lỗi hiển thị ở dòng in đậm trong ErrorLogViewController
+        // Tiêu đề lỗi hiển thị theo đúng các case của AppOperation
         let failureTitle: String = {
             switch operation {
-            case .install:    return "Lỗi cài đặt \(appName)"
-            case .refresh:    return "Lỗi làm mới \(appName)"
-            case .update:     return "Lỗi cập nhật \(appName)"
-            case .activate:   return "Lỗi kích hoạt \(appName)"
-            case .deactivate: return "Lỗi tắt kích hoạt \(appName)"
-            case .backup:     return "Lỗi sao lưu \(appName)"
-            case .restore:    return "Lỗi khôi phục \(appName)"
-            case .remove:     return "Lỗi gỡ cài đặt \(appName)"
-            case .export:     return "Lỗi xuất IPA \(appName)"
+            case .install, .reinstall:
+                return "Lỗi cài đặt \(appName)"
+            case .refresh:
+                return "Lỗi làm mới \(appName)"
+            case .update:
+                return "Lỗi cập nhật \(appName)"
+            case .activate:
+                return "Lỗi kích hoạt \(appName)"
+            case .deactivate, .deleteApp:
+                return "Lỗi tắt kích hoạt \(appName)"
+            case .backup:
+                return "Lỗi sao lưu \(appName)"
+            case .restore:
+                return "Lỗi khôi phục \(appName)"
+            case .resign:
+                return "Lỗi ký lại \(appName)"
+            case .removeApp, .removeDeactivatedApp:
+                return "Lỗi gỡ cài đặt \(appName)"
             }
         }()
         
@@ -1103,7 +1113,7 @@ extension PipelineExecutor {
             DatabaseManager.shared.persistentContainer.performBackgroundTask { bgContext in
                 bgContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
                 
-                // Tìm InstalledApp hoặc StoreApp tương ứng để ErrorLogViewController hiển thị đúng Icon ứng dụng
+                // Tìm InstalledApp hoặc StoreApp tương ứng trong bgContext để gán đúng relationship & Icon ứng dụng
                 let installedFetch = InstalledApp.fetchRequest() as NSFetchRequest<InstalledApp>
                 installedFetch.predicate = NSPredicate(format: "%K == %@", #keyPath(InstalledApp.bundleIdentifier), appBundleID)
                 installedFetch.fetchLimit = 1
@@ -1114,14 +1124,18 @@ extension PipelineExecutor {
                 storeFetch.fetchLimit = 1
                 let matchedStoreApp = try? bgContext.fetch(storeFetch).first
                 
-                // Khởi tạo bản ghi LoggedError trong CoreData
-                let loggedError = LoggedError(
+                let resolvedApp: AppProtocol = matchedInstalledApp
+                    ?? matchedStoreApp
+                    ?? AnyApp(name: appName, bundleIdentifier: appBundleID, url: nil, storeApp: nil)
+                
+                // Khởi tạo bản ghi LoggedError theo đúng chữ ký init(error:app:date:operation:context:)
+                _ = LoggedError(
                     error: enrichedError,
-                    installedApp: matchedInstalledApp,
-                    storeApp: matchedStoreApp ?? matchedInstalledApp?.storeApp,
+                    app: resolvedApp,
+                    date: Date(),
+                    operation: loggedOp,
                     context: bgContext
                 )
-                loggedError.date = Date()
                 
                 do {
                     try bgContext.save()

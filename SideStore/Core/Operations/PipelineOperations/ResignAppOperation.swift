@@ -37,7 +37,6 @@ final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext
         
         self.setProgress(5)
         
-        let effectiveBundleId = self.context.targetBundleIdentifier
         let appBundleURL = try await self.prepareAppBundle(for: appBundle, profiles: profiles, appexBundleIds: context.appexBundleIds ?? [:])
         
         self.setProgress(40)
@@ -73,7 +72,13 @@ final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext
             if FileManager.default.fileExists(atPath: appBundleURL.path) {
                 try FileManager.default.removeItem(at: appBundleURL)
             }
-            try FileManager.default.copyItem(at: fileURL, to: appBundleURL)
+            // Tối ưu tốc độ I/O: Nếu fileURL đã nằm trong temporaryDirectory (do StageAppOperation vừa copy vào),
+            // dùng moveItem để đổi tên tức thì (O(1)) thay vì copyItem toàn bộ dung lượng app lần thứ 2.
+            if fileURL.path.hasPrefix(self.context.temporaryDirectory.path) {
+                try FileManager.default.moveItem(at: fileURL, to: appBundleURL)
+            } else {
+                try FileManager.default.copyItem(at: fileURL, to: appBundleURL)
+            }
         }
         
         guard let appBundle = ALTApplication(fileURL: appBundleURL) else {
@@ -124,7 +129,7 @@ final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext
         guard let profile = context.useMainProfile ? profiles.values.first : profiles[identifier] else {
             throw OperationError.missingProvisioningProfile(reason: "No provisioning profile found for identifier '\(identifier)'.")
         }
-        guard var parser = try? InfoPlistParser(plistURL: appBundle.infoPlistURL) else {
+        guard let parser = try? InfoPlistParser(plistURL: appBundle.infoPlistURL) else {
             throw OperationError.missingInfoPlist(reason: "Could not read Info.plist for bundle '\(identifier)'.")
         }
         var infoDictionary = parser.rawDictionary as [String: Any]
@@ -132,9 +137,6 @@ final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext
         let newBundleID = appexBundleIds[identifier] ?? profile.bundleIdentifier
         infoDictionary[kCFBundleIdentifierKey as String] = newBundleID
 
-        // Fix-up BGTaskScheduler identifiers so they stay under the new bundle ID.
-        // Otherwise bg register() and submit() both succeed and the handler is never
-        // called, with no error surfaced to the app.
         if identifier != newBundleID, let taskIDs = infoDictionary["BGTaskSchedulerPermittedIdentifiers"] as? [String] {
             let taskIDs = self.rewrittenTaskSchedulerIdentifiers(taskIDs, from: identifier, to: newBundleID)
             infoDictionary["BGTaskSchedulerPermittedIdentifiers"] = taskIDs
@@ -157,7 +159,6 @@ final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext
         }
 
         if let appGroups = profile.entitlements[.appGroups] as? [String] {
-            // To keep file providers working, remap the NSExtensionFileProviderDocumentGroup, if there is one.
             if var extensionInfo = infoDictionary["NSExtension"] as? [String: Any],
                 let appGroup = extensionInfo["NSExtensionFileProviderDocumentGroup"] as? String,
                 let localAppGroup = appGroups.filter({ $0.contains(appGroup) }).min(by: { $0.count < $1.count }) {
@@ -166,7 +167,6 @@ final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext
             }
         }
         
-        // Add app-specific exported UTI so we can check later if this app (extension) is installed or not.
         let installedAppUTI = ["UTTypeConformsTo": [],
                                "UTTypeDescription": "AltStore Installed App",
                                "UTTypeIconFiles": [],
@@ -179,8 +179,6 @@ final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext
         
         try InfoPlistParser(dictionary: infoDictionary).write(to: appBundle.infoPlistURL)
         
-        // Remove _CodeSignature folder (if it exists) because it will be added when resigning and it may have files that aren't overwritten when resigning
-        // These files might be the cause of some ApplicationVerificationFailed errors
         let codeSignatureURL = appBundle.fileURL.appendingPathComponent("_CodeSignature")
         if FileManager.default.fileExists(atPath: codeSignatureURL.path) {
             try FileManager.default.removeItem(at: codeSignatureURL)
@@ -195,19 +193,14 @@ final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext
     }
     
     private func removeMissingAppExtensionReferences(from appBundle: ALTApplication) throws {
-        // If app extensions have been removed from an app (either by AltStore or the developer),
-        // we must remove all references to them from SC_Info/Manifest.plist (if it exists).
-        
         let scInfoURL = appBundle.fileURL.appendingPathComponent("SC_Info")
         let manifestPlistURL = scInfoURL.appendingPathComponent("Manifest.plist")
         
         guard let manifestPlist = try? InfoPlistParser(plistURL: manifestPlistURL),
               let sinfReplicationPaths = manifestPlist.rawDictionary["SinfReplicationPaths"] as? [String] else { return }
         
-        // Remove references to missing files.
         let filteredReplicationPaths = sinfReplicationPaths.filter { path in
             guard let fileURL = URL(string: path, relativeTo: appBundle.fileURL) else { return false }
-            
             let fileExists = FileManager.default.fileExists(atPath: fileURL.path)
             return fileExists
         }
@@ -215,7 +208,6 @@ final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext
         var updatedManifest = manifestPlist.rawDictionary
         updatedManifest["SinfReplicationPaths"] = filteredReplicationPaths
         
-        // Save updated Manifest.plist to disk.
         try InfoPlistParser(dictionary: updatedManifest).write(to: manifestPlistURL)
     }
 

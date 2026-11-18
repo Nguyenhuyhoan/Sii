@@ -210,7 +210,7 @@ private final class GuideImageCacheManager: @unchecked Sendable {
         guard let url = URL(string: urlString) else { return nil }
         do {
             let (data, _) = try await session.data(from: url)
-            return await Task.detached(priority: .userInitiated) { () -> UIImage? in
+            return await Task.detached(priority: .utility) { () -> UIImage? in
                 let options: [CFString: Any] = [
                     kCGImageSourceShouldCache: false
                 ]
@@ -442,8 +442,8 @@ final class SystemCheckViewModel: ObservableObject {
     @Published var hasAnyStoredPairingFile: Bool = false
 
     @Published var isVpnOK: Bool = false
-    @Published var tunnelIP: String = ""
-    @Published var deviceIP: String = ""
+    @Published var tunnelIP: String = "Chưa kết nối"
+    @Published var deviceIP: String = "Chưa kết nối"
 
     @Published var isCellularOK: Bool = false
     @Published var isWifiActive: Bool = false
@@ -471,7 +471,8 @@ final class SystemCheckViewModel: ObservableObject {
     private var isChecking: Bool = false
     private var needsAnotherCheck: Bool = false
     private var pendingForceVerify: Bool = false
-    private var isUpdatingDefaultsInternally: Bool = false
+    private var lastInternalConfigWriteTime: TimeInterval = 0
+    private var latestSnapshot: SystemInterfaceSnapshot? = nil
 
     private var lastVerifiedPairingSuccess: Bool = UserDefaults.standard.bool(forKey: verifiedPairingCacheKey) {
         didSet {
@@ -525,19 +526,18 @@ final class SystemCheckViewModel: ObservableObject {
 
     func markPairingVerifiedImmediately() {
         self.hasAnyStoredPairingFile = true
-        self.didAttemptLiveVerifyInCurrentMode = false
+        self.didAttemptLiveVerifyInCurrentMode = true
+        self.lastVerifiedPairingSuccess = true
         self.lastVerifiedModeSignature = ""
         self.isPairingVerifiedError = false
-        updateInstantStatus()
+        self.isPairingOK = true
+        refreshSnapshotAsyncAndApply()
     }
 
     init() {
         CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
-        updateInstantStatus()
         setupRealtimeListeners()
-        Task {
-            await checkAllStatuses(forceVerify: true)
-        }
+        refreshSnapshotAsyncAndApply()
     }
 
     deinit {
@@ -550,21 +550,38 @@ final class SystemCheckViewModel: ObservableObject {
         guard isViewVisible != visible else { return }
         isViewVisible = visible
         if visible {
-            updateInstantStatus()
             if !isWirelessPairingActive {
                 Task { await checkAllStatuses(forceVerify: false) }
+            } else {
+                refreshSnapshotAsyncAndApply()
             }
         }
     }
 
+    /// Quét cổng mạng hoàn toàn trên nhân tiết kiệm điện (.utility), không bao giờ làm khựng Main Thread
+    private func refreshSnapshotAsyncAndApply() {
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            let snap = await Task.detached(priority: .utility) {
+                Self.scanSystemInterfaces()
+            }.value
+            self.latestSnapshot = snap
+            self.updateInstantStatus(existingSnapshot: snap)
+        }
+    }
+
+    private var isWithinInternalWriteCooldown: Bool {
+        ( CFAbsoluteTimeGetCurrent() - lastInternalConfigWriteTime ) < 0.8
+    }
+
     private func setupRealtimeListeners() {
         networkChangeSubject
-            .debounce(for: .milliseconds(550), scheduler: DispatchQueue.main)
+            .debounce(for: .milliseconds(650), scheduler: DispatchQueue.main)
             .sink { [weak self] forceVerify in
                 guard let self = self,
                       self.isViewVisible,
                       !self.isWirelessPairingActive,
-                      !self.isUpdatingDefaultsInternally else { return }
+                      !self.isWithinInternalWriteCooldown else { return }
                 Task { @MainActor [weak self] in
                     await self?.checkAllStatuses(forceVerify: forceVerify)
                 }
@@ -621,7 +638,7 @@ final class SystemCheckViewModel: ObservableObject {
                 guard let self = self,
                       self.isViewVisible,
                       !self.isWirelessPairingActive,
-                      !self.isUpdatingDefaultsInternally else { return }
+                      !self.isWithinInternalWriteCooldown else { return }
                 self.networkChangeSubject.send(false)
             }
             .store(in: &cancellables)
@@ -632,7 +649,7 @@ final class SystemCheckViewModel: ObservableObject {
                 guard let self = self,
                       self.isViewVisible,
                       !self.isWirelessPairingActive,
-                      !self.isUpdatingDefaultsInternally else { return }
+                      !self.isWithinInternalWriteCooldown else { return }
                 self.networkChangeSubject.send(false)
             }
             .store(in: &cancellables)
@@ -641,8 +658,10 @@ final class SystemCheckViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self, self.isViewVisible else { return }
-                self.updateInstantStatus()
-                guard !self.isWirelessPairingActive else { return }
+                guard !self.isWirelessPairingActive else {
+                    self.refreshSnapshotAsyncAndApply()
+                    return
+                }
                 Task { @MainActor [weak self] in
                     await self?.checkAllStatuses(forceVerify: false)
                 }
@@ -650,7 +669,7 @@ final class SystemCheckViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
-    struct SystemInterfaceSnapshot: Sendable {
+    struct SystemInterfaceSnapshot: Sendable, Equatable {
         let hasCellularIPv4: Bool
         let hasWifiIPv4: Bool
         let hasActiveLocalDevUtun: Bool
@@ -674,7 +693,7 @@ final class SystemCheckViewModel: ObservableObject {
                     let family = addr.pointee.sa_family
                     if family == UInt8(AF_INET) {
                         let name = String(cString: current.pointee.ifa_name).lowercased()
-                        if name == "pdp_ip0" || name == "en0" || name.hasPrefix("utun") {
+                        if name.hasPrefix("pdp_ip") || name == "en0" || name.hasPrefix("utun") {
                             var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
                             if getnameinfo(
                                 addr,
@@ -687,7 +706,7 @@ final class SystemCheckViewModel: ObservableObject {
                             ) == 0 {
                                 let ip = String(cString: hostname)
                                 if !ip.isEmpty && !ip.hasPrefix("169.254.") && ip != "0.0.0.0" {
-                                    if name == "pdp_ip0" {
+                                    if name.hasPrefix("pdp_ip") {
                                         hasPdpIPv4 = true
                                     } else if name == "en0" {
                                         hasEn0IPv4 = true
@@ -718,23 +737,31 @@ final class SystemCheckViewModel: ObservableObject {
         guard !isWirelessPairingActive else { return }
         guard let utunIP = snapshot.detectedLocalDevUtunIPv4, utunIP.hasPrefix("10.7.") else { return }
 
-        isUpdatingDefaultsInternally = true
-        defer { isUpdatingDefaultsInternally = false }
-
         let config = ConnectionConfig.shared
+        var didWrite = false
         if config.overrideTunnelPeerIp != "10.7.0.1" {
             config.overrideTunnelPeerIp = "10.7.0.1"
+            didWrite = true
         }
         if !config.overrideTunnelPeerReachable {
             config.overrideTunnelPeerReachable = true
+            didWrite = true
+        }
+        if didWrite {
+            lastInternalConfigWriteTime = CFAbsoluteTimeGetCurrent()
         }
     }
 
     func setCellularRefreshEnabled(_ enabled: Bool) {
         guard isCellularRefreshEnabled != enabled || UserDefaults.standard.isCellularRefreshEnabled != enabled else { return }
+        lastInternalConfigWriteTime = CFAbsoluteTimeGetCurrent()
         isCellularRefreshEnabled = enabled
         CellularRefreshManager.shared.setEnabled(enabled)
-        updateInstantStatus()
+        if let snap = latestSnapshot {
+            updateInstantStatus(existingSnapshot: snap)
+        } else {
+            refreshSnapshotAsyncAndApply()
+        }
     }
 
     func deleteAllPairingFiles() {
@@ -745,7 +772,11 @@ final class SystemCheckViewModel: ObservableObject {
         self.didAttemptLiveVerifyInCurrentMode = false
         self.isPairingVerifiedError = true
         self.isPairingOK = false
-        updateInstantStatus()
+        if let snap = latestSnapshot {
+            updateInstantStatus(existingSnapshot: snap)
+        } else {
+            refreshSnapshotAsyncAndApply()
+        }
     }
 
     private static func isValidConnectedIP(_ value: String?, disconnectedText: String) -> Bool {
@@ -772,8 +803,9 @@ final class SystemCheckViewModel: ObservableObject {
         }
     }
 
-    func updateInstantStatus(existingSnapshot: SystemInterfaceSnapshot? = nil) {
-        let snapshot = existingSnapshot ?? Self.scanSystemInterfaces()
+    func updateInstantStatus(existingSnapshot: SystemInterfaceSnapshot) {
+        let snapshot = existingSnapshot
+        self.latestSnapshot = snapshot
         ensureTunnelRoutingPinned(snapshot: snapshot)
 
         let cellularActive = usesCellularPath || isCellularPathSatisfied || snapshot.hasCellularIPv4
@@ -956,7 +988,12 @@ final class SystemCheckViewModel: ObservableObject {
     }
 
     func checkAllStatuses(forceVerify: Bool = false) async {
-        guard !isWirelessPairingActive else { return }
+        if isWirelessPairingActive {
+            if forceVerify {
+                pendingForceVerify = true
+            }
+            return
+        }
 
         if isChecking {
             needsAnotherCheck = true
@@ -977,7 +1014,7 @@ final class SystemCheckViewModel: ObservableObject {
             }
         }
 
-        let snapshot = await Task.detached(priority: .userInitiated) {
+        let snapshot = await Task.detached(priority: .utility) {
             Self.scanSystemInterfaces()
         }.value
 
@@ -1000,10 +1037,19 @@ final class SystemCheckViewModel: ObservableObject {
         let canVerifyNow = vpnActive && (wifiActive || !cellularActive)
 
         if canVerifyNow {
-            let currentSignature = "\(tunnelIP)|wifi:\(wifiActive)|cell:\(cellularActive)"
+            // Chế độ kiểm tra độc lập (Tắt cả Wi-Fi và 4G, chỉ bật VPN)
+            let isStrictLoopbackTestMode = vpnActive && !wifiActive && !cellularActive
+            let currentSignature = "\(tunnelIP)|strict:\(isStrictLoopbackTestMode)"
             let signatureChanged = (lastVerifiedModeSignature != currentSignature)
 
-            if forceVerify || !didAttemptLiveVerifyInCurrentMode || signatureChanged {
+            // Tối ưu thông minh: Nếu đã từng verify thành công rồi thì không tự động giải mã lại mỗi khi Wi-Fi nhấp nháy,
+            // trừ khi người dùng bật chế độ test nghiêm ngặt (Tắt Wi-Fi + Tắt 4G + Bật VPN) hoặc chủ động forceVerify.
+            let shouldPerformHeavyHandshake = forceVerify
+                || !didAttemptLiveVerifyInCurrentMode
+                || !lastVerifiedPairingSuccess
+                || (isStrictLoopbackTestMode && signatureChanged)
+
+            if shouldPerformHeavyHandshake {
                 let ok = await verifyPairingOverTunnel(initialSnapshot: snapshot)
                 self.didAttemptLiveVerifyInCurrentMode = true
                 self.lastVerifiedModeSignature = currentSignature
@@ -1036,7 +1082,8 @@ struct SystemCheckDashboardView: SwiftUI.View {
 
     var body: some SwiftUI.View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 18) {
+            // LazyVStack giúp các mục ở cuối trang (đặc biệt là Video YouTube) chỉ khởi tạo khi người dùng thực sự cuộn tới
+            LazyVStack(spacing: 18) {
                 // Khối Hero Banner đồng bộ 100% với SettingsViewController
                 CSSHeroBannerView(
                     title: "SideStore",
@@ -1241,11 +1288,12 @@ struct SystemCheckDashboardView: SwiftUI.View {
     }
 }
 
-/// Khung phát video dọc tỉ lệ 9:19.5 được thiết kế lớn, sắc nét, bo tròn 4 góc chuẩn iPhone 14 (47.33pt continuous)
+/// Khung phát video dọc tỉ lệ 9:19.5 thông minh: Chỉ nạp WKWebView khi người dùng thực sự cuộn tới vùng hiển thị (LazyVStack)
 struct IPhone14VerticalVideoFrameView: SwiftUI.View {
     let videoID: String
     @State private var isVisibleOnScreen: Bool = false
     @State private var shouldMountWebView: Bool = false
+    @State private var mountTask: Task<Void, Never>? = nil
 
     private let iPhone14CornerRadius: CGFloat = CSSTheme.mediaFrameCornerRadius
 
@@ -1278,13 +1326,18 @@ struct IPhone14VerticalVideoFrameView: SwiftUI.View {
         .onAppear {
             isVisibleOnScreen = true
             if !shouldMountWebView {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                mountTask?.cancel()
+                mountTask = Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 180_000_000)
+                    guard !Task.isCancelled, isVisibleOnScreen else { return }
                     shouldMountWebView = true
                 }
             }
         }
         .onDisappear {
             isVisibleOnScreen = false
+            mountTask?.cancel()
+            mountTask = nil
         }
     }
 }
@@ -1914,20 +1967,17 @@ struct PairingGuideSheetView: SwiftUI.View {
                 isPresented: $pairingMgmtVM.showFileImporter,
                 allowedContentTypes: pairingMgmtVM.allowedPairingTypes
             ) { result in
-                if case .success = result {
-                    PairingFileManager.shared.resetAllPairingFiles()
-                }
                 pairingMgmtVM.handleImportResult(result)
                 Task { @MainActor in
                     let proto = PairingFileManager.shared.persistedActiveProtocol
                         ?? PairingFileManager.shared.preferredProtocol
                         ?? .rppairing
                     try? await minimuxerSwitchPairingProtocol(to: proto)
-                    vm.markPairingVerifiedImmediately()
-                    await vm.checkAllStatuses(forceVerify: true)
                     if case .success = result {
+                        vm.markPairingVerifiedImmediately()
                         statusBannerMessage = "Đã nạp tệp Pairing thành công!"
                     }
+                    await vm.checkAllStatuses(forceVerify: true)
                 }
             }
             #endif

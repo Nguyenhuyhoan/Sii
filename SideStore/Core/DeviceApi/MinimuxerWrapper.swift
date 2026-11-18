@@ -1,5 +1,3 @@
-// SideStore/Core/DeviceApi/MinimuxerWrapper.swift
-
 
 //
 //  MinimuxerWrapper.swift
@@ -369,6 +367,24 @@ func installAppBundle(_ bundleId: String, appName: String) async throws {
     #endif
 }
 
+/// Bóc tách khóa UDID trực tiếp từ chuỗi XML/Plist của File Pairing hiện tại
+private func extractUDIDFromActivePairingFile() -> String? {
+    guard let pairingString = PairingFileManager.shared.fetchPairingFile(),
+          let data = pairingString.data(using: .utf8),
+          let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any] else {
+        return nil
+    }
+    for key in ["UDID", "UniqueDeviceID", "DeviceUDID", "udid"] {
+        if let val = plist[key] as? String {
+            let clean = val.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !clean.isEmpty {
+                return clean
+            }
+        }
+    }
+    return nil
+}
+
 @discardableResult
 func fetchUDID(forceLive: Bool = false) async throws -> String {
     defer { debugLog("[SideStore] fetchUDID() completed") }
@@ -377,18 +393,55 @@ func fetchUDID(forceLive: Bool = false) async throws -> String {
     return "00008030-001234567890ABCD"
     
     #else
-    if !forceLive, let cachedUDID = Keychain.shared.deviceUDID, !cachedUDID.isEmpty {
-        debugLog("[SideStore] fetchUDID() returning cached UDID from Keychain: \(cachedUDID)")
+    debugLog("[SideStore] fetchUDID() invoked (forceLive: \(forceLive))")
+
+    // Nếu bắt buộc kiểm tra kết nối sống (forceLive == true, ví dụ khi chờ Minimuxer sẵn sàng sau khi tắt 4G)
+    if forceLive {
+        return try await withRemotePairingRetry {
+            let udid = try await minimuxer.core.fetchUDID()
+            let clean = udid.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !clean.isEmpty else {
+                throw OperationError.unknownUDID(reason: "Minimuxer returned empty UDID.")
+            }
+            Keychain.shared.deviceUDID = clean
+            return clean
+        }
+    }
+
+    // Khi lấy UDID phục vụ Xác thực Apple / Xin Provisioning Profile / Ký IPA (forceLive == false):
+    // ƯU TIÊN 1 (Chính xác nhất): Thử lấy trực tiếp từ Minimuxer nếu kết nối đang thông suốt
+    if let liveUDID = try? await minimuxer.core.fetchUDID() {
+        let clean = liveUDID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !clean.isEmpty {
+            Keychain.shared.deviceUDID = clean
+            debugLog("[SideStore] fetchUDID() resolved from Priority 1 (Live Minimuxer): \(clean)")
+            return clean
+        }
+    }
+
+    // ƯU TIÊN 2 (Chính xác nhì): Bóc trực tiếp UDID từ File Pairing gốc của máy (luôn hoạt động kể cả khi đang bật 4G)
+    if let pairingUDID = extractUDIDFromActivePairingFile() {
+        Keychain.shared.deviceUDID = pairingUDID
+        debugLog("[SideStore] fetchUDID() resolved from Priority 2 (Pairing File): \(pairingUDID)")
+        return pairingUDID
+    }
+
+    // ƯU TIÊN 3 (Chính xác ba): Lấy từ Keychain.shared.deviceUDID đã lưu
+    if let cachedUDID = Keychain.shared.deviceUDID?.trimmingCharacters(in: .whitespacesAndNewlines),
+       !cachedUDID.isEmpty {
+        debugLog("[SideStore] fetchUDID() resolved from Priority 3 (Keychain Cache): \(cachedUDID)")
         return cachedUDID
     }
-    debugLog("[SideStore] fetchUDID() invoked (forceLive: \(forceLive))")
+
+    // Nếu cả 3 nơi đều chưa có (trường hợp hiếm), thử lại qua RemotePairingRetry để báo lỗi chuẩn
     return try await withRemotePairingRetry {
         let udid = try await minimuxer.core.fetchUDID()
-        guard !udid.isEmpty else {
+        let clean = udid.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else {
             throw OperationError.unknownUDID(reason: "Minimuxer returned empty UDID.")
         }
-        Keychain.shared.deviceUDID = udid
-        return udid
+        Keychain.shared.deviceUDID = clean
+        return clean
     }
     #endif
 }

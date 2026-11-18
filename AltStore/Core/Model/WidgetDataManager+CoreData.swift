@@ -32,16 +32,11 @@ extension WidgetDataManager {
             var icons: [String: UIImage] = [:]
             for app in sortedAllApps {
                 var icon: UIImage? = nil
-                // Ưu tiên đọc trực tiếp từ gói .app riêng biệt của từng InstalledApp tại app.fileURL
-                if let application = ALTApplication(fileURL: app.fileURL),
-                   let appIcon = application.icon {
-                    icon = appIcon
-                } else if app.bundleIdentifier == StoreApp.altstoreAppID {
-                    icon = ALTApplication(fileURL: Bundle.main.bundleURL)?.icon
-                        ?? ALTApplication(fileURL: Bundle.Info.activeBundleURL)?.icon
-                        ?? UIImage(named: "SideStore")
+                if app.bundleIdentifier == StoreApp.altstoreAppID {
+                    icon = ALTApplication(fileURL: Bundle.Info.activeBundleURL)?.icon ?? UIImage(named: "SideStore")
+                } else if let application = ALTApplication(fileURL: app.fileURL) {
+                    icon = application.icon
                 }
-
                 if let icon {
                     icons[app.bundleIdentifier] = icon
                 }

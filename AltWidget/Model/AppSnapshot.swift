@@ -9,8 +9,10 @@
 @preconcurrency import UIKit
 import WidgetKit
 
-struct AppSnapshot
+struct AppSnapshot: Identifiable
 {
+    var id: String { "\(bundleIdentifier)-\(name)" }
+
     var name: String
     var bundleIdentifier: String
     var expirationDate: Date

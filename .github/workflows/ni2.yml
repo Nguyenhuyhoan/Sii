@@ -1,9 +1,10 @@
 
+
 name: Nightly SideStore Build 👍 Fast
 
 on:
   push:
-    branches: [develop, LiveContainerSupport]
+    branches: [develop, LiveContainerSupport, main]
     paths-ignore:
       - '**.md'
       - 'LICENSE'
@@ -15,13 +16,17 @@ on:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+  actions: read
+
 concurrency:
-  group: ${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    runs-on: xcode-27 # Đảm bảo runner của bạn hỗ trợ tag này
+    runs-on: macos-15 # Runner Apple Silicon chuẩn của GitHub (nhanh và miễn phí)
     env:
       DEPLOY_KEY: ${{ secrets.CROSS_REPO_PUSH_KEY }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -30,53 +35,60 @@ jobs:
       UPSTREAM_CHANNEL: ""
 
     steps:
-      # 1. Tối ưu Checkout: Không tải full lịch sử của submodules
+      # 1. Tối ưu Checkout: Không tải sẵn submodules ở bước này
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Cần thiết cho repo chính để đếm commit
-          submodules: false 
+          fetch-depth: 0
+          submodules: false
 
-      # 2. Gộp các bước kiểm tra điều kiện build vào làm một
+      # 2. Kiểm tra điều kiện build
       - name: Check Build Conditions
         id: build_gate
         run: |
           LAST_SUCCESSFUL_COMMIT=$(python3 scripts/ci/workflow.py last-successful-commit "false" "${{ env.CHANNEL }}" || echo "")
-          echo "LAST_SUCCESSFUL_COMMIT=$LAST_SUCCESSFUL_COMMIT" | tee -a $GITHUB_ENV
+          echo "LAST_SUCCESSFUL_COMMIT=$LAST_SUCCESSFUL_COMMIT" | tee -a "$GITHUB_ENV"
 
           SHOULD_SKIP="false"
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            NEW_COMMITS=$(python3 scripts/ci/workflow.py count-new-commits "$LAST_SUCCESSFUL_COMMIT")
-            echo "NEW_COMMITS=$NEW_COMMITS" | tee -a $GITHUB_ENV
+            NEW_COMMITS=$(python3 scripts/ci/workflow.py count-new-commits "$LAST_SUCCESSFUL_COMMIT" || echo "1")
+            echo "NEW_COMMITS=$NEW_COMMITS" | tee -a "$GITHUB_ENV"
             if [ "${NEW_COMMITS:-0}" -lt 1 ]; then
               SHOULD_SKIP="true"
             fi
           fi
-          echo "should_skip=$SHOULD_SKIP" >> $GITHUB_OUTPUT
+          echo "should_skip=$SHOULD_SKIP" >> "$GITHUB_OUTPUT"
 
-      # 3. Chỉ tải Submodules nếu thực sự cần build, và chỉ tải nông (depth=1)
-      - name: Checkout Submodules (Shallow)
+      # 3. Tải Submodules nông (có fallback an toàn nếu commit submodule bị ẩn sâu)
+      - name: Checkout Submodules (Shallow with Fallback)
         if: steps.build_gate.outputs.should_skip != 'true'
-        run: git submodule update --init --recursive --depth 1 --jobs 4
+        run: |
+          git submodule update --init --recursive --depth 1 --jobs 4 || \
+          git submodule update --init --recursive --jobs 4
 
-      # 4. Thay thế Brew bằng việc tải Binary trực tiếp (Siêu nhanh - mất ~2s)
+      # 4. Tải trực tiếp Binary theo đúng kiến trúc CPU (arm64 / x86_64)
       - name: Install Dependencies (Fast)
         if: steps.build_gate.outputs.should_skip != 'true'
         run: |
-          mkdir -p $HOME/.local/bin
-          export PATH="$HOME/.local/bin:$PATH"
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          
-          # Tải song song ldid và xcbeautify
-          curl -fsSL "https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_macos_x86_64" -o $HOME/.local/bin/ldid &
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+          ARCH=$(uname -m)
+          if [ "$ARCH" = "arm64" ]; then
+            LDID_ASSET="ldid_macos_arm64"
+          else
+            LDID_ASSET="ldid_macos_x86_64"
+          fi
+
+          curl -fsSL "https://github.com/ProcursusTeam/ldid/releases/latest/download/${LDID_ASSET}" -o "$HOME/.local/bin/ldid" &
           curl -fsSL "https://github.com/cpisciotta/xcbeautify/releases/latest/download/xcbeautify-universal-apple-macosx.zip" -o /tmp/xcbeautify.zip &
           wait
-          
-          chmod +x $HOME/.local/bin/ldid
-          unzip -q /tmp/xcbeautify.zip -d $HOME/.local/bin/
-          chmod +x $HOME/.local/bin/xcbeautify
+
+          chmod +x "$HOME/.local/bin/ldid"
+          unzip -q -o /tmp/xcbeautify.zip -d "$HOME/.local/bin/"
+          chmod +x "$HOME/.local/bin/xcbeautify"
 
       # --------------------------------------------------
-      # runtime env setup
+      # Runtime Env Setup
       # --------------------------------------------------
       - name: Setup Env
         if: steps.build_gate.outputs.should_skip != 'true'
@@ -92,17 +104,17 @@ jobs:
 
           python3 scripts/ci/workflow.py set-marketing-version "$NORMALIZED_VERSION"
 
-          echo "BUILD_NUM=$BUILD_NUM" | tee -a $GITHUB_ENV
-          echo "SHORT_COMMIT=$SHORT_COMMIT" | tee -a $GITHUB_ENV
-          echo "MARKETING_VERSION=$NORMALIZED_VERSION" | tee -a $GITHUB_ENV
+          echo "BUILD_NUM=$BUILD_NUM" | tee -a "$GITHUB_ENV"
+          echo "SHORT_COMMIT=$SHORT_COMMIT" | tee -a "$GITHUB_ENV"
+          echo "MARKETING_VERSION=$NORMALIZED_VERSION" | tee -a "$GITHUB_ENV"
 
       - name: Setup Xcode
         if: steps.build_gate.outputs.should_skip != 'true'
         uses: maxim-lobanov/setup-xcode@v1.6.0
         with:
-          xcode-version: "27.2"
+          xcode-version: "latest-stable"
 
-      # 5. Sửa lại cấu hình Cache chuẩn với actions/cache@v4
+      # 5. Cache Xcode DerivedData & SPM
       - name: Cache Xcode DerivedData & SPM
         if: steps.build_gate.outputs.should_skip != 'true' && !contains(github.event.head_commit.message, '[--clean-build]')
         uses: actions/cache@v4
@@ -111,13 +123,13 @@ jobs:
             ~/Library/Developer/Xcode/DerivedData
             ~/Library/Caches/org.swift.swiftpm
             ~/Library/org.swift.swiftpm
-          key: xcode-build-cache-${{ github.ref_name }}-${{ hashFiles('**/*.xcodeproj/project.pbxproj', '**/Package.resolved') }}-${{ github.sha }}
+          key: xcode-build-cache-${{ runner.os }}-${{ github.ref_name }}-${{ hashFiles('**/*.xcodeproj/project.pbxproj', '**/Package.resolved') }}-${{ github.sha }}
           restore-keys: |
-            xcode-build-cache-${{ github.ref_name }}-${{ hashFiles('**/*.xcodeproj/project.pbxproj', '**/Package.resolved') }}-
-            xcode-build-cache-${{ github.ref_name }}-
+            xcode-build-cache-${{ runner.os }}-${{ github.ref_name }}-${{ hashFiles('**/*.xcodeproj/project.pbxproj', '**/Package.resolved') }}-
+            xcode-build-cache-${{ runner.os }}-${{ github.ref_name }}-
 
       # --------------------------------------------------
-      # build and test
+      # Build and Test
       # --------------------------------------------------
       - name: Clean
         if: steps.build_gate.outputs.should_skip != 'true' && contains(github.event.head_commit.message, '[--clean-build]')
@@ -126,17 +138,15 @@ jobs:
           python3 scripts/ci/workflow.py clean-derived-data
           python3 scripts/ci/workflow.py clean-spm-cache
 
-      # 6. Gộp việc Boot Simulator và Tải Binary chạy song song cùng lúc
+      # 6. Pre-populate SPM Artifacts & Boot Simulator
       - name: Pre-populate Artifacts & Boot Sim
         if: steps.build_gate.outputs.should_skip != 'true'
         run: |
-          # Chạy ngầm việc boot simulator nếu có mở test
           if [ "${{ vars.ENABLE_TESTS }}" = "1" ] && [ "${{ vars.ENABLE_TESTS_RUN }}" = "1" ]; then
             mkdir -p build/logs
-            python3 scripts/ci/workflow.py boot-sim-async "iPhone 17 Pro" &
+            python3 scripts/ci/workflow.py boot-sim-async "iPhone 16 Pro" &
           fi
 
-          # Tải song song OpenSSL và Unicorn
           ARTIFACTS_DIR="$HOME/Library/Caches/org.swift.swiftpm/artifacts"
           mkdir -p "$ARTIFACTS_DIR"
 
@@ -149,8 +159,7 @@ jobs:
           if [ ! -f "$UNICORN_FILE" ]; then
             curl -fsSL "https://github.com/mahee96/unicorn/releases/download/2.1.4-multiarch/Unicorn.xcframework.zip" -o "$UNICORN_FILE" &
           fi
-          
-          # Đợi tất cả các tiến trình tải ngầm hoàn tất
+
           wait
 
       - name: Build
@@ -159,9 +168,14 @@ jobs:
         env:
           BUILD_LOG_ZIP_PASSWORD: ${{ secrets.BUILD_LOG_ZIP_PASSWORD }}
         run: |
-          python3 scripts/ci/workflow.py build; STATUS=$?
-          python3 scripts/ci/workflow.py encrypt-build
-          echo "encrypted=true" >> $GITHUB_OUTPUT
+          set +e
+          python3 scripts/ci/workflow.py build
+          STATUS=$?
+          set -e
+          if [ -n "$BUILD_LOG_ZIP_PASSWORD" ]; then
+            python3 scripts/ci/workflow.py encrypt-build || true
+            echo "encrypted=true" >> "$GITHUB_OUTPUT"
+          fi
           exit $STATUS
 
       - name: Tests Build
@@ -173,8 +187,13 @@ jobs:
         env:
           BUILD_LOG_ZIP_PASSWORD: ${{ secrets.BUILD_LOG_ZIP_PASSWORD }}
         run: |
-          python3 scripts/ci/workflow.py tests-build; STATUS=$?
-          python3 scripts/ci/workflow.py encrypt-tests-build
+          set +e
+          python3 scripts/ci/workflow.py tests-build
+          STATUS=$?
+          set -e
+          if [ -n "$BUILD_LOG_ZIP_PASSWORD" ]; then
+            python3 scripts/ci/workflow.py encrypt-tests-build || true
+          fi
           exit $STATUS
 
       - name: Tests Run
@@ -186,38 +205,48 @@ jobs:
         env:
           BUILD_LOG_ZIP_PASSWORD: ${{ secrets.BUILD_LOG_ZIP_PASSWORD }}
         run: |
-          python3 scripts/ci/workflow.py tests-run "iPhone 17 Pro"; STATUS=$?
-          python3 scripts/ci/workflow.py encrypt-tests-run
+          set +e
+          python3 scripts/ci/workflow.py tests-run "iPhone 16 Pro"
+          STATUS=$?
+          set -e
+          if [ -n "$BUILD_LOG_ZIP_PASSWORD" ]; then
+            python3 scripts/ci/workflow.py encrypt-tests-run || true
+          fi
           exit $STATUS
 
       # --------------------------------------------------
-      # artifacts (Đã thêm compression-level: 0 để tăng tốc upload)
+      # Artifacts
       # --------------------------------------------------
       - uses: actions/upload-artifact@v4
-        if: steps.build_gate.outputs.should_skip != 'true'
+        if: always() && steps.build_gate.outputs.should_skip != 'true' && steps.build.outputs.encrypted == 'true'
         with:
           name: build-logs-${{ env.MARKETING_VERSION }}.zip
           path: build-logs.zip
+          if-no-files-found: ignore
           compression-level: 0
 
       - uses: actions/upload-artifact@v4
         if: >
+          always() &&
           steps.build_gate.outputs.should_skip != 'true' &&
           vars.ENABLE_TESTS == '1' &&
           vars.ENABLE_TESTS_BUILD == '1'
         with:
           name: tests-build-logs-${{ env.SHORT_COMMIT }}.zip
           path: tests-build-logs.zip
+          if-no-files-found: ignore
           compression-level: 0
 
       - uses: actions/upload-artifact@v4
         if: >
+          always() &&
           steps.build_gate.outputs.should_skip != 'true' &&
           vars.ENABLE_TESTS == '1' &&
           vars.ENABLE_TESTS_RUN == '1'
         with:
           name: tests-run-logs-${{ env.SHORT_COMMIT }}.zip
           path: tests-run-logs.zip
+          if-no-files-found: ignore
           compression-level: 0
 
       - uses: actions/upload-artifact@v4
@@ -232,6 +261,7 @@ jobs:
         with:
           name: SideStore-${{ env.MARKETING_VERSION }}-dSYMs.zip
           path: SideStore.dSYMs.zip
+          if-no-files-found: ignore
           compression-level: 0
 
       # --------------------------------------------------
@@ -244,7 +274,7 @@ jobs:
           ref: "main"
           token: ${{ secrets.CROSS_REPO_PUSH_KEY }}
           path: "SideStore/apps-v2.json"
-          fetch-depth: 1 # Chỉ lấy commit mới nhất để nhanh hơn
+          fetch-depth: 1
 
       - name: Generate Metadata & Deploy
         if: steps.build_gate.outputs.should_skip != 'true'

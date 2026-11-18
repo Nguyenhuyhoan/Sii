@@ -1,5 +1,4 @@
 
-
 name: Nightly SideStore Build 👍 Fast
 
 on:
@@ -10,8 +9,6 @@ on:
       - 'LICENSE'
       - '.editorconfig'
       - '.gitignore'
-      - '.gitmodules'
-      - '.github/**'
   schedule:
     - cron: "0 0 * * *"
   workflow_dispatch:
@@ -26,7 +23,8 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-15 # Runner Apple Silicon chuẩn của GitHub (nhanh và miễn phí)
+    runs-on: macos-14 # Cụm M1 lớn nhất của GitHub: nhận runner ngay lập tức (không phải chờ queue như macos-15)
+    timeout-minutes: 45
     env:
       DEPLOY_KEY: ${{ secrets.CROSS_REPO_PUSH_KEY }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -35,7 +33,7 @@ jobs:
       UPSTREAM_CHANNEL: ""
 
     steps:
-      # 1. Tối ưu Checkout: Không tải sẵn submodules ở bước này
+      # 1. Checkout repo chính
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -58,12 +56,13 @@ jobs:
           fi
           echo "should_skip=$SHOULD_SKIP" >> "$GITHUB_OUTPUT"
 
-      # 3. Tải Submodules nông (có fallback an toàn nếu commit submodule bị ẩn sâu)
-      - name: Checkout Submodules (Shallow with Fallback)
+      # 3. Tải Submodules đa luồng (8 luồng song song, không bị treo vì lỗi unadvertised commit của --depth 1)
+      - name: Checkout Submodules (Fast Parallel)
         if: steps.build_gate.outputs.should_skip != 'true'
         run: |
-          git submodule update --init --recursive --depth 1 --jobs 4 || \
-          git submodule update --init --recursive --jobs 4
+          git config --global protocol.version 2
+          git submodule sync --recursive
+          git submodule update --init --recursive --jobs 8
 
       # 4. Tải trực tiếp Binary theo đúng kiến trúc CPU (arm64 / x86_64)
       - name: Install Dependencies (Fast)
@@ -112,7 +111,7 @@ jobs:
         if: steps.build_gate.outputs.should_skip != 'true'
         uses: maxim-lobanov/setup-xcode@v1.6.0
         with:
-          xcode-version: "latest-stable"
+          xcode-version: "16.2"
 
       # 5. Cache Xcode DerivedData & SPM
       - name: Cache Xcode DerivedData & SPM

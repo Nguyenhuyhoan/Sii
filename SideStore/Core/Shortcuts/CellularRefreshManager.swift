@@ -8,8 +8,10 @@
 
 import Foundation
 import UIKit
-import minimuxer
 import Darwin
+#if canImport(minimuxer)
+import minimuxer
+#endif
 
 @MainActor
 public final class CellularRefreshManager {
@@ -19,6 +21,8 @@ public final class CellularRefreshManager {
         static let enabled = "SS_CELLULAR_REFRESH_ENABLED"
         static let shortcutTurnOffName = "SS_CELLULAR_SHORTCUT_OFF"
         static let shortcutTurnOnName = "SS_CELLULAR_SHORTCUT_ON"
+        static let deviceID = "deviceID"
+        static let pairingFile = "pairingFile"
     }
 
     public static let defaultTurnOffShortcutName = "SideStore Turn Off Data"
@@ -73,7 +77,11 @@ public final class CellularRefreshManager {
     public var turnOffDataBaseDelayOverride: TimeInterval?
 
     public var isCellularMode: Bool {
-        isSupported && isEnabled && !minimuxer.network.isWifiSatisfied
+        #if canImport(minimuxer)
+        return isSupported && isEnabled && !minimuxer.network.isWifiSatisfied
+        #else
+        return isSupported && isEnabled
+        #endif
     }
 
     private init() {
@@ -91,31 +99,29 @@ public final class CellularRefreshManager {
 
     /// Lấy UDID chuẩn của thiết bị theo đúng 3 thứ tự ưu tiên:
     /// 1. Trực tiếp từ `minimuxer.fetch_udid()`
-    /// 2. Trực tiếp từ File Pairing của máy (`UserDefaults.standard.pairingFile` / `ALTPairingFile.plist`)
-    /// 3. Từ `UserDefaults.standard.deviceID` đã lưu
+    /// 2. Trực tiếp từ File Pairing của máy (`pairingFile` / `ALTPairingFile.plist`)
+    /// 3. Từ `UserDefaults.standard` (`deviceID`) đã lưu
     @discardableResult
     public nonisolated static func resolveDeviceUDID() -> String? {
         // ƯU TIÊN 1: Lấy trực tiếp từ Minimuxer (chính xác nhất khi kết nối sẵn sàng)
+        #if canImport(minimuxer)
         if let liveUDID = try? minimuxer.fetch_udid() {
             let clean = liveUDID.trimmingCharacters(in: .whitespacesAndNewlines)
             if !clean.isEmpty {
-                if UserDefaults.standard.deviceID != clean {
-                    UserDefaults.standard.deviceID = clean
-                }
+                saveDeviceIDIfNeeded(clean)
                 return clean
             }
         }
+        #endif
 
         // ƯU TIÊN 2: Bóc trực tiếp khóa UDID từ File Pairing của máy (luôn có sẵn kể cả khi đang bật 4G)
         if let pairingUDID = extractUDIDFromPairingFile() {
-            if UserDefaults.standard.deviceID != pairingUDID {
-                UserDefaults.standard.deviceID = pairingUDID
-            }
+            saveDeviceIDIfNeeded(pairingUDID)
             return pairingUDID
         }
 
-        // ƯU TIÊN 3: Lấy từ UserDefaults.standard.deviceID
-        if let savedDeviceID = UserDefaults.standard.deviceID {
+        // ƯU TIÊN 3: Lấy từ UserDefaults (deviceID)
+        if let savedDeviceID = UserDefaults.standard.string(forKey: Keys.deviceID) {
             let clean = savedDeviceID.trimmingCharacters(in: .whitespacesAndNewlines)
             if !clean.isEmpty {
                 return clean
@@ -123,6 +129,13 @@ public final class CellularRefreshManager {
         }
 
         return nil
+    }
+
+    private nonisolated static func saveDeviceIDIfNeeded(_ udid: String) {
+        guard !udid.isEmpty else { return }
+        if UserDefaults.standard.string(forKey: Keys.deviceID) != udid {
+            UserDefaults.standard.set(udid, forKey: Keys.deviceID)
+        }
     }
 
     /// Đọc khóa UDID từ dữ liệu Pairing File của SideStore
@@ -141,13 +154,13 @@ public final class CellularRefreshManager {
         }
 
         // Kiểm tra chuỗi/dữ liệu Pairing lưu trong UserDefaults
-        if let pairingString = UserDefaults.standard.pairingFile,
+        if let pairingString = UserDefaults.standard.string(forKey: Keys.pairingFile),
            let data = pairingString.data(using: .utf8),
            let udid = parsePlist(data) {
             return udid
         }
 
-        if let pairingData = UserDefaults.standard.data(forKey: "pairingFile"),
+        if let pairingData = UserDefaults.standard.data(forKey: Keys.pairingFile),
            let udid = parsePlist(pairingData) {
             return udid
         }
@@ -220,6 +233,7 @@ public final class CellularRefreshManager {
     @discardableResult
     public func waitForMinimuxerReady(timeout: TimeInterval = 8.0) async -> Bool {
         _ = Self.resolveDeviceUDID()
+        #if canImport(minimuxer)
         let deadline = Date().addingTimeInterval(timeout)
         var retryTick = 0
         while Date() < deadline {
@@ -235,11 +249,15 @@ public final class CellularRefreshManager {
         }
         _ = Self.resolveDeviceUDID()
         return minimuxer.Status.shared.ready
+        #else
+        return true
+        #endif
     }
 
     /// Sau khi tắt 4G, ép minimuxer tạo kết nối mới qua LocalDevVPN
     @discardableResult
     private func resetAndPrepareMinimuxer(timeout: TimeInterval = 8.0) async -> Bool {
+        #if canImport(minimuxer)
         let deadline = Date().addingTimeInterval(timeout)
         var retryTick = 0
         while Date() < deadline {
@@ -255,6 +273,9 @@ public final class CellularRefreshManager {
         }
         _ = Self.resolveDeviceUDID()
         return minimuxer.Status.shared.ready
+        #else
+        return true
+        #endif
     }
 
     private func sleep(_ seconds: TimeInterval) async {
@@ -281,9 +302,11 @@ public final class CellularRefreshManager {
             return false
         }
 
+        #if canImport(minimuxer)
         guard !minimuxer.network.isWifiSatisfied else {
             return false
         }
+        #endif
 
         let success = await runShortcutWithRoundTrip { await self.turnOffData() }
         guard success else { return false }

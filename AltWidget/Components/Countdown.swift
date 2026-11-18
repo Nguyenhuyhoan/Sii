@@ -9,7 +9,9 @@
 import WidgetKit
 import SwiftUI
 
+#if canImport(AltStoreCore)
 import AltStoreCore
+#endif
 
 private enum WidgetCSSTheme {
     static let darkBgTop = Color(red: 11/255, green: 15/255, blue: 25/255)
@@ -32,6 +34,14 @@ private enum WidgetCSSTheme {
         } else {
             return accentSuccess
         }
+    }
+    
+    static func calendarDaysBetween(from startDate: Date, to endDate: Date) -> Int {
+        let calendar = Calendar.current
+        let startOfDay1 = calendar.startOfDay(for: startDate)
+        let startOfDay2 = calendar.startOfDay(for: endDate)
+        let components = calendar.dateComponents([.day], from: startOfDay1, to: startOfDay2)
+        return max(components.day ?? 0, 0)
     }
 }
 
@@ -98,7 +108,7 @@ struct SmallAppCycleWidgetView: View {
         if !entry.activeApps.isEmpty {
             return entry.activeApps
         }
-        let fallbackID = entry.appName ?? StoreApp.altstoreAppID
+        let fallbackID = entry.appName ?? WidgetDataReader.defaultSideStoreBundleID
         return [
             AppSnapshot(
                 id: fallbackID,
@@ -112,7 +122,6 @@ struct SmallAppCycleWidgetView: View {
     }
     
     private var featuredApp: AppSnapshot {
-        // Prioritize the app matching entry.appName if selected in widget intent
         if let name = entry.appName, let matched = activeApps.first(where: { $0.name == name }) {
             return matched
         }
@@ -120,7 +129,7 @@ struct SmallAppCycleWidgetView: View {
     }
     
     private func remainingDays(for app: AppSnapshot) -> Int {
-        max(app.expirationDate.numberOfCalendarDays(since: entry.date), 0)
+        WidgetCSSTheme.calendarDaysBetween(from: entry.date, to: app.expirationDate)
     }
     
     private func progressRatio(for app: AppSnapshot) -> CGFloat {
@@ -137,7 +146,7 @@ struct SmallAppCycleWidgetView: View {
         let displayedApps = Array(activeApps.prefix(4))
         
         VStack(alignment: .leading, spacing: 8) {
-            // Top Row: App Icon + QuickRefresh Action + Remaining Badge
+            // Top Row: App Icon + QuickRefresh Action
             HStack(alignment: .center, spacing: 8) {
                 WidgetAppIconView(app: app, size: 38, cornerRadius: 10)
                 
@@ -238,7 +247,7 @@ struct MediumAppListWidgetView: View {
         if !entry.activeApps.isEmpty {
             return entry.activeApps
         }
-        let fallbackID = entry.appName ?? StoreApp.altstoreAppID
+        let fallbackID = entry.appName ?? WidgetDataReader.defaultSideStoreBundleID
         return [
             AppSnapshot(
                 id: fallbackID,
@@ -252,7 +261,7 @@ struct MediumAppListWidgetView: View {
     }
     
     private func remainingDays(for app: AppSnapshot) -> Int {
-        max(app.expirationDate.numberOfCalendarDays(since: entry.date), 0)
+        WidgetCSSTheme.calendarDaysBetween(from: entry.date, to: app.expirationDate)
     }
     
     private func progressRatio(for app: AppSnapshot) -> CGFloat {

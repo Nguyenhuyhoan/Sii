@@ -1,4 +1,3 @@
-
 //
 //  WidgetDataManager.swift
 //  SideStore
@@ -64,7 +63,8 @@ public final class WidgetDataManager: @unchecked Sendable {
         guard let iconDir = iconDirectoryURL else { return nil }
         let fileURL = iconDir.appendingPathComponent("\(bundleIdentifier).png")
         guard FileManager.default.fileExists(atPath: fileURL.path),
-              let image = UIImage(contentsOfFile: fileURL.path) else {
+              let data = try? Data(contentsOf: fileURL),
+              let image = UIImage(data: data) else {
             return nil
         }
         return image
@@ -74,18 +74,6 @@ public final class WidgetDataManager: @unchecked Sendable {
         print("[WidgetDataManager] publishWidgetData: \(activeItems.count) active, \(allItems.count) all items, \(icons.count) icons")
         let snapshot = WidgetDataSnapshot(activeApps: activeItems, allApps: allItems, lastUpdated: Date())
         writeSnapshot(snapshot)
-
-        // Dọn dẹp các icon rác của những ứng dụng đã gỡ để tránh xung đột cache
-        if let iconDir = iconDirectoryURL,
-           let existingFiles = try? FileManager.default.contentsOfDirectory(at: iconDir, includingPropertiesForKeys: nil) {
-            let validFileNames = Set(allItems.map { "\($0.bundleIdentifier).png" })
-            for fileURL in existingFiles where fileURL.pathExtension.lowercased() == "png" {
-                if !validFileNames.contains(fileURL.lastPathComponent) {
-                    try? FileManager.default.removeItem(at: fileURL)
-                }
-            }
-        }
-
         for (bundleID, iconImage) in icons {
             cacheIcon(iconImage, for: bundleID)
         }
@@ -104,9 +92,8 @@ public final class WidgetDataManager: @unchecked Sendable {
             try? FileManager.default.createDirectory(at: iconDir, withIntermediateDirectories: true)
         }
         let fileURL = iconDir.appendingPathComponent("\(bundleIdentifier).png")
-        // Luôn ghi đè icon mới nhất để đảm bảo không bao giờ bị kẹt icon của app cũ
-        let targetImage = iconImage.resizing(toFill: CGSize(width: 180, height: 180)) ?? iconImage
-        if let pngData = targetImage.pngData() {
+        let resized = iconImage.resizing(toFill: CGSize(width: 180, height: 180)) ?? iconImage
+        if let pngData = resized.pngData() {
             try? pngData.write(to: fileURL, options: Data.WritingOptions.atomic)
         }
     }

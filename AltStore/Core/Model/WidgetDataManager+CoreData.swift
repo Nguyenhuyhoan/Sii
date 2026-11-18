@@ -32,19 +32,11 @@ extension WidgetDataManager {
             var icons: [String: UIImage] = [:]
             for app in sortedAllApps {
                 var icon: UIImage? = nil
-
-                // 1. Ưu tiên đọc trực tiếp từ iconURL chuẩn của InstalledApp (đồng bộ 100% với danh sách My Apps)
-                if FileManager.default.fileExists(atPath: app.iconURL.path),
-                   let savedIcon = UIImage(contentsOfFile: app.iconURL.path) {
-                    icon = savedIcon
-                }
-                // 2. Nếu chưa có file tại iconURL thì đọc từ gói .app riêng của ứng dụng đó
-                else if let application = ALTApplication(fileURL: app.fileURL),
-                        let appIcon = application.icon {
+                // Ưu tiên đọc trực tiếp từ gói .app riêng biệt của từng InstalledApp tại app.fileURL
+                if let application = ALTApplication(fileURL: app.fileURL),
+                   let appIcon = application.icon {
                     icon = appIcon
-                }
-                // 3. Fallback cuối cùng dành riêng cho ứng dụng gốc SideStore / LiveContainer
-                else if app.bundleIdentifier == StoreApp.altstoreAppID {
+                } else if app.bundleIdentifier == StoreApp.altstoreAppID {
                     icon = ALTApplication(fileURL: Bundle.main.bundleURL)?.icon
                         ?? ALTApplication(fileURL: Bundle.Info.activeBundleURL)?.icon
                         ?? UIImage(named: "SideStore")

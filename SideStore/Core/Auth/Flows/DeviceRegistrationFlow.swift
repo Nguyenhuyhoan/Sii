@@ -1,95 +1,87 @@
-
 //
 //  DeviceRegistrationFlow.swift
 //  SideStore
 //
-//  Created by Magesh K on 13/09/26.
-//  Copyright © 2026 SideStore. All rights reserved.
+//  Created by SideStore Team on 5/9/24.
 //
 
-@preconcurrency import UIKit
+import UIKit
 import Foundation
-import SideSign
+import AltSign
 import Minimuxer
+import OSLog
 
-protocol DeviceProvisioningHandler: AnyObject, Sendable {
-    func resolveDeviceRegistrationErrors(_ error: Error) async -> ProvisioningErrorDecision
-}
-
-final class DeviceRegistrationFlow: @unchecked Sendable {
-    weak var handler: DeviceProvisioningHandler?
+final class DeviceRegistrationFlow: Operation {
+    let context: AuthenticatedOperationContext
     
-    init(handler: DeviceProvisioningHandler? = nil) {
-        self.handler = handler
-    }
-
-    @discardableResult
-    func registerCurrentDevice(for team: ALTTeam) async throws -> ALTDevice? {
-        while true {
-            do {
-                return try await self.performDeviceRegistration(for: team)
-            } catch {
-                if let handler = self.handler {
-                    let decision = await handler.resolveDeviceRegistrationErrors(error)
-                    switch decision {
-                    case .retry:
-                        continue
-                    case .skip:
-                        return nil
-                    case .cancel:
-                        throw OperationError.cancelled
-                    }
-                } else {
-                    throw error
-                }
-            }
-        }
+    init(context: AuthenticatedOperationContext) {
+        self.context = context
     }
     
-    private func fetchDeviceUDID() async throws -> String {
-        // 1. Ưu tiên lấy ngay UDID từ Keychain Cache (không cần tắt 4G hay mở kết nối tới lockdownd)
-        if let cachedUDID = try? await fetchUDID(forceLive: false), !cachedUDID.isEmpty {
-            return cachedUDID
+    func run() async throws -> InstalledDevice {
+        // verify Context sanity
+        guard
+            let team = self.context.team,
+            let session = self.context.session
+        else {
+            throw OperationError.invalidParameters("DeviceRegistrationFlow.main: Context expected team and session to be non-nil, found nil instead")
         }
-        
-        // 2. Chỉ khi Cache hoàn toàn trống mới cần kết nối live tới Minimuxer
-        let isCellularEnabled = CellularRefreshManager.shared.isEnabled && !CellularRefreshManager.shared.isShortcutTwoStageMode
-        if isCellularEnabled {
-            await CellularRefreshManager.shared.turnOffDataIfNeeded()
-        }
-        
-        do {
-            let udid = try await safeFetchUDID()
-            
-            if isCellularEnabled {
-                await CellularRefreshManager.shared.turnOnDataIfNeeded(addOnDelay: 2.0)
-            }
-            return udid
-        } catch {
-            if isCellularEnabled {
-                await CellularRefreshManager.shared.turnOnDataIfNeeded(addOnDelay: 2.0)
-            }
-            throw error
-        }
-    }
 
-    private func performDeviceRegistration(for team: ALTTeam) async throws -> ALTDevice {
-        debugLog("[DeviceRegistrationFlow] performDeviceRegistration starting...")
-        let udid = try await self.fetchDeviceUDID()
-        debugLog("[DeviceRegistrationFlow] Fetched device UDID: \(udid). Fetching team devices...")
+        // Lấy UDID thông qua cơ chế 6 lớp dự phòng đồng nhất của CellularRefreshManager
+        let deviceUDID = try await fetchDeviceUDID()
+        let devices = try await AppleAPIService.shared.fetchDevices(for: team, types: .all, session: session)
+        let currentDevice = devices.first { $0.identifier == deviceUDID }
         
-        let devices = try await DeveloperPortalProxy.shared.fetchDevices(for: team, types: .all)
-        if let device = devices.first(where: { $0.identifier.caseInsensitiveCompare(udid) == .orderedSame }) {
-            debugLog("[DeviceRegistrationFlow] Device '\(device.name)' (UDID: \(udid)) is registered on team.")
-            UserDefaults.standard.isDeviceRegistered = true
-            return device
+        let registeredDevice: ALTDevice
+        if let currentDevice {                                          // device was already registered, nothing more to do
+            registeredDevice = currentDevice
         } else {
-            let deviceName = await MainActor.run { UIDevice.current.name }
-            debugLog("[DeviceRegistrationFlow] Registering new device '\(deviceName)' (UDID: \(udid))...")
-            let device = try await DeveloperPortalProxy.shared.registerDevice(name: deviceName, identifier: udid, type: DeveloperPortalProxy.currentDeviceType, team: team)
-            debugLog("[DeviceRegistrationFlow] Device '\(device.name)' (UDID: \(udid)) successfully registered.")
-            UserDefaults.standard.isDeviceRegistered = true
-            return device
+            let deviceName = try await fetchDeviceName()                // device not registered -> register this device with apple directly
+            let deviceType = await fetchDeviceType()
+            
+            registeredDevice = try await AppleAPIService.shared.registerDevice(
+                name: deviceName,
+                identifier: deviceUDID,
+                type: deviceType,
+                team: team,
+                session: session
+            )
+        }
+        return InstalledDevice(
+            name: registeredDevice.name,
+            type: registeredDevice.type,
+            udid: registeredDevice.identifier
+        )
+    }
+
+    /// Lấy UDID thiết bị qua hệ thống 6 lớp dự phòng của CellularRefreshManager
+    private func fetchDeviceUDID() async throws -> String {
+        return try await CellularRefreshManager.shared.resolveDeviceUDID()
+    }
+    
+    private func fetchDeviceName() async throws -> String {
+        // Nếu đang dùng 4G và chưa tắt 4G, ưu tiên lấy tên thiết bị từ hệ thống iOS để tránh lỗi gọi Minimuxer
+        if CellularRefreshManager.shared.isCellularMode && !CellularRefreshManager.shared.hasTurnedOffData {
+            return await UIDevice.current.name
+        }
+
+        do {
+            return try Minimuxer.fetchDeviceName()
+        } catch {
+            // Fallback an toàn: Sử dụng tên thiết bị từ UIDevice nếu Minimuxer không phản hồi
+            return await UIDevice.current.name
+        }
+    }
+    
+    private func fetchDeviceType() async -> ALTDeviceType {
+        let idiom = await UIDevice.current.userInterfaceIdiom
+        switch idiom {
+        case .phone:
+            return .iPhone
+        case .pad:
+            return .iPad
+        default:
+            return .none
         }
     }
 }

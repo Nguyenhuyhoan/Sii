@@ -63,8 +63,7 @@ public final class WidgetDataManager: @unchecked Sendable {
         guard let iconDir = iconDirectoryURL else { return nil }
         let fileURL = iconDir.appendingPathComponent("\(bundleIdentifier).png")
         guard FileManager.default.fileExists(atPath: fileURL.path),
-              let data = try? Data(contentsOf: fileURL),
-              let image = UIImage(data: data) else {
+              let image = UIImage(contentsOfFile: fileURL.path) else {
             return nil
         }
         return image
@@ -92,9 +91,11 @@ public final class WidgetDataManager: @unchecked Sendable {
             try? FileManager.default.createDirectory(at: iconDir, withIntermediateDirectories: true)
         }
         let fileURL = iconDir.appendingPathComponent("\(bundleIdentifier).png")
-        let resized = iconImage.resizing(toFill: CGSize(width: 180, height: 180)) ?? iconImage
-        if let pngData = resized.pngData() {
-            try? pngData.write(to: fileURL, options: Data.WritingOptions.atomic)
+        if !FileManager.default.fileExists(atPath: fileURL.path) {
+            if let resized = iconImage.resizing(toFill: CGSize(width: 180, height: 180)),
+               let pngData = resized.pngData() {
+                try? pngData.write(to: fileURL, options: Data.WritingOptions.atomic)
+            }
         }
     }
 

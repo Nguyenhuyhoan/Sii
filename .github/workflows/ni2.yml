@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-latest # Tự động chọn cụm máy macOS khả dụng ngay lập tức, không bao giờ lỗi "not supported"
+    runs-on: macos-latest
     timeout-minutes: 45
     env:
       DEPLOY_KEY: ${{ secrets.CROSS_REPO_PUSH_KEY }}
@@ -64,27 +64,37 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --recursive --jobs 8
 
-      # 4. Tải trực tiếp Binary theo đúng kiến trúc CPU (arm64 / x86_64)
+      # 4. Cài đặt ldid & xcbeautify siêu tốc (Đã fix lỗi 404 URL)
       - name: Install Dependencies (Fast)
         if: steps.build_gate.outputs.should_skip != 'true'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+          HOMEBREW_NO_INSTALL_CLEANUP: 1
         run: |
           mkdir -p "$HOME/.local/bin"
+          export PATH="$HOME/.local/bin:$PATH"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
           ARCH=$(uname -m)
           if [ "$ARCH" = "arm64" ]; then
-            LDID_ASSET="ldid_macos_arm64"
+            LDID_ASSET="ldid_macosx_arm64"
           else
-            LDID_ASSET="ldid_macos_x86_64"
+            LDID_ASSET="ldid_macosx_x86_64"
           fi
 
-          curl -fsSL "https://github.com/ProcursusTeam/ldid/releases/latest/download/${LDID_ASSET}" -o "$HOME/.local/bin/ldid" &
-          curl -fsSL "https://github.com/cpisciotta/xcbeautify/releases/latest/download/xcbeautify-universal-apple-macosx.zip" -o /tmp/xcbeautify.zip &
-          wait
+          # 1. Tải ldid trực tiếp từ ProcursusTeam (nếu lỗi thì fallback qua brew)
+          if ! command -v ldid >/dev/null 2>&1; then
+            if curl -fsSL "https://github.com/ProcursusTeam/ldid/releases/latest/download/${LDID_ASSET}" -o "$HOME/.local/bin/ldid"; then
+              chmod +x "$HOME/.local/bin/ldid"
+            else
+              brew install ldid
+            fi
+          fi
 
-          chmod +x "$HOME/.local/bin/ldid"
-          unzip -q -o /tmp/xcbeautify.zip -d "$HOME/.local/bin/"
-          chmod +x "$HOME/.local/bin/xcbeautify"
+          # 2. Kiểm tra xcbeautify (thường đã cài sẵn trên macos-latest, nếu chưa có thì cài nhanh)
+          if ! command -v xcbeautify >/dev/null 2>&1; then
+            brew install xcbeautify
+          fi
 
       # --------------------------------------------------
       # Runtime Env Setup

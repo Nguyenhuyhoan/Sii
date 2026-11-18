@@ -8,44 +8,15 @@
 
 import SwiftUI
 import WidgetKit
+
 import GameplayKit
 
-// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME SÁNG (ĐỒNG BỘ VỚI SETTINGS TAB)
-private enum WidgetCSSTheme
+private extension Color
 {
-    static let primary = Color(red: 0/255, green: 123/255, blue: 255/255)          // #007bff
-    static let secondary = Color(red: 111/255, green: 66/255, blue: 193/255)       // #6f42c1
-    static let green = Color(red: 40/255, green: 167/255, blue: 69/255)            // #28a745
-    static let orange = Color(red: 245/255, green: 130/255, blue: 32/255)          // #f58220
-    static let red = Color(red: 220/255, green: 53/255, blue: 69/255)              // #dc3545
-    static let pureBlack = Color.black
-    static let subtitleText = Color(red: 82/255, green: 90/255, blue: 101/255)
-    static let cardBackground = Color.white
-    static let cardBorder = Color(red: 218/255, green: 224/255, blue: 233/255)     // #dae0e9
-
-    // Nền Gradient Sáng cố định (#f3e0ff -> #e0f7ff)
-    static var pageGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                Color(red: 243/255, green: 224/255, blue: 255/255),
-                Color(red: 224/255, green: 247/255, blue: 255/255)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    // Hero Gradient cho biểu tượng Placeholder
-    static var heroGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                Color(red: 0/255, green: 123/255, blue: 255/255),
-                Color(red: 111/255, green: 66/255, blue: 193/255)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
+    static let altGradientLight = Color.init(.displayP3, red: 219.0/255.0, green: 38.0/255.0, blue: 200.0/255.0)
+    static let altGradientDark = Color.init(.displayP3, red: 135.0/255.0, green: 22.0/255.0, blue: 232.0/255.0)
+    
+    static let altGradientExtraDark = Color.init(.displayP3, red: 58.0/255.0, green: 8.0/255.0, blue: 135.0/255.0)
 }
 
 struct WidgetTag: WidgetInfo{
@@ -103,6 +74,9 @@ private struct ActiveAppsWidgetView: View
 {
     var entry: AppsEntry<WidgetInfo>
     var widgetKind: String
+    
+    @Environment(\.colorScheme)
+    private var colorScheme
 
     @Environment(\.widgetRenderingMode)
     private var renderingMode
@@ -118,33 +92,36 @@ private struct ActiveAppsWidgetView: View
                 content
             }
         }
-        // Khóa cứng giao diện Sáng (Light Mode Only) như tab Cài đặt
-        .environment(\.colorScheme, .light)
-        .foregroundStyle(WidgetCSSTheme.pureBlack)
+        .foregroundStyle(.white)
         .containerBackground(for: .widget) {
-            if renderingMode == .accented
+            if colorScheme == .dark
             {
+                LinearGradient(colors: [.altGradientDark, .altGradientExtraDark], startPoint: .top, endPoint: .bottom)
+            }
+            else if renderingMode == .accented
+            {
+                // Plain dark background in tinted mode so the system's
+                // accent colour composites cleanly over it.
                 Color.black
             }
             else
             {
-                WidgetCSSTheme.pageGradient
+                LinearGradient(colors: [.altGradientLight, .altGradientDark], startPoint: .top, endPoint: .bottom)
             }
         }
     }
     
     private var content: some View {
         GeometryReader { (geometry) in
-            HStack(alignment: .center, spacing: 8) {
+            HStack(alignment: .center) {
                 
                 let itemsPerPage = ActiveAppsWidget.Constants.MAX_ROWS_PER_PAGE
-                let totalVerticalSpacing: CGFloat = 12.0
-                let calculatedRowHeight = (geometry.size.height - totalVerticalSpacing) / Double(itemsPerPage)
-                let rowHeight = max(36.0, min(calculatedRowHeight, 44.0))
+                
+                let preferredRowHeight = (geometry.size.height / Double(itemsPerPage)) - 8
+                let rowHeight = min(preferredRowHeight, geometry.size.height / 2)
 
-                LazyVStack(spacing: 6) {
-                    // Duyệt theo Identifiable của AppSnapshot thay vì index offset để không bao giờ nhầm Icon
-                    ForEach(entry.apps) { app in
+                LazyVStack(spacing: 12) {
+                    ForEach(Array(entry.apps.enumerated()), id: \.offset) { index, app in
                     
                         let icon: UIImage = app.icon ?? UIImage(named: "SideStore") ?? UIImage(systemName: "app.fill")!
                         
@@ -159,135 +136,87 @@ private struct ActiveAppsWidgetView: View
                         )
                         
                         let resizedIcon = icon.resizing(to: resizedSize) ?? icon
-                        let iconSize = max(26.0, rowHeight - 10.0)
-                        let iconCornerRadius = iconSize * 0.24
+                        let cornerRadius = rowHeight / 5.0
                         let daysRemaining = app.expirationDate.numberOfCalendarDays(since: entry.date)
-                        let isExpired = entry.date > app.expirationDate
-                        let statusColor: Color = isExpired
-                            ? WidgetCSSTheme.red
-                            : (daysRemaining <= 2 ? WidgetCSSTheme.orange : WidgetCSSTheme.green)
 
                         HStack(spacing: 10) {
+                            // In tinted (accented) mode, luminanceToAlpha() converts the icon's
+                            // brightness into opacity so the system can tint it with the user's
+                            // chosen accent colour. widgetAccentable() opts the view into that
+                            // accent group. In fullColor mode both are no-ops (via the helpers).
                             Image(uiImage: resizedIcon)
                                 .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: iconSize, height: iconSize)
+                                .aspectRatio(contentMode: .fit)
                                 .luminanceToAlphaInAccentedMode()
-                                .clipShape(RoundedRectangle(cornerRadius: iconCornerRadius, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: iconCornerRadius, style: .continuous)
-                                        .stroke(WidgetCSSTheme.cardBorder.opacity(0.85), lineWidth: 0.8)
-                                )
-                                .shadow(color: Color.black.opacity(0.08), radius: 2, x: 0, y: 1)
+                                .mask(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                                 .widgetAccentableIfAvailable()
                             
-                            VStack(alignment: .leading, spacing: 1.5) {
+                            VStack(alignment: .leading, spacing: 1) {
                                 Text(app.name)
-                                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                                    .foregroundStyle(WidgetCSSTheme.pureBlack)
-                                    .lineLimit(1)
+                                    .font(.system(size: 15, weight: .semibold, design: .rounded))
                                 
-                                HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(statusColor)
-                                        .frame(width: 5.5, height: 5.5)
-
-                                    let text = if isExpired
-                                    {
-                                        Text("Expired")
-                                    }
-                                    else
-                                    {
-                                        Text("Expires in \(daysRemaining) ") + (daysRemaining == 1 ? Text("day") : Text("days"))
-                                    }
-                                    
-                                    text
-                                        .font(.system(size: 11.5, weight: .semibold, design: .rounded))
-                                        .foregroundStyle(isExpired ? WidgetCSSTheme.red : WidgetCSSTheme.subtitleText)
-                                        .lineLimit(1)
+                                let text = if entry.date > app.expirationDate
+                                {
+                                    Text("Expired")
                                 }
+                                else
+                                {
+                                    Text("Expires in \(daysRemaining) ") + (daysRemaining == 1 ? Text("day") : Text("days"))
+                                }
+                                
+                                text
+                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(.secondary)
                             }
                             .widgetAccentableIfAvailable()
                             
-                            Spacer(minLength: 4)
+                            Spacer()
                             
                             Countdown(startDate: app.refreshedDate,
                                       endDate: app.expirationDate,
                                       currentDate: entry.date,
-                                      strokeWidth: 2.8)
-                            .foregroundStyle(isExpired ? WidgetCSSTheme.red : WidgetCSSTheme.primary)
+                                      strokeWidth: 3.0) // Slightly thinner circle stroke width
                             .background {
-                                WidgetCSSTheme.primary.opacity(0.10)
+                                Color.black.opacity(0.1)
                                     .mask(Capsule())
-                                    .overlay(
-                                        Capsule()
-                                            .stroke(WidgetCSSTheme.primary.opacity(0.22), lineWidth: 0.8)
-                                    )
-                                    .padding(.all, -4)
+                                    .padding(.all, -5)
                             }
-                            .font(.system(size: 14.5, weight: .bold, design: .rounded))
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
                             .activatesRefreshAllAppsIntent()
+                            // this modifier invalidates the view (disables user interaction and shows a blinking effect)
                             .invalidatableContent()
                             .widgetAccentableIfAvailable()
+
                         }
-                        .padding(.horizontal, 10)
                         .frame(height: rowHeight)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(renderingMode == .accented ? Color.white.opacity(0.12) : WidgetCSSTheme.cardBackground)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(WidgetCSSTheme.cardBorder, lineWidth: 1.0)
-                        )
-                        .shadow(color: WidgetCSSTheme.primary.opacity(0.07), radius: 5, x: 0, y: 2)
+                    
                     }
                 }
                 
+                Spacer(minLength: 16)
+                
+                let buttonWidth: CGFloat = 16
                 let widgetID = entry.context?.ID
                 
-                VStack(spacing: 0) {
-                    ZStack {
-                        Circle()
-                            .fill(WidgetCSSTheme.cardBackground)
-                            .frame(width: 26, height: 26)
-                            .overlay(
-                                Circle()
-                                    .stroke(WidgetCSSTheme.cardBorder, lineWidth: 1.0)
-                            )
-                            .shadow(color: WidgetCSSTheme.primary.opacity(0.10), radius: 3, x: 0, y: 1)
-
-                        Image(systemName: "chevron.up")
-                            .font(.system(size: 11, weight: .heavy))
-                            .foregroundStyle(WidgetCSSTheme.primary)
-                    }
-                    .pageUpButton(widgetID, widgetKind)
+                VStack {
+                    Image(systemName: "arrow.up")
+                        .resizable()
+                        .frame(width: buttonWidth, height: buttonWidth)
+                        .opacity(0.3)
+                        // .mask(Capsule())
+                        .pageUpButton(widgetID, widgetKind)
                     
-                    Spacer(minLength: 4)
-
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(WidgetCSSTheme.primary.opacity(0.25))
-                        .frame(width: 4, height: 14)
-
-                    Spacer(minLength: 4)
+                    Spacer()
                     
-                    ZStack {
-                        Circle()
-                            .fill(WidgetCSSTheme.cardBackground)
-                            .frame(width: 26, height: 26)
-                            .overlay(
-                                Circle()
-                                    .stroke(WidgetCSSTheme.cardBorder, lineWidth: 1.0)
-                            )
-                            .shadow(color: WidgetCSSTheme.primary.opacity(0.10), radius: 3, x: 0, y: 1)
-
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 11, weight: .heavy))
-                            .foregroundStyle(WidgetCSSTheme.primary)
-                    }
-                    .pageDownButton(widgetID, widgetKind)
+                    Image(systemName: "arrow.down")
+                        .resizable()
+                        .frame(width: buttonWidth, height: buttonWidth)
+                        .opacity(0.3)
+                        // .mask(Capsule())
+                        .pageDownButton(widgetID, widgetKind)
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical)
+                
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onAppear {
@@ -297,39 +226,17 @@ private struct ActiveAppsWidgetView: View
     }
     
     private var placeholder: some View {
-        VStack(spacing: 6) {
-            ZStack {
-                Circle()
-                    .fill(WidgetCSSTheme.heroGradient)
-                    .frame(width: 38, height: 38)
-                    .shadow(color: WidgetCSSTheme.primary.opacity(0.25), radius: 6, x: 0, y: 3)
-
-                Image(systemName: "sparkles")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(Color.white)
-            }
-
+        VStack(spacing: 4) {
             Text("Open SideStore")
-                .font(.system(size: 16, weight: .heavy, design: .rounded))
-                .foregroundStyle(WidgetCSSTheme.primary)
-
+                .font(.system(.body, design: .rounded))
+                .fontWeight(.semibold)
+                .foregroundColor(Color.white.opacity(0.8))
             Text("Launch app to update widget")
-                .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                .foregroundStyle(WidgetCSSTheme.subtitleText)
+                .font(.system(.caption, design: .rounded))
+                .foregroundColor(Color.white.opacity(0.5))
                 .multilineTextAlignment(.center)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .fill(WidgetCSSTheme.cardBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .stroke(WidgetCSSTheme.cardBorder, lineWidth: 1.0)
-        )
-        .shadow(color: WidgetCSSTheme.primary.opacity(0.08), radius: 8, x: 0, y: 4)
+        .padding()
         .unredacted()
     }
 }

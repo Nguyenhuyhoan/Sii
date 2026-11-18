@@ -3,202 +3,243 @@
 //  CellularRefreshManager.swift
 //  SideStore
 //
-//  Created by SideStore Team.
+//  Created by Magesh K on 4/9/26.
+//  Copyright © 2026 SideStore. All rights reserved.
 //
 
 import Foundation
 import UIKit
 import Darwin
-#if canImport(minimuxer)
-import minimuxer
-#endif
+import Minimuxer
 
-@MainActor
-public final class CellularRefreshManager {
-    public static let shared = CellularRefreshManager()
+private struct PersistedProfileBatch: Codable {
+    let bundleID: String
+    let profiles: [Data]
+    let timestamp: TimeInterval
+}
 
-    private nonisolated enum Keys {
-        static let enabled = "SS_CELLULAR_REFRESH_ENABLED"
-        static let shortcutTurnOffName = "SS_CELLULAR_SHORTCUT_OFF"
-        static let shortcutTurnOnName = "SS_CELLULAR_SHORTCUT_ON"
-        static let deviceID = "deviceID"
-        static let pairingFile = "pairingFile"
+/// Theo dõi chu kỳ SideStore nhường màn hình cho Phím tắt và quay trở lại Foreground
+private final class ShortcutTransitionTracker: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _didResignActive = false
+    private var _didBecomeActiveAfterResign = false
+    private var observers: [NSObjectProtocol] = []
+
+    var didResignActive: Bool { lock.withLock { _didResignActive } }
+    var didBecomeActiveAfterResign: Bool { lock.withLock { _didBecomeActiveAfterResign } }
+
+    @MainActor
+    func start() {
+        let nc = NotificationCenter.default
+        let resignObs = nc.addObserver(
+            forName: UIApplication.willResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.lock.withLock { self?._didResignActive = true }
+        }
+        let activeObs = nc.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.lock.withLock {
+                if self._didResignActive {
+                    self._didBecomeActiveAfterResign = true
+                }
+            }
+        }
+        self.observers = [resignObs, activeObs]
     }
 
-    public static let defaultTurnOffShortcutName = "SideStore Turn Off Data"
-    public static let defaultTurnOnShortcutName = "SideStore Turn On Data"
+    @MainActor
+    func stop() {
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+        observers.removeAll()
+    }
+}
 
-    public static let turnOffShortcutICloudURL = URL(string: "https://www.icloud.com/shortcuts/27762c3ee91e4f0e8adba06a8a3d8d4c")!
-    public static let turnOnShortcutICloudURL = URL(string: "https://www.icloud.com/shortcuts/d6db3c41465c42e88a32049e4bf55a2e")!
+public final class CellularRefreshManager: @unchecked Sendable {
+    public static let shared = CellularRefreshManager()
 
+    private let lock = NSLock()
+    private var cachedDidTurnOffData = false
+    private var didTurnOffData: Bool {
+        get { lock.withLock { cachedDidTurnOffData } }
+        set { lock.withLock { cachedDidTurnOffData = newValue } }
+    }
+
+    // --- LƯU TRỮ TẠM CHO SHORTCUT 2 GIAI ĐOẠN ---
+    private var cachedShortcutMode = false
+    public var isShortcutTwoStageMode: Bool {
+        get { lock.withLock { cachedShortcutMode } }
+        set { lock.withLock { cachedShortcutMode = newValue } }
+    }
+
+    private var stagedBatchesFileURL: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("cellular_staged_batches.json")
+    }
+
+    public var hasRecentStagedBatches: Bool {
+        !stagedBatches.isEmpty
+    }
+
+    internal var stagedBatches: [PendingProfileBatch] {
+        get {
+            lock.withLock {
+                guard let data = try? Data(contentsOf: stagedBatchesFileURL),
+                      let persisted = try? JSONDecoder().decode([PersistedProfileBatch].self, from: data),
+                      let first = persisted.first else {
+                    return []
+                }
+                // Chỉ giữ hiệu lực trong 180 giây (3 phút)
+                guard (Date().timeIntervalSince1970 - first.timestamp) <= 180 else {
+                    try? FileManager.default.removeItem(at: stagedBatchesFileURL)
+                    return []
+                }
+                return persisted.map {
+                    PendingProfileBatch(bundleID: $0.bundleID, profiles: $0.profiles, app: nil, certStatus: nil)
+                }
+            }
+        }
+        set {
+            lock.withLock {
+                if newValue.isEmpty {
+                    try? FileManager.default.removeItem(at: stagedBatchesFileURL)
+                } else {
+                    let now = Date().timeIntervalSince1970
+                    let persisted = newValue.map {
+                        PersistedProfileBatch(bundleID: $0.bundleID, profiles: $0.profiles, timestamp: now)
+                    }
+                    if let data = try? JSONEncoder().encode(persisted) {
+                        try? data.write(to: stagedBatchesFileURL, options: .atomic)
+                    }
+                }
+            }
+        }
+    }
+
+    private init() {}
+
+    // --- CẤU HÌNH & TRẠNG THÁI ---
     public var isSupported: Bool {
-        true
+        #if os(tvOS)
+        return false
+        #else
+        return true
+        #endif
     }
 
     public var isEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: Keys.enabled) }
-        set {
-            UserDefaults.standard.set(newValue, forKey: Keys.enabled)
-            NotificationCenter.default.post(name: .cellularRefreshPreferencesChanged, object: nil)
-        }
+        UserDefaults.standard.isCellularRefreshEnabled
     }
-
-    public var turnOffShortcutName: String {
-        get {
-            let val = UserDefaults.standard.string(forKey: Keys.shortcutTurnOffName)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return val.isEmpty ? Self.defaultTurnOffShortcutName : val
-        }
-        set {
-            UserDefaults.standard.set(
-                newValue.trimmingCharacters(in: .whitespacesAndNewlines),
-                forKey: Keys.shortcutTurnOffName
-            )
-        }
-    }
-
-    public var turnOnShortcutName: String {
-        get {
-            let val = UserDefaults.standard.string(forKey: Keys.shortcutTurnOnName)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return val.isEmpty ? Self.defaultTurnOnShortcutName : val
-        }
-        set {
-            UserDefaults.standard.set(
-                newValue.trimmingCharacters(in: .whitespacesAndNewlines),
-                forKey: Keys.shortcutTurnOnName
-            )
-        }
-    }
-
-    public var isShortcutTwoStageMode: Bool = false
-    public private(set) var didTurnOffData: Bool = false
-    private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
-    public var turnOffDataBaseDelayOverride: TimeInterval?
 
     public var isCellularMode: Bool {
-        #if canImport(minimuxer)
-        return isSupported && isEnabled && !minimuxer.network.isWifiSatisfied
-        #else
-        return isSupported && isEnabled
-        #endif
+        if isShortcutTwoStageMode { return true }
+        guard isSupported && isEnabled else { return false }
+        return !minimuxer.network.isWifiSatisfied
     }
 
-    private init() {
-        UserDefaults.standard.register(defaults: [
-            Keys.enabled: false,
-            Keys.shortcutTurnOffName: Self.defaultTurnOffShortcutName,
-            Keys.shortcutTurnOnName: Self.defaultTurnOnShortcutName
-        ])
-        _ = Self.resolveDeviceUDID()
+    public func setEnabled(_ enabled: Bool) {
+        UserDefaults.standard.isCellularRefreshEnabled = enabled
     }
 
-    // =========================================================================
-    // MARK: - LẤY UDID TỪ 3 NGUỒN CHÍNH XÁC NHẤT (ƯU TIÊN 1 -> 2 -> 3)
-    // =========================================================================
+    // --- QUẢN LÝ PHÍM TẮT (SHORTCUTS) ---
+    public static func sanitizeShortcutName(_ name: String, fallback: String = "") -> String {
+        let cleaned = name.components(separatedBy: .controlCharacters).joined()
+                          .trimmingCharacters(in: .whitespacesAndNewlines)
+        let limited = String(cleaned.prefix(100)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return limited.isEmpty ? fallback : limited
+    }
 
-    /// Lấy UDID chuẩn của thiết bị theo đúng 3 thứ tự ưu tiên:
-    /// 1. Trực tiếp từ `minimuxer.fetch_udid()`
-    /// 2. Trực tiếp từ File Pairing của máy (`pairingFile` / `ALTPairingFile.plist`)
-    /// 3. Từ `UserDefaults.standard` (`deviceID`) đã lưu
+    public var turnOffDataShortcutName: String {
+        Self.sanitizeShortcutName(UserDefaults.standard.turnOffDataShortcutName,
+                                  fallback: AppConstants.Shortcuts.defaultTurnOffDataShortcutName)
+    }
+
+    public var turnOnDataShortcutName: String {
+        Self.sanitizeShortcutName(UserDefaults.standard.turnOnDataShortcutName,
+                                  fallback: AppConstants.Shortcuts.defaultTurnOnDataShortcutName)
+    }
+
+    public func setTurnOffDataShortcutName(_ name: String) {
+        UserDefaults.standard.turnOffDataShortcutName = Self.sanitizeShortcutName(
+            name, fallback: AppConstants.Shortcuts.defaultTurnOffDataShortcutName
+        )
+    }
+
+    public func setTurnOnDataShortcutName(_ name: String) {
+        UserDefaults.standard.turnOnDataShortcutName = Self.sanitizeShortcutName(
+            name, fallback: AppConstants.Shortcuts.defaultTurnOnDataShortcutName
+        )
+    }
+
+    public func shortcutURL(for name: String, fallback: String) -> URL {
+        let sanitized = Self.sanitizeShortcutName(name, fallback: fallback)
+        var components = URLComponents()
+        components.scheme = "shortcuts"
+        components.host = "run-shortcut"
+        components.queryItems = [URLQueryItem(name: "name", value: sanitized)]
+        return components.url ?? URL(string: "shortcuts://run-shortcut?name=\(fallback)")!
+    }
+
+    @MainActor
+    private func openShortcut(url: URL) async -> Bool {
+        debugLog("[CellularRefreshManager] Opening shortcut URL: \(url.absoluteString)")
+        return await UIApplication.shared.open(url)
+    }
+
     @discardableResult
-    public nonisolated static func resolveDeviceUDID() -> String? {
-        // ƯU TIÊN 1: Lấy trực tiếp từ Minimuxer (chính xác nhất khi kết nối sẵn sàng)
-        #if canImport(minimuxer)
-        if let liveUDID = try? minimuxer.fetch_udid() {
-            let clean = liveUDID.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !clean.isEmpty {
-                saveDeviceIDIfNeeded(clean)
-                return clean
-            }
-        }
-        #endif
-
-        // ƯU TIÊN 2: Bóc trực tiếp khóa UDID từ File Pairing của máy (luôn có sẵn kể cả khi đang bật 4G)
-        if let pairingUDID = extractUDIDFromPairingFile() {
-            saveDeviceIDIfNeeded(pairingUDID)
-            return pairingUDID
-        }
-
-        // ƯU TIÊN 3: Lấy từ UserDefaults (deviceID)
-        if let savedDeviceID = UserDefaults.standard.string(forKey: Keys.deviceID) {
-            let clean = savedDeviceID.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !clean.isEmpty {
-                return clean
-            }
-        }
-
-        return nil
+    private func turnOffData() async -> Bool {
+        let url = shortcutURL(for: turnOffDataShortcutName, fallback: AppConstants.Shortcuts.defaultTurnOffDataShortcutName)
+        return await openShortcut(url: url)
     }
 
-    private nonisolated static func saveDeviceIDIfNeeded(_ udid: String) {
-        guard !udid.isEmpty else { return }
-        if UserDefaults.standard.string(forKey: Keys.deviceID) != udid {
-            UserDefaults.standard.set(udid, forKey: Keys.deviceID)
+    @discardableResult
+    private func turnOnData() async -> Bool {
+        let url = shortcutURL(for: turnOnDataShortcutName, fallback: AppConstants.Shortcuts.defaultTurnOnDataShortcutName)
+        return await openShortcut(url: url)
+    }
+
+    // --- CẤU HÌNH ĐỘ TRỄ (GIỮ LẠI ĐỂ TƯƠNG THÍCH UI SETTINGS) ---
+    public var turnOffDataBaseDelayOverride: TimeInterval? {
+        (UserDefaults.standard.object(forKey: "turnOffDataBaseDelayOverride") as? Double).map { max(0, $0) }
+    }
+
+    public var turnOnDataBaseDelayOverride: TimeInterval? {
+        (UserDefaults.standard.object(forKey: "turnOnDataBaseDelayOverride") as? Double).map { max(0, $0) }
+    }
+
+    public func setTurnOffDataBaseDelayOverride(_ delay: TimeInterval?) {
+        if let delay {
+            UserDefaults.standard.set(max(0, delay), forKey: "turnOffDataBaseDelayOverride")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "turnOffDataBaseDelayOverride")
         }
     }
 
-    /// Đọc khóa UDID từ dữ liệu Pairing File của SideStore
-    private nonisolated static func extractUDIDFromPairingFile() -> String? {
-        let parsePlist: (Data) -> String? = { data in
-            guard let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any] else {
-                return nil
-            }
-            for key in ["UDID", "UniqueDeviceID", "DeviceUDID"] {
-                if let val = plist[key] as? String {
-                    let clean = val.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !clean.isEmpty { return clean }
-                }
-            }
-            return nil
-        }
-
-        // Kiểm tra chuỗi/dữ liệu Pairing lưu trong UserDefaults
-        if let pairingString = UserDefaults.standard.string(forKey: Keys.pairingFile),
-           let data = pairingString.data(using: .utf8),
-           let udid = parsePlist(data) {
-            return udid
-        }
-
-        if let pairingData = UserDefaults.standard.data(forKey: Keys.pairingFile),
-           let udid = parsePlist(pairingData) {
-            return udid
-        }
-
-        // Kiểm tra file ALTPairingFile.plist trong thư mục Documents / Application Support
-        let fm = FileManager.default
-        for dir in [FileManager.SearchPathDirectory.documentDirectory, .applicationSupportDirectory] {
-            if let baseURL = fm.urls(for: dir, in: .userDomainMask).first {
-                let fileURL = baseURL.appendingPathComponent("ALTPairingFile.plist")
-                if let data = try? Data(contentsOf: fileURL),
-                   let udid = parsePlist(data) {
-                    return udid
-                }
-            }
-        }
-
-        return nil
-    }
-
-    // =========================================================================
-    // MARK: - QUẢN LÝ CHẠY NGẦM
-    // =========================================================================
-    private func beginBackgroundKeepAlive() {
-        endBackgroundKeepAlive()
-        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "SideStoreCellularShortcutSwitch") { [weak self] in
-            Task { @MainActor in self?.endBackgroundKeepAlive() }
+    public func setTurnOnDataBaseDelayOverride(_ delay: TimeInterval?) {
+        if let delay {
+            UserDefaults.standard.set(max(0, delay), forKey: "turnOnDataBaseDelayOverride")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "turnOnDataBaseDelayOverride")
         }
     }
 
-    private func endBackgroundKeepAlive() {
-        guard backgroundTaskID != .invalid else { return }
-        UIApplication.shared.endBackgroundTask(backgroundTaskID)
-        backgroundTaskID = .invalid
+    public func resetToDefaults() {
+        setTurnOffDataShortcutName(AppConstants.Shortcuts.defaultTurnOffDataShortcutName)
+        setTurnOnDataShortcutName(AppConstants.Shortcuts.defaultTurnOnDataShortcutName)
+        setTurnOffDataBaseDelayOverride(nil)
+        setTurnOnDataBaseDelayOverride(nil)
     }
 
-    // =========================================================================
-    // MARK: - KIỂM TRA MẠNG & MINIMUXER
-    // =========================================================================
+    private func sleep(_ seconds: TimeInterval) async {
+        guard seconds > 0 else { return }
+        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+    }
+
+    // --- KIỂM TRA MẠNG & MINIMUXER ---
     /// Kiểm tra tầng nhân iOS xem giao diện dữ liệu di động chính (`pdp_ip0`) còn giữ IP hay đã ngắt hoàn toàn
     /// (Bỏ qua pdp_ip1, pdp_ip2... vì đó là cổng VoLTE/IMS luôn giữ IP kể cả khi đã tắt 4G)
     private static func hasActiveCellularInterface() -> Bool {
@@ -230,83 +271,87 @@ public final class CellularRefreshManager {
         return false
     }
 
-    @discardableResult
-    public func waitForMinimuxerReady(timeout: TimeInterval = 8.0) async -> Bool {
-        _ = Self.resolveDeviceUDID()
-        #if canImport(minimuxer)
-        let deadline = Date().addingTimeInterval(timeout)
-        var retryTick = 0
-        while Date() < deadline {
-            if minimuxer.Status.shared.ready && minimuxer.Status.shared.deviceConnected {
-                _ = Self.resolveDeviceUDID()
-                return true
-            }
-            if retryTick % 3 == 0 {
-                minimuxer.retryFetchudid()
-            }
-            retryTick += 1
-            try? await Task.sleep(nanoseconds: 250_000_000)
-        }
-        _ = Self.resolveDeviceUDID()
-        return minimuxer.Status.shared.ready
-        #else
-        return true
-        #endif
-    }
+    /// Mở Phím tắt và chờ chu trình: SideStore -> Phím tắt -> Quay lại SideStore (.active)
+    private func runShortcutWithRoundTrip(_ action: () async -> Bool) async -> Bool {
+        let wasActive = await MainActor.run { UIApplication.shared.applicationState == .active }
+        let tracker = ShortcutTransitionTracker()
+        if wasActive { await tracker.start() }
+        defer { Task { @MainActor in tracker.stop() } }
 
-    /// Sau khi tắt 4G, ép minimuxer tạo kết nối mới qua LocalDevVPN
-    @discardableResult
-    private func resetAndPrepareMinimuxer(timeout: TimeInterval = 8.0) async -> Bool {
-        #if canImport(minimuxer)
-        let deadline = Date().addingTimeInterval(timeout)
-        var retryTick = 0
-        while Date() < deadline {
-            if retryTick % 3 == 0 {
-                minimuxer.retryFetchudid()
-            }
-            retryTick += 1
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            if minimuxer.Status.shared.ready && minimuxer.Status.shared.deviceConnected {
-                _ = Self.resolveDeviceUDID()
-                return true
+        let success = await action()
+        guard success, wasActive else { return success }
+
+        // 1. Đợi tối đa 1.5s để chuyển sang Phím tắt
+        let leaveDeadline = Date().addingTimeInterval(1.5)
+        while !tracker.didResignActive && Date() < leaveDeadline {
+            await sleep(0.08)
+        }
+
+        // 2. Đợi Phím tắt chạy xong và đưa SideStore trở lại trạng thái .active (tối đa 10s)
+        if tracker.didResignActive {
+            let returnDeadline = Date().addingTimeInterval(10.0)
+            while Date() < returnDeadline {
+                let isActive = await MainActor.run { UIApplication.shared.applicationState == .active }
+                if tracker.didBecomeActiveAfterResign && isActive { break }
+                await sleep(0.12)
             }
         }
-        _ = Self.resolveDeviceUDID()
-        return minimuxer.Status.shared.ready
-        #else
         return true
-        #endif
     }
 
-    private func sleep(_ seconds: TimeInterval) async {
-        guard seconds > 0 else { return }
-        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+    public func waitForMinimuxerReady(timeout: TimeInterval) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+
+        if case .success(true) = await minimuxer.core.isReady(withNetworkCheck: false) {
+            // Đã sẵn sàng
+        } else if let pf = PairingFileManager.shared.fetchPairingFile() {
+            try? await AppBootManager.shared.startMinimuxer(pairingFile: pf)
+        }
+
+        while Date() < deadline {
+            await minimuxer.network.refreshEndpoint()
+            if (try? await fetchUDID(forceLive: true)) != nil {
+                // Thêm đệm 0.25s sau khi lockdown thông suốt để các dịch vụ con (RwAfc/misagent) ổn định hẳn
+                await sleep(0.25)
+                debugLog("[CellularRefreshManager] Minimuxer live lockdown connection is ready.")
+                return true
+            }
+            await sleep(0.4)
+        }
+        debugLog("[CellularRefreshManager] Timed out waiting for minimuxer to become ready.")
+        return false
     }
 
-    // =========================================================================
-    // MARK: - PUBLIC APIS
-    // =========================================================================
+    @discardableResult
+    public func resetAndPrepareMinimuxer(timeout: TimeInterval = 8.0) async -> Bool {
+        debugLog("[CellularRefreshManager] Resetting Minimuxer session for LocalDevVPN...")
+        try? await minimuxerStop()
+        // Đợi 0.35s để OS thu hồi hoàn toàn các file descriptor / socket cũ tránh lỗi MinimuxerError 35 (EAGAIN)
+        await sleep(0.35)
+        if let pf = PairingFileManager.shared.fetchPairingFile() {
+            try? await AppBootManager.shared.startMinimuxer(pairingFile: pf)
+        }
+        return await waitForMinimuxerReady(timeout: timeout)
+    }
+
+    // --- PUBLIC APIS ---
     @discardableResult
     public func turnOffDataIfNeeded(addOnDelay: TimeInterval = 0) async -> Bool {
-        // Luôn đồng bộ UDID từ 3 nguồn ưu tiên vào UserDefaults trước tiên
-        _ = Self.resolveDeviceUDID()
-
         guard !isShortcutTwoStageMode, isSupported, isEnabled else {
             return false
         }
 
-        // Nếu trong phiên này (Install IPA / Refresh / Refresh All) ĐÃ gọi tắt 4G rồi,
-        // thì tuyệt đối không mở Phím tắt Tắt 4G lần 2 nữa, chỉ đảm bảo Minimuxer sẵn sàng cho từng app.
+        // CHỐT CHẶN CHỐNG TẮT 4G 2 LẦN:
+        // Khi PipelineExecutor vừa gọi turnOffDataIfNeeded() xong, đến lượt SendAppOperation gọi lại,
+        // cờ didTurnOffData đã là true -> Tuyệt đối không mở Phím tắt lần 2, chỉ đảm bảo Minimuxer sẵn sàng!
         if didTurnOffData {
             _ = await waitForMinimuxerReady(timeout: 5.0)
             return false
         }
 
-        #if canImport(minimuxer)
         guard !minimuxer.network.isWifiSatisfied else {
             return false
         }
-        #endif
 
         let success = await runShortcutWithRoundTrip { await self.turnOffData() }
         guard success else { return false }
@@ -327,84 +372,24 @@ public final class CellularRefreshManager {
         return true
     }
 
-    public func turnOnDataIfNeeded() async {
-        guard !isShortcutTwoStageMode, isSupported, isEnabled, didTurnOffData else { return }
-        didTurnOffData = false
-        _ = await runShortcutWithRoundTrip { await self.turnOnData() }
-        await sleep(1.5)
-    }
-
     @discardableResult
-    public func turnOffData() async -> Bool {
-        await runShortcut(named: turnOffShortcutName)
-    }
+    public func turnOnDataIfNeeded(addOnDelay: TimeInterval = 0) async -> Bool {
+        guard !isShortcutTwoStageMode, didTurnOffData else { return false }
 
-    @discardableResult
-    public func turnOnData() async -> Bool {
-        await runShortcut(named: turnOnShortcutName)
-    }
-
-    public func resetState() {
-        didTurnOffData = false
-        endBackgroundKeepAlive()
-    }
-
-    // =========================================================================
-    // MARK: - SHORTCUT EXECUTION
-    // =========================================================================
-    @discardableResult
-    private func runShortcutWithRoundTrip(trigger: @MainActor () async -> Bool) async -> Bool {
-        while UIApplication.shared.applicationState != .active {
+        // Đảm bảo app đang ở trạng thái .active trước khi gọi mở URL Phím tắt (tối đa 2.25s)
+        for _ in 0..<15 {
+            if await MainActor.run(body: { UIApplication.shared.applicationState == .active }) {
+                break
+            }
             await sleep(0.15)
         }
 
-        beginBackgroundKeepAlive()
-        defer { endBackgroundKeepAlive() }
+        didTurnOffData = false
+        let success = await turnOnData()
 
-        let nc = NotificationCenter.default
-        var didResignActive = false
-        let resignObs = nc.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { _ in
-            didResignActive = true
+        if success, let customDelay = turnOnDataBaseDelayOverride, (customDelay + addOnDelay) > 0 {
+            await sleep(customDelay + addOnDelay)
         }
-        defer { nc.removeObserver(resignObs) }
-
-        let opened = await trigger()
-        guard opened else { return false }
-
-        // 1. Chờ tối đa 3 giây để nhảy sang ứng dụng Phím tắt
-        let resignDeadline = Date().addingTimeInterval(3.0)
-        while !didResignActive && UIApplication.shared.applicationState == .active && Date() < resignDeadline {
-            await sleep(0.05)
-        }
-
-        // 2. Chờ đến khi Phím tắt chạy lệnh "Mở ứng dụng SideStore" quay trở lại (tối đa 25s)
-        let activeDeadline = Date().addingTimeInterval(25.0)
-        while UIApplication.shared.applicationState != .active && Date() < activeDeadline {
-            await sleep(0.1)
-        }
-
-        // 3. Nghỉ 0.5s để UI SideStore ổn định hoàn toàn trên Foreground
-        await sleep(0.5)
-        return UIApplication.shared.applicationState == .active
+        return success
     }
-
-    @discardableResult
-    private func runShortcut(named shortcutName: String) async -> Bool {
-        var allowed = CharacterSet.urlQueryAllowed
-        allowed.remove(charactersIn: "&+=?#/")
-
-        guard let encodedName = shortcutName.addingPercentEncoding(withAllowedCharacters: allowed),
-              let url = URL(string: "shortcuts://run-shortcut?name=\(encodedName)")
-        else { return false }
-
-        return await withCheckedContinuation { continuation in
-            UIApplication.shared.open(url, options: [:]) { success in
-                continuation.resume(returning: success)
-            }
-        }
-    }
-}
-
-public extension Notification.Name {
-    static let cellularRefreshPreferencesChanged = Notification.Name("SSCellularRefreshPreferencesChanged")
 }

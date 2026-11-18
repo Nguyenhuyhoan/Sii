@@ -463,8 +463,12 @@ final class SystemCheckViewModel: ObservableObject {
 
     private var usesCellularPath: Bool = false
     private var isCellularPathSatisfied: Bool = false
+    private var didReceiveCellularMonitorUpdate: Bool = false
+
     private var usesWifiPath: Bool = false
     private var isWifiPathSatisfied: Bool = false
+    private var didReceiveWifiMonitorUpdate: Bool = false
+
     private var cancellables = Set<AnyCancellable>()
 
     private var isViewVisible: Bool = false
@@ -486,6 +490,22 @@ final class SystemCheckViewModel: ObservableObject {
     private var didAttemptLiveVerifyInCurrentMode: Bool = false
 
     private let networkChangeSubject = PassthroughSubject<Bool, Never>()
+
+    /// Xác định chính xác 100% Dữ liệu di động (4G/5G) đang bật hay tắt (không bị đánh lừa bởi cổng ngầm VoLTE pdp_ip1/pdp_ip2)
+    private func resolveCellularActive(snapshot: SystemInterfaceSnapshot) -> Bool {
+        if didReceiveCellularMonitorUpdate {
+            return usesCellularPath || isCellularPathSatisfied
+        }
+        return usesCellularPath || isCellularPathSatisfied || snapshot.hasCellularIPv4
+    }
+
+    /// Xác định chính xác Wi-Fi đang bật và kết nối hay tắt
+    private func resolveWifiActive(snapshot: SystemInterfaceSnapshot) -> Bool {
+        if didReceiveWifiMonitorUpdate {
+            return usesWifiPath || isWifiPathSatisfied
+        }
+        return usesWifiPath || isWifiPathSatisfied || snapshot.hasWifiIPv4
+    }
 
     var canAutoVerifyPairingInCurrentNetwork: Bool {
         guard isVpnOK else { return false }
@@ -576,7 +596,7 @@ final class SystemCheckViewModel: ObservableObject {
 
     private func setupRealtimeListeners() {
         networkChangeSubject
-            .debounce(for: .milliseconds(650), scheduler: DispatchQueue.main)
+            .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
             .sink { [weak self] forceVerify in
                 guard let self = self,
                       self.isViewVisible,
@@ -589,8 +609,8 @@ final class SystemCheckViewModel: ObservableObject {
             .store(in: &cancellables)
 
         pathMonitor.pathUpdateHandler = { [weak self] path in
-            let usesCell = path.usesInterfaceType(.cellular)
-            let usesWifi = path.usesInterfaceType(.wifi)
+            let usesCell = (path.status == .satisfied) && path.usesInterfaceType(.cellular)
+            let usesWifi = (path.status == .satisfied) && path.usesInterfaceType(.wifi)
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 var changed = false
@@ -602,8 +622,14 @@ final class SystemCheckViewModel: ObservableObject {
                     self.usesWifiPath = usesWifi
                     changed = true
                 }
-                guard changed, self.isViewVisible, !self.isWirelessPairingActive else { return }
-                self.networkChangeSubject.send(false)
+                if changed {
+                    if let snap = self.latestSnapshot {
+                        self.updateInstantStatus(existingSnapshot: snap)
+                    }
+                    if self.isViewVisible && !self.isWirelessPairingActive {
+                        self.networkChangeSubject.send(false)
+                    }
+                }
             }
         }
         pathMonitor.start(queue: monitorQueue)
@@ -612,8 +638,13 @@ final class SystemCheckViewModel: ObservableObject {
             let cellSatisfied = (path.status == .satisfied)
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
-                guard self.isCellularPathSatisfied != cellSatisfied else { return }
+                let firstUpdate = !self.didReceiveCellularMonitorUpdate
+                self.didReceiveCellularMonitorUpdate = true
+                guard firstUpdate || self.isCellularPathSatisfied != cellSatisfied else { return }
                 self.isCellularPathSatisfied = cellSatisfied
+                if let snap = self.latestSnapshot {
+                    self.updateInstantStatus(existingSnapshot: snap)
+                }
                 guard self.isViewVisible, !self.isWirelessPairingActive else { return }
                 self.networkChangeSubject.send(false)
             }
@@ -624,8 +655,13 @@ final class SystemCheckViewModel: ObservableObject {
             let wifiSatisfied = (path.status == .satisfied)
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
-                guard self.isWifiPathSatisfied != wifiSatisfied else { return }
+                let firstUpdate = !self.didReceiveWifiMonitorUpdate
+                self.didReceiveWifiMonitorUpdate = true
+                guard firstUpdate || self.isWifiPathSatisfied != wifiSatisfied else { return }
                 self.isWifiPathSatisfied = wifiSatisfied
+                if let snap = self.latestSnapshot {
+                    self.updateInstantStatus(existingSnapshot: snap)
+                }
                 guard self.isViewVisible, !self.isWirelessPairingActive else { return }
                 self.networkChangeSubject.send(false)
             }
@@ -693,7 +729,8 @@ final class SystemCheckViewModel: ObservableObject {
                     let family = addr.pointee.sa_family
                     if family == UInt8(AF_INET) {
                         let name = String(cString: current.pointee.ifa_name).lowercased()
-                        if name.hasPrefix("pdp_ip") || name == "en0" || name.hasPrefix("utun") {
+                        // Chỉ kiểm tra đúng pdp_ip0 (kênh dữ liệu di động chính), bỏ qua pdp_ip1/2/3/4 của VoLTE/IMS
+                        if name == "pdp_ip0" || name == "en0" || name.hasPrefix("utun") {
                             var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
                             if getnameinfo(
                                 addr,
@@ -706,7 +743,7 @@ final class SystemCheckViewModel: ObservableObject {
                             ) == 0 {
                                 let ip = String(cString: hostname)
                                 if !ip.isEmpty && !ip.hasPrefix("169.254.") && ip != "0.0.0.0" {
-                                    if name.hasPrefix("pdp_ip") {
+                                    if name == "pdp_ip0" {
                                         hasPdpIPv4 = true
                                     } else if name == "en0" {
                                         hasEn0IPv4 = true
@@ -808,8 +845,8 @@ final class SystemCheckViewModel: ObservableObject {
         self.latestSnapshot = snapshot
         ensureTunnelRoutingPinned(snapshot: snapshot)
 
-        let cellularActive = usesCellularPath || isCellularPathSatisfied || snapshot.hasCellularIPv4
-        let wifiActive = usesWifiPath || isWifiPathSatisfied || snapshot.hasWifiIPv4
+        let cellularActive = resolveCellularActive(snapshot: snapshot)
+        let wifiActive = resolveWifiActive(snapshot: snapshot)
         assignIfChanged(\.isCellularOK, cellularActive)
         assignIfChanged(\.isWifiActive, wifiActive)
 
@@ -1030,8 +1067,8 @@ final class SystemCheckViewModel: ObservableObject {
             return
         }
 
-        let cellularActive = usesCellularPath || isCellularPathSatisfied || snapshot.hasCellularIPv4
-        let wifiActive = usesWifiPath || isWifiPathSatisfied || snapshot.hasWifiIPv4
+        let cellularActive = resolveCellularActive(snapshot: snapshot)
+        let wifiActive = resolveWifiActive(snapshot: snapshot)
         let vpnActive = isVpnOK || snapshot.hasActiveLocalDevUtun
 
         let canVerifyNow = vpnActive && (wifiActive || !cellularActive)

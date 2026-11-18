@@ -19,26 +19,22 @@ struct Countdown: View
     
     @Environment(\.font) private var font
     
-    private var remainingDaysAndHours: (days: Int, hours: Int) {
-        guard let endDate = self.endDate, endDate > self.currentDate else {
-            return (0, 0)
-        }
-        return endDate.remainingDaysAndHours(since: self.currentDate)
-    }
-    
     // Chuỗi hiển thị Ngày - Giờ
     private var remainingTimeText: String {
         guard let endDate = self.endDate else { return "0d 0h" }
         
+        // Nếu đã quá hạn
         if endDate <= self.currentDate {
-            return "Hết hạn"
+            return "0d 0h" // Bạn có thể đổi thành "0n 0g" hoặc "Hết hạn"
         }
         
-        let remaining = self.remainingDaysAndHours
+        let remaining = endDate.remainingDaysAndHours(since: self.currentDate)
+        
+        // Đổi chữ "d" (days) và "h" (hours) thành "n" và "g" nếu muốn tiếng Việt
         return "\(remaining.days)d \(remaining.hours)h"
     }
     
-    // Tính thanh tiến trình chính xác theo từng giây
+    // Tính thanh tiến trình chính xác theo từng giây (thay vì theo ngày như cũ)
     private var fractionComplete: CGFloat {
         guard let startDate = self.startDate, let endDate = self.endDate else { return 1.0 }
         
@@ -48,39 +44,7 @@ struct Countdown: View
         guard totalTime > 0 else { return 0.0 }
         
         let fraction = CGFloat(remainingTime / totalTime)
-        return min(max(fraction, 0.0), 1.0)
-    }
-    
-    // Màu sắc tự động theo thời hạn còn lại (Xanh ngọc -> Vàng cam -> Đỏ)
-    private var statusGradient: LinearGradient {
-        let days = self.remainingDaysAndHours.days
-        let hours = self.remainingDaysAndHours.hours
-        
-        if days == 0 && hours == 0 {
-            return LinearGradient(
-                colors: [Color(red: 248/255, green: 113/255, blue: 113/255), Color(red: 239/255, green: 68/255, blue: 68/255)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        } else if days <= 1 {
-            return LinearGradient(
-                colors: [Color(red: 248/255, green: 113/255, blue: 113/255), Color(red: 251/255, green: 146/255, blue: 60/255)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        } else if days <= 3 {
-            return LinearGradient(
-                colors: [Color(red: 251/255, green: 191/255, blue: 36/255), Color(red: 56/255, green: 189/255, blue: 248/255)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        } else {
-            return LinearGradient(
-                colors: [Color(red: 52/255, green: 211/255, blue: 153/255), Color(red: 56/255, green: 189/255, blue: 248/255)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
+        return min(max(fraction, 0.0), 1.0) // Giới hạn từ 0.0 đến 1.0
     }
         
     @ViewBuilder
@@ -88,6 +52,7 @@ struct Countdown: View
     {
         let strokeStyle = StrokeStyle(lineWidth: self.strokeWidth, lineCap: .round, lineJoin: .round)
         
+        // Luôn dùng hình viên thuốc (Capsule) vì chữ "6d 14h" dài hơn 1 con số, để hình tròn sẽ bị tràn viền
         Capsule(style: .continuous)
             .trim(from: 0.0, to: progress)
             .stroke(style: strokeStyle)
@@ -95,24 +60,19 @@ struct Countdown: View
     
     var body: some View {
         Text(remainingTimeText)
-            .font((font ?? .title3).monospacedDigit())
+            .font((font ?? .title3).monospacedDigit()) // Dùng .title3 để chữ vừa vặn hơn
             .bold()
             .lineLimit(1)
-            .minimumScaleFactor(0.5)
+            .minimumScaleFactor(0.5) // Tự động thu nhỏ chữ nếu không đủ chỗ
             .opacity(endDate != nil ? 1 : 0)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.06))
-            )
             .overlay(
                 ZStack {
                     overlay(progress: 1.0)
-                        .opacity(0.22)
+                        .opacity(0.3)
                     
                     overlay(progress: fractionComplete)
-                        .foregroundStyle(statusGradient)
                 }
             )
     }

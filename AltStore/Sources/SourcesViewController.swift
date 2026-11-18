@@ -1422,7 +1422,7 @@ final class SourcesViewController: UICollectionViewController {
         setupStateOverlayCard()
         setupTableFooterInfo()
 
-        // 3. Tải dữ liệu từ GitHub
+        // 3. Hiển thị tức thì từ Cache (nếu có) và kiểm tra ngầm từ GitHub
         fetchGuidesFromGitHub(showLoadingCard: true)
     }
 
@@ -1604,8 +1604,21 @@ private extension SourcesViewController {
 
     func fetchGuidesFromGitHub(showLoadingCard: Bool) {
         guard !isLoadingGuides else { return }
-        isLoadingGuides = true
 
+        let cacheKey = "CachedGitHubGuidesText"
+
+        // 1. ⚡ HIỂN THỊ NGAY LẬP TỨC TỪ BỘ NHỚ MÁY (NẾU CÓ)
+        if articles.isEmpty, let cachedText = UserDefaults.standard.string(forKey: cacheKey) {
+            let cachedArticles = GuideParser.parse(cachedText)
+            if !cachedArticles.isEmpty {
+                self.articles = cachedArticles
+                self.heroHeaderView.updateCount(cachedArticles.count)
+                self.guidesTableView.reloadData()
+                self.stateCardView.isHidden = true
+            }
+        }
+
+        // Chỉ hiện khung "Đang tải..." ở lần đầu tiên cài app (khi máy chưa có dữ liệu)
         if showLoadingCard && articles.isEmpty {
             stateCardView.isHidden = false
             stateActivityIndicator.startAnimating()
@@ -1614,6 +1627,7 @@ private extension SourcesViewController {
             stateRetryButton.isHidden = true
         }
 
+        isLoadingGuides = true
         fetchTask?.cancel()
         fetchTask = Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -1625,13 +1639,16 @@ private extension SourcesViewController {
             }
 
             guard let rawURL = GuideParser.convertToRawGitHubURL(GuideParser.githubGuideURL) else {
-                self.showErrorState(message: "Đường dẫn cấu hình hướng dẫn không hợp lệ.")
+                if self.articles.isEmpty {
+                    self.showErrorState(message: "Đường dẫn cấu hình hướng dẫn không hợp lệ.")
+                }
                 return
             }
 
             do {
                 var request = URLRequest(url: rawURL)
-                request.cachePolicy = .reloadIgnoringLocalCacheData
+                // Dùng cache mặc định của hệ thống khi mở app, hoặc ép tải mới khi người dùng kéo xuống làm mới
+                request.cachePolicy = showLoadingCard ? .useProtocolCachePolicy : .reloadIgnoringLocalCacheData
                 request.timeoutInterval = 20
 
                 let (data, response) = try await URLSession.shared.data(for: request)
@@ -1640,17 +1657,25 @@ private extension SourcesViewController {
                 }
 
                 let rawText = String(decoding: data, as: UTF8.self)
-                let parsedArticles = GuideParser.parse(rawText)
 
-                self.articles = parsedArticles
-                self.heroHeaderView.updateCount(parsedArticles.count)
-                self.guidesTableView.reloadData()
-
-                if parsedArticles.isEmpty {
-                    self.showErrorState(message: "Hiện chưa có bài viết hướng dẫn nào trong tệp cấu hình.")
-                } else {
+                // 2. 🛑 NẾU NỘI DUNG KHÔNG ĐỔI -> DỪNG LUÔN, KHÔNG LOAD LẠI BẢNG
+                if rawText == UserDefaults.standard.string(forKey: cacheKey) && !self.articles.isEmpty {
                     self.stateCardView.isHidden = true
                     self.stateActivityIndicator.stopAnimating()
+                    return
+                }
+
+                // 3. NẾU CÓ BÀI MỚI -> LƯU LẠI VÀ CẬP NHẬT BẢNG
+                let parsedArticles = GuideParser.parse(rawText)
+                if !parsedArticles.isEmpty {
+                    UserDefaults.standard.set(rawText, forKey: cacheKey)
+                    self.articles = parsedArticles
+                    self.heroHeaderView.updateCount(parsedArticles.count)
+                    self.guidesTableView.reloadData()
+                    self.stateCardView.isHidden = true
+                    self.stateActivityIndicator.stopAnimating()
+                } else if self.articles.isEmpty {
+                    self.showErrorState(message: "Hiện chưa có bài viết hướng dẫn nào trong tệp cấu hình.")
                 }
             } catch {
                 if self.articles.isEmpty {

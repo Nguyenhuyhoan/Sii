@@ -22,7 +22,6 @@ private enum WidgetCSSTheme
     static let subtitleText = Color(red: 82/255, green: 90/255, blue: 101/255)
     static let cardBackground = Color.white
     static let cardBorder = Color(red: 218/255, green: 224/255, blue: 233/255)     // #dae0e9
-    static let badgeBackground = Color(red: 242/255, green: 246/255, blue: 252/255)
 
     // Nền Gradient Sáng cố định (#f3e0ff -> #e0f7ff)
     static var pageGradient: LinearGradient {
@@ -139,12 +138,12 @@ private struct ActiveAppsWidgetView: View
             HStack(alignment: .center, spacing: 8) {
                 
                 let itemsPerPage = ActiveAppsWidget.Constants.MAX_ROWS_PER_PAGE
-                let totalVerticalSpacing: CGFloat = 12.0 // 2 khoảng cách 6pt giữa 3 hàng
+                let totalVerticalSpacing: CGFloat = 12.0
                 let calculatedRowHeight = (geometry.size.height - totalVerticalSpacing) / Double(itemsPerPage)
                 let rowHeight = max(36.0, min(calculatedRowHeight, 44.0))
 
                 LazyVStack(spacing: 6) {
-                    // Sử dụng định danh duy nhất của từng AppSnapshot để không bao giờ gán nhầm Icon
+                    // Duyệt theo Identifiable của AppSnapshot thay vì index offset để không bao giờ nhầm Icon
                     ForEach(entry.apps) { app in
                     
                         let icon: UIImage = app.icon ?? UIImage(named: "SideStore") ?? UIImage(systemName: "app.fill")!
@@ -247,7 +246,6 @@ private struct ActiveAppsWidgetView: View
                 
                 let widgetID = entry.context?.ID
                 
-                // Cột nút chuyển trang Lên/Xuống phong cách Floating Button đồng bộ Settings
                 VStack(spacing: 0) {
                     ZStack {
                         Circle()

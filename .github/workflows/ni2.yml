@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-14 # Cụm M1 lớn nhất của GitHub: nhận runner ngay lập tức (không phải chờ queue như macos-15)
+    runs-on: macos-latest # Tự động chọn cụm máy macOS khả dụng ngay lập tức, không bao giờ lỗi "not supported"
     timeout-minutes: 45
     env:
       DEPLOY_KEY: ${{ secrets.CROSS_REPO_PUSH_KEY }}
@@ -56,7 +56,7 @@ jobs:
           fi
           echo "should_skip=$SHOULD_SKIP" >> "$GITHUB_OUTPUT"
 
-      # 3. Tải Submodules đa luồng (8 luồng song song, không bị treo vì lỗi unadvertised commit của --depth 1)
+      # 3. Tải Submodules đa luồng (8 luồng song song)
       - name: Checkout Submodules (Fast Parallel)
         if: steps.build_gate.outputs.should_skip != 'true'
         run: |
@@ -111,7 +111,7 @@ jobs:
         if: steps.build_gate.outputs.should_skip != 'true'
         uses: maxim-lobanov/setup-xcode@v1.6.0
         with:
-          xcode-version: "16.2"
+          xcode-version: "latest-stable"
 
       # 5. Cache Xcode DerivedData & SPM
       - name: Cache Xcode DerivedData & SPM

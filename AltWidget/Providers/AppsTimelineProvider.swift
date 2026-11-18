@@ -1,4 +1,3 @@
-
 //
 //  AppsTimelineProvider.swift
 //  AltWidgetExtension
@@ -121,7 +120,7 @@ extension AppsTimelineProviderBase
             return [Entry(date: Date(), apps: [], context: context)]
         }
         
-        // Lấy thời gian thực tế hiện tại (thay vì 0h sáng như code cũ)
+        // Lấy thời gian thực tế hiện tại
         let now = Date()
         
         // Nếu tất cả các app đều đã hết hạn

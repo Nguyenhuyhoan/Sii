@@ -1,235 +1,194 @@
 
 //
 //  AppsTimelineProvider.swift
-//  AltWidgetExtension
+//  AltWidget
 //
-//  Created by Riley Testut on 8/23/23.
-//  Copyright © 2023 Riley Testut. All rights reserved.
+//  Created by Riley Testut on 9/17/20.
+//  Copyright © 2020 Riley Testut. All rights reserved.
 //
 
 import WidgetKit
+import SwiftUI
+import Intents
+import CoreData
 
-struct AppsEntry<T>: TimelineEntry
-{
-    var date: Date
-    var relevance: TimelineEntryRelevance?
-    
-    var apps: [AppSnapshot]
-    var isPlaceholder: Bool = false
-    
-    var context: T?
-}
+import AltStoreCore
 
-class AppsTimelineProviderBase<T>
-{
-    typealias Entry = AppsEntry<T>
+struct AppSnapshot: Identifiable, Equatable {
+    let id: String // Unique bundleIdentifier to prevent SwiftUI ForEach icon mix-ups
+    let name: String
+    let bundleIdentifier: String
+    let refreshedDate: Date
+    let expirationDate: Date
+    let appIcon: UIImage?
     
-    func placeholder(in context: TimelineProviderContext) -> AppsEntry<T>
-    {
-        debugLog("[AppsTimelineProviderBase] placeholder requested (isPreview: \(context.isPreview))")
-        return Entry(date: Date(), apps: [], isPlaceholder: true)
-    }
-    
-    func snapshot(for appBundleIDs: [String], in context: T? = nil) async -> AppsEntry<T>
-    {
-        debugLog("[AppsTimelineProvider] Snapshot requested for bundleIDs: \(appBundleIDs)")
-        do
-        {
-            try await self.prepare()
-            
-            var apps = try await self.fetchApps(withBundleIDs: appBundleIDs)
-            
-            apps = getUpdatedData(apps, context)
-            
-            verboseLog("[AppsTimelineProvider] Prepared snapshot entry with \(apps.count) app(s)")
-            let entry = Entry(date: Date(), apps: apps, context: context)
-            return entry
-        }
-        catch
-        {
-            debugLog("Failed to prepare widget snapshot: \(error)")
-            
-            let entry = Entry(date: Date(), apps: [], context: context)
-            return entry
-        }
-    }
-    
-    func timeline(for appBundleIDs: [String], in context: T? = nil) async -> Timeline<AppsEntry<T>>
-    {
-        debugLog("[AppsTimelineProvider] Timeline requested for bundleIDs: \(appBundleIDs)")
-        do
-        {
-            try await self.prepare()
-            
-            var apps = try await self.fetchApps(withBundleIDs: appBundleIDs)
-
-            apps = getUpdatedData(apps, context)
-
-            let entries = self.makeEntries(for: apps, in: context)
-            verboseLog("[AppsTimelineProvider] Generated timeline with \(entries.count) entries")
-            let timeline = Timeline(entries: entries, policy: .atEnd)
-            return timeline
-        }
-        catch
-        {
-            debugLog("Failed to prepare widget timeline: \(error)")
-            
-            let entry = Entry(date: Date(), apps: [], context: context)
-            let timeline = Timeline(entries: [entry], policy: .atEnd)
-            return timeline
-        }
-    }
-    
-    func getUpdatedData(_ apps: [AppSnapshot], _ context: T?) -> [AppSnapshot]{
-        // override in subclasses as required
-        return apps
+    static func == (lhs: AppSnapshot, rhs: AppSnapshot) -> Bool {
+        return lhs.id == rhs.id &&
+               lhs.name == rhs.name &&
+               lhs.refreshedDate == rhs.refreshedDate &&
+               lhs.expirationDate == rhs.expirationDate
     }
 }
 
-extension AppsTimelineProviderBase
-{
-    private func prepare() async throws
-    {
-        // No-op in push-pull architecture: widget snapshot JSON is read directly from App Group container.
-    }
+struct AppsEntry: TimelineEntry {
+    public let date: Date
+    let refreshedDate: Date
+    let expirationDate: Date
+    let appName: String?
+    let appIcon: UIImage?
+    let activeApps: [AppSnapshot]
     
-    private func fetchApps(withBundleIDs bundleIDs: [String]) async throws -> [AppSnapshot]
-    {
-        let snapshot = WidgetDataManager.shared.fetchSnapshot()
-        let matchingItems = snapshot.allApps.filter { bundleIDs.contains($0.bundleIdentifier) }
-        let apps = matchingItems.map { AppSnapshot(item: $0) }
-        let sortedApps = apps.sorted { $0.name < $1.name }
-        return sortedApps
-    }
-    
-    func makeEntries(for snapshots: [AppSnapshot], in context: T? = nil) -> [AppsEntry<T>]
-    {
-        let sortedAppsByExpirationDate = snapshots.sorted { $0.expirationDate < $1.expirationDate }
-        guard let firstExpiringApp = sortedAppsByExpirationDate.first, let lastExpiringApp = sortedAppsByExpirationDate.last else {
-            return [Entry(date: Date(), apps: [], context: context)]
-        }
+    init(
+        date: Date,
+        refreshedDate: Date? = nil,
+        expirationDate: Date? = nil,
+        appName: String? = "SideStore",
+        appIcon: UIImage? = nil,
+        activeApps: [AppSnapshot] = []
+    ) {
+        self.date = date
         
-        // Lấy thời gian thực tế hiện tại (thay vì 0h sáng như code cũ)
-        let now = Date()
-        
-        // Nếu tất cả các app đều đã hết hạn
-        if lastExpiringApp.expirationDate <= now {
-            let entry = Entry(date: now, relevance: TimelineEntryRelevance(score: 1.0), apps: snapshots, context: context)
-            return [entry]
-        }
-        
-        var entries: [AppsEntry<T>] = []
-        
-        // Tạo lịch trình cập nhật mỗi 1 tiếng cho 24 giờ tiếp theo.
-        // Sau 24 giờ, hệ thống sẽ tự động gọi lại hàm này để lấy 24 giờ mới (nhờ policy: .atEnd).
-        let maxHours = 24
-        
-        for hourOffset in 0 ... maxHours {
-            guard let entryDate = Calendar.current.date(byAdding: .hour, value: hourOffset, to: now) else { continue }
-            
-            // Tính điểm ưu tiên (Relevance score) để hiển thị trên Smart Stack của iOS
-            let timeSinceRefresh = entryDate.timeIntervalSince(firstExpiringApp.refreshedDate)
-            let totalTime = firstExpiringApp.expirationDate.timeIntervalSince(firstExpiringApp.refreshedDate)
-            
-            var score: Float = 0.0
-            if totalTime > 0 {
-                score = (entryDate <= firstExpiringApp.expirationDate) ? Float(timeSinceRefresh / totalTime) : 1.0
-            } else {
-                score = 1.0
-            }
-            
-            if snapshots.allSatisfy({ $0.expirationDate > entryDate }) {
-                score = 0.0
-            }
-            
-            let entry = Entry(date: entryDate, relevance: TimelineEntryRelevance(score: score), apps: snapshots, context: context)
-            entries.append(entry)
-            
-            // Dừng tạo thêm lịch nếu mốc thời gian này đã vượt qua hạn của tất cả các app
-            if entryDate >= lastExpiringApp.expirationDate {
-                break
-            }
-        }
-        
-        return entries
-    }
-    
-    func fetchActiveAppBundleIDs() async -> [String]
-    {
-        let snapshot = WidgetDataManager.shared.fetchSnapshot()
-        let bundleIDs = snapshot.activeApps.map { $0.bundleIdentifier }
-        return bundleIDs.isEmpty ? [Bundle.Info.storeAppBundleIdentifier] : bundleIDs
+        let currentDate = Date()
+        self.refreshedDate = refreshedDate ?? currentDate
+        self.expirationDate = expirationDate ?? (Calendar.current.date(byAdding: .day, value: 7, to: currentDate) ?? currentDate)
+        self.appName = appName
+        self.appIcon = appIcon
+        self.activeApps = activeApps
     }
 }
 
-typealias Intent = ViewAppIntent
-
-class AppsTimelineProvider: AppsTimelineProviderBase<Intent>, IntentTimelineProvider
-{
-    func getSnapshot(for intent: Intent, in context: Context, completion: @escaping (AppsEntry<Intent>) -> Void)
-    {
-        debugLog("[AppsTimelineProvider] Legacy getSnapshot for app: \(intent.app?.identifier ?? "default")")
-        Task {
-            let bundleID = await self.resolvedBundleID(for: intent)
-            let snapshot = await self.snapshot(for: [bundleID], in: intent)
-            completion(snapshot)
-        }
-    }
-    
-    func getTimeline(for intent: Intent, in context: Context, completion: @escaping (Timeline<AppsEntry<Intent>>) -> Void)
-    {
-        debugLog("[AppsTimelineProvider] Legacy getTimeline for app: \(intent.app?.identifier ?? "default")")
-        Task {
-            let bundleID = await self.resolvedBundleID(for: intent)
-            let timeline = await self.timeline(for: [bundleID], in: intent)
-            completion(timeline)
-        }
-    }
-    
-    private func resolvedBundleID(for intent: Intent) async -> String
-    {
-        if let id = intent.app?.identifier {
-            return id
-        }
-        let activeIDs = await self.fetchActiveAppBundleIDs()
-        let resolved = activeIDs.first ?? Bundle.Info.storeAppBundleIdentifier
-        return resolved
-    }
-}
-
-// Modern AppIntents-based provider for AppDetailWidget on iOS 17+.
-// Replaces AppsTimelineProvider (IntentTimelineProvider) which uses the legacy
-// SiriKit Intents framework that breaks containerBackground on iOS 17+.
-@available(iOS 17.0, *)
-class SelectAppTimelineProvider: AppsTimelineProviderBase<SelectAppIntent>, AppIntentTimelineProvider
-{
+struct AppsTimelineProvider: IntentTimelineProvider {
     typealias Intent = SelectAppIntent
-
-    func snapshot(for intent: SelectAppIntent, in context: Context) async -> AppsEntry<SelectAppIntent>
-    {
-        debugLog("[SelectAppTimelineProvider] AppIntent snapshot for app: \(intent.app?.id ?? "none") (isPreview: \(context.isPreview))")
-        let bundleID = await resolvedBundleID(for: intent)
-        return await self.snapshot(for: [bundleID], in: intent)
-    }
-
-    func timeline(for intent: SelectAppIntent, in context: Context) async -> Timeline<AppsEntry<SelectAppIntent>>
-    {
-        debugLog("[SelectAppTimelineProvider] AppIntent timeline for app: \(intent.app?.id ?? "none") (isPreview: \(context.isPreview))")
-        let bundleID = await resolvedBundleID(for: intent)
-        return await self.timeline(for: [bundleID], in: intent)
-    }
-
-    // If the user hasn't picked an app yet, fall back to the first active app
-    // rather than a hardcoded bundle ID that may not exist in the database.
-    private func resolvedBundleID(for intent: SelectAppIntent) async -> String
-    {
-        if let id = intent.app?.id {
-            verboseLog("[SelectAppTimelineProvider] resolvedBundleID from intent: \(id)")
-            return id
+    public typealias Entry = AppsEntry
+    
+    private static func loadIsolatedIcon(for app: InstalledApp) -> UIImage? {
+        // 1. Read strictly from this app's dedicated folder on disk without UIImage path caching
+        let iconURL = InstalledApp.fileURL(for: app).appendingPathComponent("Icon.png")
+        if let data = try? Data(contentsOf: iconURL), let image = UIImage(data: data) {
+            return image.resizing(toFill: CGSize(width: 90, height: 90)) ?? image
         }
-        let activeIDs = await self.fetchActiveAppBundleIDs()
-        let resolved = activeIDs.first ?? Bundle.Info.storeAppBundleIdentifier
-        verboseLog("[SelectAppTimelineProvider] resolvedBundleID fallback: \(resolved)")
-        return resolved
+        
+        // 2. If this app is SideStore itself and Icon.png isn't on disk, use the bundled SideStore icon
+        if app.bundleIdentifier == StoreApp.altstoreAppID, let bundledIcon = UIImage(named: "AppIcon60x60") {
+            return bundledIcon.resizing(toFill: CGSize(width: 90, height: 90)) ?? bundledIcon
+        }
+        
+        // 3. Fallback to InstalledApp.icon property
+        if let fallbackIcon = app.icon {
+            return fallbackIcon.resizing(toFill: CGSize(width: 90, height: 90)) ?? fallbackIcon
+        }
+        
+        return UIImage(named: "AppIcon60x60")
+    }
+    
+    public func snapshot(for configuration: SelectAppIntent, with context: Context, completion: @escaping (AppsEntry) -> ()) {
+        let currentDate = Date()
+        let nextWeek = Calendar.current.date(byAdding: .day, value: 7, to: currentDate) ?? currentDate
+        let sampleApps = [
+            AppSnapshot(id: StoreApp.altstoreAppID, name: "SideStore", bundleIdentifier: StoreApp.altstoreAppID, refreshedDate: currentDate, expirationDate: nextWeek, appIcon: UIImage(named: "AppIcon60x60"))
+        ]
+        let entry = AppsEntry(date: currentDate, activeApps: sampleApps)
+        completion(entry)
+    }
+    
+    public func timeline(for configuration: SelectAppIntent, with context: Context, completion: @escaping (Timeline<Entry>) -> ()) {
+        DatabaseManager.shared.start { (error) in
+            let currentDate = Date()
+            let reloadDate = Calendar.current.date(byAdding: .minute, value: 30, to: currentDate) ?? currentDate.addingTimeInterval(1800)
+            
+            if let error = error {
+                print("Failed to start DatabaseManager in Widget:", error)
+                let timeline = Timeline(entries: [AppsEntry(date: currentDate)], policy: .after(reloadDate))
+                return completion(timeline)
+            }
+            
+            let bgContext = DatabaseManager.shared.persistentContainer.newBackgroundContext()
+            bgContext.perform {
+                // Reset context to avoid stale cached relationships or faulted properties
+                bgContext.reset()
+                
+                let allActivePredicate = NSPredicate(format: "%K == YES", #keyPath(InstalledApp.isActive))
+                // Deterministic sorting: expirationDate -> refreshedDate -> bundleIdentifier
+                let sortDescriptors = [
+                    NSSortDescriptor(keyPath: \InstalledApp.expirationDate, ascending: true),
+                    NSSortDescriptor(keyPath: \InstalledApp.refreshedDate, ascending: true),
+                    NSSortDescriptor(keyPath: \InstalledApp.bundleIdentifier, ascending: true)
+                ]
+                
+                let fetchRequest = InstalledApp.fetchRequest() as NSFetchRequest<InstalledApp>
+                fetchRequest.predicate = allActivePredicate
+                fetchRequest.sortDescriptors = sortDescriptors
+                fetchRequest.returnsObjectsAsFaults = false
+                
+                let fetchedApps = (try? bgContext.fetch(fetchRequest)) ?? []
+                
+                let snapshots: [AppSnapshot] = fetchedApps.map { app in
+                    let bundleID = app.bundleIdentifier
+                    let iconImage = Self.loadIsolatedIcon(for: app)
+                    return AppSnapshot(
+                        id: bundleID,
+                        name: app.name,
+                        bundleIdentifier: bundleID,
+                        refreshedDate: app.refreshedDate,
+                        expirationDate: app.expirationDate,
+                        appIcon: iconImage
+                    )
+                }
+                
+                let selectedBundleID = configuration.app?.identifier ?? StoreApp.altstoreAppID
+                let targetSnapshot = snapshots.first(where: { $0.bundleIdentifier == selectedBundleID }) ?? snapshots.first
+                
+                guard let primaryApp = targetSnapshot else {
+                    let timeline = Timeline(entries: [AppsEntry(date: currentDate, activeApps: [])], policy: .after(reloadDate))
+                    completion(timeline)
+                    return
+                }
+                
+                var entries: [AppsEntry] = []
+                
+                let remainingHours = Calendar.current.dateComponents([.hour], from: currentDate, to: primaryApp.expirationDate).hour ?? 0
+                let totalEntries = max(min(remainingHours, 24), 1)
+                
+                for hourOffset in 0 ..< totalEntries {
+                    guard let entryDate = Calendar.current.date(byAdding: .hour, value: hourOffset, to: currentDate),
+                          entryDate <= primaryApp.expirationDate
+                    else { break }
+                    
+                    let entry = AppsEntry(
+                        date: entryDate,
+                        refreshedDate: primaryApp.refreshedDate,
+                        expirationDate: primaryApp.expirationDate,
+                        appName: primaryApp.name,
+                        appIcon: primaryApp.appIcon,
+                        activeApps: snapshots
+                    )
+                    entries.append(entry)
+                }
+                
+                if entries.isEmpty {
+                    let fallbackEntry = AppsEntry(
+                        date: currentDate,
+                        refreshedDate: primaryApp.refreshedDate,
+                        expirationDate: primaryApp.expirationDate,
+                        appName: primaryApp.name,
+                        appIcon: primaryApp.appIcon,
+                        activeApps: snapshots
+                    )
+                    entries.append(fallbackEntry)
+                }
+                
+                let timeline = Timeline(entries: entries, policy: .after(reloadDate))
+                completion(timeline)
+            }
+        }
+    }
+    
+    func placeholder(in context: Context) -> AppsEntry {
+        let currentDate = Date()
+        let nextWeek = Calendar.current.date(byAdding: .day, value: 7, to: currentDate) ?? currentDate
+        let sampleApps = [
+            AppSnapshot(id: StoreApp.altstoreAppID, name: "SideStore", bundleIdentifier: StoreApp.altstoreAppID, refreshedDate: currentDate, expirationDate: nextWeek, appIcon: UIImage(named: "AppIcon60x60"))
+        ]
+        return AppsEntry(date: currentDate, activeApps: sampleApps)
     }
 }

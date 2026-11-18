@@ -1,3 +1,4 @@
+
 //
 //  AppsTimelineProvider.swift
 //  AltWidgetExtension
@@ -95,22 +96,10 @@ extension AppsTimelineProviderBase
     private func fetchApps(withBundleIDs bundleIDs: [String]) async throws -> [AppSnapshot]
     {
         let snapshot = WidgetDataManager.shared.fetchSnapshot()
-        
-        // Tạo Dictionary ánh xạ chuẩn xác từng bundleIdentifier với dữ liệu của app đó.
-        // Sử dụng uniquingKeysWith để giữ lại bản ghi đầu tiên nếu dữ liệu gốc bị trùng lặp.
-        let appsByBundleID = Dictionary(
-            snapshot.allApps.map { ($0.bundleIdentifier, $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
-        
-        // Lấy ra danh sách AppSnapshot theo ĐÚNG THỨ TỰ của mảng bundleIDs được yêu cầu,
-        // tuyệt đối không tự ý sort lại làm lệch vị trí icon và tên app.
-        let apps = bundleIDs.compactMap { id -> AppSnapshot? in
-            guard let item = appsByBundleID[id] else { return nil }
-            return AppSnapshot(item: item)
-        }
-        
-        return apps
+        let matchingItems = snapshot.allApps.filter { bundleIDs.contains($0.bundleIdentifier) }
+        let apps = matchingItems.map { AppSnapshot(item: $0) }
+        let sortedApps = apps.sorted { $0.name < $1.name }
+        return sortedApps
     }
     
     func makeEntries(for snapshots: [AppSnapshot], in context: T? = nil) -> [AppsEntry<T>]
@@ -120,7 +109,7 @@ extension AppsTimelineProviderBase
             return [Entry(date: Date(), apps: [], context: context)]
         }
         
-        // Lấy thời gian thực tế hiện tại
+        // Lấy thời gian thực tế hiện tại (thay vì 0h sáng như code cũ)
         let now = Date()
         
         // Nếu tất cả các app đều đã hết hạn

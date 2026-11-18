@@ -1,5 +1,4 @@
 
-
 //
 //  AppsTimelineProvider.swift
 //  AltWidgetExtension
@@ -9,7 +8,6 @@
 //
 
 import WidgetKit
-import Foundation
 
 struct AppsEntry<T>: TimelineEntry
 {
@@ -82,8 +80,7 @@ class AppsTimelineProviderBase<T>
         }
     }
     
-    func getUpdatedData(_ apps: [AppSnapshot], _ context: T?) -> [AppSnapshot]
-    {
+    func getUpdatedData(_ apps: [AppSnapshot], _ context: T?) -> [AppSnapshot]{
         // override in subclasses as required
         return apps
     }
@@ -100,34 +97,21 @@ extension AppsTimelineProviderBase
     {
         let snapshot = WidgetDataManager.shared.fetchSnapshot()
         
-        // Xây dựng bảng tra cứu theo đúng bundleIdentifier (ngăn chặn trùng lặp hoặc lấy nhầm icon của app khác)
-        var itemByBundleID: [String: WidgetAppItem] = [:]
-        for item in snapshot.allApps {
-            itemByBundleID[item.bundleIdentifier] = item
-        }
-        for item in snapshot.activeApps {
-            itemByBundleID[item.bundleIdentifier] = item
-        }
+        // Tạo Dictionary ánh xạ chuẩn xác từng bundleIdentifier với dữ liệu của app đó.
+        // Sử dụng uniquingKeysWith để giữ lại bản ghi đầu tiên nếu dữ liệu gốc bị trùng lặp.
+        let appsByBundleID = Dictionary(
+            snapshot.allApps.map { ($0.bundleIdentifier, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         
-        // Loại bỏ bundleID trùng lặp nếu có nhưng giữ nguyên danh sách yêu cầu
-        var seenIDs = Set<String>()
-        let uniqueBundleIDs = bundleIDs.filter { seenIDs.insert($0).inserted }
-        
-        let matchedItems = uniqueBundleIDs.compactMap { itemByBundleID[$0] }
-        let apps = matchedItems.map { AppSnapshot(item: $0) }
-        
-        // Sắp xếp ổn định: ưu tiên ứng dụng sắp hết hạn trước, nếu bằng nhau thì xếp theo tên và bundleIdentifier
-        let sortedApps = apps.sorted { lhs, rhs in
-            if lhs.expirationDate != rhs.expirationDate {
-                return lhs.expirationDate < rhs.expirationDate
-            }
-            if lhs.name != rhs.name {
-                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
-            }
-            return lhs.bundleIdentifier < rhs.bundleIdentifier
+        // Lấy ra danh sách AppSnapshot theo ĐÚNG THỨ TỰ của mảng bundleIDs được yêu cầu,
+        // tuyệt đối không tự ý sort lại làm lệch vị trí icon và tên app.
+        let apps = bundleIDs.compactMap { id -> AppSnapshot? in
+            guard let item = appsByBundleID[id] else { return nil }
+            return AppSnapshot(item: item)
         }
         
-        return sortedApps
+        return apps
     }
     
     func makeEntries(for snapshots: [AppSnapshot], in context: T? = nil) -> [AppsEntry<T>]
@@ -137,6 +121,7 @@ extension AppsTimelineProviderBase
             return [Entry(date: Date(), apps: [], context: context)]
         }
         
+        // Lấy thời gian thực tế hiện tại (thay vì 0h sáng như code cũ)
         let now = Date()
         
         // Nếu tất cả các app đều đã hết hạn
@@ -148,11 +133,13 @@ extension AppsTimelineProviderBase
         var entries: [AppsEntry<T>] = []
         
         // Tạo lịch trình cập nhật mỗi 1 tiếng cho 24 giờ tiếp theo.
+        // Sau 24 giờ, hệ thống sẽ tự động gọi lại hàm này để lấy 24 giờ mới (nhờ policy: .atEnd).
         let maxHours = 24
         
         for hourOffset in 0 ... maxHours {
             guard let entryDate = Calendar.current.date(byAdding: .hour, value: hourOffset, to: now) else { continue }
             
+            // Tính điểm ưu tiên (Relevance score) để hiển thị trên Smart Stack của iOS
             let timeSinceRefresh = entryDate.timeIntervalSince(firstExpiringApp.refreshedDate)
             let totalTime = firstExpiringApp.expirationDate.timeIntervalSince(firstExpiringApp.refreshedDate)
             
@@ -170,6 +157,7 @@ extension AppsTimelineProviderBase
             let entry = Entry(date: entryDate, relevance: TimelineEntryRelevance(score: score), apps: snapshots, context: context)
             entries.append(entry)
             
+            // Dừng tạo thêm lịch nếu mốc thời gian này đã vượt qua hạn của tất cả các app
             if entryDate >= lastExpiringApp.expirationDate {
                 break
             }
@@ -221,6 +209,9 @@ class AppsTimelineProvider: AppsTimelineProviderBase<Intent>, IntentTimelineProv
     }
 }
 
+// Modern AppIntents-based provider for AppDetailWidget on iOS 17+.
+// Replaces AppsTimelineProvider (IntentTimelineProvider) which uses the legacy
+// SiriKit Intents framework that breaks containerBackground on iOS 17+.
 @available(iOS 17.0, *)
 class SelectAppTimelineProvider: AppsTimelineProviderBase<SelectAppIntent>, AppIntentTimelineProvider
 {
@@ -240,6 +231,8 @@ class SelectAppTimelineProvider: AppsTimelineProviderBase<SelectAppIntent>, AppI
         return await self.timeline(for: [bundleID], in: intent)
     }
 
+    // If the user hasn't picked an app yet, fall back to the first active app
+    // rather than a hardcoded bundle ID that may not exist in the database.
     private func resolvedBundleID(for intent: SelectAppIntent) async -> String
     {
         if let id = intent.app?.id {

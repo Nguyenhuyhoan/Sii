@@ -1,3 +1,4 @@
+
 //
 //  ResignAppOperation.swift
 //  AltStore
@@ -37,7 +38,6 @@ final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext
         
         self.setProgress(5)
         
-        let effectiveBundleId = self.context.targetBundleIdentifier
         let appBundleURL = try await self.prepareAppBundle(for: appBundle, profiles: profiles, appexBundleIds: context.appexBundleIds ?? [:])
         
         self.setProgress(40)
@@ -105,13 +105,37 @@ final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext
             }
         }
         
+        // Đồng bộ lại bảng ánh xạ appexBundleIds theo đúng finalBundleIdentifier của App chính
+        // (Đảm bảo khi chọn dùng lại ID cũ như com.alone.37D6PWG5PP, mọi Extension đều mang đúng tiền tố com.alone.37D6PWG5PP.<suffix>)
+        var resolvedAppexBundleIds = appexBundleIds
+        let originalMainBundleID = targetAppBundle.bundleIdentifier
+        for appExtension in appBundle.appExtensions {
+            let originalExtID = appExtension.bundleIdentifier
+            let updatedAppExBundleId = originalExtID.replacingOccurrences(of: originalMainBundleID, with: bundleIdentifier)
+
+            let extSuffix: String
+            if originalExtID.hasPrefix(originalMainBundleID + ".") {
+                extSuffix = String(originalExtID.dropFirst(originalMainBundleID.count))
+            } else if updatedAppExBundleId.hasPrefix(bundleIdentifier + ".") {
+                extSuffix = String(updatedAppExBundleId.dropFirst(bundleIdentifier.count))
+            } else {
+                let lastPart = originalExtID.components(separatedBy: ".").last ?? "extension"
+                extSuffix = "." + lastPart
+            }
+
+            let expectedExtensionBundleID = finalBundleIdentifier + extSuffix
+            resolvedAppexBundleIds[updatedAppExBundleId] = expectedExtensionBundleID
+            resolvedAppexBundleIds[originalExtID] = expectedExtensionBundleID
+        }
+        self.context.appexBundleIds = resolvedAppexBundleIds
+
         // Prepare app
-        try self.prepare(appBundle, bundleID: bundleIdentifier, additionalInfoDictionaryValues: additionalValues, profiles: profiles, appexBundleIds: appexBundleIds)
+        try self.prepare(appBundle, bundleID: bundleIdentifier, additionalInfoDictionaryValues: additionalValues, profiles: profiles, appexBundleIds: resolvedAppexBundleIds)
         try self.removeMissingAppExtensionReferences(from: appBundle)
         
         for appExtension in appBundle.appExtensions {
             let updatedAppExBundleId = appExtension.bundleIdentifier.replacingOccurrences(of: targetAppBundle.bundleIdentifier, with: bundleIdentifier)
-            try self.prepare(appExtension, bundleID: updatedAppExBundleId, profiles: profiles, appexBundleIds: appexBundleIds)
+            try self.prepare(appExtension, bundleID: updatedAppExBundleId, profiles: profiles, appexBundleIds: resolvedAppexBundleIds)
         }
         
         return appBundleURL
@@ -124,13 +148,28 @@ final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext
         guard let profile = context.useMainProfile ? profiles.values.first : profiles[identifier] else {
             throw OperationError.missingProvisioningProfile(reason: "No provisioning profile found for identifier '\(identifier)'.")
         }
-        guard var parser = try? InfoPlistParser(plistURL: appBundle.infoPlistURL) else {
+        guard let parser = try? InfoPlistParser(plistURL: appBundle.infoPlistURL) else {
             throw OperationError.missingInfoPlist(reason: "Could not read Info.plist for bundle '\(identifier)'.")
         }
         var infoDictionary = parser.rawDictionary as [String: Any]
         
-        let newBundleID = appexBundleIds[identifier] ?? profile.bundleIdentifier
+        let newBundleID: String
+        if appBundle.isExtension {
+            newBundleID = appexBundleIds[identifier] ?? appexBundleIds[appBundle.bundleIdentifier] ?? profile.bundleIdentifier
+        } else {
+            newBundleID = profile.bundleIdentifier
+        }
         infoDictionary[kCFBundleIdentifierKey as String] = newBundleID
+
+        // Nếu là WatchKit / Extension có chứa WKAppBundleIdentifier hoặc NSExtension, cập nhật trỏ về profile.bundleIdentifier
+        if appBundle.isExtension,
+           var extensionInfo = infoDictionary["NSExtension"] as? [String: Any],
+           var attributes = extensionInfo["NSExtensionAttributes"] as? [String: Any],
+           attributes["WKAppBundleIdentifier"] != nil {
+            attributes["WKAppBundleIdentifier"] = profile.bundleIdentifier
+            extensionInfo["NSExtensionAttributes"] = attributes
+            infoDictionary["NSExtension"] = extensionInfo
+        }
 
         // Fix-up BGTaskScheduler identifiers so they stay under the new bundle ID.
         // Otherwise bg register() and submit() both succeed and the handler is never
@@ -167,10 +206,11 @@ final class ResignAppOperation: BasePipelineOperation<InstallAppOperationContext
         }
         
         // Add app-specific exported UTI so we can check later if this app (extension) is installed or not.
+        let utiBundleID = appBundle.isExtension ? newBundleID : profile.bundleIdentifier
         let installedAppUTI = ["UTTypeConformsTo": [],
                                "UTTypeDescription": "AltStore Installed App",
                                "UTTypeIconFiles": [],
-                               "UTTypeIdentifier": InstalledApp.installedAppUTI(forBundleIdentifier: profile.bundleIdentifier),
+                               "UTTypeIdentifier": InstalledApp.installedAppUTI(forBundleIdentifier: utiBundleID),
                                "UTTypeTagSpecification": [:]] as [String : Any]
         
         var exportedUTIs = infoDictionary[Bundle.Info.exportedUTIs] as? [[String: Any]] ?? []

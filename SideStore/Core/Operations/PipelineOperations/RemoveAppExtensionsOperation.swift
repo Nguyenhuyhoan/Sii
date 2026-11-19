@@ -1,5 +1,4 @@
 
-
 //
 //  RemoveAppExtensionsOperation.swift
 //  AltStore
@@ -23,21 +22,19 @@ public enum AppExtensionCustomization: String, CaseIterable, Identifiable, Senda
     public var displayName: String {
         switch self {
         case .promptUser:
-            return "Hỏi mỗi khi cài"
+            return "Ask Every Time"
         case .removeAll:
-            return "Xóa mọi phần mở rộng"
+            return "Remove All App Extensions"
         case .keepAll:
-            return "Giữ nguyên (Tốn thêm ID)"
+            return "Keep All (Register App IDs)"
         case .useMainProfile:
-            return "Gộp chung 1 ID chính"
+            return "Keep All (Use Main Profile)"
         }
     }
 
     var fixedDecision: ExtensionRemovalDecision? {
         switch self {
         case .promptUser:
-            // Luôn ưu tiên gộp toàn bộ App Extensions vào 1 Provisioning Profile của ID chính
-            // để không bao giờ hiện bảng hỏi 4 lựa chọn và tiết kiệm tuyệt đối App ID.
             return .keepAll(useMainProfile: true)
         case .removeAll:
             return .removeAll
@@ -72,8 +69,7 @@ final class RemoveAppExtensionsOperation: BasePipelineOperation<InstallAppOperat
             throw OperationError.invalidParameters("RemoveAppExtensionsOperation: context.appBundle is nil")
         }
         
-        // Luôn bật cờ useMainProfile = true ngay từ đầu để đảm bảo mọi App Extensions
-        // dùng chung 1 ID chính trong cả cài mới lẫn cập nhật IPA.
+        // Luôn bật cờ useMainProfile = true để mọi App Extensions dùng chung 1 ID chính duy nhất
         self.context.useMainProfile = true
         
         // target App Bundle doesn't contain extensions so don't bother
@@ -89,7 +85,7 @@ final class RemoveAppExtensionsOperation: BasePipelineOperation<InstallAppOperat
         if UserDefaults.standard.customizeAppExtensions == .removeAll {
             decision = .removeAll
         } else {
-            // Mặc định luôn giữ toàn bộ Extensions nhưng gộp chung vào 1 Profile của App chính (tốn 0 ID phụ)
+            // Luôn giữ toàn bộ Extensions nhưng gộp chung vào 1 Profile của App chính (không hiện bảng 4 lựa chọn)
             decision = .keepAll(useMainProfile: true)
         }
 
@@ -159,7 +155,6 @@ final class RemoveAppExtensionsOperation: BasePipelineOperation<InstallAppOperat
     
     private func processExtensionsInfo(from targetAppBundle: ALTApplication,
                                        localAppExtensions: Set<ALTApplication>?) -> Set<ALTApplication> {
-        //App-Extensions: Ensure existing app's extensions in DB and currently installing app bundle's extensions must match
         let targetAppEx: Set<ALTApplication> = targetAppBundle.appExtensions
         let targetAppExNames  = targetAppEx.map { appEx in appEx.bundleIdentifier }
 
@@ -167,7 +162,7 @@ final class RemoveAppExtensionsOperation: BasePipelineOperation<InstallAppOperat
             let diagnosticsMsg = "RemoveAppExtensionsOperation: ExistingApp is nil, Hence keeping all app extensions from targetAppBundle"
                                + "RemoveAppExtensionsOperation: ExistingAppEx: nil; targetAppBundleEx: \(targetAppExNames)"
             verboseLog(diagnosticsMsg)
-            return Set()    // nothing is excess since we are keeping all, so returning empty
+            return Set()
         }
         
         let existingAppEx: Set<ALTApplication> = extensionsInExistingApp

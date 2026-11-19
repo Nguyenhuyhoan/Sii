@@ -1,3 +1,4 @@
+
 //
 //  PipelineHandler.swift
 //  SideStore
@@ -147,21 +148,9 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                             }
 
                             VStack(alignment: .leading, spacing: 3) {
-                                HStack(spacing: 6) {
-                                    SwiftUI.Text("Dùng ID gốc của IPA")
-                                        .font(.system(size: 14.5, weight: .bold))
-                                        .foregroundColor(PipelineCSSTheme.suiPureBlack)
-                                    Spacer()
-                                    SwiftUI.Text("Mặc định")
-                                        .font(.system(size: 10.5, weight: .bold))
-                                        .foregroundColor(PipelineCSSTheme.suiPrimary)
-                                        .padding(.horizontal, 7)
-                                        .padding(.vertical, 2.5)
-                                        .background(
-                                            Capsule()
-                                                .fill(PipelineCSSTheme.suiPrimary.opacity(0.14))
-                                        )
-                                }
+                                SwiftUI.Text("Dùng ID gốc của IPA")
+                                    .font(.system(size: 14.5, weight: .bold))
+                                    .foregroundColor(PipelineCSSTheme.suiPureBlack)
 
                                 SwiftUI.Text(initialBundleID)
                                     .font(.system(size: 12, weight: .medium, design: .monospaced))
@@ -169,6 +158,8 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                                     .lineLimit(1)
                                     .truncationMode(.middle)
                             }
+
+                            Spacer(minLength: 4)
 
                             SwiftUI.Image(systemName: "chevron.right")
                                 .font(.system(size: 12.5, weight: .bold))
@@ -184,21 +175,16 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                     }
                     .buttonStyle(PipelineBounceButtonStyle())
 
-                    // Lựa chọn 2: Tái sử dụng ID sẵn có (Tốn 0 ID)
+                    // Lựa chọn 2: Dùng lại ID cũ
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            HStack(spacing: 5) {
-                                SwiftUI.Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                                    .font(.system(size: 13.5, weight: .bold))
-                                    .foregroundColor(PipelineCSSTheme.suiGreen)
-                                SwiftUI.Text("Tái sử dụng ID sẵn có (Tốn 0 ID)")
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundColor(PipelineCSSTheme.suiGreen)
-                            }
+                        HStack(spacing: 5) {
+                            SwiftUI.Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                                .font(.system(size: 13.5, weight: .bold))
+                                .foregroundColor(PipelineCSSTheme.suiGreen)
+                            SwiftUI.Text("Dùng lại ID cũ")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(PipelineCSSTheme.suiGreen)
                             Spacer()
-                            SwiftUI.Text("\(reusableAppIDs.count) khả dụng")
-                                .font(.system(size: 11.5, weight: .semibold))
-                                .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.6))
                         }
 
                         if reusableAppIDs.isEmpty {
@@ -206,7 +192,7 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                                 SwiftUI.Image(systemName: "info.circle.fill")
                                     .font(.system(size: 14))
                                     .foregroundColor(PipelineCSSTheme.suiSecondary.opacity(0.75))
-                                SwiftUI.Text("Hiện không có ID rảnh rỗi nào ngoài các ứng dụng đang hoạt động.")
+                                SwiftUI.Text("Hiện không có ID cũ nào rảnh rỗi ngoài các ứng dụng đang hoạt động.")
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.68))
                                     .fixedSize(horizontal: false, vertical: true)
@@ -224,7 +210,7 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                                 VStack(spacing: 7) {
                                     ForEach(reusableAppIDs) { candidate in
                                         SwiftUI.Button {
-                                            onComplete((candidate.baseBundleIdentifier, true))
+                                            onComplete((candidate.fullBundleIdentifier, candidate.requiresAppendingTeamID))
                                         } label: {
                                             HStack(spacing: 10) {
                                                 ZStack {

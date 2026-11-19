@@ -1,1197 +1,685 @@
 
 //
 //  PipelineHandler.swift
-//  SideStore
+//  AltStore
 //
-//  Created by Magesh K on 8/9/26.
-//  Copyright © 2026 SideStore. All rights reserved.
+//  Created by SideStore Team.
+//  Copyright © 2024 SideStore. All rights reserved.
 //
 
 import UIKit
 import SwiftUI
-import SideSign
+import AltStoreCore
 
-// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (Đồng bộ 100% với SettingsViewController)
-private struct PipelineCSSTheme {
-    static let white = UIColor.white
-    static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0) // #007bff
-    static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0) // #6f42c1
-    static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0) // #28a745
-    static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0) // #dc3545
-    static let magenta = UIColor(red: 255/255, green: 0/255, blue: 255/255, alpha: 1.0) // #ff00ff
+// MARK: - Data Models for Customization Modals
 
-    static let cornerRadius: CGFloat = 15.0
-
-    // SwiftUI Colors (Đồng bộ với SettingsViewController)
-    static let suiPrimary = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255)
-    static let suiSecondary = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)
-    static let suiGreen = SwiftUI.Color(red: 40/255, green: 167/255, blue: 69/255)
-    static let suiRed = SwiftUI.Color(red: 220/255, green: 53/255, blue: 69/255)
-    static let suiMagenta = SwiftUI.Color(red: 255/255, green: 0/255, blue: 255/255)
-    static let suiPureBlack = SwiftUI.Color.black
-    static let suiCardBackground = SwiftUI.Color.white
-    static let suiInnerRowBackground = SwiftUI.Color(red: 246/255, green: 248/255, blue: 251/255)
-    static let suiBorder = SwiftUI.Color(red: 218/255, green: 224/255, blue: 233/255)
-    static let suiInnerBorder = SwiftUI.Color(red: 222/255, green: 228/255, blue: 236/255)
-
-    static var suiPageGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                SwiftUI.Color(red: 243/255, green: 224/255, blue: 255/255),
-                SwiftUI.Color(red: 224/255, green: 247/255, blue: 255/255)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    static var suiHeroGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.92),
-                SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.88)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+public struct AppExtensionInfo: Identifiable, Hashable {
+    public var id: String { fileURL.path }
+    public let name: String
+    public let bundleIdentifier: String
+    public let fileURL: URL
+    public let sizeInBytes: Int64
+    
+    public var formattedSize: String {
+        ByteCountFormatter.string(fromByteCount: sizeInBytes, countStyle: .file)
     }
 }
 
-private struct PipelineBounceButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some SwiftUI.View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
-            .offset(x: configuration.isPressed ? 3 : 0, y: configuration.isPressed ? -1 : 0)
-            .animation(.spring(response: 0.28, dampingFraction: 0.62), value: configuration.isPressed)
-    }
+public struct ReusableBundleIDCandidate: Identifiable, Hashable {
+    public var id: String { fullBundleIdentifier.lowercased() }
+    public let name: String
+    public let baseBundleIdentifier: String
+    public let fullBundleIdentifier: String
+    public let expirationDate: Date?
+    public let hasEmbeddedTeamID: Bool
+    public let requiresAppendingTeamID: Bool
+    public let isLikelyExtension: Bool
+    public let sourceDescription: String
 }
 
-// MARK: - 🛡️ KHUNG CHỌN APP ID THÔNG MINH HIỆN Ở GIỮA MÀN HÌNH KHI CÀI IPA MỚI
-private struct SmartBundleIDCenterModalView: SwiftUI.View {
-    let initialBundleID: String
-    let appName: String
-    let teamID: String
-    let reusableAppIDs: [ReusableAppIDCandidate]
-    let onComplete: ((String, Bool)?) -> Void
+public struct EditableInfoPlistBundle: Identifiable, Hashable {
+    public let id: String // Original bundleIdentifier
+    public let title: String
+    public let bundlePath: String
+    public var entries: [String: String]
+}
 
-    @State private var isManualExpanded: Bool = false
-    @State private var customBundleIDText: String
-    @State private var appendTeamID: Bool = true
+// MARK: - PipelineHandler Protocol
 
-    init(
-        initialBundleID: String,
+public protocol PipelineHandler: AnyObject {
+    func updateProgress(stepName: String, stepIndex: Int, totalSteps: Int)
+    func requestCustomAppName(defaultName: String, bundleId: String) async throws -> String
+    func requestCustomBundleID(defaultBundleId: String, teamId: String) async throws -> (customID: String, appendTeamID: Bool)
+    func requestSmartBundleIDSelection(
         appName: String,
-        teamID: String,
-        reusableAppIDs: [ReusableAppIDCandidate],
-        onComplete: @escaping ((String, Bool)?) -> Void
-    ) {
-        self.initialBundleID = initialBundleID
-        self.appName = appName
-        self.teamID = teamID
-        self.reusableAppIDs = reusableAppIDs
-        self.onComplete = onComplete
-        self._customBundleIDText = State(initialValue: initialBundleID)
-    }
-
-    private func remainingDaysText(for date: Date?) -> String {
-        guard let date else { return "Khả dụng" }
-        let seconds = date.timeIntervalSinceNow
-        guard seconds > 0 else { return "Hết hạn" }
-        let days = Int(ceil(seconds / 86400.0))
-        return "Còn \(days) ngày"
-    }
-
-    var body: some SwiftUI.View {
-        ZStack {
-            SwiftUI.Color.black.opacity(0.44)
-                .ignoresSafeArea()
-
-            VStack(spacing: 12) {
-                // Banner tiêu đề chuẩn Hero Tab Cài đặt
-                VStack(spacing: 4) {
-                    HStack(spacing: 7) {
-                        SwiftUI.Image(systemName: "shield.lefthalf.filled.badge.checkmark")
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundColor(.white)
-                        SwiftUI.Text(appName.isEmpty ? "Chọn Định Danh (App ID)" : "Cài đặt: \(appName)")
-                            .font(.system(size: 16.5, weight: .heavy))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                    }
-
-                    SwiftUI.Text("Tự động gộp mọi tiện ích mở rộng vào 1 ID chính duy nhất")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(SwiftUI.Color.white.opacity(0.94))
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.vertical, 12)
-                .padding(.horizontal, 12)
-                .frame(maxWidth: .infinity)
-                .background(PipelineCSSTheme.suiHeroGradient)
-                .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous))
-                .shadow(color: PipelineCSSTheme.suiPrimary.opacity(0.22), radius: 10, x: 0, y: 4)
-
-                // Khối thẻ trắng chính chứa các lựa chọn ID
-                VStack(spacing: 10) {
-                    // Lựa chọn 1: Dùng ID gốc của IPA
-                    SwiftUI.Button {
-                        onComplete((initialBundleID, true))
-                    } label: {
-                        HStack(spacing: 11) {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(PipelineCSSTheme.suiPrimary.opacity(0.14))
-                                    .frame(width: 40, height: 40)
-                                SwiftUI.Image(systemName: "plus.app.fill")
-                                    .font(.system(size: 18, weight: .bold))
-                                    .foregroundColor(PipelineCSSTheme.suiPrimary)
-                            }
-
-                            VStack(alignment: .leading, spacing: 3) {
-                                SwiftUI.Text("Dùng ID gốc của IPA")
-                                    .font(.system(size: 14.5, weight: .bold))
-                                    .foregroundColor(PipelineCSSTheme.suiPureBlack)
-
-                                SwiftUI.Text(initialBundleID)
-                                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                                    .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.68))
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            }
-
-                            Spacer(minLength: 4)
-
-                            SwiftUI.Image(systemName: "chevron.right")
-                                .font(.system(size: 12.5, weight: .bold))
-                                .foregroundColor(PipelineCSSTheme.suiPrimary.opacity(0.75))
-                        }
-                        .padding(11)
-                        .background(PipelineCSSTheme.suiInnerRowBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(PipelineCSSTheme.suiPrimary.opacity(0.55), lineWidth: 1.2)
-                        )
-                    }
-                    .buttonStyle(PipelineBounceButtonStyle())
-
-                    // Lựa chọn 2: Dùng lại ID cũ
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 5) {
-                            SwiftUI.Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                                .font(.system(size: 13.5, weight: .bold))
-                                .foregroundColor(PipelineCSSTheme.suiGreen)
-                            SwiftUI.Text("Dùng lại ID cũ")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(PipelineCSSTheme.suiGreen)
-                            Spacer()
-                        }
-
-                        if reusableAppIDs.isEmpty {
-                            HStack(spacing: 8) {
-                                SwiftUI.Image(systemName: "info.circle.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(PipelineCSSTheme.suiSecondary.opacity(0.75))
-                                SwiftUI.Text("Hiện không có ID cũ nào rảnh rỗi ngoài các ứng dụng đang hoạt động.")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.68))
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(10)
-                            .background(PipelineCSSTheme.suiCardBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
-                            )
-                        } else {
-                            ScrollView(.vertical, showsIndicators: true) {
-                                VStack(spacing: 7) {
-                                    ForEach(reusableAppIDs) { candidate in
-                                        SwiftUI.Button {
-                                            onComplete((candidate.fullBundleIdentifier, candidate.requiresAppendingTeamID))
-                                        } label: {
-                                            HStack(spacing: 10) {
-                                                ZStack {
-                                                    Circle()
-                                                        .fill(PipelineCSSTheme.suiGreen.opacity(0.14))
-                                                        .frame(width: 30, height: 30)
-                                                    SwiftUI.Image(systemName: "bolt.shield.fill")
-                                                        .font(.system(size: 14, weight: .bold))
-                                                        .foregroundColor(PipelineCSSTheme.suiGreen)
-                                                }
-
-                                                VStack(alignment: .leading, spacing: 2) {
-                                                    SwiftUI.Text(candidate.name)
-                                                        .font(.system(size: 13.5, weight: .bold))
-                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack)
-                                                        .lineLimit(1)
-
-                                                    SwiftUI.Text(candidate.baseBundleIdentifier)
-                                                        .font(.system(size: 11.5, weight: .medium, design: .monospaced))
-                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.65))
-                                                        .lineLimit(1)
-                                                        .truncationMode(.middle)
-                                                }
-
-                                                Spacer(minLength: 4)
-
-                                                VStack(alignment: .trailing, spacing: 2) {
-                                                    SwiftUI.Text("0 ID")
-                                                        .font(.system(size: 10.5, weight: .bold))
-                                                        .foregroundColor(PipelineCSSTheme.suiGreen)
-                                                        .padding(.horizontal, 6)
-                                                        .padding(.vertical, 2)
-                                                        .background(
-                                                            Capsule()
-                                                                .fill(PipelineCSSTheme.suiGreen.opacity(0.15))
-                                                        )
-
-                                                    SwiftUI.Text(remainingDaysText(for: candidate.expirationDate))
-                                                        .font(.system(size: 10.5, weight: .medium))
-                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.6))
-                                                }
-                                            }
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 8.5)
-                                            .background(PipelineCSSTheme.suiCardBackground)
-                                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                                    .stroke(PipelineCSSTheme.suiGreen.opacity(0.38), lineWidth: 1.1)
-                                            )
-                                        }
-                                        .buttonStyle(PipelineBounceButtonStyle())
-                                    }
-                                }
-                                .padding(2)
-                            }
-                            .frame(maxHeight: min(CGFloat(reusableAppIDs.count) * 60.0, 195.0))
-                        }
-                    }
-                    .padding(10)
-                    .background(PipelineCSSTheme.suiInnerRowBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1.1)
-                    )
-
-                    // Lựa chọn 3: Tự nhập mã Bundle ID tùy chỉnh
-                    VStack(spacing: 8) {
-                        SwiftUI.Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isManualExpanded.toggle()
-                            }
-                        } label: {
-                            HStack(spacing: 8) {
-                                SwiftUI.Image(systemName: "pencil.and.outline")
-                                    .font(.system(size: 13.5, weight: .bold))
-                                    .foregroundColor(PipelineCSSTheme.suiSecondary)
-                                SwiftUI.Text("Tự nhập Bundle ID tùy chỉnh khác")
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundColor(PipelineCSSTheme.suiPureBlack)
-                                Spacer()
-                                SwiftUI.Image(systemName: isManualExpanded ? "chevron.up" : "chevron.down")
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundColor(PipelineCSSTheme.suiSecondary)
-                            }
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 9)
-                            .background(PipelineCSSTheme.suiInnerRowBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
-                            )
-                        }
-                        .buttonStyle(PipelineBounceButtonStyle())
-
-                        if isManualExpanded {
-                            VStack(spacing: 8) {
-                                TextField("com.example.app", text: $customBundleIDText)
-                                    .textInputAutocapitalization(.never)
-                                    .disableAutocorrection(true)
-                                    .font(.system(size: 13, weight: .medium, design: .monospaced))
-                                    .foregroundColor(PipelineCSSTheme.suiPureBlack)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 8.5)
-                                    .background(PipelineCSSTheme.suiCardBackground)
-                                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                            .stroke(PipelineCSSTheme.suiPrimary.opacity(0.4), lineWidth: 1)
-                                    )
-
-                                Toggle("Tự động gắn hậu tố Mã Nhóm (Team ID)", isOn: $appendTeamID)
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundColor(PipelineCSSTheme.suiPureBlack)
-                                    .tint(PipelineCSSTheme.suiPrimary)
-
-                                SwiftUI.Button {
-                                    let trimmed = customBundleIDText.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    let rawID = trimmed.isEmpty ? initialBundleID : trimmed
-                                    let sanitized = InfoPlistParser.sanitizeBundleID(rawID)
-                                    onComplete((sanitized.isEmpty ? initialBundleID : sanitized, appendTeamID))
-                                } label: {
-                                    SwiftUI.Text("Áp dụng ID tùy chỉnh này")
-                                        .font(.system(size: 13.5, weight: .bold))
-                                        .foregroundColor(.white)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 9.5)
-                                        .background(PipelineCSSTheme.suiPrimary)
-                                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                                }
-                                .buttonStyle(PipelineBounceButtonStyle())
-                            }
-                            .padding(10)
-                            .background(PipelineCSSTheme.suiInnerRowBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
-                            )
-                        }
-                    }
-                }
-                .padding(12)
-                .background(PipelineCSSTheme.suiCardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous)
-                        .stroke(PipelineCSSTheme.suiBorder, lineWidth: 1.0)
-                )
-                .shadow(color: PipelineCSSTheme.suiPrimary.opacity(0.08), radius: 10, x: 0, y: 5)
-
-                // Nút Hủy cài đặt
-                SwiftUI.Button {
-                    onComplete(nil)
-                } label: {
-                    HStack(spacing: 8) {
-                        SwiftUI.Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 16, weight: .bold))
-                        SwiftUI.Text("Hủy cài đặt")
-                            .font(.system(size: 15.5, weight: .bold))
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(
-                        LinearGradient(
-                            colors: [PipelineCSSTheme.suiRed, PipelineCSSTheme.suiMagenta.opacity(0.85)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .shadow(color: PipelineCSSTheme.suiRed.opacity(0.32), radius: 6, x: 0, y: 3)
-                }
-                .buttonStyle(PipelineBounceButtonStyle())
-            }
-            .padding(14)
-            .background(PipelineCSSTheme.suiPageGradient)
-            .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius + 3, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius + 3, style: .continuous)
-                    .stroke(SwiftUI.Color.white.opacity(0.85), lineWidth: 1.5)
-            )
-            .shadow(color: SwiftUI.Color.black.opacity(0.22), radius: 22, x: 0, y: 10)
-            .frame(maxWidth: 385)
-            .padding(.horizontal, 18)
-        }
-        .preferredColorScheme(.light)
-    }
+        defaultBundleId: String,
+        teamId: String,
+        candidates: [ReusableBundleIDCandidate]
+    ) async throws -> (customID: String, appendTeamID: Bool)
+    func requestExtensionRemoval(extensions: [AppExtensionInfo]) async throws -> [URL]
+    func requestInfoPlistEdits(bundles: [EditableInfoPlistBundle]) async throws -> [String: [String: String]]
 }
 
-// MARK: - 🧩 KHUNG LỰA CHỌN XỬ LÝ APP ID HIỆN Ở GIỮA MÀN HÌNH (CHỈ GỒM 4 CÁCH XỬ LÝ & NÚT HỦY)
-private enum ExtensionAlertChoice {
-    case keepAllMainProfile
-    case keepAllSeparateAppIDs
-    case removeAll
-    case chooseCustom
-    case cancel
-}
+// MARK: - Default UI Implementation
 
-private struct ExtensionDecisionCenterModalView: SwiftUI.View {
-    let onSelect: (ExtensionAlertChoice) -> Void
-
-    var body: some SwiftUI.View {
-        ZStack {
-            // Lớp nền tối mờ nhẹ phía sau khung giữa màn hình
-            SwiftUI.Color.black.opacity(0.42)
-                .ignoresSafeArea()
-
-            // Khung chính nằm giữa màn hình (Đồng bộ chuẩn thẻ SettingsViewController)
-            VStack(spacing: 12) {
-                // Khối thẻ trắng chứa đúng 4 cách xử lý App ID
-                VStack(spacing: 9) {
-                    // Cách 1: Giữ tất cả (Dùng chung Profile chính)
-                    optionButton(
-                        icon: "shield.lefthalf.filled.badge.checkmark",
-                        iconColor: PipelineCSSTheme.suiGreen,
-                        title: "Giữ tất cả 1 cách thông minh",
-                        subtitle: "Giữ nguyên tất cả tiện ích chỉ dùng 1 App ID",
-                        borderColor: PipelineCSSTheme.suiGreen.opacity(0.55)
-                    ) {
-                        onSelect(.keepAllMainProfile)
-                    }
-
-                    // Cách 2: Giữ tất cả (Tạo App ID riêng)
-                    optionButton(
-                        icon: "key.radiowaves.forward.fill",
-                        iconColor: PipelineCSSTheme.suiPrimary,
-                        title: "Giữ tất cả và tạo App ID riêng",
-                        subtitle: "Đăng ký từng App ID riêng cho mỗi tiện ích (Tốn nhiều ID)",
-                        borderColor: PipelineCSSTheme.suiInnerBorder
-                    ) {
-                        onSelect(.keepAllSeparateAppIDs)
-                    }
-
-                    // Cách 3: Tùy chọn từng tiện ích
-                    optionButton(
-                        icon: "checklist",
-                        iconColor: PipelineCSSTheme.suiSecondary,
-                        title: "Tùy chọn từng tiện ích...",
-                        subtitle: "Chọn các tiện ích muốn giữ hoặc gỡ bỏ",
-                        borderColor: PipelineCSSTheme.suiInnerBorder
-                    ) {
-                        onSelect(.chooseCustom)
-                    }
-
-                    // Cách 4: Gỡ bỏ tất cả tiện ích
-                    optionButton(
-                        icon: "trash.fill",
-                        iconColor: PipelineCSSTheme.suiRed,
-                        title: "Gỡ bỏ tất cả tiện ích",
-                        subtitle: "Chỉ cài ứng dụng chính, chỉ dùng 1 App ID",
-                        borderColor: PipelineCSSTheme.suiRed.opacity(0.38)
-                    ) {
-                        onSelect(.removeAll)
-                    }
-                }
-                .padding(12)
-                .background(PipelineCSSTheme.suiCardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous)
-                        .stroke(PipelineCSSTheme.suiBorder, lineWidth: 1.0)
-                )
-                .shadow(color: PipelineCSSTheme.suiPrimary.opacity(0.08), radius: 10, x: 0, y: 5)
-
-                // Nút Hủy cài đặt
-                SwiftUI.Button {
-                    onSelect(.cancel)
-                } label: {
-                    HStack(spacing: 8) {
-                        SwiftUI.Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 16, weight: .bold))
-                        SwiftUI.Text("Hủy cài đặt")
-                            .font(.system(size: 15.5, weight: .bold))
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12.5)
-                    .background(
-                        LinearGradient(
-                            colors: [PipelineCSSTheme.suiRed, PipelineCSSTheme.suiMagenta.opacity(0.85)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .shadow(color: PipelineCSSTheme.suiRed.opacity(0.32), radius: 6, x: 0, y: 3)
-                }
-                .buttonStyle(PipelineBounceButtonStyle())
-            }
-            .padding(14)
-            .background(PipelineCSSTheme.suiPageGradient)
-            .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius + 3, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius + 3, style: .continuous)
-                    .stroke(SwiftUI.Color.white.opacity(0.85), lineWidth: 1.5)
-            )
-            .shadow(color: SwiftUI.Color.black.opacity(0.22), radius: 22, x: 0, y: 10)
-            .frame(maxWidth: 380)
-            .padding(.horizontal, 20)
-        }
-        .preferredColorScheme(.light)
-    }
-
-    @ViewBuilder
-    private func optionButton(
-        icon: String,
-        iconColor: SwiftUI.Color,
-        title: String,
-        subtitle: String,
-        borderColor: SwiftUI.Color,
-        action: @escaping () -> Void
-    ) -> some SwiftUI.View {
-        SwiftUI.Button(action: action) {
-            HStack(spacing: 11) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(iconColor.opacity(0.14))
-                        .frame(width: 38, height: 38)
-                    SwiftUI.Image(systemName: icon)
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundColor(iconColor)
-                }
-
-                VStack(alignment: .leading, spacing: 2.5) {
-                    SwiftUI.Text(title)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(PipelineCSSTheme.suiPureBlack)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.82)
-
-                    SwiftUI.Text(subtitle)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.72))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .multilineTextAlignment(.leading)
-                }
-
-                Spacer(minLength: 4)
-
-                SwiftUI.Image(systemName: "chevron.right")
-                    .font(.system(size: 12.5, weight: .bold))
-                    .foregroundColor(PipelineCSSTheme.suiPrimary.opacity(0.75))
-            }
-            .padding(11)
-            .background(PipelineCSSTheme.suiInnerRowBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(borderColor, lineWidth: 1.2)
-            )
-        }
-        .buttonStyle(PipelineBounceButtonStyle())
-    }
-}
-
-final class PipelineHandler: PipelineExecutionHandler,
-                             PreflightChecksHandler,
-                             EntitlementsReviewHandler,
-                             ExtensionRemovalHandler,
-                             UnsupportedVersionHandler,
-                             InstallAppHandler,
-                             UserCustomizationHandler,
-                             Sendable
-{
-    var preflightChecksHandler: PreflightChecksHandler { self }
-    var entitlementsReviewHandler: EntitlementsReviewHandler { self }
-    var extensionRemovalHandler: ExtensionRemovalHandler { self }
-    var unsupportedVersionHandler: UnsupportedVersionHandler { self }
-    var installAppHandler: InstallAppHandler { self }
-    var userCustomizationHandler: UserCustomizationHandler { self }
-
-    let isResignActive: Bool
-    private let presenterProvider: PresenterProvider?
-
-    init(
-        isResignActive: Bool = false,
-        presenterProvider: PresenterProvider? = nil
-    ) {
-        self.isResignActive = isResignActive
-        self.presenterProvider = presenterProvider
-    }
-
-    @MainActor
-    private var isPresenterAvailable: Bool {
-        return self.activePresenter != nil
-    }
-
-    @MainActor
-    private var activePresenter: UIViewController? {
-        return self.presenterProvider?()
-    }
-
-    @MainActor
-    func resolveBundleIDMismatch(targetID: String, activeEffectiveID: String) async -> Bool {
-        guard let presenter = self.activePresenter else {
-            return false
-        }
-        
-        let title = "Không Khớp Bundle ID"
-        let message = String(
-            format: "Ứng dụng bạn đang cài đặt có Bundle ID (%@) không khớp với ứng dụng đang hoạt động (%@). Bạn có muốn tiếp tục không?",
-            targetID,
-            activeEffectiveID
-        )
-        
-        return await withCheckedContinuation { continuation in
-            let alertController = UIAlertController(title: title, message: message, preferredStyle: .alert)
-            alertController.view.tintColor = PipelineCSSTheme.blue
-            alertController.addAction(UIAlertAction(title: "Hủy", style: .cancel) { _ in
-                continuation.resume(returning: false)
-            })
-            alertController.addAction(UIAlertAction(title: "Tiếp tục", style: .default) { _ in
-                continuation.resume(returning: true)
-            })
-            presenter.present(alertController, animated: true)
-        }
-    }
-
-    @MainActor
-    func reviewPermissions(_ permissions: [ALTEntitlement], for app: AppProtocol, mode: PermissionReviewMode) async throws {
-        guard let presenter = self.activePresenter else {
-            throw OperationError.invalidParameters("PipelineHandler: Không thể kiểm tra quyền vì màn hình hiển thị không khả dụng")
-        }
-        let reviewPermissionsViewController = ReviewPermissionsViewController(app: app, permissions: permissions, mode: mode)
-        let navigationController = UINavigationController(rootViewController: reviewPermissionsViewController)
-        
-        defer {
-            navigationController.dismiss(animated: true)
-        }
-        
-        try await withCheckedThrowingContinuation { continuation in
-            reviewPermissionsViewController.completionHandler = { result in
-                continuation.resume(with: result)
-            }
-            
-            presenter.present(navigationController, animated: true)
-        }
-    }
-
-    // MARK: - ✨ KHUNG HIỆN Ở GIỮA MÀN HÌNH (CHỈ CHỨA 4 CÁCH XỬ LÝ APP ID & NÚT HỦY) ✨
-    @MainActor
-    func selectAppExtensionsToRemove(
-        appBundle: ALTApplication,
-        localAppExtensions: [ALTApplication],
-        excessExtensions: Set<ALTApplication>
-    ) async throws -> ExtensionRemovalDecision {
-        guard let presenter = self.activePresenter else {
-            return .removeSelected(excessExtensions)
-        }
-        
-        let step1Choice: ExtensionAlertChoice = await withCheckedContinuation { continuation in
-            var hasResumed = false
-            let resumeOnce: (ExtensionAlertChoice) -> Void = { choice in
-                guard !hasResumed else { return }
-                hasResumed = true
-                continuation.resume(returning: choice)
-            }
-
-            var hostingController: UIHostingController<ExtensionDecisionCenterModalView>?
-
-            let modalView = ExtensionDecisionCenterModalView { choice in
-                if let hc = hostingController, hc.presentingViewController != nil {
-                    hc.dismiss(animated: true) {
-                        resumeOnce(choice)
-                    }
-                } else {
-                    resumeOnce(choice)
-                }
-            }
-
-            let hc = UIHostingController(rootView: modalView)
-            hostingController = hc
-            hc.overrideUserInterfaceStyle = .light
-            hc.view.backgroundColor = .clear
-            hc.modalPresentationStyle = .overFullScreen
-            hc.modalTransitionStyle = .crossDissolve
-
-            presenter.present(hc, animated: true) {
-                if presenter.presentedViewController == nil && !hc.isViewLoaded {
-                    resumeOnce(.cancel)
-                }
-            }
-        }
-
-        switch step1Choice {
-        case .cancel:
-            throw OperationError.cancelled
-        case .keepAllMainProfile:
-            return .keepAll(useMainProfile: true)
-        case .keepAllSeparateAppIDs:
-            return .keepAll(useMainProfile: false)
-        case .removeAll:
-            return .removeAll
-        case .chooseCustom:
-            return try await presentCustomExtensionPicker(for: appBundle, from: presenter)
-        }
-    }
-
-    @MainActor
-    private func presentCustomExtensionPicker(
-        for appBundle: ALTApplication,
-        from presenter: UIViewController
-    ) async throws -> ExtensionRemovalDecision {
-        return try await withCheckedThrowingContinuation { continuation in
-            var hasResumed = false
-            let resumeOnce: (Result<ExtensionRemovalDecision, Error>) -> Void = { result in
-                guard !hasResumed else { return }
-                hasResumed = true
-                continuation.resume(with: result)
-            }
-
-            let popoverContentController = AppExtensionViewHostingController(extensions: appBundle.appExtensions) { selection in
-                resumeOnce(.success(.removeSelected(Set(selection))))
-            }
-            popoverContentController.overrideUserInterfaceStyle = .light
-
-            #if !os(tvOS)
-            popoverContentController.modalPresentationStyle = .pageSheet
-            if #available(iOS 15.0, *), let sheet = popoverContentController.sheetPresentationController {
-                sheet.detents = [.medium(), .large()]
-                sheet.prefersGrabberVisible = true
-                sheet.preferredCornerRadius = 20
-            }
-            presenter.present(popoverContentController, animated: true) {
-                if presenter.presentedViewController == nil && !popoverContentController.isViewLoaded {
-                    resumeOnce(.failure(OperationError.invalidParameters("Không thể mở danh sách tiện ích mở rộng.")))
-                }
-            }
-            #else
-            popoverContentController.modalPresentationStyle = .blurOverFullScreen
-            presenter.present(popoverContentController, animated: true)
-            #endif
-        }
-    }
-
-    @MainActor
-    func resolveUnsupportediOSVersion(errorDescription: String, appName: String, compatibleVersion: String) async throws -> Bool {
-        guard let presenter = self.activePresenter else {
-            return false
-        }
-        
-        let title = "Phiên Bản iOS Không Hỗ Trợ"
-        let message = errorDescription + "\n\n" + "Bạn có muốn tải xuống phiên bản cuối cùng tương thích với thiết bị này không?"
-        
-        return await withCheckedContinuation { continuation in
-            let alertController = UIAlertController(title: title, message: message, preferredStyle: .alert)
-            alertController.view.tintColor = PipelineCSSTheme.blue
-            alertController.addAction(UIAlertAction(title: "Hủy", style: .cancel) { _ in
-                continuation.resume(returning: false)
-            })
-            alertController.addAction(UIAlertAction(title: String(format: "Tải %@ %@", appName, compatibleVersion), style: .default) { _ in
-                continuation.resume(returning: true)
-            })
-            presenter.present(alertController, animated: true)
-        }
-    }
-
-    func requestBackgroundSuspension() async {
-        await withCheckedContinuation { continuation in
-            Task { @MainActor in
-                let alert = UIAlertController(
-                    title: "Hoàn Tất Làm Mới",
-                    message: """
-                    Để hoàn tất quá trình làm mới, SideStore cần được chuyển xuống chạy nền. Bạn có thể tự thoát ra Màn hình chính hoặc bấm "Tiếp tục" bên dưới, sau đó mở lại SideStore.
-                    """,
-                    preferredStyle: .alert
-                )
-                alert.view.tintColor = PipelineCSSTheme.blue
-                alert.addAction(UIAlertAction(title: "Tiếp tục", style: .default, handler: { _ in
-                    continuation.resume()
-                }))
-                
-                let presenter = self.activePresenter
-                                ?? UIApplication.shared.connectedScenes
-                                    .compactMap { ($0 as? UIWindowScene)?.keyWindow }
-                                    .first?.rootViewController
-                                    
-                if var topVC = presenter {
-                    while let presented = topVC.presentedViewController {
-                        topVC = presented
-                    }
-                    topVC.present(alert, animated: true)
-                } else {
-                    continuation.resume()
-                }
-            }
-        }
-    }
-
-    func suspendToHomeScreen() async {
-        await CellularRefreshManager.shared.turnOnDataIfNeeded()
-        await MainActor.run {
-            _ = UIApplication.shared.perform(#selector(NSXPCConnection.suspend))
-        }
-    }
-
-    func isAppInForeground() async -> Bool {
-        await MainActor.run {
-            UIApplication.shared.applicationState == .active
-        }
-    }
-
-    @MainActor
-    func resolveInfoPlistCustomization(
-        targets: [InfoPlistTarget],
-        initialBundleID: String,
-        appendTeamID: Bool,
-        installedAppIdentities: [String: String],
-        teamID: String
-    ) async throws -> (modifiedPlists: [String: [String: any Sendable]], appendTeamID: Bool)? {
-        debugLog("[PipelineHandler] resolveInfoPlistCustomization (targets: \(targets.count)): initialBundleID='\(initialBundleID)', teamID='\(teamID)', appendTeamID=\(appendTeamID)")
-        guard let presenter = self.activePresenter else {
-            debugLog("[PipelineHandler] resolveInfoPlistCustomization: activePresenter is nil!")
-            var fallback: [String: [String: any Sendable]] = [:]
-            for t in targets {
-                fallback[t.id] = t.initialPlist
-            }
-            return (fallback, appendTeamID)
-        }
-
-        let result: (modifiedPlists: [String: [String: any Sendable]], appendTeamID: Bool)?
-        if UserDefaults.standard.preferSheetForInfoPlistCustomization {
-            result = await InfoPlistCustomizationSheetView.present(
-                from: presenter,
-                targets: targets,
-                initialBundleID: initialBundleID,
-                appendTeamID: appendTeamID,
-                installedAppIdentities: installedAppIdentities,
-                teamID: teamID
-            )
-        } else {
-            result = await InfoPlistCustomizationView.present(
-                from: presenter,
-                targets: targets,
-                initialBundleID: initialBundleID,
-                appendTeamID: appendTeamID,
-                installedAppIdentities: installedAppIdentities,
-                teamID: teamID
-            )
-        }
-        debugLog("[PipelineHandler] resolveInfoPlistCustomization result: \(result?.modifiedPlists.count ?? 0) target(s) returned, appendTeamID=\(result?.appendTeamID ?? false)")
-        return result
-    }
-
-    @MainActor
-    func resolveInfoPlistCustomization(
-        initialPlist: [String: any Sendable],
-        initialBundleID: String,
-        appendTeamID: Bool,
-        installedAppIdentities: [String: String],
-        teamID: String
-    ) async throws -> (modifiedPlist: [String: any Sendable], appendTeamID: Bool)? {
-        let target = InfoPlistTarget(
-            id: initialBundleID,
-            name: (initialPlist["CFBundleDisplayName"] as? String) ?? (initialPlist["CFBundleName"] as? String) ?? initialBundleID,
-            isExtension: false,
-            initialPlist: initialPlist
-        )
-        guard let result = try await resolveInfoPlistCustomization(
-            targets: [target],
-            initialBundleID: initialBundleID,
-            appendTeamID: appendTeamID,
-            installedAppIdentities: installedAppIdentities,
-            teamID: teamID
-        ) else { return nil }
-        let plist = result.modifiedPlists[initialBundleID] ?? initialPlist
-        return (plist, result.appendTeamID)
-    }
-
-    @MainActor
-    func resolveEntitlementsCustomization(
-        targets: [EntitlementsTarget],
-        teamType: ALTTeamType
-    ) async throws -> [String: [String: any Sendable]]? {
-        debugLog("[PipelineHandler] resolveEntitlementsCustomization: targets=\(targets.count), teamType=\(teamType.displayName)")
-        guard let presenter = self.activePresenter else {
-            debugLog("[PipelineHandler] resolveEntitlementsCustomization: activePresenter is nil!")
-            var fallback: [String: [String: any Sendable]] = [:]
-            for t in targets {
-                fallback[t.id] = t.initialEntitlements
-            }
-            return fallback
-        }
-
-        let result: [String: [String: any Sendable]]?
-        if UserDefaults.standard.preferSheetForEntitlementsCustomization {
-            result = await EntitlementsCustomizationSheetView.present(
-                from: presenter,
-                targets: targets,
-                teamType: teamType
-            )
-        } else {
-            result = await EntitlementsCustomizationView.present(
-                from: presenter,
-                targets: targets,
-                teamType: teamType
-            )
-        }
-        debugLog("[PipelineHandler] resolveEntitlementsCustomization result: \(result?.count ?? 0) target(s) returned")
-        return result
-    }
-
-    @MainActor
-    func resolveEntitlementsCustomization(
-        initialEntitlements: [String: any Sendable],
-        bundleID: String,
-        teamType: ALTTeamType
-    ) async throws -> [String: any Sendable]? {
-        let target = EntitlementsTarget(
-            id: bundleID,
-            name: bundleID,
-            isExtension: false,
-            initialEntitlements: initialEntitlements
-        )
-        let result = try await resolveEntitlementsCustomization(targets: [target], teamType: teamType)
-        return result?[bundleID]
-    }
-
-    // MARK: - 🛡️ BẢNG CHỌN APP ID THÔNG MINH KHI CÀI ĐẶT IPA MỚI
-    @MainActor
-    func resolveBundleIDOverride(
-        initialBundleID: String,
-        appName: String,
-        teamID: String,
-        reusableAppIDs: [ReusableAppIDCandidate]
-    ) async throws -> (customID: String, appendTeamID: Bool)? {
-        let cleanInitialID: String = {
-            let trimmed = initialBundleID.trimmingCharacters(in: .whitespacesAndNewlines)
-            let base: String
-            if !teamID.isEmpty && trimmed.lowercased().hasSuffix(".\(teamID)".lowercased()) {
-                base = String(trimmed.dropLast((".\(teamID)").count))
-            } else {
-                base = trimmed
-            }
-            let sanitized = InfoPlistParser.sanitizeBundleID(base)
-            return sanitized.isEmpty ? trimmed : sanitized
-        }()
-
-        guard let presenter = self.activePresenter else {
-            return (cleanInitialID, true)
-        }
-
-        return await withCheckedContinuation { continuation in
-            var hasResumed = false
-            let resumeOnce: ((String, Bool)?) -> Void = { value in
-                guard !hasResumed else { return }
-                hasResumed = true
-                continuation.resume(returning: value)
-            }
-
-            var hostingController: UIHostingController<SmartBundleIDCenterModalView>?
-
-            let modalView = SmartBundleIDCenterModalView(
-                initialBundleID: cleanInitialID,
-                appName: appName,
-                teamID: teamID,
-                reusableAppIDs: reusableAppIDs
-            ) { result in
-                if let hc = hostingController, hc.presentingViewController != nil {
-                    hc.dismiss(animated: true) {
-                        resumeOnce(result)
-                    }
-                } else {
-                    resumeOnce(result)
-                }
-            }
-
-            let hc = UIHostingController(rootView: modalView)
-            hostingController = hc
-            hc.overrideUserInterfaceStyle = .light
-            hc.view.backgroundColor = .clear
-            hc.modalPresentationStyle = .overFullScreen
-            hc.modalTransitionStyle = .crossDissolve
-
-            presenter.present(hc, animated: true) {
-                if presenter.presentedViewController == nil && !hc.isViewLoaded {
-                    resumeOnce(nil)
-                }
-            }
-        }
-    }
-
-    @MainActor
-    func resolveBundleIDOverride(initialBundleID: String) async throws -> (customID: String, appendTeamID: Bool)? {
-        let team = try await AuthManager.shared.getAuthenticatedTeam()
-        let teamID = team.identifier
-        guard !teamID.isEmpty else {
-            throw OperationError.invalidParameters("Mã định danh nhóm nhà phát triển (Team ID) đang trống.")
-        }
-        return try await resolveBundleIDOverride(
-            initialBundleID: initialBundleID,
-            appName: "",
-            teamID: teamID,
-            reusableAppIDs: []
-        )
-    }
-
-    @MainActor
-    func resolveAppGroupMismatch(originalGroup: String, correctedGroup: String) async throws -> AppGroupResolution {
-        guard let presenter = self.activePresenter else {
-            return .correctAndProceed(correctedGroup)
-        }
-        
-        let title = "Sai Lệch App Group"
-        let message = String(
-            format: "Nhóm ứng dụng '%@' không khớp kiểu chữ hoa/thường với Bundle ID. Bạn có muốn tự động sửa thành '%@' không?",
-            originalGroup,
-            correctedGroup
-        )
-        
-        return await withCheckedContinuation { continuation in
-            let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
-            alert.view.tintColor = PipelineCSSTheme.blue
-            
-            alert.addAction(UIAlertAction(title: "Sửa & Tiếp tục", style: .default) { _ in
-                continuation.resume(returning: .correctAndProceed(correctedGroup))
-            })
-            
-            alert.addAction(UIAlertAction(title: "Giữ nguyên gốc", style: .destructive) { _ in
-                continuation.resume(returning: .keepOriginal(originalGroup))
-            })
-            
-            alert.addAction(UIAlertAction(title: "Hủy", style: .cancel) { _ in
-                continuation.resume(returning: .keepOriginal(originalGroup))
-            })
-            
-            presenter.present(alert, animated: true)
-        }
-    }
-
-    @MainActor
-    func resolveAppIconCustomization(appName: String) async throws -> URL? {
-        guard let presenter = self.activePresenter else {
+@MainActor
+public final class DefaultPipelineHandler: PipelineHandler {
+    public static let shared = DefaultPipelineHandler()
+    
+    private init() {}
+    
+    private func topMostViewController() -> UIViewController? {
+        guard let windowScene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }) ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
+              let rootVC = windowScene.windows.first(where: { $0.isKeyWindow })?.rootViewController ?? windowScene.windows.first?.rootViewController else {
             return nil
         }
-
-        return try await withCheckedThrowingContinuation { continuation in
-            let title = "Tùy Chỉnh Biểu Tượng"
-            let message = String(format: "Bạn muốn chọn ảnh biểu tượng (Icon) mới cho '%@' hay giữ nguyên biểu tượng gốc?", appName)
-
-            let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
-            alert.view.tintColor = PipelineCSSTheme.blue
-
-            alert.addAction(UIAlertAction(title: "Chọn từ Thư viện ảnh", style: .default) { _ in
-                #if !os(tvOS)
-                let pickerDelegate = ImagePickerDelegateHandler { image in
-                    guard let image = image,
-                          let icon = image.resizing(toFill: CGSize(width: 256, height: 256)),
-                          let iconData = icon.pngData() else {
-                        continuation.resume(returning: nil)
-                        return
-                    }
-                    let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("CustomIcon_\(UUID().uuidString).png")
-                    do {
-                        try iconData.write(to: tempURL, options: .atomic)
-                        continuation.resume(returning: tempURL)
-                    } catch {
-                        continuation.resume(throwing: error)
-                    }
-                } onCancel: {
-                    continuation.resume(returning: nil)
-                }
-
-                let imagePicker = UIImagePickerController()
-                imagePicker.allowsEditing = true
-                imagePicker.delegate = pickerDelegate
-                objc_setAssociatedObject(imagePicker, "pickerDelegate", pickerDelegate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-                presenter.present(imagePicker, animated: true)
-                #else
-                TVWebFileTransferManager.shared.startImport(
-                    acceptedExtensions: ["png", "jpg", "jpeg"],
-                    title: "Tải lên Biểu tượng Tùy chỉnh",
-                    presentingVC: presenter
-                ) { fileURL in
-                    guard let fileURL = fileURL,
-                          let data = try? Data(contentsOf: fileURL),
-                          let image = UIImage(data: data),
-                          let icon = image.resizing(toFill: CGSize(width: 256, height: 256)),
-                          let iconData = icon.pngData() else {
-                        continuation.resume(returning: nil)
-                        return
-                    }
-                    let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("CustomIcon_\(UUID().uuidString).png")
-                    do {
-                        try iconData.write(to: tempURL, options: .atomic)
-                        continuation.resume(returning: tempURL)
-                    } catch {
-                        continuation.resume(throwing: error)
-                    }
-                }
-                #endif
-            })
-
-            alert.addAction(UIAlertAction(title: "Giữ biểu tượng gốc", style: .default) { _ in
-                continuation.resume(returning: nil)
-            })
-
-            alert.addAction(UIAlertAction(title: "Hủy", style: .cancel) { _ in
-                continuation.resume(throwing: OperationError.cancelled)
-            })
-
-            presenter.present(alert, animated: true)
+        
+        var topVC = rootVC
+        while let presented = topVC.presentedViewController {
+            topVC = presented
+        }
+        return topVC
+    }
+    
+    nonisolated public func updateProgress(stepName: String, stepIndex: Int, totalSteps: Int) {
+        Task { @MainActor in
+            PipelineMonitorState.shared.update(stepName: stepName, index: stepIndex, total: totalSteps)
         }
     }
-
-    @MainActor
-    func resolveProvisioningProfileCustomization(appName: String, bundleID: String) async throws -> ProfileCustomizationChoice? {
-        guard let presenter = self.activePresenter else {
-            return .defaultProfile
-        }
-
-        let allProfiles = ProfileManager.shared.getAllLocalProfiles()
-        guard !allProfiles.isEmpty else {
-            return .defaultProfile
-        }
-
+    
+    nonisolated public func requestCustomAppName(defaultName: String, bundleId: String) async throws -> String {
         return try await withCheckedThrowingContinuation { continuation in
-            let title = "Chọn Hồ Sơ Cấu Hình"
-            let message = String(format: "Chọn hồ sơ cấu hình (Provisioning Profile) cho '%@' (%@) hoặc dùng hồ sơ tự động mặc định.", appName, bundleID)
-
-            let alert = UIAlertController(title: title, message: message, preferredStyle: .actionSheet)
-            alert.view.tintColor = PipelineCSSTheme.blue
-
-            alert.addAction(UIAlertAction(title: "Mặc định (Hồ sơ nhóm tự động)", style: .default) { _ in
-                continuation.resume(returning: .defaultProfile)
-            })
-
-            let formatter = DateFormatter()
-            formatter.dateStyle = .short
-            formatter.timeStyle = .none
-
-            for profile in allProfiles {
-                let isReady = ProfileManager.shared.isProfileReadyToSign(profile)
-                let certInfo = isReady ? "✓ Sẵn sàng" : (profile.expirationDate < Date() ? "Hết hạn" : "Thiếu khóa")
-                let profileTitle = "\(profile.name) (\(certInfo), HSD: \(formatter.string(from: profile.expirationDate)))"
-
-                alert.addAction(UIAlertAction(title: profileTitle, style: .default) { _ in
-                    continuation.resume(returning: .profile(profile))
+            Task { @MainActor in
+                guard let presenter = self.topMostViewController() else {
+                    continuation.resume(returning: defaultName)
+                    return
+                }
+                
+                let alert = UIAlertController(
+                    title: "Đặt tên ứng dụng tùy chỉnh",
+                    message: "Nhập tên hiển thị mới cho ứng dụng.\nID gói gốc: \(bundleId)",
+                    preferredStyle: .alert
+                )
+                
+                alert.addTextField { textField in
+                    textField.text = defaultName
+                    textField.placeholder = defaultName
+                    textField.clearButtonMode = .whileEditing
+                }
+                
+                alert.addAction(UIAlertAction(title: "Giữ mặc định", style: .cancel) { _ in
+                    continuation.resume(returning: defaultName)
                 })
+                
+                alert.addAction(UIAlertAction(title: "Tiếp tục", style: .default) { _ in
+                    let text = alert.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    continuation.resume(returning: text.isEmpty ? defaultName : text)
+                })
+                
+                presenter.present(alert, animated: true)
             }
-
-            alert.addAction(UIAlertAction(title: "Hủy", style: .cancel) { _ in
-                continuation.resume(throwing: OperationError.cancelled)
-            })
-
-            #if !os(tvOS)
-            if let popover = alert.popoverPresentationController {
-                popover.sourceView = presenter.view
-                popover.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 0, height: 0)
-                popover.permittedArrowDirections = []
+        }
+    }
+    
+    nonisolated public func requestCustomBundleID(defaultBundleId: String, teamId: String) async throws -> (customID: String, appendTeamID: Bool) {
+        return try await withCheckedThrowingContinuation { continuation in
+            Task { @MainActor in
+                guard let presenter = self.topMostViewController() else {
+                    continuation.resume(returning: (defaultBundleId, true))
+                    return
+                }
+                
+                var hasResumed = false
+                let modalView = CustomBundleIDModalView(
+                    defaultBundleId: defaultBundleId,
+                    teamId: teamId
+                ) { result in
+                    guard !hasResumed else { return }
+                    hasResumed = true
+                    presenter.dismiss(animated: true) {
+                        continuation.resume(returning: result)
+                    }
+                }
+                
+                let hostingVC = UIHostingController(rootView: modalView)
+                hostingVC.isModalInPresentation = true
+                hostingVC.modalPresentationStyle = .formSheet
+                presenter.present(hostingVC, animated: true)
             }
-            #endif
-
-            presenter.present(alert, animated: true)
+        }
+    }
+    
+    nonisolated public func requestSmartBundleIDSelection(
+        appName: String,
+        defaultBundleId: String,
+        teamId: String,
+        candidates: [ReusableBundleIDCandidate]
+    ) async throws -> (customID: String, appendTeamID: Bool) {
+        return try await withCheckedThrowingContinuation { continuation in
+            Task { @MainActor in
+                guard let presenter = self.topMostViewController() else {
+                    continuation.resume(returning: (defaultBundleId, true))
+                    return
+                }
+                
+                var hasResumed = false
+                let modalView = SmartBundleIDCenterModalView(
+                    appName: appName,
+                    defaultBundleId: defaultBundleId,
+                    teamId: teamId,
+                    candidates: candidates
+                ) { result in
+                    guard !hasResumed else { return }
+                    hasResumed = true
+                    presenter.dismiss(animated: true) {
+                        continuation.resume(returning: result)
+                    }
+                }
+                
+                let hostingVC = UIHostingController(rootView: modalView)
+                hostingVC.isModalInPresentation = true
+                hostingVC.modalPresentationStyle = .formSheet
+                presenter.present(hostingVC, animated: true)
+            }
+        }
+    }
+    
+    nonisolated public func requestExtensionRemoval(extensions: [AppExtensionInfo]) async throws -> [URL] {
+        return try await withCheckedThrowingContinuation { continuation in
+            Task { @MainActor in
+                guard let presenter = self.topMostViewController() else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                
+                var hasResumed = false
+                let modalView = ExtensionRemovalModalView(extensions: extensions) { urlsToRemove in
+                    guard !hasResumed else { return }
+                    hasResumed = true
+                    presenter.dismiss(animated: true) {
+                        continuation.resume(returning: urlsToRemove)
+                    }
+                }
+                
+                let hostingVC = UIHostingController(rootView: modalView)
+                hostingVC.isModalInPresentation = true
+                hostingVC.modalPresentationStyle = .formSheet
+                presenter.present(hostingVC, animated: true)
+            }
+        }
+    }
+    
+    nonisolated public func requestInfoPlistEdits(bundles: [EditableInfoPlistBundle]) async throws -> [String: [String: String]] {
+        return try await withCheckedThrowingContinuation { continuation in
+            Task { @MainActor in
+                guard let presenter = self.topMostViewController() else {
+                    continuation.resume(returning: [:])
+                    return
+                }
+                
+                var hasResumed = false
+                let modalView = InfoPlistEditorModalView(bundles: bundles) { editedMap in
+                    guard !hasResumed else { return }
+                    hasResumed = true
+                    presenter.dismiss(animated: true) {
+                        continuation.resume(returning: editedMap)
+                    }
+                }
+                
+                let hostingVC = UIHostingController(rootView: modalView)
+                hostingVC.isModalInPresentation = true
+                hostingVC.modalPresentationStyle = .formSheet
+                presenter.present(hostingVC, animated: true)
+            }
         }
     }
 }
 
-private final class ImagePickerDelegateHandler: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-    let onSelect: (UIImage?) -> Void
-    let onCancel: () -> Void
+// MARK: - Live Pipeline Monitor State
 
-    init(onSelect: @escaping (UIImage?) -> Void, onCancel: @escaping () -> Void) {
-        self.onSelect = onSelect
-        self.onCancel = onCancel
+public final class PipelineMonitorState: ObservableObject {
+    public static let shared = PipelineMonitorState()
+    
+    @Published public var currentStepName: String = ""
+    @Published public var currentStepIndex: Int = 0
+    @Published public var totalSteps: Int = 0
+    @Published public var isActive: Bool = false
+    
+    private init() {}
+    
+    public func update(stepName: String, index: Int, total: Int) {
+        self.currentStepName = stepName
+        self.currentStepIndex = index
+        self.totalSteps = total
+        self.isActive = index < total
     }
+    
+    public func reset() {
+        self.isActive = false
+        self.currentStepName = ""
+        self.currentStepIndex = 0
+        self.totalSteps = 0
+    }
+}
 
-    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-        let image = (info[.editedImage] as? UIImage) ?? (info[.originalImage] as? UIImage)
-        picker.dismiss(animated: true) {
-            self.onSelect(image)
+// MARK: - Helper for Stripping Trailing Team ID in UI
+
+private func stripTrailingTeamSuffix(_ bundleID: String, teamID: String) -> String {
+    let trimmedTeam = teamID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedTeam.isEmpty else { return bundleID }
+    
+    var result = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+    let suffix = "." + trimmedTeam
+    while result.lowercased().hasSuffix(suffix.lowercased()), result.count > suffix.count {
+        result = String(result.dropLast(suffix.count))
+    }
+    return result
+}
+
+// MARK: - 1. Smart Bundle ID Reuse Center Modal View
+
+struct SmartBundleIDCenterModalView: View {
+    let appName: String
+    let defaultBundleId: String
+    let teamId: String
+    let candidates: [ReusableBundleIDCandidate]
+    let onComplete: ((customID: String, appendTeamID: Bool)) -> Void
+    
+    @State private var customBundleID: String
+    @State private var appendTeamID: Bool = true
+    @State private var showExtensionIDs: Bool = false
+    
+    init(
+        appName: String,
+        defaultBundleId: String,
+        teamId: String,
+        candidates: [ReusableBundleIDCandidate],
+        onComplete: @escaping ((customID: String, appendTeamID: Bool)) -> Void
+    ) {
+        self.appName = appName
+        self.defaultBundleId = defaultBundleId
+        self.teamId = teamId
+        self.candidates = candidates
+        self.onComplete = onComplete
+        _customBundleID = State(initialValue: defaultBundleId)
+    }
+    
+    private var filteredCandidates: [ReusableBundleIDCandidate] {
+        candidates.filter { showExtensionIDs || !$0.isLikelyExtension }
+    }
+    
+    private var previewFinalBundleID: String {
+        let trimmed = customBundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = trimmed.isEmpty ? defaultBundleId : trimmed
+        if appendTeamID && !teamId.isEmpty {
+            let cleanBase = stripTrailingTeamSuffix(base, teamID: teamId)
+            return "\(cleanBase).\(teamId)"
+        }
+        return base
+    }
+    
+    var body: some View {
+        NavigationView {
+            List {
+                Section(
+                    header: Text("Tái sử dụng App ID đã cấp cho \"\(appName)\""),
+                    footer: Text("Chọn một ID ứng dụng chính từ chứng chỉ của bạn để tiết kiệm giới hạn 10 App ID mỗi tuần. Nếu ID có chứa Mã Nhóm ở giữa (ví dụ: com.kdt.livecontainer.\(teamId.isEmpty ? "TEAMID" : teamId).LiveWidget), hệ thống sẽ giữ nguyên mà không gắn trùng lặp hậu tố.")
+                ) {
+                    if filteredCandidates.isEmpty {
+                        Text("Không tìm thấy App ID cũ nào trên chứng chỉ hoặc thiết bị.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(filteredCandidates) { candidate in
+                            SwiftUI.Button {
+                                // Pass clean baseBundleIdentifier when requiresAppendingTeamID is true
+                                // so downstream operations never duplicate ".TEAMID.TEAMID"
+                                let selectedID = candidate.requiresAppendingTeamID
+                                    ? stripTrailingTeamSuffix(candidate.baseBundleIdentifier, teamID: teamId)
+                                    : candidate.fullBundleIdentifier
+                                onComplete((selectedID, candidate.requiresAppendingTeamID))
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text(candidate.name)
+                                            .font(.headline)
+                                            .foregroundColor(.primary)
+                                        Spacer()
+                                        if candidate.hasEmbeddedTeamID {
+                                            Text("TeamID ở giữa")
+                                                .font(.caption2)
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(Color.orange.opacity(0.2))
+                                                .foregroundColor(.orange)
+                                                .cornerRadius(4)
+                                        } else {
+                                            Text("Tái sử dụng")
+                                                .font(.caption2)
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(Color.blue.opacity(0.15))
+                                                .foregroundColor(.blue)
+                                                .cornerRadius(4)
+                                        }
+                                    }
+                                    
+                                    Text("ID đầy đủ: \(candidate.fullBundleIdentifier)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    
+                                    Text("ID gốc: \(candidate.baseBundleIdentifier) • \(candidate.sourceDescription)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+                    }
+                    
+                    if candidates.contains(where: { $0.isLikelyExtension }) {
+                        Toggle("Hiển thị cả ID của Phần mở rộng (Widget/Plugin)", isOn: $showExtensionIDs)
+                            .font(.subheadline)
+                    }
+                }
+                
+                Section(
+                    header: Text("Hoặc tự nhập Bundle ID tùy chỉnh khác"),
+                    footer: Text("ID cuối cùng sẽ dùng để ký: \(previewFinalBundleID)")
+                ) {
+                    TextField(defaultBundleId, text: $customBundleID)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                    
+                    Toggle("Tự động gắn hậu tố Mã Nhóm (.\(teamId.isEmpty ? "TEAMID" : teamId))", isOn: $appendTeamID)
+                    
+                    SwiftUI.Button("Sử dụng ID tùy chỉnh ở trên") {
+                        let rawInput = customBundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let effectiveInput = rawInput.isEmpty ? defaultBundleId : rawInput
+                        let finalID = appendTeamID
+                            ? stripTrailingTeamSuffix(effectiveInput, teamID: teamId)
+                            : effectiveInput
+                        onComplete((finalID, appendTeamID))
+                    }
+                    .font(.headline)
+                }
+            }
+            .navigationTitle("Chọn ID Gói Chính")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    SwiftUI.Button("Giữ mặc định") {
+                        onComplete(( stripTrailingTeamSuffix(defaultBundleId, teamID: teamId), true))
+                    }
+                }
+            }
         }
     }
+}
 
-    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-        picker.dismiss(animated: true) {
-            self.onCancel()
+// MARK: - 2. Simple Custom Bundle ID Modal View
+
+struct CustomBundleIDModalView: View {
+    let defaultBundleId: String
+    let teamId: String
+    let onComplete: ((customID: String, appendTeamID: Bool)) -> Void
+    
+    @State private var customBundleID: String
+    @State private var appendTeamID: Bool = true
+    
+    init(
+        defaultBundleId: String,
+        teamId: String,
+        onComplete: @escaping ((customID: String, appendTeamID: Bool)) -> Void
+    ) {
+        self.defaultBundleId = defaultBundleId
+        self.teamId = teamId
+        self.onComplete = onComplete
+        _customBundleID = State(initialValue: defaultBundleId)
+    }
+    
+    private var previewFinalBundleID: String {
+        let trimmed = customBundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = trimmed.isEmpty ? defaultBundleId : trimmed
+        if appendTeamID && !teamId.isEmpty {
+            let cleanBase = stripTrailingTeamSuffix(base, teamID: teamId)
+            return "\(cleanBase).\(teamId)"
+        }
+        return base
+    }
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(
+                    header: Text("Mã định danh gói (Bundle ID)"),
+                    footer: Text("ID thực tế sau khi ký: \(previewFinalBundleID)")
+                ) {
+                    TextField(defaultBundleId, text: $customBundleID)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                    
+                    Toggle("Gắn hậu tố Mã Nhóm (.\(teamId.isEmpty ? "TEAMID" : teamId))", isOn: $appendTeamID)
+                }
+            }
+            .navigationTitle("Tùy chỉnh Bundle ID")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    SwiftUI.Button("Mặc định") {
+                        onComplete((stripTrailingTeamSuffix(defaultBundleId, teamID: teamId), true))
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    SwiftUI.Button("Xác nhận") {
+                        let rawInput = customBundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let effectiveInput = rawInput.isEmpty ? defaultBundleId : rawInput
+                        let finalID = appendTeamID
+                            ? stripTrailingTeamSuffix(effectiveInput, teamID: teamId)
+                            : effectiveInput
+                        onComplete((finalID, appendTeamID))
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - 3. App Extensions / Placeholders Removal Modal View
+
+struct ExtensionRemovalModalView: View {
+    let extensions: [AppExtensionInfo]
+    let onComplete: ([URL]) -> Void
+    
+    @State private var selectedURLs: Set<URL> = []
+    
+    var body: some View {
+        NavigationView {
+            List {
+                Section(
+                    header: Text("Chọn các Phần mở rộng (PlugIns) muốn gỡ bỏ"),
+                    footer: Text("Các phần mở rộng được đánh dấu sẽ bị xóa khỏi gói cài đặt trước khi tạo App Group và lấy Hồ sơ cấp phép, giúp tiết kiệm số lượng App ID của tài khoản miễn phí.")
+                ) {
+                    ForEach(extensions) { ext in
+                        SwiftUI.Button {
+                            if selectedURLs.contains(ext.fileURL) {
+                                selectedURLs.remove(ext.fileURL)
+                            } else {
+                                selectedURLs.insert(ext.fileURL)
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: selectedURLs.contains(ext.fileURL) ? "checkmark.circle.fill" : "circle")
+                                    .foregroundColor(selectedURLs.contains(ext.fileURL) ? .red : .secondary)
+                                    .font(.title3)
+                                
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(ext.name)
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    Text(ext.bundleIdentifier)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                Spacer()
+                                
+                                Text(ext.formattedSize)
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+                                    .background(Color.secondary.opacity(0.15))
+                                    .cornerRadius(4)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+                
+                Section {
+                    SwiftUI.Button("Chọn gỡ bỏ tất cả (\(extensions.count) phần mở rộng)") {
+                        selectedURLs = Set(extensions.map { $0.fileURL })
+                    }
+                    .foregroundColor(.red)
+                    
+                    SwiftUI.Button("Giữ lại tất cả (Không gỡ bỏ)") {
+                        selectedURLs.removeAll()
+                    }
+                }
+            }
+            .navigationTitle("Quản lý Phần mở rộng")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    SwiftUI.Button(selectedURLs.isEmpty ? "Tiếp tục" : "Gỡ bỏ (\(selectedURLs.count))") {
+                        onComplete(Array(selectedURLs))
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - 4. Info.plist Editor Modal View
+
+struct InfoPlistEditorModalView: View {
+    @State private var bundles: [EditableInfoPlistBundle]
+    @State private var selectedBundleIndex: Int = 0
+    @State private var searchText: String = ""
+    @State private var newKeyName: String = ""
+    @State private var newKeyValue: String = ""
+    
+    let onComplete: ([String: [String: String]]) -> Void
+    
+    init(bundles: [EditableInfoPlistBundle], onComplete: @escaping ([String: [String: String]]) -> Void) {
+        _bundles = State(initialValue: bundles)
+        self.onComplete = onComplete
+    }
+    
+    private var currentKeys: [String] {
+        guard bundles.indices.contains(selectedBundleIndex) else { return [] }
+        let allKeys = bundles[selectedBundleIndex].entries.keys.sorted()
+        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return allKeys
+        }
+        return allKeys.filter {
+            $0.localizedCaseInsensitiveContains(searchText) ||
+            (bundles[selectedBundleIndex].entries[$0]?.localizedCaseInsensitiveContains(searchText) ?? false)
+        }
+    }
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                if bundles.count > 1 {
+                    Picker("Chọn gói", selection: $selectedBundleIndex) {
+                        ForEach(bundles.indices, id: \.self) { idx in
+                            Text(bundles[idx].title).tag(idx)
+                        }
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                }
+                
+                List {
+                    Section(header: Text("Tìm kiếm khóa hoặc giá trị")) {
+                        TextField("Nhập từ khóa (VD: CFBundleDisplayName, UIFileSharingEnabled)...", text: $searchText)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                    }
+                    
+                    Section(header: Text("Thêm khóa mới vào Info.plist")) {
+                        TextField("Tên khóa mới (Key)", text: $newKeyName)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                        TextField("Giá trị (Value - true/false/chuỗi)", text: $newKeyValue)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                        
+                        SwiftUI.Button("Thêm / Cập nhật khóa này") {
+                            let k = newKeyName.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !k.isEmpty, bundles.indices.contains(selectedBundleIndex) else { return }
+                            bundles[selectedBundleIndex].entries[k] = newKeyValue
+                            newKeyName = ""
+                            newKeyValue = ""
+                        }
+                        .disabled(newKeyName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                    
+                    Section(header: Text("Danh sách các khóa (\(currentKeys.count))")) {
+                        ForEach(currentKeys, id: \.self) { key in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(key)
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.blue)
+                                    Spacer()
+                                    SwiftUI.Button(role: .destructive) {
+                                        bundles[selectedBundleIndex].entries.removeValue(forKey: key)
+                                    } label: {
+                                        Image(systemName: "trash")
+                                            .font(.caption)
+                                            .foregroundColor(.red)
+                                    }
+                                    .buttonStyle(BorderlessButtonStyle())
+                                }
+                                
+                                TextField("Giá trị", text: Binding(
+                                    get: { bundles[selectedBundleIndex].entries[key] ?? "" },
+                                    set: { bundles[selectedBundleIndex].entries[key] = $0 }
+                                ))
+                                .font(.subheadline)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .autocapitalization(.none)
+                                .disableAutocorrection(true)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Trình sửa Info.plist")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    SwiftUI.Button("Bỏ qua") {
+                        onComplete([:])
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    SwiftUI.Button("Lưu & Tiếp tục") {
+                        var result: [String: [String: String]] = [:]
+                        for bundle in bundles {
+                            result[bundle.id] = bundle.entries
+                        }
+                        onComplete(result)
+                    }
+                }
+            }
         }
     }
 }

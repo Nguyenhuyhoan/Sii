@@ -9,7 +9,6 @@
 
 import Foundation
 import SideSign
-import Roxas
 
 @objc(ALTFetchProvisioningProfilesOperation)
 final class FetchProvisioningProfilesOperation: ResultOperation<[String: ALTProvisioningProfile]>

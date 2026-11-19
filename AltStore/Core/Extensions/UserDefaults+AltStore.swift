@@ -8,7 +8,6 @@
 //
 
 import Foundation
-import AltStoreCore
 
 public extension UserDefaults {
     static let shared = UserDefaults(suiteName: Bundle.main.altstoreAppGroup)!

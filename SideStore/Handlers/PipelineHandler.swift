@@ -9,7 +9,6 @@
 
 import UIKit
 import SwiftUI
-import AltStoreCore
 
 // MARK: - Data Models for Customization Modals
 

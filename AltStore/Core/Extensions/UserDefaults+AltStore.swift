@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import Roxas
 
 public extension UserDefaults
 {
@@ -202,11 +201,11 @@ public extension UserDefaults
             }
         }
         var index: [RecommendedSources]
-        varcommunity: [RecommendedSources]?
+        var community: [RecommendedSources]?
         
         enum CodingKeys: String, CodingKey {
             case index = "Index"
-            case varcommunity = "Community"
+            case community = "Community"
         }
     }
     

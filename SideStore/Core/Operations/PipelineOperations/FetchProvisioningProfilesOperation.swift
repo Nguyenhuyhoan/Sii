@@ -1,3 +1,4 @@
+
 //
 //  FetchProvisioningProfilesOperation.swift
 //  AltStore
@@ -7,7 +8,7 @@
 //
 
 import Foundation
-import AltStoreCore
+import SideSign
 import Roxas
 
 @objc(ALTFetchProvisioningProfilesOperation)
@@ -44,7 +45,7 @@ final class FetchProvisioningProfilesOperation: ResultOperation<[String: ALTProv
         if self.context.customBundleIdentifier == nil,
            let provisioningProfile = self.context.provisioningProfile,
            FileManager.default.fileExists(atPath: (self.context.app?.fileURL.appendingPathComponent("embedded.mobileprovision").path) ?? "") {
-            var profiles = [effectiveBundleId: provisioningProfile]
+            let profiles = [effectiveBundleId: provisioningProfile]
             self.finish(.success(profiles))
             return
         }

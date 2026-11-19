@@ -1,3 +1,4 @@
+
 //
 //  PipelineExecutionHandler.swift
 //  SideStore
@@ -17,8 +18,6 @@ protocol PipelineExecutionHandler: AnyObject, Sendable {
     var installAppHandler: InstallAppHandler { get }
     var userCustomizationHandler: UserCustomizationHandler { get }
 }
-
-
 
 protocol PreflightChecksHandler: AnyObject, Sendable {
     func resolveBundleIDMismatch(targetID: String, activeEffectiveID: String) async -> Bool
@@ -66,6 +65,12 @@ enum ProfileCustomizationChoice: Sendable {
 
 protocol UserCustomizationHandler: AnyObject, Sendable {
     func resolveBundleIDOverride(initialBundleID: String) async throws -> (customID: String, appendTeamID: Bool)?
+    func resolveBundleIDOverride(
+        initialBundleID: String,
+        appName: String,
+        teamID: String,
+        reusableAppIDs: [ReusableAppIDCandidate]
+    ) async throws -> (customID: String, appendTeamID: Bool)?
     func resolveInfoPlistCustomization(
         targets: [InfoPlistTarget],
         initialBundleID: String,
@@ -94,3 +99,13 @@ protocol UserCustomizationHandler: AnyObject, Sendable {
     func resolveProvisioningProfileCustomization(appName: String, bundleID: String) async throws -> ProfileCustomizationChoice?
 }
 
+extension UserCustomizationHandler {
+    func resolveBundleIDOverride(
+        initialBundleID: String,
+        appName: String,
+        teamID: String,
+        reusableAppIDs: [ReusableAppIDCandidate]
+    ) async throws -> (customID: String, appendTeamID: Bool)? {
+        try await resolveBundleIDOverride(initialBundleID: initialBundleID)
+    }
+}

@@ -3,590 +3,126 @@
 //  UserDefaults+AltStore.swift
 //  AltStore
 //
-//  Created by Magesh K on 6/17/26.
-//  Copyright © 2019 SideStore. All rights reserved.
+//  Created by Riley Testut on 6/4/19.
+//  Copyright © 2019 Riley Testut. All rights reserved.
 //
 
 import Foundation
-import Minimuxer
-import MinimuxerCommon
+import AltStoreCore
 
-public extension UserDefaults
-{
-    static let defaultBetaUpdatesTrack: String = ReleaseTrackType.nightly.description
-
-    @objc var firstLaunch: Date? {
-        get { self.object(forKey: #function) as? Date }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var hasCompletedOnboarding: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var acctFileChecksum: String? {
-        get { self.string(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var textServer: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var isSideJITServerEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var textInputSideJITServerurl: String? {
-        get { self.string(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var textInputAnisetteURL: String? {
-        get { self.string(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var customAnisetteURL: String? {
-        get { self.string(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var menuAnisetteURL: String {
-        get { self.string(forKey: #function) ?? "" }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var menuAnisetteList: String {
-        get { self.string(forKey: #function) ?? "" }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var menuAnisetteServersList: [String] {
-        get { self.stringArray(forKey: #function) ?? [] }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var customAnisetteClientInfo: String? {
-        get { self.string(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var customAnisetteUserAgent: String? {
-        get { self.string(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var customAnisetteDeviceID: String? {
-        get { self.string(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var customAnisetteLocalUserID: String? {
-        get { self.string(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var customAnisetteLocale: String? {
-        get { self.string(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var customAnisetteTimeZone: String? {
-        get { self.string(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var customAnisetteXcodeVersion: String? {
-        get { self.string(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var customAnisetteSerialNumber: String? {
-        get { self.string(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var customAnisetteRoutingInfo: String? {
-        get { self.string(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
+public extension UserDefaults {
+    static let shared = UserDefaults(suiteName: Bundle.main.altstoreAppGroup)!
     
-    @objc var isBackgroundRefreshEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
-    }
-    @objc var isBackgroundServiceEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
-    }
-    var backgroundServiceMode: BackgroundServiceMode {
-        get {
-            let mode = _backgroundServiceMode.flatMap { BackgroundServiceMode(rawValue: $0) } ?? .audio
-            return mode
-        }
-        set {
-            _backgroundServiceMode = newValue.rawValue
-        }
-    }
-    @objc(backgroundServiceMode) private var _backgroundServiceMode: String? {
-        get { self.string(forKey: "backgroundServiceMode") }
-        set { self.set(newValue, forKey: "backgroundServiceMode") }
-    }
-    @objc var enableEMPforWireguard: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var minimuxerGatewayBackend: String {
-        get { self.string(forKey: #function) ?? GatewayBackend.idevice.rawValue }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var remotePairingPortOverride: Int {
-        get { self.integer(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var lastDiscoveredRemotePairingPort: Int {
-        get { self.integer(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var isAutoRetryRemotePairingPortEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var isInstallConfirmationEnabled: Bool {
-        get {
-            guard self.object(forKey: #function) != nil else { return true }
-            return self.bool(forKey: #function)
-        }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var isClearCustomizationsOnUninstallEnabled: Bool {
-        get {
-            guard self.object(forKey: #function) != nil else { return true }
-            return self.bool(forKey: #function)
-        }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var isAutoLaunchAppAfterInstallEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var deviceProbeTimeoutOverride: Int {
-        get { self.integer(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var skipNonCopyableBackupFiles: Bool {
-        get {
-            guard self.object(forKey: #function) != nil else { return true }
-            return self.bool(forKey: #function)
-        }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var isIdleTimeoutDisableEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
-    }
-    @objc var isAppLimitDisabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var isRotateLogsOnStartupEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
-    }
-    @objc var freeAcctAppIdDeletion: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var isBetaUpdatesEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
-    }
-    @objc var customizeInfoPlist: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var preferSheetForInfoPlistCustomization: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var customizeEntitlements: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var preferSheetForEntitlementsCustomization: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var customizeAppId: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var customizeAppIcon: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var customizeProvisioningProfile: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var turnOffDataShortcutName: String {
-        get { self.string(forKey: #function) ?? "TurnOffData" }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var turnOnDataShortcutName: String {
-        get { self.string(forKey: #function) ?? "TurnOnData" }
-        set { self.set(newValue, forKey: #function) }
-    }
+    @NSManaged var firstLaunch: Date?
+    @NSManaged var presentedLaunchReminderNotification: Bool
     
-    var customizeAppExtensions: AppExtensionCustomization {
-        get {
-            let option = _customizeAppExtensions.flatMap { AppExtensionCustomization(rawValue: $0) } ?? .promptUser
-            return option
-        }
-        set {
-            _customizeAppExtensions = newValue.rawValue
-        }
-    }
-    @objc(customizeAppExtensions) private var _customizeAppExtensions: String? {
-        get { self.string(forKey: "customizeAppExtensions") }
-        set { self.set(newValue, forKey: "customizeAppExtensions") }
-    }
-    var appImportSourceMode: AppImportSourceMode {
-        get { _appImportSourceMode.flatMap { AppImportSourceMode(rawValue: $0) } ?? .prompt }
-        set { _appImportSourceMode = newValue.rawValue }
-    }
-    @objc(appImportSourceMode) private var _appImportSourceMode: String? {
-        get { self.string(forKey: "appImportSourceMode") }
-        set { self.set(newValue, forKey: "appImportSourceMode") }
-    }
-    var autoFixAppGroupIDs: Bool {
-        get {
-            if self.object(forKey: "autoFixAppGroupIDs") != nil {
-                return self._autoFixAppGroupIDs
-            }
-            return true
-        }
-        set { self._autoFixAppGroupIDs = newValue }
-    }
-    @objc(autoFixAppGroupIDs) private var _autoFixAppGroupIDs: Bool {
-        get { self.bool(forKey: "autoFixAppGroupIDs") }
-        set { self.set(newValue, forKey: "autoFixAppGroupIDs") }
-    }
+    @NSManaged var isBackgroundRefreshEnabled: Bool
+    @NSManaged var isDebugModeEnabled: Bool
+    @NSManaged var isExportModeEnabled: Bool
     
-    // ĐÃ SỬA: Ép cứng về false để không nén lại IPA, cài thẳng .app
-    @objc var preferResignedIPA: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
-    }
-    // ĐÃ SỬA: Ép cứng về false để không chạy bước nén IPA xuất file
-    @objc var isExportResignedAppEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
-    }
+    @NSManaged var activePatreonAccountID: String?
+    @NSManaged var isBetaTester: Bool
     
-    @objc var isVerboseOperationsLoggingEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
-    }
-    @objc var isAltSignVerboseLoggingEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
-    }
-    @objc var isSideStoreVerboseLoggingEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
-    }
-    @objc var isMinimuxerVerboseLoggingEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
-    }
-    @objc var isMinimuxerBackendHotswapEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var pairingFileEditSuppressedSHAs: [String: Bool] {
-        get { (self.dictionary(forKey: #function) as? [String: Bool]) ?? [:] }
-        set { self.set(newValue, forKey: #function) }
-    }
-    func isPairingFileEditSuppressed(forHash sha: String) -> Bool {
-        pairingFileEditSuppressedSHAs[sha] ?? false
-    }
-    func setPairingFileEditSuppressed(_ suppressed: Bool, forHash sha: String) {
-        var map = pairingFileEditSuppressedSHAs
-        map[sha] = suppressed
-        pairingFileEditSuppressedSHAs = map
-    }
-
-    var activePairingProtocol: PairingProtocol? {
-        get { _activePairingProtocol.flatMap { PairingProtocol(rawValue: $0) } }
-        set { _activePairingProtocol = newValue?.rawValue }
-    }
-    @objc(activePairingProtocol) private var _activePairingProtocol: String? {
-        get { self.string(forKey: "activePairingProtocol") }
-        set { self.set(newValue, forKey: "activePairingProtocol") }
-    }
-
-    var preferredPairingProtocol: PairingProtocol? {
-        get { _preferredPairingProtocol.flatMap { PairingProtocol(rawValue: $0) } }
-        set { _preferredPairingProtocol = newValue?.rawValue }
-    }
-    @objc(preferredPairingProtocol) private var _preferredPairingProtocol: String? {
-        get { self.string(forKey: "preferredPairingProtocol") }
-        set { self.set(newValue, forKey: "preferredPairingProtocol") }
-    }
-    @objc var keepSigningCertsAfterLogout: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var keepAnisetteDataAfterLogout: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var isDeviceRegistered: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var keepAnisetteHeadersAfterLogout: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var keepSideSignHeadersAfterLogout: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-
-    @objc var isAnisetteOfflineMode: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var disableAnisetteRotation: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var useOnDeviceAnisette: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-
-    @objc var recreateDatabaseOnNextStart: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var isPairingReset: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var isDebugModeEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
-    }
-    @objc var presentedLaunchReminderNotification: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
+    @NSManaged var responseCachingEnabled: Bool
+    @NSManaged var patreonTier: Int
     
-    @objc var legacySideloadedApps: [String]? {
-        get { self.stringArray(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
+    @NSManaged var menuBarAppShown: Bool
+    @NSManaged var menuBarAppStatusItemShown: Bool
     
-    @objc var isLegacyDeactivationSupported: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var activeAppLimitIncludesExtensions: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
+    @NSManaged var preferredServerID: String?
+    @NSManaged var isServerDiscoverable: Bool
     
-    @objc var patchedApps: [String]? {
-        get { self.stringArray(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
+    @NSManaged var trustedSources: [String]?
+    @NSManaged var blockedSources: [String]?
     
-    @objc var defaultSourceIDs: [String]? {
-        get { self.stringArray(forKey: "defaultSourceIDs") }
-        set { self.set(newValue, forKey: "defaultSourceIDs") }
-    }
-    @objc var defaultServerURL: String? {
-        get { self.string(forKey: "defaultServerURL") }
-        set { self.set(newValue, forKey: "defaultServerURL") }
-    }
+    @NSManaged var lastUpdatedSourcesDate: Date?
     
-    @objc var betaUdpatesTrack: String? {
-        get { self.string(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
+    @NSManaged var isAppLimitDisabled: Bool
     
-    @objc var isCowExploitSupported: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
+    @NSManaged var activeAnisetteURL: String
+    @NSManaged var customAnisetteURL: String?
+    @NSManaged var anisetteURLList: [String]?
     
-    @objc var permissionCheckingDisabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var isBundleIDVerificationEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var isiOSVersionVerificationEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var isAppVersionVerificationEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var isChecksumVerificationEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
-    }
-    @objc var isFileSizeVerificationEnabled: Bool {
-        get { false }
-        set { self.set(false, forKey: #function) }
-    }
-    @objc var appVerificationDisabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var responseCachingDisabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var alwaysShowWireGuardConfig: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-    @objc var acceptIPv6ConnectionConfig: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-
-    @nonobjc var preferredAppSorting: AppSorting {
-        get {
-            let sorting = _preferredAppSorting.flatMap { AppSorting(rawValue: $0) } ?? .default
-            return sorting
-        }
-        set {
-            _preferredAppSorting = newValue.rawValue
-        }
-    }
+    @NSManaged var isLegacyDecompressionEnabled: Bool
     
-    @objc(preferredAppSorting) private var _preferredAppSorting: String? {
-        get { self.string(forKey: "preferredAppSorting") }
-        set { self.set(newValue, forKey: "preferredAppSorting") }
-    }
+    @NSManaged var isFetchSourcesIndexEnabled: Bool
+    @NSManaged var sourcesIndexURL: String?
+    @NSManaged var customSourcesIndexURL: String?
     
-    @nonobjc var activeAppsLimit: Int? {
-        get { return self._activeAppsLimit?.intValue }
-        set {
-            if let value = newValue {
-                self._activeAppsLimit = NSNumber(value: value)
-            } else {
-                self._activeAppsLimit = nil
-            }
-        }
-    }
+    @NSManaged var isWLANRefreshEnabled: Bool
+    @NSManaged var isBackgroundRefreshWithinAppEnabled: Bool
     
-    @objc var isCellularRefreshEnabled: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
-
-    @objc var useLocalVPN: Bool {
-        get { self.bool(forKey: #function) }
-        set { self.set(newValue, forKey: #function) }
-    }
+    @NSManaged var autoFixAppGroupIDs: Bool
+    @NSManaged var autoUseExistingAppIDs: Bool
     
-    @objc(activeAppsLimit) private var _activeAppsLimit: NSNumber? {
-        get { self.object(forKey: "activeAppsLimit") as? NSNumber }
-        set { self.set(newValue, forKey: "activeAppsLimit") }
-    }
+    @NSManaged var isJITLessTestCompleted: Bool
+    @NSManaged var isJITLessEnabled: Bool
+    @NSManaged var isJITLessSetupShown: Bool
     
-    class func registerDefaults()
-    {
-        let ios13_5 = OperatingSystemVersion(majorVersion: 13, minorVersion: 5, patchVersion: 0)
-        let isLegacyDeactivationSupported = !ProcessInfo.processInfo.isOperatingSystemAtLeast(ios13_5)
-        let activeAppLimitIncludesExtensions = !ProcessInfo.processInfo.isOperatingSystemAtLeast(ios13_5)
-        
-        let ios14 = OperatingSystemVersion(majorVersion: 14, minorVersion: 0, patchVersion: 0)
-        let ios16 = OperatingSystemVersion(majorVersion: 16, minorVersion: 0, patchVersion: 0)
-        let ios16_2 = OperatingSystemVersion(majorVersion: 16, minorVersion: 2, patchVersion: 0)
-        let ios15_7_2 = OperatingSystemVersion(majorVersion: 15, minorVersion: 7, patchVersion: 2)
-        
-        let isMacDirtyCowSupported =
-        (ProcessInfo.processInfo.isOperatingSystemAtLeast(ios14) && !ProcessInfo.processInfo.isOperatingSystemAtLeast(ios15_7_2)) ||
-        (ProcessInfo.processInfo.isOperatingSystemAtLeast(ios16) && !ProcessInfo.processInfo.isOperatingSystemAtLeast(ios16_2))
-        
-        let preferredAppSorting: AppSorting = .default
-        
-        let defaults = [
-            #keyPath(UserDefaults.isLegacyDeactivationSupported): isLegacyDeactivationSupported,
-            #keyPath(UserDefaults.activeAppLimitIncludesExtensions): activeAppLimitIncludesExtensions,
-            #keyPath(UserDefaults.isAppLimitDisabled): false,
-            #keyPath(UserDefaults.isCowExploitSupported): isMacDirtyCowSupported,
-            #keyPath(UserDefaults._preferredAppSorting): preferredAppSorting.rawValue,
-
-            #keyPath(UserDefaults.minimuxerGatewayBackend): GatewayBackend.idevice.rawValue,
-            #keyPath(UserDefaults.keepSigningCertsAfterLogout): true,
-            #keyPath(UserDefaults.keepAnisetteDataAfterLogout): true,
-            #keyPath(UserDefaults.keepAnisetteHeadersAfterLogout): true,
-            #keyPath(UserDefaults.keepSideSignHeadersAfterLogout): true,
-            #keyPath(UserDefaults.isBackgroundRefreshEnabled): false,
-            #keyPath(UserDefaults.isBackgroundServiceEnabled): false,
-            #keyPath(UserDefaults.isBetaUpdatesEnabled): false,
-            #keyPath(UserDefaults.permissionCheckingDisabled): true,
-            #keyPath(UserDefaults.isBundleIDVerificationEnabled): true,
-            #keyPath(UserDefaults.isiOSVersionVerificationEnabled): true,
-            #keyPath(UserDefaults.isAppVersionVerificationEnabled): true,
-            #keyPath(UserDefaults.isChecksumVerificationEnabled): false,
-            #keyPath(UserDefaults.isFileSizeVerificationEnabled): false,
-            #keyPath(UserDefaults.appVerificationDisabled): false,
-            #keyPath(UserDefaults.isIdleTimeoutDisableEnabled): false,
-            #keyPath(UserDefaults.betaUdpatesTrack): defaultBetaUpdatesTrack,
-            #keyPath(UserDefaults.menuAnisetteList): AppConstants.Anisette.Servers.defaultSource,
-            #keyPath(UserDefaults.menuAnisetteURL): AppConstants.Anisette.Servers.defaultServerURL,
-            #keyPath(UserDefaults.isAnisetteOfflineMode): false,
-            #keyPath(UserDefaults.disableAnisetteRotation): false,
-            #keyPath(UserDefaults.useOnDeviceAnisette): true,
-            #keyPath(UserDefaults.useLocalVPN): true,
-            #keyPath(UserDefaults.acceptIPv6ConnectionConfig): false,
-            #keyPath(UserDefaults.isAutoRetryRemotePairingPortEnabled): true,
-            #keyPath(UserDefaults.enableEMPforWireguard): false,
-            #keyPath(UserDefaults.skipNonCopyableBackupFiles): true,
+    @NSManaged var isUsingSideStoreAnisette: Bool
+    @NSManaged var shouldCheckTrackers: Bool
+    @NSManaged var shouldClearCacheOnLaunch: Bool
+    
+    @NSManaged var appTintColorHex: String?
+    @NSManaged var appLanguageCode: String?
+    
+    // MARK: - Custom Install Pipeline & Advanced Features (SideStore Customizations)
+    
+    @NSManaged var isCustomPipelineEnabled: Bool
+    @NSManaged var isPipelineLiveMonitorEnabled: Bool
+    @NSManaged var isBundleIDVerificationEnabled: Bool
+    @NSManaged var isUserCustomizationEnabled: Bool
+    @NSManaged var isCustomAppNameEnabled: Bool
+    @NSManaged var isCustomBundleIDEnabled: Bool
+    @NSManaged var isExtensionMgmtEnabled: Bool
+    @NSManaged var isInfoPlistEditorEnabled: Bool
+    @NSManaged var isRemoveAppPlaceholdersEnabled: Bool
+    @NSManaged var isSmartBundleIDReuseEnabled: Bool
+    @NSManaged var customPipelineOrder: [String]?
+    @NSManaged var customPipelineDisabledSteps: [String]?
+    
+    // MARK: - Local IPA Library & Export Options
+    
+    @NSManaged var autoSaveInstalledIPAs: Bool
+    @NSManaged var customDocumentsDisplayName: String?
+    
+    func registerDefaults() {
+        var defaults: [String: Any] = [
+            #keyPath(UserDefaults.isBackgroundRefreshEnabled): true,
+            #keyPath(UserDefaults.isWLANRefreshEnabled): true,
+            #keyPath(UserDefaults.isBackgroundRefreshWithinAppEnabled): true,
+            #keyPath(UserDefaults.responseCachingEnabled): true,
+            #keyPath(UserDefaults.isServerDiscoverable): true,
+            #keyPath(UserDefaults.activeAnisetteURL): "https://ani.sidestore.io",
+            #keyPath(UserDefaults.isFetchSourcesIndexEnabled): true,
+            #keyPath(UserDefaults.sourcesIndexURL): "https://raw.githubusercontent.com/SideStore/SideStore-Index/main/index.json",
+            #keyPath(UserDefaults.autoFixAppGroupIDs): true,
+            #keyPath(UserDefaults.autoUseExistingAppIDs): true,
+            #keyPath(UserDefaults.isUsingSideStoreAnisette): false,
+            #keyPath(UserDefaults.shouldCheckTrackers): true,
+            #keyPath(UserDefaults.shouldClearCacheOnLaunch): false,
             
-            #keyPath(UserDefaults.responseCachingDisabled): false,
-            #keyPath(UserDefaults.customizeInfoPlist): false,
-            #keyPath(UserDefaults.preferSheetForInfoPlistCustomization): true,
-            #keyPath(UserDefaults.customizeEntitlements): false,
-            #keyPath(UserDefaults.preferSheetForEntitlementsCustomization): true,
-            #keyPath(UserDefaults.customizeAppId): false,
-            #keyPath(UserDefaults.customizeAppIcon): false,
-            #keyPath(UserDefaults.customizeProvisioningProfile): false,
-            #keyPath(UserDefaults._customizeAppExtensions): AppExtensionCustomization.promptUser.rawValue,
-            #keyPath(UserDefaults._appImportSourceMode): AppImportSourceMode.prompt.rawValue,
-            #keyPath(UserDefaults.isInstallConfirmationEnabled): true,
-            #keyPath(UserDefaults.isClearCustomizationsOnUninstallEnabled): true,
-            #keyPath(UserDefaults.isAutoLaunchAppAfterInstallEnabled): false,
+            // Custom Install Pipeline & Advanced Features (SideStore Customizations)
+            #keyPath(UserDefaults.isCustomPipelineEnabled): false,
+            #keyPath(UserDefaults.isPipelineLiveMonitorEnabled): false,
+            #keyPath(UserDefaults.isBundleIDVerificationEnabled): false, // Mặc định TẮT kiểm tra ID gói
+            #keyPath(UserDefaults.isUserCustomizationEnabled): false,
+            #keyPath(UserDefaults.isCustomAppNameEnabled): true,
+            #keyPath(UserDefaults.isCustomBundleIDEnabled): true,
+            #keyPath(UserDefaults.isExtensionMgmtEnabled): true,
+            #keyPath(UserDefaults.isInfoPlistEditorEnabled): false,
+            #keyPath(UserDefaults.isRemoveAppPlaceholdersEnabled): false,
+            #keyPath(UserDefaults.isSmartBundleIDReuseEnabled): false,
             
-            // ĐÃ SỬA: Đặt mặc định là false
-            #keyPath(UserDefaults.preferResignedIPA): false,
-            #keyPath(UserDefaults.isExportResignedAppEnabled): false,
-            
-            #keyPath(UserDefaults.isVerboseOperationsLoggingEnabled): false,
-            #keyPath(UserDefaults.isSideStoreVerboseLoggingEnabled): false,
-            #keyPath(UserDefaults.isAltSignVerboseLoggingEnabled): false,
-            #keyPath(UserDefaults.isMinimuxerVerboseLoggingEnabled): false,
-            #keyPath(UserDefaults.isMinimuxerBackendHotswapEnabled): false,
-            #keyPath(UserDefaults.pairingFileEditSuppressedSHAs): [String: Bool](),
-            #keyPath(UserDefaults.isRotateLogsOnStartupEnabled): false,
-            #keyPath(UserDefaults.recreateDatabaseOnNextStart): false,
-            #keyPath(UserDefaults.isCellularRefreshEnabled): false,
-            #keyPath(UserDefaults.turnOffDataShortcutName): "TurnOffData",
-            #keyPath(UserDefaults.turnOnDataShortcutName): "TurnOnData",
-            #keyPath(UserDefaults.isPairingReset): true,
-            #keyPath(UserDefaults.isDebugModeEnabled): false,
-            #keyPath(UserDefaults.isDeviceRegistered): false,
-        ] as [String: Any]
-
-        UserDefaults.standard.register(defaults: defaults)
+            // Local IPA Library
+            #keyPath(UserDefaults.autoSaveInstalledIPAs): false
+        ]
         
-        if !isMacDirtyCowSupported && ProcessInfo().sparseRestorePatched
-        {
-            UserDefaults.standard.isAppLimitDisabled = false
-        }
-    }
-    
-    static func enableGlobalLogging() {
-    }
-    
-    static func dumpAllSettingsOnBoot() {
+        #if targetEnvironment(macCatalyst)
+        defaults[#keyPath(UserDefaults.menuBarAppShown)] = true
+        defaults[#keyPath(UserDefaults.menuBarAppStatusItemShown)] = true
+        #endif
+        
+        self.register(defaults: defaults)
     }
 }

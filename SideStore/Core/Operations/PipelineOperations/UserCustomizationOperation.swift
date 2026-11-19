@@ -50,9 +50,6 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         try await super.executePreconditionCheck(parentProgress: parentProgress)
         self.setProgress(10)
 
-        // Luôn gộp mọi App Extensions vào 1 ID chính duy nhất (giống hệt LC+SS)
-        self.context.useMainProfile = true
-
         guard let targetAppBundle = context.targetAppBundle else {
             throw OperationError.invalidParameters("UserCustomizationOperation: context.targetAppBundle is nil")
         }
@@ -63,6 +60,9 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
             debugLog("[UserCustomizationOperation] FAILED: authTeamID is empty")
             throw OperationError.invalidParameters("Active developer team identifier is missing.")
         }
+
+        // Luôn bật cờ gộp chung 1 Provisioning Profile của App chính cho mọi phần mở rộng
+        self.context.useMainProfile = true
 
         // 1. Quét danh sách App đang sống trên máy để nhận diện Cài Mới hay Cập Nhật IPA
         let installedSnap = fetchInstalledAppSnapshots(teamID: teamID)
@@ -183,11 +183,14 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
 
             if let matchedCandidate = reusableCandidates.first(where: {
                 $0.fullBundleIdentifier.caseInsensitiveCompare(chosenRawID) == .orderedSame
-            }) {
+            }), !result.appendTeamID {
+                // KHI CHỌN "DÙNG LẠI ID CŨ":
+                // Giữ nguyên 100% ID cũ (VD: com.alone.37D6PWG5PP) và dùng 1 ID này cho cả App chính lẫn mọi phần mở rộng!
                 context.appendTeamID = false
                 context.customBundleIdentifier = matchedCandidate.fullBundleIdentifier
                 didCustomizeBundleID = true
             } else {
+                // KHI CHỌN "DÙNG ID GỐC CỦA IPA":
                 context.appendTeamID = result.appendTeamID
                 if !chosenRawID.isEmpty, chosenRawID != context.bundleIdentifier {
                     context.customBundleIdentifier = chosenRawID

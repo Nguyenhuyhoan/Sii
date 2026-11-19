@@ -1,3 +1,5 @@
+
+
 //
 //  RemoveAppExtensionsOperation.swift
 //  AltStore
@@ -21,20 +23,22 @@ public enum AppExtensionCustomization: String, CaseIterable, Identifiable, Senda
     public var displayName: String {
         switch self {
         case .promptUser:
-            return "Prompt User"
+            return "Hỏi mỗi khi cài"
         case .removeAll:
-            return "Remove All"
+            return "Xóa mọi phần mở rộng"
         case .keepAll:
-            return "Keep All"
+            return "Giữ nguyên (Tốn thêm ID)"
         case .useMainProfile:
-            return "Use Main Profile"
+            return "Gộp chung 1 ID chính"
         }
     }
 
     var fixedDecision: ExtensionRemovalDecision? {
         switch self {
         case .promptUser:
-            return nil
+            // Luôn ưu tiên gộp toàn bộ App Extensions vào 1 Provisioning Profile của ID chính
+            // để không bao giờ hiện bảng hỏi 4 lựa chọn và tiết kiệm tuyệt đối App ID.
+            return .keepAll(useMainProfile: true)
         case .removeAll:
             return .removeAll
         case .keepAll:
@@ -68,6 +72,10 @@ final class RemoveAppExtensionsOperation: BasePipelineOperation<InstallAppOperat
             throw OperationError.invalidParameters("RemoveAppExtensionsOperation: context.appBundle is nil")
         }
         
+        // Luôn bật cờ useMainProfile = true ngay từ đầu để đảm bảo mọi App Extensions
+        // dùng chung 1 ID chính trong cả cài mới lẫn cập nhật IPA.
+        self.context.useMainProfile = true
+        
         // target App Bundle doesn't contain extensions so don't bother
         guard !targetAppBundle.appExtensions.isEmpty else {
             self.setProgress(100)
@@ -75,19 +83,14 @@ final class RemoveAppExtensionsOperation: BasePipelineOperation<InstallAppOperat
         }
         
         self.setProgress(30)
-        let excessExtensions = processExtensionsInfo(from: targetAppBundle, localAppExtensions: localAppExtensions)
+        _ = processExtensionsInfo(from: targetAppBundle, localAppExtensions: localAppExtensions)
         
-        let handler = self.context.handler.extensionRemovalHandler
         let decision: ExtensionRemovalDecision
-        if let preset = UserDefaults.standard.customizeAppExtensions.fixedDecision {
-            decision = preset
+        if UserDefaults.standard.customizeAppExtensions == .removeAll {
+            decision = .removeAll
         } else {
-            self.setProgress(50)
-            decision = try await handler.selectAppExtensionsToRemove(
-                appBundle: targetAppBundle,
-                localAppExtensions: Array(localAppExtensions ?? []),
-                excessExtensions: excessExtensions
-            )
+            // Mặc định luôn giữ toàn bộ Extensions nhưng gộp chung vào 1 Profile của App chính (tốn 0 ID phụ)
+            decision = .keepAll(useMainProfile: true)
         }
 
         switch decision {

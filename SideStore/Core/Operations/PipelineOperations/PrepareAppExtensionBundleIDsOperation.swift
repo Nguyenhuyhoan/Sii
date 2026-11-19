@@ -1,3 +1,4 @@
+
 //
 //  PrepareAppExtensionBundleIDsOperation.swift
 //  SideStore
@@ -19,13 +20,34 @@ final class PrepareAppExtensionBundleIDsOperation: BasePipelineOperation<Install
         try await super.executePreconditionCheck(parentProgress: parentProgress)
         
         if self.context.useMainProfile {
-            if let appBundle = self.context.targetAppBundle, let profile = self.context.provisioningProfiles?[self.context.bundleIdentifier] {
+            let mainBundleKey = self.context.targetBundleIdentifier
+            if let appBundle = self.context.targetAppBundle,
+               let profile = self.context.provisioningProfiles?[mainBundleKey]
+                    ?? self.context.provisioningProfiles?[self.context.bundleIdentifier]
+                    ?? self.context.provisioningProfiles?.values.first {
                 var appexBundleIds: [String: String] = [:]
                 for appex in appBundle.appExtensions {
-                    appexBundleIds[appex.bundleIdentifier] = appex.bundleIdentifier
-                        .replacingOccurrences(of: appBundle.bundleIdentifier, with: profile.bundleIdentifier)
+                    let resolvedAppExBundleID: String
+                    if appex.bundleIdentifier.hasPrefix(appBundle.bundleIdentifier + ".") {
+                        let suffix = String(appex.bundleIdentifier.dropFirst(appBundle.bundleIdentifier.count))
+                        resolvedAppExBundleID = profile.bundleIdentifier + suffix
+                    } else if appex.bundleIdentifier.contains(appBundle.bundleIdentifier) {
+                        resolvedAppExBundleID = appex.bundleIdentifier
+                            .replacingOccurrences(of: appBundle.bundleIdentifier, with: profile.bundleIdentifier)
+                    } else {
+                        let extName = appex.bundleIdentifier.components(separatedBy: ".").last ?? appex.name.replacingOccurrences(of: " ", with: "")
+                        resolvedAppExBundleID = "\(profile.bundleIdentifier).\(extName)"
+                    }
+
+                    // Lưu cả key gốc lẫn key đã thay bằng targetBundleIdentifier để ResignAppOperation luôn tra cứu trúng 100%
+                    let updatedKeyInResign = appex.bundleIdentifier
+                        .replacingOccurrences(of: appBundle.bundleIdentifier, with: mainBundleKey)
+
+                    appexBundleIds[appex.bundleIdentifier] = resolvedAppExBundleID
+                    appexBundleIds[updatedKeyInResign] = resolvedAppExBundleID
                 }
                 self.context.appexBundleIds = appexBundleIds
+                debugLog("[PrepareAppExtensionBundleIDsOperation] Mapped \(appBundle.appExtensions.count) extensions to main profile '\(profile.bundleIdentifier)'")
             }
         }
         self.setProgress(100)

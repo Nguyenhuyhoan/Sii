@@ -1,4 +1,3 @@
-
 //
 //  PipelineHandler.swift
 //  SideStore
@@ -44,6 +43,17 @@ private struct PipelineCSSTheme {
             endPoint: .bottomTrailing
         )
     }
+
+    static var suiHeroGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.92),
+                SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.88)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
 }
 
 private struct PipelineBounceButtonStyle: ButtonStyle {
@@ -52,6 +62,359 @@ private struct PipelineBounceButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
             .offset(x: configuration.isPressed ? 3 : 0, y: configuration.isPressed ? -1 : 0)
             .animation(.spring(response: 0.28, dampingFraction: 0.62), value: configuration.isPressed)
+    }
+}
+
+// MARK: - 🛡️ KHUNG CHỌN APP ID THÔNG MINH HIỆN Ở GIỮA MÀN HÌNH KHI CÀI IPA MỚI
+private struct SmartBundleIDCenterModalView: SwiftUI.View {
+    let initialBundleID: String
+    let appName: String
+    let teamID: String
+    let reusableAppIDs: [ReusableAppIDCandidate]
+    let onComplete: ((String, Bool)?) -> Void
+
+    @State private var isManualExpanded: Bool = false
+    @State private var customBundleIDText: String
+    @State private var appendTeamID: Bool = true
+
+    init(
+        initialBundleID: String,
+        appName: String,
+        teamID: String,
+        reusableAppIDs: [ReusableAppIDCandidate],
+        onComplete: @escaping ((String, Bool)?) -> Void
+    ) {
+        self.initialBundleID = initialBundleID
+        self.appName = appName
+        self.teamID = teamID
+        self.reusableAppIDs = reusableAppIDs
+        self.onComplete = onComplete
+        self._customBundleIDText = State(initialValue: initialBundleID)
+    }
+
+    private func remainingDaysText(for date: Date?) -> String {
+        guard let date else { return "Khả dụng" }
+        let seconds = date.timeIntervalSinceNow
+        guard seconds > 0 else { return "Hết hạn" }
+        let days = Int(ceil(seconds / 86400.0))
+        return "Còn \(days) ngày"
+    }
+
+    var body: some SwiftUI.View {
+        ZStack {
+            SwiftUI.Color.black.opacity(0.44)
+                .ignoresSafeArea()
+
+            VStack(spacing: 12) {
+                // Banner tiêu đề chuẩn Hero Tab Cài đặt
+                VStack(spacing: 4) {
+                    HStack(spacing: 7) {
+                        SwiftUI.Image(systemName: "shield.lefthalf.filled.badge.checkmark")
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundColor(.white)
+                        SwiftUI.Text(appName.isEmpty ? "Chọn Định Danh (App ID)" : "Cài đặt: \(appName)")
+                            .font(.system(size: 16.5, weight: .heavy))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                    }
+
+                    SwiftUI.Text("Tự động gộp mọi tiện ích mở rộng vào 1 ID chính duy nhất")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(SwiftUI.Color.white.opacity(0.94))
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.vertical, 12)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity)
+                .background(PipelineCSSTheme.suiHeroGradient)
+                .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous))
+                .shadow(color: PipelineCSSTheme.suiPrimary.opacity(0.22), radius: 10, x: 0, y: 4)
+
+                // Khối thẻ trắng chính chứa các lựa chọn ID
+                VStack(spacing: 10) {
+                    // Lựa chọn 1: Dùng ID gốc của IPA
+                    SwiftUI.Button {
+                        onComplete((initialBundleID, true))
+                    } label: {
+                        HStack(spacing: 11) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(PipelineCSSTheme.suiPrimary.opacity(0.14))
+                                    .frame(width: 40, height: 40)
+                                SwiftUI.Image(systemName: "plus.app.fill")
+                                    .font(.system(size: 18, weight: .bold))
+                                    .foregroundColor(PipelineCSSTheme.suiPrimary)
+                            }
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 6) {
+                                    SwiftUI.Text("Dùng ID gốc của IPA")
+                                        .font(.system(size: 14.5, weight: .bold))
+                                        .foregroundColor(PipelineCSSTheme.suiPureBlack)
+                                    Spacer()
+                                    SwiftUI.Text("Mặc định")
+                                        .font(.system(size: 10.5, weight: .bold))
+                                        .foregroundColor(PipelineCSSTheme.suiPrimary)
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 2.5)
+                                        .background(
+                                            Capsule()
+                                                .fill(PipelineCSSTheme.suiPrimary.opacity(0.14))
+                                        )
+                                }
+
+                                SwiftUI.Text(initialBundleID)
+                                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                    .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.68))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+
+                            SwiftUI.Image(systemName: "chevron.right")
+                                .font(.system(size: 12.5, weight: .bold))
+                                .foregroundColor(PipelineCSSTheme.suiPrimary.opacity(0.75))
+                        }
+                        .padding(11)
+                        .background(PipelineCSSTheme.suiInnerRowBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(PipelineCSSTheme.suiPrimary.opacity(0.55), lineWidth: 1.2)
+                        )
+                    }
+                    .buttonStyle(PipelineBounceButtonStyle())
+
+                    // Lựa chọn 2: Tái sử dụng ID sẵn có (Tốn 0 ID)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            HStack(spacing: 5) {
+                                SwiftUI.Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                                    .font(.system(size: 13.5, weight: .bold))
+                                    .foregroundColor(PipelineCSSTheme.suiGreen)
+                                SwiftUI.Text("Tái sử dụng ID sẵn có (Tốn 0 ID)")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(PipelineCSSTheme.suiGreen)
+                            }
+                            Spacer()
+                            SwiftUI.Text("\(reusableAppIDs.count) khả dụng")
+                                .font(.system(size: 11.5, weight: .semibold))
+                                .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.6))
+                        }
+
+                        if reusableAppIDs.isEmpty {
+                            HStack(spacing: 8) {
+                                SwiftUI.Image(systemName: "info.circle.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(PipelineCSSTheme.suiSecondary.opacity(0.75))
+                                SwiftUI.Text("Hiện không có ID rảnh rỗi nào ngoài các ứng dụng đang hoạt động.")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.68))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                            .background(PipelineCSSTheme.suiCardBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
+                            )
+                        } else {
+                            ScrollView(.vertical, showsIndicators: true) {
+                                VStack(spacing: 7) {
+                                    ForEach(reusableAppIDs) { candidate in
+                                        SwiftUI.Button {
+                                            onComplete((candidate.baseBundleIdentifier, true))
+                                        } label: {
+                                            HStack(spacing: 10) {
+                                                ZStack {
+                                                    Circle()
+                                                        .fill(PipelineCSSTheme.suiGreen.opacity(0.14))
+                                                        .frame(width: 30, height: 30)
+                                                    SwiftUI.Image(systemName: "bolt.shield.fill")
+                                                        .font(.system(size: 14, weight: .bold))
+                                                        .foregroundColor(PipelineCSSTheme.suiGreen)
+                                                }
+
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    SwiftUI.Text(candidate.name)
+                                                        .font(.system(size: 13.5, weight: .bold))
+                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack)
+                                                        .lineLimit(1)
+
+                                                    SwiftUI.Text(candidate.baseBundleIdentifier)
+                                                        .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.65))
+                                                        .lineLimit(1)
+                                                        .truncationMode(.middle)
+                                                }
+
+                                                Spacer(minLength: 4)
+
+                                                VStack(alignment: .trailing, spacing: 2) {
+                                                    SwiftUI.Text("0 ID")
+                                                        .font(.system(size: 10.5, weight: .bold))
+                                                        .foregroundColor(PipelineCSSTheme.suiGreen)
+                                                        .padding(.horizontal, 6)
+                                                        .padding(.vertical, 2)
+                                                        .background(
+                                                            Capsule()
+                                                                .fill(PipelineCSSTheme.suiGreen.opacity(0.15))
+                                                        )
+
+                                                    SwiftUI.Text(remainingDaysText(for: candidate.expirationDate))
+                                                        .font(.system(size: 10.5, weight: .medium))
+                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.6))
+                                                }
+                                            }
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 8.5)
+                                            .background(PipelineCSSTheme.suiCardBackground)
+                                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                    .stroke(PipelineCSSTheme.suiGreen.opacity(0.38), lineWidth: 1.1)
+                                            )
+                                        }
+                                        .buttonStyle(PipelineBounceButtonStyle())
+                                    }
+                                }
+                                .padding(2)
+                            }
+                            .frame(maxHeight: min(CGFloat(reusableAppIDs.count) * 60.0, 195.0))
+                        }
+                    }
+                    .padding(10)
+                    .background(PipelineCSSTheme.suiInnerRowBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1.1)
+                    )
+
+                    // Lựa chọn 3: Tự nhập mã Bundle ID tùy chỉnh
+                    VStack(spacing: 8) {
+                        SwiftUI.Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isManualExpanded.toggle()
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                SwiftUI.Image(systemName: "pencil.and.outline")
+                                    .font(.system(size: 13.5, weight: .bold))
+                                    .foregroundColor(PipelineCSSTheme.suiSecondary)
+                                SwiftUI.Text("Tự nhập Bundle ID tùy chỉnh khác")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(PipelineCSSTheme.suiPureBlack)
+                                Spacer()
+                                SwiftUI.Image(systemName: isManualExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(PipelineCSSTheme.suiSecondary)
+                            }
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 9)
+                            .background(PipelineCSSTheme.suiInnerRowBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(PipelineBounceButtonStyle())
+
+                        if isManualExpanded {
+                            VStack(spacing: 8) {
+                                TextField("com.example.app", text: $customBundleIDText)
+                                    .textInputAutocapitalization(.never)
+                                    .disableAutocorrection(true)
+                                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                    .foregroundColor(PipelineCSSTheme.suiPureBlack)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8.5)
+                                    .background(PipelineCSSTheme.suiCardBackground)
+                                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                            .stroke(PipelineCSSTheme.suiPrimary.opacity(0.4), lineWidth: 1)
+                                    )
+
+                                Toggle("Tự động gắn hậu tố Mã Nhóm (Team ID)", isOn: $appendTeamID)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(PipelineCSSTheme.suiPureBlack)
+                                    .tint(PipelineCSSTheme.suiPrimary)
+
+                                SwiftUI.Button {
+                                    let trimmed = customBundleIDText.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    let rawID = trimmed.isEmpty ? initialBundleID : trimmed
+                                    let sanitized = InfoPlistParser.sanitizeBundleID(rawID)
+                                    onComplete((sanitized.isEmpty ? initialBundleID : sanitized, appendTeamID))
+                                } label: {
+                                    SwiftUI.Text("Áp dụng ID tùy chỉnh này")
+                                        .font(.system(size: 13.5, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 9.5)
+                                        .background(PipelineCSSTheme.suiPrimary)
+                                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                }
+                                .buttonStyle(PipelineBounceButtonStyle())
+                            }
+                            .padding(10)
+                            .background(PipelineCSSTheme.suiInnerRowBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
+                            )
+                        }
+                    }
+                }
+                .padding(12)
+                .background(PipelineCSSTheme.suiCardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous)
+                        .stroke(PipelineCSSTheme.suiBorder, lineWidth: 1.0)
+                )
+                .shadow(color: PipelineCSSTheme.suiPrimary.opacity(0.08), radius: 10, x: 0, y: 5)
+
+                // Nút Hủy cài đặt
+                SwiftUI.Button {
+                    onComplete(nil)
+                } label: {
+                    HStack(spacing: 8) {
+                        SwiftUI.Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 16, weight: .bold))
+                        SwiftUI.Text("Hủy cài đặt")
+                            .font(.system(size: 15.5, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        LinearGradient(
+                            colors: [PipelineCSSTheme.suiRed, PipelineCSSTheme.suiMagenta.opacity(0.85)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .shadow(color: PipelineCSSTheme.suiRed.opacity(0.32), radius: 6, x: 0, y: 3)
+                }
+                .buttonStyle(PipelineBounceButtonStyle())
+            }
+            .padding(14)
+            .background(PipelineCSSTheme.suiPageGradient)
+            .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius + 3, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius + 3, style: .continuous)
+                    .stroke(SwiftUI.Color.white.opacity(0.85), lineWidth: 1.5)
+            )
+            .shadow(color: SwiftUI.Color.black.opacity(0.22), radius: 22, x: 0, y: 10)
+            .frame(maxWidth: 385)
+            .padding(.horizontal, 18)
+        }
+        .preferredColorScheme(.light)
     }
 }
 
@@ -584,114 +947,83 @@ final class PipelineHandler: PipelineExecutionHandler,
         return result?[bundleID]
     }
 
+    // MARK: - 🛡️ BẢNG CHỌN APP ID THÔNG MINH KHI CÀI ĐẶT IPA MỚI
     @MainActor
-    func resolveBundleIDOverride(initialBundleID: String) async throws -> (customID: String, appendTeamID: Bool)? {
-        guard let presenter = self.activePresenter else {
-            return (initialBundleID, true)
-        }
-        
-        let titleText = "Tùy Chỉnh App ID"
-        let messageText = "Chỉnh sửa App ID nếu cần thiết và nhấn 'Xác nhận' để tiếp tục."
-        
-        let alert = UIAlertController(
-            title: titleText,
-            message: messageText,
-            preferredStyle: .alert
-        )
-        alert.view.tintColor = PipelineCSSTheme.blue
-        
-        let team = try await AuthManager.shared.getAuthenticatedTeam()
-        debugLog("[PipelineHandler] resolveBundleIDOverride: initialBundleID='\(initialBundleID)', teamID='\(team.identifier)', isAuthenticated=\(AuthManager.shared.isAuthenticated)")
-        let teamID = team.identifier
-        guard !teamID.isEmpty else {
-            debugLog("[PipelineHandler] resolveBundleIDOverride FAILED: teamID is empty")
-            throw OperationError.invalidParameters("Mã định danh nhóm nhà phát triển (Team ID) đang trống.")
-        }
+    func resolveBundleIDOverride(
+        initialBundleID: String,
+        appName: String,
+        teamID: String,
+        reusableAppIDs: [ReusableAppIDCandidate]
+    ) async throws -> (customID: String, appendTeamID: Bool)? {
         let cleanInitialID: String = {
             let trimmed = initialBundleID.trimmingCharacters(in: .whitespacesAndNewlines)
             let base: String
-            if !teamID.isEmpty && trimmed.hasSuffix(".\(teamID)") {
+            if !teamID.isEmpty && trimmed.lowercased().hasSuffix(".\(teamID)".lowercased()) {
                 base = String(trimmed.dropLast((".\(teamID)").count))
             } else {
                 base = trimmed
             }
             let sanitized = InfoPlistParser.sanitizeBundleID(base)
-            verboseLog("[PipelineHandler] cleanInitialID: trimmed='\(trimmed)', base='\(base)', sanitized='\(sanitized)'")
-            return sanitized
+            return sanitized.isEmpty ? trimmed : sanitized
         }()
 
-        let checkboxView = AppendTeamIDCheckboxView(isChecked: true, teamID: teamID)
-        checkboxView.translatesAutoresizingMaskIntoConstraints = false
+        guard let presenter = self.activePresenter else {
+            return (cleanInitialID, true)
+        }
 
-        alert.addTextField { textField in
-            let initialText = !teamID.isEmpty ? "\(cleanInitialID).\(teamID)" : cleanInitialID
-            verboseLog("[PipelineHandler] resolveBundleIDOverride: setting textField.text='\(initialText)'")
-            textField.text = initialText
-            textField.autocapitalizationType = .none
-            textField.autocorrectionType = .no
-            textField.clearButtonMode = .whileEditing
-            checkboxView.attach(to: textField, teamID: teamID)
-        }
-        
-        alert.addTextField { textField in
-            textField.isUserInteractionEnabled = false
-        }
-        
-        _ = alert.view
-        if let tf1 = alert.textFields?.first, let tf1View = tf1.superview {
-            tf1View.layer.cornerRadius = 20
-            tf1View.layer.cornerCurve = .continuous
-            tf1View.layer.maskedCorners = [
-                .layerMinXMinYCorner,
-                .layerMaxXMinYCorner,
-                .layerMinXMaxYCorner,
-                .layerMaxXMaxYCorner
-            ]
-            tf1View.layer.masksToBounds = true
-            tf1View.clipsToBounds = true
-            
-            tf1View.superview?.backgroundColor = .clear
-            tf1View.superview?.layer.borderWidth = 0
-            tf1View.superview?.layer.borderColor = UIColor.clear.cgColor
-        }
-        
-        if (alert.textFields?.count ?? 0) >= 2,
-           let tf2 = alert.textFields?[1],
-           let container = tf2.superview {
-            tf2.isHidden = true
-            container.backgroundColor = .clear
-            container.layer.borderWidth = 0
-            container.layer.borderColor = UIColor.clear.cgColor
-            
-            for subview in container.subviews where subview !== checkboxView && subview !== tf2 {
-                subview.isHidden = true
-                subview.alpha = 0
-            }
-            
-            container.addSubview(checkboxView)
-            NSLayoutConstraint.activate([
-                checkboxView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-                checkboxView.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -16),
-                checkboxView.centerYAnchor.constraint(equalTo: container.centerYAnchor)
-            ])
-        }
-        
         return await withCheckedContinuation { continuation in
-            let okAction = UIAlertAction(title: "Xác nhận", style: .default) { _ in
-                let baseID = checkboxView.cleanBaseID()
-                let customID = InfoPlistParser.sanitizeBundleID(!baseID.isEmpty ? baseID : cleanInitialID)
-                let appendTeamID = checkboxView.isChecked
-                debugLog("[PipelineHandler] resolveBundleIDOverride confirmed: baseID='\(baseID)', customID='\(customID)', appendTeamID=\(appendTeamID)")
-                continuation.resume(returning: (customID, appendTeamID))
+            var hasResumed = false
+            let resumeOnce: ((String, Bool)?) -> Void = { value in
+                guard !hasResumed else { return }
+                hasResumed = true
+                continuation.resume(returning: value)
             }
-            
-            let cancelAction = UIAlertAction(title: "Hủy", style: .cancel) { _ in
-                continuation.resume(returning: nil)
+
+            var hostingController: UIHostingController<SmartBundleIDCenterModalView>?
+
+            let modalView = SmartBundleIDCenterModalView(
+                initialBundleID: cleanInitialID,
+                appName: appName,
+                teamID: teamID,
+                reusableAppIDs: reusableAppIDs
+            ) { result in
+                if let hc = hostingController, hc.presentingViewController != nil {
+                    hc.dismiss(animated: true) {
+                        resumeOnce(result)
+                    }
+                } else {
+                    resumeOnce(result)
+                }
             }
-            alert.addAction(cancelAction)
-            alert.addAction(okAction)
-            presenter.present(alert, animated: true)
+
+            let hc = UIHostingController(rootView: modalView)
+            hostingController = hc
+            hc.overrideUserInterfaceStyle = .light
+            hc.view.backgroundColor = .clear
+            hc.modalPresentationStyle = .overFullScreen
+            hc.modalTransitionStyle = .crossDissolve
+
+            presenter.present(hc, animated: true) {
+                if presenter.presentedViewController == nil && !hc.isViewLoaded {
+                    resumeOnce(nil)
+                }
+            }
         }
+    }
+
+    @MainActor
+    func resolveBundleIDOverride(initialBundleID: String) async throws -> (customID: String, appendTeamID: Bool)? {
+        let team = try await AuthManager.shared.getAuthenticatedTeam()
+        let teamID = team.identifier
+        guard !teamID.isEmpty else {
+            throw OperationError.invalidParameters("Mã định danh nhóm nhà phát triển (Team ID) đang trống.")
+        }
+        return try await resolveBundleIDOverride(
+            initialBundleID: initialBundleID,
+            appName: "",
+            teamID: teamID,
+            reusableAppIDs: []
+        )
     }
 
     @MainActor

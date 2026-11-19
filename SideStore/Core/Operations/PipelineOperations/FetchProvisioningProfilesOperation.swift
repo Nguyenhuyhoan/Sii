@@ -223,7 +223,7 @@ final class FetchProvisioningProfilesOperation: ResultOperation<[String: ALTProv
             return appID
         }
         
-        let updatedAppID = try await self. retryingUpdateFeatures(
+        let updatedAppID = try await self.retryingUpdateFeatures(
             for: appID,
             features: features,
             team: team
@@ -236,9 +236,9 @@ final class FetchProvisioningProfilesOperation: ResultOperation<[String: ALTProv
         features: [ALTFeature: Any],
         team: ALTTeam
     ) async throws -> ALTAppID {
-        var mutableFeatures = features
+        let mutableFeatures = features
         
-        let appIDToUpdate = appID. copy() as! ALTAppID
+        let appIDToUpdate = appID.copy() as! ALTAppID
         appIDToUpdate.features = mutableFeatures
         
         do {

@@ -1,3 +1,4 @@
+
 //
 //  UserCustomizationOperation.swift
 //  SideStore
@@ -17,9 +18,8 @@ public struct ReusableAppIDCandidate: Identifiable, Hashable, Sendable {
     public let name: String
     /// Bundle ID đầy đủ chính xác trên Apple Portal (ví dụ: com.alone.37D6PWG5PP)
     public let fullBundleIdentifier: String
-    /// Bundle ID hiển thị/gán vào context (giữ nguyên giống hệt fullBundleIdentifier, không cắt đuôi)
+    /// Bundle ID hiển thị/gán vào context (giữ nguyên giống hệt fullBundleIdentifier)
     public let baseBundleIdentifier: String
-    /// Không bao giờ tự gắn thêm .TEAMID nữa vì fullBundleIdentifier đã là ID hoàn chỉnh
     public let requiresAppendingTeamID: Bool
     public let expirationDate: Date?
 
@@ -50,7 +50,7 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         try await super.executePreconditionCheck(parentProgress: parentProgress)
         self.setProgress(10)
 
-        // Luôn ép gộp mọi App Extensions vào 1 ID chính cho cả cài mới, cập nhật và làm mới
+        // Luôn gộp mọi App Extensions vào 1 ID chính duy nhất (giống hệt LC+SS)
         self.context.useMainProfile = true
 
         guard let targetAppBundle = context.targetAppBundle else {
@@ -86,23 +86,16 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         }
 
         // 2. NẾU LÀ CẬP NHẬT (Store Update hoặc cài IPA cập nhật đè lên App đang sống trên máy):
-        // -> Giữ nguyên 100% ID hiện tại của App (ví dụ com.alone.37D6PWG5PP), không cắt đuôi hay thêm đuôi!
         if context.isStoreUpdate || context.installedApp != nil {
-            if let existingApp = context.installedApp {
-                let existingResignedID = context.dbBackgroundContext.performAndWait {
-                    existingApp.resignedBundleIdentifier
-                }
-                let trimmedResigned = existingResignedID.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmedResigned.isEmpty {
-                    context.customBundleIdentifier = trimmedResigned
-                    context.appendTeamID = false
-                    applyUnifiedBundleIDToAllTargets(
-                        exactBundleID: trimmedResigned,
-                        targetAppBundle: targetAppBundle
-                    )
-                }
+            let existingResignedID: String? = context.dbBackgroundContext.performAndWait {
+                self.context.installedApp?.resignedBundleIdentifier
             }
-            debugLog("[UserCustomizationOperation] Existing app update detected; using exact ID without stripping/appending.")
+            if let trimmedResigned = existingResignedID?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !trimmedResigned.isEmpty {
+                context.customBundleIdentifier = trimmedResigned
+                context.appendTeamID = false
+            }
+            debugLog("[UserCustomizationOperation] Existing app update detected; keeping existing ID and skipping prompt.")
             self.setProgress(100)
             return context.customBundleIdentifier != nil ? context.targetBundleIdentifier : nil
         }
@@ -167,7 +160,6 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 context.installedApp = nil
             }
         } else {
-            // Hiển thị bảng chọn ID thông minh:
             self.setProgress(35)
             let reusableCandidates = await fetchReusableAppIDCandidates(
                 authTeam: authTeam,
@@ -189,29 +181,16 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
 
             let chosenRawID = result.customID.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            // Nếu người dùng chọn ID cũ (ví dụ com.alone.37D6PWG5PP):
-            // -> Giữ nguyên 100% com.alone.37D6PWG5PP, tắt appendTeamID, và áp dụng cho toàn bộ App + Extensions!
             if let matchedCandidate = reusableCandidates.first(where: {
                 $0.fullBundleIdentifier.caseInsensitiveCompare(chosenRawID) == .orderedSame
             }) {
-                let exactID = matchedCandidate.fullBundleIdentifier
                 context.appendTeamID = false
-                context.customBundleIdentifier = exactID
-                applyUnifiedBundleIDToAllTargets(
-                    exactBundleID: exactID,
-                    targetAppBundle: targetAppBundle
-                )
+                context.customBundleIdentifier = matchedCandidate.fullBundleIdentifier
                 didCustomizeBundleID = true
             } else {
                 context.appendTeamID = result.appendTeamID
                 if !chosenRawID.isEmpty, chosenRawID != context.bundleIdentifier {
                     context.customBundleIdentifier = chosenRawID
-                    if !result.appendTeamID {
-                        applyUnifiedBundleIDToAllTargets(
-                            exactBundleID: chosenRawID,
-                            targetAppBundle: targetAppBundle
-                        )
-                    }
                     didCustomizeBundleID = true
                 } else {
                     context.customBundleIdentifier = nil
@@ -289,29 +268,6 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
             return context.targetBundleIdentifier
         } else {
             return nil
-        }
-    }
-
-    // MARK: - Đồng bộ nguyên vẹn ID (VD: com.alone.37D6PWG5PP) cho App chính và tất cả phần mở rộng
-    private func applyUnifiedBundleIDToAllTargets(
-        exactBundleID: String,
-        targetAppBundle: ALTApplication
-    ) {
-        var mainPlist = context.customInfoPlistByBundleID[context.targetBundleIdentifier] ?? targetAppBundle.infoPlist
-        mainPlist["CFBundleIdentifier"] = exactBundleID
-        context.customInfoPlistByBundleID[context.targetBundleIdentifier] = mainPlist
-
-        for ext in targetAppBundle.allAppBundles where ext.isExtension {
-            var extPlist = context.customInfoPlistByBundleID[ext.bundleIdentifier] ?? ext.infoPlist
-            extPlist["CFBundleIdentifier"] = exactBundleID
-            if var nsExt = extPlist["NSExtension"] as? [String: any Sendable],
-               var attrs = nsExt["NSExtensionAttributes"] as? [String: any Sendable],
-               attrs["WKAppBundleIdentifier"] != nil {
-                attrs["WKAppBundleIdentifier"] = exactBundleID
-                nsExt["NSExtensionAttributes"] = attrs
-                extPlist["NSExtension"] = nsExt
-            }
-            context.customInfoPlistByBundleID[ext.bundleIdentifier] = extPlist
         }
     }
 
@@ -403,7 +359,6 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
 
             let lowerFull = fullID.lowercased()
 
-            // 1. Chỉ bảo vệ đúng ID CHÍNH của ứng dụng chủ (SideStore / LiveContainer / LC+SS)
             if Self.isExactProtectedHostMainID(
                 lowerFull: lowerFull,
                 hostMainID: hostMainBundleID,
@@ -412,12 +367,10 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 continue
             }
 
-            // 2. Loại bỏ ID CHÍNH của các App đang cài trên máy
             if activeMainIDsLowercased.contains(lowerFull) {
                 continue
             }
 
-            // 3. Giữ nguyên 100% fullID (VD: com.alone.37D6PWG5PP), không cắt đuôi, không gắn thêm đuôi
             guard !seenFullIDs.contains(lowerFull) else { continue }
             seenFullIDs.insert(lowerFull)
 
@@ -449,7 +402,6 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         return candidates
     }
 
-    /// Chỉ chặn đúng ID chính của ứng dụng chủ (SideStore / LiveContainer / LC+SS)
     private static func isExactProtectedHostMainID(
         lowerFull: String,
         hostMainID: String,

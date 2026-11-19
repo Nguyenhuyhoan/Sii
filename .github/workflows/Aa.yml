@@ -1,5 +1,4 @@
 
-
 name: Nightly SideStore Build 😂
 
 on:
@@ -198,8 +197,6 @@ jobs:
             "$SOURCE_JSON" \
             "$CHANNEL" \
             "$MARKETING_VERSION"
-      
-     
 
       # --------------------------------------------------
       # upload release to GH (CHỈ ĐẨY FILE IPA, SIÊU NHANH)
@@ -207,8 +204,8 @@ jobs:
       - name: Upload Release (IPA Only)
         if: steps.build_gate.outputs.should_skip != 'true'
         run: |
-          # 1. Tạo nội dung ghi chú (Release notes) như bình thường
-          python3 scripts/ci/generate_release_notes.py --retrieve "$CHANNEL" --output-dir .
+          # 1. Tạo nội dung ghi chú và LƯU THẲNG VÀO FILE release_body.md
+          python3 scripts/ci/generate_release_notes.py --retrieve "$CHANNEL" --output-dir . > release_body.md || echo "Nightly Build" > release_body.md
 
           # 2. Cập nhật hoặc tạo mới trang Release "nightly"
           gh release edit "$CHANNEL" --title "$RELEASE_NAME" --notes-file "release_body.md" --prerelease || \

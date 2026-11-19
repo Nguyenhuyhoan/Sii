@@ -1,5 +1,5 @@
 
-name: Nightly SideStore Build 😂
+name: Nightly SideStore Fast 😂
 
 on:
   push:
@@ -109,7 +109,7 @@ jobs:
             xcode-build-cache-${{ github.ref_name }}-
 
       # --------------------------------------------------
-      # build (ĐÃ XOÁ TOÀN BỘ PHẦN TEST VÀ NÉN LOG ZIP)
+      # 1. TẠO NHANH IPA
       # --------------------------------------------------
       - name: Clean
         if: steps.build_gate.outputs.should_skip != 'true' && contains(github.event.head_commit.message, '[--clean-build]')
@@ -141,20 +141,22 @@ jobs:
         run: |
           python3 scripts/ci/workflow.py build
 
-      - name: Save Cache
-        if: >
-          steps.build_gate.outputs.should_skip != 'true' &&
-          steps.xcode-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ~/Library/Developer/Xcode/DerivedData
-            ~/Library/Caches/org.swift.swiftpm
-          key: xcode-build-cache-${{ github.ref_name }}-${{ github.sha }}
+      # --------------------------------------------------
+      # 2. ÚP LUÔN LẤY LINK NGAY LẬP TỨC (Không phải đợi Cache)
+      # --------------------------------------------------
+      - name: Upload Release (IPA Only - Instant Link!)
+        if: steps.build_gate.outputs.should_skip != 'true'
+        run: |
+          # Tạo nội dung ghi chú và lưu vào file release_body.md
+          python3 scripts/ci/generate_release_notes.py --retrieve "$CHANNEL" --output-dir . > release_body.md || echo "Nightly Build" > release_body.md
 
-      # --------------------------------------------------
-      # artifacts (CHỈ UPLOAD ĐÚNG FILE IPA, BỎ QUA 4 FILE ZIP)
-      # --------------------------------------------------
+          # Cập nhật hoặc tạo mới trang Release "nightly"
+          gh release edit "$CHANNEL" --title "$RELEASE_NAME" --notes-file "release_body.md" --prerelease || \
+          gh release create "$CHANNEL" --title "$RELEASE_NAME" --notes-file "release_body.md" --prerelease
+
+          # Đẩy ngay SideStore.ipa lên để có link tải luôn!
+          gh release upload "$CHANNEL" SideStore.ipa --clobber
+
       - uses: actions/upload-artifact@v4
         if: steps.build_gate.outputs.should_skip != 'true'
         with:
@@ -162,6 +164,9 @@ jobs:
           path: SideStore.ipa
           compression-level: 0
 
+      # --------------------------------------------------
+      # 3. CÁC BƯỚC RÂU RIA VÀ LƯU CACHE ĐỂ CHẠY SAU CÙNG
+      # --------------------------------------------------
       - uses: actions/checkout@v4
         if: steps.build_gate.outputs.should_skip != 'true' && env.DEPLOY_KEY != ''
         with:
@@ -198,18 +203,13 @@ jobs:
             "$CHANNEL" \
             "$MARKETING_VERSION"
 
-      # --------------------------------------------------
-      # upload release to GH (CHỈ ĐẨY FILE IPA, SIÊU NHANH)
-      # --------------------------------------------------
-      - name: Upload Release (IPA Only)
-        if: steps.build_gate.outputs.should_skip != 'true'
-        run: |
-          # 1. Tạo nội dung ghi chú và LƯU THẲNG VÀO FILE release_body.md
-          python3 scripts/ci/generate_release_notes.py --retrieve "$CHANNEL" --output-dir . > release_body.md || echo "Nightly Build" > release_body.md
-
-          # 2. Cập nhật hoặc tạo mới trang Release "nightly"
-          gh release edit "$CHANNEL" --title "$RELEASE_NAME" --notes-file "release_body.md" --prerelease || \
-          gh release create "$CHANNEL" --title "$RELEASE_NAME" --notes-file "release_body.md" --prerelease
-
-          # 3. CHỈ ĐẨY ĐÚNG 1 FILE SideStore.ipa (Không đòi hỏi .zip nữa!)
-          gh release upload "$CHANNEL" SideStore.ipa --clobber
+      - name: Save Cache (Chạy cuối cùng)
+        if: >
+          steps.build_gate.outputs.should_skip != 'true' &&
+          steps.xcode-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+            ~/Library/Caches/org.swift.swiftpm
+          key: xcode-build-cache-${{ github.ref_name }}-${{ github.sha }}

@@ -63,51 +63,59 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         // Luôn bật cờ gộp chung 1 Provisioning Profile của App chính cho mọi phần mở rộng
         self.context.useMainProfile = true
 
-        // Lấy ID gốc thật sự của file IPA (chưa bị nhiễm customBundleIdentifier cũ lưu trong máy)
+        // Lấy Tên thật và ID gốc thật sự của file IPA đang đưa vào
         let trueOriginalBundleID = targetAppBundle.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
         let incomingOrigBaseLower = Self.stripTrailingTeamID(from: trueOriginalBundleID, teamID: teamID).lowercased()
-        let incomingOrigWithTeamLower = "\(incomingOrigBaseLower).\(teamID)".lowercased()
         let incomingNameLower = targetAppBundle.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
-        // 1. Quét danh sách App đang sống trên máy để nhận diện Cài Mới hay Cập Nhật IPA
+        // 1. Quét danh sách App đang sống trên máy
         let installedSnap = fetchInstalledAppSnapshots(teamID: teamID)
 
-        // KIỂM TRA CHỐNG NHẬN NHẦM APP KHÁC KHI DÙNG LẠI ID CŨ:
-        // Nếu trước đó context.installedApp đã được gán sẵn bởi bước Preflight (do trùng customBundleIdentifier cũ),
-        // ta phải kiểm tra xem App đang sống đó có thực sự cùng ID gốc hoặc cùng Tên với file IPA này không!
-        if !context.isStoreUpdate, let preMatchedApp = context.installedApp {
-            let isTrulySameApp: Bool = context.dbBackgroundContext.performAndWait {
-                let existingOrigBase = Self.stripTrailingTeamID(from: preMatchedApp.bundleIdentifier, teamID: teamID).lowercased()
-                let existingName = preMatchedApp.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                return existingOrigBase == incomingOrigBaseLower
-                    || (!incomingNameLower.isEmpty && existingName == incomingNameLower)
-            }
-            if !isTrulySameApp {
-                // Đây là App A mới hoàn toàn (chỉ vô tình nhớ lại ID cũ từng dùng mà nay App B đang giữ)!
-                // Reset ngay lập tức để không cài đè lên App B và buộc phải hiện bảng chọn ID mới!
-                debugLog("[UserCustomizationOperation] Resetting false-positive installedApp match (different original ID & app name).")
-                context.installedApp = nil
-                context.customBundleIdentifier = nil
-            }
-        }
+        // =========================================================================
+        // THUẬT TOÁN NHẬN DIỆN THÔNG MINH (CHỐNG CÀI ĐÈ NHẦM KHI KHÁC TÊN APP)
+        // =========================================================================
+        // Nguyên tắc vàng:
+        // - Nếu KHÔNG PHẢI bấm Update từ Store (context.isStoreUpdate == false):
+        //   Hai app có thể dùng chung/mượn lại cùng một Bundle ID cũ, nên BẮT BUỘC
+        //   TÊN APP PHẢI GIỐNG HỆT NHAU (existingName == incomingNameLower) thì mới
+        //   được coi là tự động Cập Nhật (Update) không cần hỏi!
+        // - Nếu trùng Bundle ID (hoặc nhớ lại ID cũ trong UserDefaults) nhưng TÊN APP KHÁC NHAU:
+        //   Tuyệt đối KHÔNG được tự ý cài đè! Phải reset để hiện bảng hỏi cho người dùng chọn!
+        // =========================================================================
 
-        // Nếu context.installedApp đang nil, chỉ tìm khớp theo ID GỐC của IPA hoặc TÊN của IPA
-        // (Tuyệt đối không khớp mò theo resignedBundleIdentifier của một App khác tên/khác gốc)
-        if context.installedApp == nil {
-            let matchedObjectID = installedSnap.objectIDByOriginalBundleID[incomingOrigBaseLower]
-                ?? installedSnap.objectIDByOriginalBundleID[incomingOrigWithTeamLower]
-                ?? installedSnap.objectIDByAppName[incomingNameLower]
+        if !context.isStoreUpdate {
+            // BƯỚC 1A: Kiểm tra lại context.installedApp (nếu bước Preflight trước đó đã gán sẵn do trùng ID)
+            if let preMatchedApp = context.installedApp {
+                let isSameAppIdentity: Bool = context.dbBackgroundContext.performAndWait {
+                    let existingName = preMatchedApp.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    // BẮT BUỘC TÊN APP PHẢI TRÙNG KHỚP! Nếu khác tên app -> Chắc chắn là 2 app khác nhau!
+                    return !incomingNameLower.isEmpty && existingName == incomingNameLower
+                }
 
-            if let matchedObjectID {
-                context.dbBackgroundContext.performAndWait {
-                    if let matchedApp = try? context.dbBackgroundContext.existingObject(with: matchedObjectID) as? InstalledApp {
-                        self.context.installedApp = matchedApp
+                if !isSameAppIdentity {
+                    debugLog("[UserCustomizationOperation] Blocked auto-overwrite: Incoming IPA '\(targetAppBundle.name)' has different name from existing app. Forcing prompt!")
+                    context.installedApp = nil
+                    context.customBundleIdentifier = nil
+                }
+            }
+
+            // BƯỚC 1B: Nếu context.installedApp đang nil, tìm xem có đúng App đó đang sống trên máy không
+            // Chỉ khớp tự động khi TÊN APP TRÙNG KHỚP HOÀN TOÀN (ưu tiên khớp cả ID + Tên trước, sau đó mới tới Tên duy nhất)
+            if context.installedApp == nil, !incomingNameLower.isEmpty {
+                let matchedObjectID = installedSnap.objectIDByExactNameAndBaseID["\(incomingNameLower)|\(incomingOrigBaseLower)"]
+                    ?? installedSnap.objectIDByUniqueAppName[incomingNameLower]
+
+                if let matchedObjectID {
+                    context.dbBackgroundContext.performAndWait {
+                        if let matchedApp = try? context.dbBackgroundContext.existingObject(with: matchedObjectID) as? InstalledApp {
+                            self.context.installedApp = matchedApp
+                        }
                     }
                 }
             }
         }
 
-        // 2. NẾU LÀ CẬP NHẬT THẬT SỰ (Store Update hoặc cài IPA cập nhật đè lên đúng App đó đang sống trên máy):
+        // 2. NẾU LÀ CẬP NHẬT THẬT SỰ (Bấm Update từ Store HOẶC cài IPA mới của đúng App có cùng Tên đang sống trên máy):
         if context.isStoreUpdate || context.installedApp != nil {
             let existingResignedID: String? = context.dbBackgroundContext.performAndWait {
                 self.context.installedApp?.resignedBundleIdentifier
@@ -117,18 +125,18 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 context.customBundleIdentifier = trimmedResigned
                 context.appendTeamID = false
             }
-            debugLog("[UserCustomizationOperation] Genuine existing app update detected; keeping existing ID and skipping prompt.")
+            debugLog("[UserCustomizationOperation] Genuine existing app update detected ('\(targetAppBundle.name)'); keeping existing ID and skipping prompt.")
             self.setProgress(100)
             return context.customBundleIdentifier != nil ? context.targetBundleIdentifier : nil
         }
 
-        // Đảm bảo khi cài IPA mới, ô hiển thị ID gốc của IPA luôn là ID gốc sạch sẽ của IPA (không bị dính ID cũ nhớ từ trước)
+        // 3. NẾU LÀ APP MỚI (HOẶC APP KHÁC TÊN NHƯNG TRÙNG/NHỚ LẠI ID CŨ):
+        // Xóa sạch customBundleIdentifier cũ để hiện bảng hỏi với ID gốc sạch sẽ của IPA!
         context.customBundleIdentifier = nil
 
         let handler = context.handler.userCustomizationHandler
         var didCustomizeBundleID = false
 
-        // 3. NẾU LÀ CÀI ĐẶT IPA MỚI HOÀN TOÀN:
         if UserDefaults.standard.customizeInfoPlist {
             let installedApps: [InstalledApp] = context.dbBackgroundContext.performAndWait {
                 let request = InstalledApp.fetchRequest()
@@ -177,13 +185,8 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 context.customInfoPlistByBundleID[key] = plist
             }
 
-            let effectiveCustomID = context.customBundleIdentifier ?? initialBundleID
-            let resolvedID = !teamID.isEmpty ? "\(effectiveCustomID).\(teamID)" : effectiveCustomID
-            if let matchingApp = installedApps.first(where: { $0.bundleIdentifier == resolvedID || $0.resignedBundleIdentifier == resolvedID }) {
-                context.installedApp = matchingApp
-            } else {
-                context.installedApp = nil
-            }
+            // Hậu kiểm: Chỉ gán installedApp (để ghi đè) nếu ID cuối cùng người dùng chốt trùng với một app đang có trên máy
+            syncInstalledAppWithFinalChosenBundleID(teamID: teamID, installedSnap: installedSnap)
         } else {
             self.setProgress(35)
             let reusableCandidates = await fetchReusableAppIDCandidates(
@@ -192,7 +195,6 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 activeMainIDsLowercased: installedSnap.activeMainIDsLowercased
             )
 
-            // Luôn truyền ID gốc thật sự của file IPA vào bảng chọn (không truyền ID cũ lưu trong bộ nhớ đệm)
             let initialBundleID = trueOriginalBundleID
             self.setProgress(50)
 
@@ -207,21 +209,16 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
 
             let chosenRawID = result.customID.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            // Kiểm tra xem ID người dùng chọn có nằm trong danh sách ID cũ rảnh rỗi không
-            // (Khớp cả trường hợp truyền fullBundleIdentifier lẫn baseBundleIdentifier đã cắt đuôi Team ID)
             if let matchedCandidate = reusableCandidates.first(where: {
                 $0.fullBundleIdentifier.caseInsensitiveCompare(chosenRawID) == .orderedSame ||
                 $0.baseBundleIdentifier.caseInsensitiveCompare(chosenRawID) == .orderedSame
             }) {
                 // KHI CHỌN "DÙNG LẠI ID CŨ":
-                // Luôn lấy fullBundleIdentifier chính xác trên Apple Portal (VD: com.alone.37D6PWG5PP)
-                // và đặt appendTeamID = false để không bị gắn trùng đuôi Team ID lần 2!
                 context.appendTeamID = false
                 context.customBundleIdentifier = matchedCandidate.fullBundleIdentifier
                 didCustomizeBundleID = true
             } else {
                 // KHI DÙNG ID GỐC CỦA IPA HOẶC TỰ GÕ ID MỚI:
-                // Mặc định luôn bật gắn hậu tố Team ID (appendTeamID = true)
                 context.appendTeamID = true
                 let cleanCustomID = Self.stripTrailingTeamID(from: chosenRawID, teamID: teamID)
                 if !cleanCustomID.isEmpty, cleanCustomID != context.bundleIdentifier {
@@ -231,6 +228,11 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                     context.customBundleIdentifier = nil
                 }
             }
+
+            // Hậu kiểm: Sau khi người dùng đã được hỏi và tự tay chốt ID trên bảng chọn:
+            // - Nếu họ chọn 1 ID mới/ID cũ đang rảnh -> context.installedApp = nil (Cài thành App mới độc lập!)
+            // - Nếu họ cố tình nhập/chọn đúng cái ID đang thuộc về 1 App đang sống -> Gán installedApp để cài đè theo ý họ.
+            syncInstalledAppWithFinalChosenBundleID(teamID: teamID, installedSnap: installedSnap)
         }
 
         if UserDefaults.standard.customizeEntitlements {
@@ -306,15 +308,42 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         }
     }
 
-    // MARK: - Helpers: Quét và lọc Kho App ID Trống (Tách biệt ID đang bận và ID gốc để nhận diện Update chuẩn 100%)
+    // MARK: - Helpers: Đồng bộ & Nhận diện Thông minh
+
+    /// Kiểm tra ID cuối cùng sau khi người dùng đã chọn trên bảng hỏi.
+    /// Đảm bảo nếu chọn ID rảnh thì cài mới độc lập (`installedApp = nil`),
+    /// còn nếu cố tình chọn trùng ID với một app đang sống thì cập nhật đúng vào slot đó.
+    private func syncInstalledAppWithFinalChosenBundleID(teamID: String, installedSnap: InstalledAppSnapshot) {
+        let baseChosen = (context.customBundleIdentifier ?? context.targetBundleIdentifier)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalFullID: String
+        if context.appendTeamID && !teamID.isEmpty && !baseChosen.lowercased().hasSuffix(".\(teamID.lowercased())") {
+            finalFullID = "\(baseChosen).\(teamID)"
+        } else {
+            finalFullID = baseChosen
+        }
+
+        let lowerFinal = finalFullID.lowercased()
+        let lowerBase = Self.stripTrailingTeamID(from: finalFullID, teamID: teamID).lowercased()
+
+        if let matchedID = installedSnap.objectIDByActiveBundleID[lowerFinal] ?? installedSnap.objectIDByActiveBundleID[lowerBase] {
+            context.dbBackgroundContext.performAndWait {
+                self.context.installedApp = try? context.dbBackgroundContext.existingObject(with: matchedID) as? InstalledApp
+            }
+        } else {
+            context.installedApp = nil
+        }
+    }
 
     private struct InstalledAppSnapshot {
         /// Toàn bộ ID (cả gốc lẫn resigned) của các App đang sống -> dùng để ẩn khỏi danh sách "Dùng lại ID cũ"
         let activeMainIDsLowercased: Set<String>
-        /// Chỉ lưu ID gốc (bundleIdentifier) của App đang sống -> dùng để nhận diện Cập Nhật chuẩn xác, không nhận nhầm App khác
-        let objectIDByOriginalBundleID: [String: NSManagedObjectID]
-        /// Lưu Tên của App đang sống -> dùng để nhận diện Cập Nhật khi trùng tên App
-        let objectIDByAppName: [String: NSManagedObjectID]
+        /// Khóa kép "tên_app|base_id" -> Nhận diện chuẩn xác 100% cùng Tên và cùng ID
+        let objectIDByExactNameAndBaseID: [String: NSManagedObjectID]
+        /// Chỉ lưu Tên App nếu trên máy có DUY NHẤT 1 App mang tên đó (dùng để nhận diện Update khi App đang mặc áo ID cũ khác với ID gốc trong IPA)
+        let objectIDByUniqueAppName: [String: NSManagedObjectID]
+        /// Bản đồ ID đang hoạt động -> ObjectID (chỉ dùng cho bước Hậu kiểm sau khi người dùng đã tự tay chọn trên bảng hỏi)
+        let objectIDByActiveBundleID: [String: NSManagedObjectID]
     }
 
     private func fetchInstalledAppSnapshots(teamID: String) -> InstalledAppSnapshot {
@@ -323,13 +352,15 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
             let installedApps = (try? context.dbBackgroundContext.fetch(request)) ?? []
 
             var activeMainIDs = Set<String>()
-            var mapByOriginalID: [String: NSManagedObjectID] = [:]
-            var mapByName: [String: NSManagedObjectID] = [:]
+            var mapByNameAndBaseID: [String: NSManagedObjectID] = [:]
+            var mapByUniqueName: [String: NSManagedObjectID] = [:]
+            var duplicatedNames = Set<String>()
+            var mapByActiveBundleID: [String: NSManagedObjectID] = [:]
 
             let hostMainBundleID = (Bundle.main.bundleIdentifier ?? "").lowercased()
             let lowerTeam = teamID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
-            // Bảo vệ ứng dụng chủ SideStore đang chạy (kèm các extension của chính nó)
+            // Bảo vệ ứng dụng chủ SideStore đang chạy
             if !hostMainBundleID.isEmpty {
                 activeMainIDs.insert(hostMainBundleID)
                 if !lowerTeam.isEmpty && !hostMainBundleID.hasSuffix(".\(lowerTeam)") {
@@ -340,8 +371,14 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
             for app in installedApps {
                 let rawID = app.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
                 let resignedID = app.resignedBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+                let nameKey = app.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
-                // 1. Đưa cả rawID và resignedID vào activeMainIDs để khóa không cho hiển thị trong "Dùng lại ID cũ"
+                let isHostApp = Self.isProtectedHostOrCoreApp(
+                    lowerFull: rawID.lowercased(),
+                    hostMainID: hostMainBundleID,
+                    teamID: teamID
+                )
+
                 for idVariant in [rawID, resignedID] where !idVariant.isEmpty {
                     let lower = idVariant.lowercased()
                     activeMainIDs.insert(lower)
@@ -349,33 +386,37 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                     if !lowerTeam.isEmpty && !lower.hasSuffix(".\(lowerTeam)") {
                         activeMainIDs.insert("\(lower).\(lowerTeam)")
                     }
+
+                    if !isHostApp {
+                        let baseLower = Self.stripTrailingTeamID(from: idVariant, teamID: teamID).lowercased()
+                        mapByActiveBundleID[lower] = app.objectID
+                        mapByActiveBundleID[baseLower] = app.objectID
+
+                        if !nameKey.isEmpty {
+                            mapByNameAndBaseID["\(nameKey)|\(baseLower)"] = app.objectID
+                            mapByNameAndBaseID["\(nameKey)|\(lower)"] = app.objectID
+                        }
+                    }
                 }
 
-                // 2. Chỉ đưa ID gốc (rawID và bản cắt đuôi Team ID của rawID) vào bảng nhận diện Update
-                // TUYỆT ĐỐI KHÔNG đưa resignedID vào đây để tránh trường hợp App B mượn ID cũ của App A làm App A cài đè lên App B!
-                if !rawID.isEmpty {
-                    let lowerRaw = rawID.lowercased()
-                    let baseRaw = Self.stripTrailingTeamID(from: rawID, teamID: teamID).lowercased()
-                    mapByOriginalID[lowerRaw] = app.objectID
-                    mapByOriginalID[baseRaw] = app.objectID
-                }
-
-                if !Self.isProtectedHostOrCoreApp(
-                    lowerFull: rawID.lowercased(),
-                    hostMainID: hostMainBundleID,
-                    teamID: teamID
-                ) {
-                    let nameKey = app.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                    if !nameKey.isEmpty {
-                        mapByName[nameKey] = app.objectID
+                // Ghi nhận Tên App duy nhất (nếu có 2 bản clone trùng tên trên máy thì loại khỏi danh sách tự động khớp theo tên để luôn hỏi người dùng muốn cập nhật bản nào)
+                if !isHostApp, !nameKey.isEmpty {
+                    if duplicatedNames.contains(nameKey) {
+                        // Đã bị trùng tên -> không tự đoán mò
+                    } else if mapByUniqueName[nameKey] != nil {
+                        mapByUniqueName.removeValue(forKey: nameKey)
+                        duplicatedNames.insert(nameKey)
+                    } else {
+                        mapByUniqueName[nameKey] = app.objectID
                     }
                 }
             }
 
             return InstalledAppSnapshot(
                 activeMainIDsLowercased: activeMainIDs,
-                objectIDByOriginalBundleID: mapByOriginalID,
-                objectIDByAppName: mapByName
+                objectIDByExactNameAndBaseID: mapByNameAndBaseID,
+                objectIDByUniqueAppName: mapByUniqueName,
+                objectIDByActiveBundleID: mapByActiveBundleID
             )
         }
     }
@@ -439,7 +480,6 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
             guard !seenFullIDs.contains(lowerFull) else { continue }
             seenFullIDs.insert(lowerFull)
 
-            // Cắt bỏ .TEAM_ID (cả ở cuối lẫn ở giữa) để hiển thị trên giao diện gọn gàng
             let shortDisplayID = Self.stripTrailingTeamID(from: fullID, teamID: teamID)
 
             candidates.append(
@@ -470,7 +510,6 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         return candidates
     }
 
-    /// Kiểm tra xem ID có thuộc về SideStore / AltStore (kể cả Widget/Extension của nó) hay không
     private static func isProtectedHostOrCoreApp(
         lowerFull: String,
         hostMainID: String,
@@ -504,8 +543,6 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         return false
     }
 
-    /// Tự động cắt bỏ `.TEAM_ID` ở cuối (VD: `com.alone.37D6PWG5PP` -> `com.alone`)
-    /// hoặc `.TEAM_ID.` ở giữa của ID phụ thuộc app đã xóa (VD: `com.app.37D6PWG5PP.Widget` -> `com.app.Widget`)
     static func stripTrailingTeamID(from bundleID: String, teamID: String) -> String {
         let trimmed = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanTeamID = teamID.trimmingCharacters(in: .whitespacesAndNewlines)

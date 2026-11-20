@@ -1,4 +1,3 @@
-
 //
 //  PrepareAppExtensionBundleIDsOperation.swift
 //  SideStore
@@ -18,7 +17,7 @@ final class PrepareAppExtensionBundleIDsOperation: BasePipelineOperation<Install
             debugLog("[PrepareAppExtensionBundleIDsOperation] execute() took: \(String(format: "%.3fs", elapsed))")
         }
         try await super.executePreconditionCheck(parentProgress: parentProgress)
-        
+
         if self.context.useMainProfile {
             let mainBundleKey = self.context.targetBundleIdentifier
             if let appBundle = self.context.targetAppBundle,
@@ -27,23 +26,29 @@ final class PrepareAppExtensionBundleIDsOperation: BasePipelineOperation<Install
                     ?? self.context.provisioningProfiles?.values.first {
                 var appexBundleIds: [String: String] = [:]
                 for appex in appBundle.appExtensions {
+                    let originalExtID = appex.bundleIdentifier
+                    let originalMainID = appBundle.bundleIdentifier
+
                     let resolvedAppExBundleID: String
-                    if appex.bundleIdentifier.hasPrefix(appBundle.bundleIdentifier + ".") {
-                        let suffix = String(appex.bundleIdentifier.dropFirst(appBundle.bundleIdentifier.count))
+                    if originalExtID.hasPrefix(originalMainID + ".") {
+                        let suffix = String(originalExtID.dropFirst(originalMainID.count))
                         resolvedAppExBundleID = profile.bundleIdentifier + suffix
-                    } else if appex.bundleIdentifier.contains(appBundle.bundleIdentifier) {
-                        resolvedAppExBundleID = appex.bundleIdentifier
-                            .replacingOccurrences(of: appBundle.bundleIdentifier, with: profile.bundleIdentifier)
                     } else {
-                        let extName = appex.bundleIdentifier.components(separatedBy: ".").last ?? appex.name.replacingOccurrences(of: " ", with: "")
+                        let extName = originalExtID.components(separatedBy: ".").last
+                            ?? appex.name.replacingOccurrences(of: " ", with: "")
                         resolvedAppExBundleID = "\(profile.bundleIdentifier).\(extName)"
                     }
 
                     // Lưu cả key gốc lẫn key đã thay bằng targetBundleIdentifier để ResignAppOperation luôn tra cứu trúng 100%
-                    let updatedKeyInResign = appex.bundleIdentifier
-                        .replacingOccurrences(of: appBundle.bundleIdentifier, with: mainBundleKey)
+                    let updatedKeyInResign: String
+                    if originalExtID.hasPrefix(originalMainID + ".") {
+                        let suffix = String(originalExtID.dropFirst(originalMainID.count))
+                        updatedKeyInResign = mainBundleKey + suffix
+                    } else {
+                        updatedKeyInResign = originalExtID.replacingOccurrences(of: originalMainID, with: mainBundleKey)
+                    }
 
-                    appexBundleIds[appex.bundleIdentifier] = resolvedAppExBundleID
+                    appexBundleIds[originalExtID] = resolvedAppExBundleID
                     appexBundleIds[updatedKeyInResign] = resolvedAppExBundleID
                 }
                 self.context.appexBundleIds = appexBundleIds

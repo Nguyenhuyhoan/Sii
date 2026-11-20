@@ -7,7 +7,6 @@
 //  Copyright © 2020 Riley Testut. All rights reserved.
 //
 
-
 import Foundation
 import SideSign
 
@@ -46,15 +45,14 @@ public enum AppExtensionCustomization: String, CaseIterable, Identifiable, Senda
     }
 }
 
-
 final class RemoveAppExtensionsOperation: BasePipelineOperation<InstallAppOperationContext, ALTApplication>, @unchecked Sendable {
     let localAppExtensions: Set<ALTApplication>?
-    
+
     init(context: InstallAppOperationContext, localAppExtensions: Set<ALTApplication>?) throws {
         self.localAppExtensions = localAppExtensions
         try super.init(context: context)
     }
-    
+
     override func execute(parentProgress: Progress?) async throws -> ALTApplication {
         let startTime = CFAbsoluteTimeGetCurrent()
         debugLog("[RemoveAppExtensionsOperation] execute() started")
@@ -64,23 +62,23 @@ final class RemoveAppExtensionsOperation: BasePipelineOperation<InstallAppOperat
         }
         try await super.executePreconditionCheck(parentProgress: parentProgress)
         self.setProgress(10)
-        
+
         guard let targetAppBundle = context.targetAppBundle else {
             throw OperationError.invalidParameters("RemoveAppExtensionsOperation: context.appBundle is nil")
         }
-        
+
         // Luôn bật cờ useMainProfile = true để mọi App Extensions dùng chung 1 ID chính duy nhất
         self.context.useMainProfile = true
-        
+
         // target App Bundle doesn't contain extensions so don't bother
         guard !targetAppBundle.appExtensions.isEmpty else {
             self.setProgress(100)
             return targetAppBundle
         }
-        
+
         self.setProgress(30)
         _ = processExtensionsInfo(from: targetAppBundle, localAppExtensions: localAppExtensions)
-        
+
         let decision: ExtensionRemovalDecision
         if UserDefaults.standard.customizeAppExtensions == .removeAll {
             decision = .removeAll
@@ -90,26 +88,26 @@ final class RemoveAppExtensionsOperation: BasePipelineOperation<InstallAppOperat
         }
 
         switch decision {
-            case .cancel:
-                throw OperationError.cancelled
+        case .cancel:
+            throw OperationError.cancelled
 
-            case .keepAll(let useMainProfile):
-                self.context.useMainProfile = useMainProfile
-                self.setProgress(100)
+        case .keepAll(let useMainProfile):
+            self.context.useMainProfile = useMainProfile
+            self.setProgress(100)
 
-            case .removeAll:
-                try self.removeExtensions(from: targetAppBundle.appExtensions, endPercent: 85)
-                try self.updateManifest()
-                self.setProgress(100)
+        case .removeAll:
+            try self.removeExtensions(from: targetAppBundle.appExtensions, endPercent: 85)
+            try self.updateManifest()
+            self.setProgress(100)
 
-            case .removeSelected(let selection):
-                try self.removeExtensions(from: selection, endPercent: 100)
-                self.setProgress(100)
+        case .removeSelected(let selection):
+            try self.removeExtensions(from: selection, endPercent: 100)
+            self.setProgress(100)
         }
-        
+
         return targetAppBundle
     }
-    
+
     private func removeExtensions(from extensions: Set<ALTApplication>, endPercent: Int64) throws {
         let isLoggingEnabled = OperationsLoggingControl.isLoggingEnabled(for: RemoveAppExtensionsOperation.self)
         let startProgress = self.progress.completedUnitCount
@@ -136,27 +134,29 @@ final class RemoveAppExtensionsOperation: BasePipelineOperation<InstallAppOperat
         guard let appBundle = context.targetAppBundle else {
             return
         }
-        
+
         let scInfoURL = appBundle.fileURL.appendingPathComponent("SC_Info")
         let manifestPlistURL = scInfoURL.appendingPathComponent("Manifest.plist")
-        
+
         if let manifestPlist = NSMutableDictionary(contentsOf: manifestPlistURL),
            let sinfReplicationPaths = manifestPlist["SinfReplicationPaths"] as? [String] {
-            let replacementPaths = sinfReplicationPaths.filter { !$0.starts(with: "PlugIns/") } // Filter out app extension paths.
+            let replacementPaths = sinfReplicationPaths.filter { !$0.starts(with: "PlugIns/") }
             manifestPlist["SinfReplicationPaths"] = replacementPaths
             try manifestPlist.write(to: manifestPlistURL)
         }
     }
-    
+
     struct ExtensionsInfo {
         let excessInTarget: Set<ALTApplication>
         let necessaryInExisting: Set<ALTApplication>
     }
-    
-    private func processExtensionsInfo(from targetAppBundle: ALTApplication,
-                                       localAppExtensions: Set<ALTApplication>?) -> Set<ALTApplication> {
+
+    private func processExtensionsInfo(
+        from targetAppBundle: ALTApplication,
+        localAppExtensions: Set<ALTApplication>?
+    ) -> Set<ALTApplication> {
         let targetAppEx: Set<ALTApplication> = targetAppBundle.appExtensions
-        let targetAppExNames  = targetAppEx.map { appEx in appEx.bundleIdentifier }
+        let targetAppExNames = targetAppEx.map { appEx in appEx.bundleIdentifier }
 
         guard let extensionsInExistingApp = localAppExtensions else {
             let diagnosticsMsg = "RemoveAppExtensionsOperation: ExistingApp is nil, Hence keeping all app extensions from targetAppBundle"
@@ -164,14 +164,14 @@ final class RemoveAppExtensionsOperation: BasePipelineOperation<InstallAppOperat
             verboseLog(diagnosticsMsg)
             return Set()
         }
-        
+
         let existingAppEx: Set<ALTApplication> = extensionsInExistingApp
         let existingAppExNames = existingAppEx.map { appEx in appEx.bundleIdentifier }
-        
+
         let excessExtensionsInTargetApp = targetAppEx.filter {
             !(existingAppExNames.contains($0.bundleIdentifier))
         }
-    
+
         let isMatching = (targetAppEx.count == existingAppEx.count) && excessExtensionsInTargetApp.isEmpty
         let diagnosticsMsg = "RemoveAppExtensionsOperation: App Extensions in localAppBundle and targetAppBundle are matching: \(isMatching)\n"
                             + "RemoveAppExtensionsOperation: \nlocalAppBundleEx: \(existingAppExNames); \ntargetAppBundleEx: \(String(describing: targetAppExNames))\n"
@@ -180,3 +180,4 @@ final class RemoveAppExtensionsOperation: BasePipelineOperation<InstallAppOperat
         return excessExtensionsInTargetApp
     }
 }
+

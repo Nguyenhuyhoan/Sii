@@ -33,11 +33,28 @@ final class PipelineExecutor: @unchecked Sendable {
         operationProgress: Progress?
     ) async throws -> InstalledApp {
         var finalApp: InstalledApp?
+        var didTurnOffCellularInSinglePipeline = false
+        
+        defer {
+            // Đảm bảo nếu luồng đơn lẻ (Refresh 1 app lẻ hoặc Cài IPA lẻ trên 4G) đã tắt 4G
+            // mà gặp lỗi dừng sớm trước khi về tới cuối PipelineRunner thì vẫn bật lại 4G an toàn.
+            if didTurnOffCellularInSinglePipeline && !group.isCellularRefreshGroup {
+                Task {
+                    await CellularRefreshManager.shared.turnOnDataIfNeeded()
+                }
+            }
+        }
         
         for pipelineStep in pipelineSteps {
             let step = pipelineStep.step
             
             do {
+                if step == .sendApp || (step == .refreshApp && !group.isCellularRefreshGroup) {
+                    if !CellularRefreshManager.shared.isShortcutTwoStageMode && CellularRefreshManager.shared.isCellularMode {
+                        didTurnOffCellularInSinglePipeline = true
+                    }
+                }
+                
                 if let result = try await executeStep(
                     step,
                     context: context,
@@ -203,7 +220,7 @@ final class PipelineExecutor: @unchecked Sendable {
             case .sendApp:
                 loggerType = SendAppOperation.self
                 // Nếu đang cài IPA qua 4G, tự động ngắt 4G sang VPN nội bộ trước khi đẩy IPA
-                if CellularRefreshManager.shared.isCellularMode {
+                if !CellularRefreshManager.shared.isShortcutTwoStageMode && CellularRefreshManager.shared.isCellularMode {
                     _ = await CellularRefreshManager.shared.turnOffDataIfNeeded()
                 }
                 let step = try SendAppOperation(context: context)
@@ -232,6 +249,13 @@ final class PipelineExecutor: @unchecked Sendable {
                 
             case .refreshApp:
                 loggerType = RefreshAppOperation.self
+                // Nếu đang Refresh 1 app lẻ trực tiếp trên 4G (không nằm trong batch isCellularRefreshGroup),
+                // tự động tắt 4G sau khi đã tải xong Provisioning Profile từ Apple để tiêm Profile qua LocalDevVPN.
+                if !group.isCellularRefreshGroup &&
+                   !CellularRefreshManager.shared.isShortcutTwoStageMode &&
+                   CellularRefreshManager.shared.isCellularMode {
+                    _ = await CellularRefreshManager.shared.turnOffDataIfNeeded()
+                }
                 let step = try RefreshAppOperation(context: context)
                 let installedApp = try await step.execute(parentProgress: progress)
                 context.installedApp = installedApp

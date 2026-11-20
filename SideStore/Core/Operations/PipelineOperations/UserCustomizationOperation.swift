@@ -1,4 +1,5 @@
 
+
 //
 //  UserCustomizationOperation.swift
 //  SideStore
@@ -18,7 +19,7 @@ public struct ReusableAppIDCandidate: Identifiable, Hashable, Sendable {
     public let name: String
     /// Bundle ID đầy đủ chính xác trên Apple Portal (ví dụ: com.alone.37D6PWG5PP)
     public let fullBundleIdentifier: String
-    /// Bundle ID hiển thị/gán vào context (giữ nguyên giống hệt fullBundleIdentifier)
+    /// Bundle ID đã bỏ đuôi Team ID để hiển thị gọn gàng trên UI (ví dụ: com.alone)
     public let baseBundleIdentifier: String
     public let requiresAppendingTeamID: Bool
     public let expirationDate: Date?
@@ -129,19 +130,19 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
             guard let result = try await handler.resolveInfoPlistCustomization(
                 targets: targets,
                 initialBundleID: initialBundleID,
-                appendTeamID: context.appendTeamID,
+                appendTeamID: true,
                 installedAppIdentities: installedAppIdentities,
                 teamID: teamID
             ) else {
                 throw OperationError.cancelled
             }
 
-            context.appendTeamID = result.appendTeamID
+            context.appendTeamID = true
 
             let mainModifiedPlist = result.modifiedPlists[initialBundleID] ?? [:]
             let customID = InfoPlistParser(dictionary: mainModifiedPlist).bundleIdentifier
             if let customID = customID, !customID.isEmpty, customID != context.bundleIdentifier {
-                context.customBundleIdentifier = customID
+                context.customBundleIdentifier = Self.stripTrailingTeamID(from: customID, teamID: teamID)
                 didCustomizeBundleID = true
             } else {
                 context.customBundleIdentifier = nil
@@ -153,7 +154,7 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
             }
 
             let effectiveCustomID = context.customBundleIdentifier ?? initialBundleID
-            let resolvedID = result.appendTeamID && !teamID.isEmpty ? "\(effectiveCustomID).\(teamID)" : effectiveCustomID
+            let resolvedID = !teamID.isEmpty ? "\(effectiveCustomID).\(teamID)" : effectiveCustomID
             if let matchingApp = installedApps.first(where: { $0.bundleIdentifier == resolvedID || $0.resignedBundleIdentifier == resolvedID }) {
                 context.installedApp = matchingApp
             } else {
@@ -181,19 +182,25 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
 
             let chosenRawID = result.customID.trimmingCharacters(in: .whitespacesAndNewlines)
 
+            // Kiểm tra xem ID người dùng chọn có nằm trong danh sách ID cũ rảnh rỗi không
+            // (Khớp cả trường hợp truyền fullBundleIdentifier lẫn baseBundleIdentifier đã cắt đuôi Team ID)
             if let matchedCandidate = reusableCandidates.first(where: {
-                $0.fullBundleIdentifier.caseInsensitiveCompare(chosenRawID) == .orderedSame
-            }), !result.appendTeamID {
+                $0.fullBundleIdentifier.caseInsensitiveCompare(chosenRawID) == .orderedSame ||
+                $0.baseBundleIdentifier.caseInsensitiveCompare(chosenRawID) == .orderedSame
+            }) {
                 // KHI CHỌN "DÙNG LẠI ID CŨ":
-                // Giữ nguyên 100% ID cũ (VD: com.alone.37D6PWG5PP) và dùng 1 ID này cho cả App chính lẫn mọi phần mở rộng!
+                // Luôn lấy fullBundleIdentifier chính xác trên Apple Portal (VD: com.alone.37D6PWG5PP)
+                // và đặt appendTeamID = false để không bị gắn trùng đuôi Team ID lần 2!
                 context.appendTeamID = false
                 context.customBundleIdentifier = matchedCandidate.fullBundleIdentifier
                 didCustomizeBundleID = true
             } else {
-                // KHI CHỌN "DÙNG ID GỐC CỦA IPA":
-                context.appendTeamID = result.appendTeamID
-                if !chosenRawID.isEmpty, chosenRawID != context.bundleIdentifier {
-                    context.customBundleIdentifier = chosenRawID
+                // KHI DÙNG ID GỐC CỦA IPA HOẶC TỰ GÕ ID MỚI:
+                // Mặc định luôn bật gắn hậu tố Team ID (appendTeamID = true)
+                context.appendTeamID = true
+                let cleanCustomID = Self.stripTrailingTeamID(from: chosenRawID, teamID: teamID)
+                if !cleanCustomID.isEmpty, cleanCustomID != context.bundleIdentifier {
+                    context.customBundleIdentifier = cleanCustomID
                     didCustomizeBundleID = true
                 } else {
                     context.customBundleIdentifier = nil
@@ -274,7 +281,7 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         }
     }
 
-    // MARK: - Helpers: Quét và lọc Kho App ID Trống (Giữ nguyên ID gốc, không cắt đuôi)
+    // MARK: - Helpers: Quét và lọc Kho App ID Trống (Hiển thị bỏ đuôi Team ID, lưu ngầm Full ID)
 
     private struct InstalledAppSnapshot {
         let activeMainIDsLowercased: Set<String>
@@ -377,11 +384,14 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
             guard !seenFullIDs.contains(lowerFull) else { continue }
             seenFullIDs.insert(lowerFull)
 
+            // Cắt bỏ đuôi .TEAM_ID để hiển thị trên giao diện gọn gàng, không chiếm chỗ
+            let shortDisplayID = Self.stripTrailingTeamID(from: fullID, teamID: teamID)
+
             candidates.append(
                 ReusableAppIDCandidate(
-                    name: item.name.isEmpty ? fullID : item.name,
+                    name: item.name.isEmpty ? shortDisplayID : item.name,
                     fullBundleIdentifier: fullID,
-                    baseBundleIdentifier: fullID,
+                    baseBundleIdentifier: shortDisplayID,
                     requiresAppendingTeamID: false,
                     expirationDate: item.expirationDate
                 )
@@ -431,7 +441,16 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         return false
     }
 
+    /// Tự động cắt bỏ đuôi `.TEAM_ID` (ví dụ: `com.alone.37D6PWG5PP` -> `com.alone`)
     static func stripTrailingTeamID(from bundleID: String, teamID: String) -> String {
-        return bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTeamID = teamID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTeamID.isEmpty else { return trimmed }
+
+        let suffix = ".\(cleanTeamID)"
+        if trimmed.lowercased().hasSuffix(suffix.lowercased()), trimmed.count > suffix.count {
+            return String(trimmed.dropLast(suffix.count))
+        }
+        return trimmed
     }
 }

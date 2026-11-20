@@ -1,3 +1,4 @@
+
 //
 //  PipelineRunner.swift
 //  AltStore
@@ -424,6 +425,9 @@ final class PipelineRunner: Sendable
         context.isCellularRefreshGroup = group.isCellularRefreshGroup
         context.groupOperationsCount = operationsCount
         
+        // Luôn mặc định chỉ xin chứng chỉ/Provisioning Profile cho App chính
+        context.useMainProfile = true
+        
         switch operation {
             case .install(_, let customID), .reinstall(_, let customID):
                 context.customBundleIdentifier = customID
@@ -439,9 +443,17 @@ final class PipelineRunner: Sendable
         if let app = operation.app as? InstalledApp {
             context.installedApp = app
             context.appBundleFingerprint = app.appBundleFingerprint
-            context.useMainProfile = app.useMainProfile
+            // Ép cứng luôn dùng Profile của App chính, không bao giờ tạo thêm App ID cho Extensions khi Refresh
+            context.useMainProfile = true
             context.customBundleIdentifier = app.customBundleIdentifier
             context.targetAppBundle = ALTApplication(fileURL: app.fileURL)
+            
+            let dbContext = group.dbContext
+            await dbContext.perform {
+                if !app.useMainProfile {
+                    app.useMainProfile = true
+                }
+            }
         }
         
         context.beginInstallationHandler = { (installedApp) in

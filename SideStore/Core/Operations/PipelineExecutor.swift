@@ -1,3 +1,4 @@
+
 //
 //  PipelineExecutor.swift
 //  SideStore
@@ -54,6 +55,8 @@ final class PipelineExecutor: @unchecked Sendable {
                 }
                 
                 if let phase = Self.monitoredPhase(for: step) {
+                    let actionTitle = Self.actionFailureTitle(for: operation)
+                    
                     // 1. Lưu lỗi trực tiếp vào CoreData (LoggedError) để hiển thị trong ErrorLogViewController
                     await Self.recordDiagnosticErrorToDatabase(
                         for: group,
@@ -63,12 +66,12 @@ final class PipelineExecutor: @unchecked Sendable {
                         operation: operation
                     )
                     
-                    // 2. Hiển thị bảng chẩn đoán lỗi CSS duy nhất 1 lần
+                    // 2. Hiển thị bảng thông báo lỗi CSS duy nhất 1 lần với Chi tiết kỹ thuật trực tiếp
                     await Self.presentDiagnosticErrorAlertOnce(
                         for: group,
                         phase: phase,
                         stepName: "\(step)",
-                        appName: operation.app.name,
+                        appName: actionTitle,
                         error: error
                     )
                     
@@ -353,7 +356,7 @@ final class PipelineExecutor: @unchecked Sendable {
     }
 }
 
-// MARK: - 🛡️ HỆ THỐNG CHẨN ĐOÁN LỖI (CHỈ HIỆN ĐÚNG 1 LẦN DUY NHẤT & TỰ LƯU VÀO NHẬT KÝ LỖI)
+// MARK: - 🛡️ HỆ THỐNG THÔNG BÁO LỖI TRỰC TIẾP (KHÔNG ĐOÁN MÒ, HIỆN RÕ CHI TIẾT KỸ THUẬT)
 extension PipelineExecutor {
 
     // MARK: - 🔒 CHỐT CHẶN HIỂN THỊ & LƯU LOG 1 LẦN DUY NHẤT
@@ -365,7 +368,7 @@ extension PipelineExecutor {
     private static var lastAlertDismissTimestamp: CFAbsoluteTime = 0
     private static var lastDatabaseLogTimestamp: CFAbsoluteTime = 0
 
-    /// Kiểm tra xem lỗi có phải là lỗi đã bị huỷ (bao gồm cả `OperationError.cancelled` vốn trả về `CancellationError`)
+    /// Kiểm tra xem lỗi có phải là lỗi đã bị huỷ (bao gồm cả `OperationError.cancelled`)
     static func isCancellationError(_ error: Error) -> Bool {
         if Task.isCancelled || error is CancellationError {
             return true
@@ -394,7 +397,6 @@ extension PipelineExecutor {
         }
     }
 
-    /// Đánh dấu và kiểm tra quyền hiển thị thông báo cho 1 `RefreshGroup` (Chỉ cho phép đúng 1 lần)
     private static func tryAcquireAlertPresentation(for group: RefreshGroup?) -> Bool {
         return alertStateLock.withLock {
             if isPresentingDiagnosticAlert {
@@ -427,12 +429,10 @@ extension PipelineExecutor {
         }
     }
 
-    /// Đảm bảo mỗi `RefreshGroup` hoặc mỗi ứng dụng chỉ ghi 1 bản ghi lỗi duy nhất vào CoreData
     private static func tryAcquireDatabaseLog(for group: RefreshGroup?, identifierKey: String) -> Bool {
         return alertStateLock.withLock {
             if let group = group {
                 let groupID = ObjectIdentifier(group)
-                // Nếu cả group này đã từng lưu lỗi (ví dụ ở bước batch hoặc bước pipeline trước đó) thì không lưu trùng
                 if loggedDatabaseGroupIDs.contains(groupID) {
                     return false
                 }
@@ -458,8 +458,8 @@ extension PipelineExecutor {
     }
 
     enum MonitoredPhase: Sendable {
-        case authorization  // PHẦN 1: Bước "Xin cấp phép" (Kẹt ở 10% - 30%): Giao tiếp Apple & Anisette
-        case systemPush     // PHẦN 2: Bước "Đẩy vào hệ thống" (Kẹt ở 70% - 85%): Giao tiếp nội bộ qua VPN
+        case authorization  // BƯỚC 1: Xin cấp phép & Chuẩn bị (10% - 30%)
+        case systemPush     // BƯỚC 2: Ký & Đẩy vào hệ thống (70% - 85%)
         
         var title: String {
             switch self {
@@ -474,37 +474,6 @@ extension PipelineExecutor {
             case .systemPush:    return "iphone.radiowaves.left.and.right"
             }
         }
-    }
-
-    enum ErrorSourceBadge: String, Sendable {
-        case vpn      = "LỖI VPN / MẠNG"
-        case pairing  = "LỖI FILE PAIRING"
-        case device   = "LỖI THIẾT BỊ GHÉP NỐI"
-        case apple    = "LỖI APPLE / ANISETTE"
-        case system   = "LỖI HỆ THỐNG iOS"
-        
-        var color: SwiftUI.Color {
-            switch self {
-            case .vpn:     return CSSErrorTheme.primary
-            case .pairing: return CSSErrorTheme.red
-            case .device:  return CSSErrorTheme.secondary
-            case .apple:   return CSSErrorTheme.secondary
-            case .system:  return CSSErrorTheme.red
-            }
-        }
-    }
-
-    struct DiagnosticErrorItem: Sendable {
-        let badge: ErrorSourceBadge
-        let title: String
-        let cause: String
-    }
-
-    /// Trạng thái thực tế của card mạng (`utun`, `pdp_ip`, `en0`) trên iOS
-    enum VPNHardwareState: Sendable {
-        case connectedLocalDevVPN           // Đã bật đúng LocalDevVPN / StosVPN (có IP 10.7.x.x)
-        case disconnectedOnCellularOnly     // Đang bật 4G/5G (không Wi-Fi) nhưng đã tắt LocalDevVPN
-        case disconnected                   // Đã tắt LocalDevVPN (đang dùng Wi-Fi hoặc mất mạng)
     }
 
     static func monitoredPhase(for step: PipelineStep) -> MonitoredPhase? {
@@ -532,92 +501,57 @@ extension PipelineExecutor {
         }
     }
 
-    // MARK: - 🌐 BỘ DỊCH CÁC CÂU THÔNG BÁO MẶC ĐỊNH CỦA HỆ ĐIỀU HÀNH iOS SANG TIẾNG VIỆT
-    static func translateSystemNetworkError(_ text: String) -> String {
-        var result = text
-        let replacements: [(String, String)] = [
-            ("The Internet connection appears to be offline.", "Không có kết nối Internet (Thiết bị đang ngoại tuyến hoặc mạng đã bị ngắt)."),
-            ("The internet connection appears to be offline.", "Không có kết nối Internet (Thiết bị đang ngoại tuyến hoặc mạng đã bị ngắt)."),
-            ("The Internet connection appears to be offline", "Không có kết nối Internet (Thiết bị đang ngoại tuyến hoặc mạng đã bị ngắt)"),
-            ("The network connection was lost.", "Kết nối mạng đã bị ngắt đột ngột trong lúc truyền dữ liệu."),
-            ("The request timed out.", "Quá thời gian chờ phản hồi từ máy chủ (Mạng yếu hoặc bị nghẽn)."),
-            ("A server with the specified hostname could not be found.", "Không thể phân giải tên miền máy chủ (Lỗi DNS hoặc mất kết nối Internet)."),
-            ("Could not connect to the server.", "Không thể kết nối tới máy chủ."),
-            ("A data connection is not currently allowed.", "Kết nối dữ liệu di động hiện đang bị chặn hoặc chưa được cấp quyền."),
-            ("An SSL error has occurred and a secure connection to the server cannot be made.", "Lỗi bảo mật SSL: Không thể thiết lập kết nối an toàn tới máy chủ.")
-        ]
-        
-        for (english, vietnamese) in replacements {
-            if result.localizedCaseInsensitiveContains(english) {
-                result = result.replacingOccurrences(of: english, with: vietnamese, options: .caseInsensitive)
-            }
-        }
-        return result
-    }
-
-    // MARK: - 🔍 QUÉT TRỰC TIẾP CARD MẠNG ĐỂ NHẬN DIỆN: ĐANG BẬT 4G NHƯNG TẮT LOCALDEVVPN (KHÔNG WIFI)
-    static func inspectVPNHardwareState() -> VPNHardwareState {
-        var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr else {
-            return .disconnected
-        }
-        defer { freeifaddrs(ifaddr) }
-        
-        var hasLocalDevIP = false
-        var hasCellularIP = false
-        var hasWiFiIP = false
-        var ptr: UnsafeMutablePointer<ifaddrs>? = firstAddr
-        
-        while let current = ptr {
-            let interface = current.pointee
-            let name = String(cString: interface.ifa_name)
-            let flags = Int32(interface.ifa_flags)
-            let isUp = (flags & IFF_UP) != 0 && (flags & IFF_RUNNING) != 0
-            
-            if isUp, let addr = interface.ifa_addr {
-                let family = addr.pointee.sa_family
-                if family == UInt8(AF_INET) || family == UInt8(AF_INET6) {
-                    var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                    if getnameinfo(addr, socklen_t(addr.pointee.sa_len),
-                                   &hostname, socklen_t(hostname.count),
-                                   nil, 0, NI_NUMERICHOST) == 0 {
-                        let ip = String(cString: hostname)
-                        
-                        if (name.hasPrefix("utun") || name.hasPrefix("ipsec") || name.hasPrefix("ppp")),
-                           ip.hasPrefix("10.7.") {
-                            hasLocalDevIP = true
-                        }
-                        
-                        if name == "en0" && family == UInt8(AF_INET) && !ip.hasPrefix("169.254.") {
-                            hasWiFiIP = true
-                        }
-                        
-                        if name.hasPrefix("pdp_ip") && !ip.hasPrefix("169.254.") && !ip.hasPrefix("fe80") {
-                            hasCellularIP = true
-                        }
-                    }
-                }
-            }
-            ptr = interface.ifa_next
-        }
-        
-        if hasLocalDevIP {
-            return .connectedLocalDevVPN
-        } else if hasCellularIP && !hasWiFiIP {
-            return .disconnectedOnCellularOnly
-        } else {
-            return .disconnected
+    // MARK: - 🏷️ TẠO TIÊU ĐỀ TRỰC DIỆN: "Không thể cài đặt...", "Không thể làm mới..."
+    static func actionFailureTitle(for operation: AppOperation) -> String {
+        let appName = operation.app.name
+        switch operation {
+        case .install, .reinstall:
+            return "Không thể cài đặt \(appName)"
+        case .refresh:
+            return "Không thể làm mới \(appName)"
+        case .update:
+            return "Không thể cập nhật \(appName)"
+        case .activate:
+            return "Không thể kích hoạt \(appName)"
+        case .deactivate, .deleteApp:
+            return "Không thể tắt kích hoạt \(appName)"
+        case .backup:
+            return "Không thể sao lưu \(appName)"
+        case .restore:
+            return "Không thể khôi phục \(appName)"
+        case .resign:
+            return "Không thể ký lại \(appName)"
+        case .removeApp, .removeDeactivatedApp:
+            return "Không thể gỡ cài đặt \(appName)"
         }
     }
 
-    /// Thu thập toàn bộ chuỗi mô tả lỗi sâu nhất (bao gồm cả `underlyingErrors` và `ALTWrappedError`)
-    private static func extractFullErrorInfo(_ error: Error) -> (code: Int, domain: String, text: String) {
+    static func normalizedFailureTitle(appNameOrTitle: String, stepName: String) -> String {
+        let trimmed = appNameOrTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = trimmed.lowercased()
+        
+        if lower.hasPrefix("không thể") {
+            return trimmed
+        }
+        if lower.hasPrefix("lỗi ") {
+            let stripped = String(trimmed.dropFirst(4))
+            return "Không thể \(stripped)"
+        }
+        if lower.hasPrefix("làm mới") || lower.hasPrefix("cài đặt") || lower.hasPrefix("cập nhật") {
+            return "Không thể \(trimmed)"
+        }
+        if stepName.lowercased().contains("refresh") || stepName.lowercased().contains("batch") {
+            return "Không thể làm mới \(trimmed)"
+        }
+        return "Không thể cài đặt \(trimmed)"
+    }
+
+    /// Trích xuất đầy đủ chi tiết kỹ thuật thực tế của lỗi (bao gồm cả lỗi con bên trong)
+    static func extractTechnicalDetails(_ error: Error) -> (code: Int, domain: String, detailText: String) {
         let nsError = error as NSError
-        let deepDesc = ErrorProcessing(.fullError, unique: true, recur: true).getDescription(error: nsError)
-        let localDesc = ErrorProcessing(.localizedDescription, unique: true, recur: true).getDescription(error: nsError)
-        
         var deepestCode = nsError.code
         var deepestDomain = nsError.domain
+        
         var current: NSError? = nsError
         while let currentError = current {
             if let wrapped = (currentError as? ALTWrappedError)?.wrappedError {
@@ -633,480 +567,25 @@ extension PipelineExecutor {
             }
         }
         
-        let combined = "\(nsError.domain) \(deepestDomain) \(nsError.code) \(deepestCode) \(error.localizedDescription) \(localDesc) \(deepDesc) \(String(describing: error))".lowercased()
-        return (deepestCode, deepestDomain.lowercased(), combined)
+        let fullErrorDesc = ErrorProcessing(.fullError, unique: true, recur: true)
+            .getDescription(error: nsError)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        let localizedDesc = nsError.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        let resolvedText: String
+        if !fullErrorDesc.isEmpty {
+            resolvedText = fullErrorDesc
+        } else if !localizedDesc.isEmpty {
+            resolvedText = localizedDesc
+        } else {
+            resolvedText = String(describing: error)
+        }
+        
+        return (deepestCode, deepestDomain, resolvedText)
     }
 
-    // MARK: - 🧩 CÁC HÀM HELPER KIỂM TRA PATTERN CỦA `OperationError` (TRÁNH LỖI TYPE CHECKER)
-    private static func isNotAuthenticatedOperationError(_ opError: OperationError?) -> Bool {
-        guard let opError = opError else { return false }
-        if case .notAuthenticated = opError { return true }
-        return false
-    }
-
-    private static func isPairingNotCompleteOperationError(_ opError: OperationError?) -> Bool {
-        guard let opError = opError else { return false }
-        if case .pairingNotComplete = opError { return true }
-        return false
-    }
-
-    private static func isInvalidPairingFileOperationError(_ opError: OperationError?) -> Bool {
-        guard let opError = opError else { return false }
-        if case .invalidPairingFile = opError { return true }
-        return false
-    }
-
-    private static func isTimedOutOperationError(_ opError: OperationError?) -> Bool {
-        guard let opError = opError else { return false }
-        if case .timedOut = opError { return true }
-        return false
-    }
-
-    // MARK: - 🧠 BỘ CHẨN ĐOÁN LỖI (ĐÃ DỊCH TOÀN BỘ LỖI MẠNG OFFLINE CỦA iOS SANG TIẾNG VIỆT)
-    static func diagnoseError(_ error: Error, phase: MonitoredPhase) -> DiagnosticErrorItem {
-        let opError: OperationError? = {
-            if let direct = error as? OperationError { return direct }
-            if let minErr = error as? MinimuxerError { return minErr.asOperationError }
-            return nil
-        }()
-        
-        let info = Self.extractFullErrorInfo(error)
-        let code = info.code
-        let fullText = info.text
-        
-        let hasPairingFile = PairingFileManager.shared.hasPairingFile()
-        let vpnState = Self.inspectVPNHardwareState()
-        let isConnectionReset = fullText.contains("connectionreset") ||
-                                fullText.contains("connection reset by peer") ||
-                                fullText.contains("code: 54") ||
-                                fullText.contains("os error 54")
-        
-        // =========================================================================
-        // KIỂM TRA LỖI MẤT KẾT NỐI INTERNET CỦA HỆ ĐIỀU HÀNH iOS (-1009, -1020, -1005...)
-        // =========================================================================
-        let isOfflineError = (code == -1009) ||
-                             (code == NSURLErrorNotConnectedToInternet) ||
-                             fullText.contains("appears to be offline") ||
-                             fullText.contains("notconnectedtointernet") ||
-                             fullText.contains("-1009")
-        if isOfflineError {
-            return DiagnosticErrorItem(
-                badge: .vpn,
-                title: "Không có kết nối Internet (Ngoại tuyến -1009)",
-                cause: "Thiết bị đang mất kết nối mạng Internet (Wi-Fi/4G đã tắt, vừa bị ngắt 4G khi đang gọi máy chủ Apple/Anisette, hoặc cấu hình VPN đang chặn đường truyền Internet)."
-            )
-        }
-        
-        let isDataNotAllowed = (code == -1020) ||
-                               (code == NSURLErrorDataNotAllowed) ||
-                               fullText.contains("data connection is not currently allowed") ||
-                               fullText.contains("-1020")
-        if isDataNotAllowed {
-            return DiagnosticErrorItem(
-                badge: .vpn,
-                title: "Dữ liệu di động bị chặn cho ứng dụng (Mã -1020)",
-                cause: "Quyền sử dụng Dữ liệu di động (4G/5G) của ứng dụng đang bị tắt trong Cài đặt iOS hoặc sóng di động đang bị khóa dữ liệu."
-            )
-        }
-        
-        let isCannotFindHost = (code == -1003) ||
-                               (code == NSURLErrorCannotFindHost) ||
-                               fullText.contains("specified hostname could not be found") ||
-                               fullText.contains("-1003")
-        if isCannotFindHost {
-            return DiagnosticErrorItem(
-                badge: .vpn,
-                title: "Không tìm thấy máy chủ (Lỗi DNS -1003)",
-                cause: "Không thể phân giải tên miền tới máy chủ Apple hoặc Anisette do mất mạng Internet hoặc bị lỗi DNS."
-            )
-        }
-        
-        let isNetworkLost = (code == -1005) ||
-                            (code == NSURLErrorNetworkConnectionLost) ||
-                            fullText.contains("network connection was lost") ||
-                            fullText.contains("-1005")
-        if isNetworkLost {
-            return DiagnosticErrorItem(
-                badge: .vpn,
-                title: "Kết nối mạng bị ngắt giữa chừng (Mã -1005)",
-                cause: "Đường truyền Internet hoặc VPN bị ngắt đột ngột ngay trong lúc đang tải hoặc xác thực dữ liệu."
-            )
-        }
-        
-        // =========================================================================
-        // KIỂM TRA CÁC LỖI VERIFICATION
-        // =========================================================================
-        if let verifError = error as? VerificationError {
-            switch verifError.code {
-            case .iOSVersionNotSupported:
-                return DiagnosticErrorItem(
-                    badge: .system,
-                    title: "Không tương thích phiên bản iOS (Minimum OS Mismatch)",
-                    cause: "File IPA yêu cầu phiên bản iOS cao hơn (hoặc khác với) phiên bản iOS hiện tại trên máy của bạn."
-                )
-            case .mismatchedBundleIdentifiers:
-                return DiagnosticErrorItem(
-                    badge: .system,
-                    title: "Lệch định danh ứng dụng (Mismatched Bundle ID)",
-                    cause: "Cố gắng Làm mới / Cài đè ứng dụng nhưng Bundle ID hoặc Apple ID khác với lúc cài đặt ban đầu."
-                )
-            case .undeclaredPermissions, .addedPermissions:
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Quyền hệ thống đặc biệt không hợp lệ (Invalid Entitlements)",
-                    cause: "IPA yêu cầu quyền hệ thống cao cấp (Siri, iCloud đặc biệt...) mà tài khoản Apple miễn phí không được cấp."
-                )
-            default:
-                return DiagnosticErrorItem(
-                    badge: .system,
-                    title: "Gói cài đặt IPA bị lỗi cấu trúc (Corrupted IPA Payload)",
-                    cause: Self.translateSystemNetworkError(verifError.localizedDescription)
-                )
-            }
-        }
-        
-        // =========================================================================
-        // PHẦN 1: BƯỚC “XIN CẤP PHÉP” (Kẹt ở 10% - 30%)
-        // =========================================================================
-        if phase == .authorization {
-            if code == -1001 || code == NSURLErrorTimedOut || fullText.contains("request timed out") {
-                return DiagnosticErrorItem(
-                    badge: .vpn,
-                    title: "Quá thời gian kết nối máy chủ (Timed Out -1001)",
-                    cause: "Mạng Internet quá yếu hoặc máy chủ Apple / Anisette phản hồi quá chậm khiến yêu cầu bị hết hạn."
-                )
-            }
-            
-            if code == -1004 || code == NSURLErrorCannotConnectToHost || fullText.contains("could not connect to the server") {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Không thể kết nối tới máy chủ (Mã -1004)",
-                    cause: "Máy chủ Anisette hoặc Apple hiện không phản hồi hoặc đang bị chặn kết nối."
-                )
-            }
-            
-            let isAnisetteOverload = fullText.contains("anisette") &&
-                (fullText.contains("500") || fullText.contains("502") || fullText.contains("503") || fullText.contains("504") || fullText.contains("overload") || fullText.contains("bad gateway"))
-            if isAnisetteOverload {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Máy chủ Anisette quá tải (Error 500/502/503)",
-                    cause: "Server Anisette đang bị quá tải do có quá nhiều người dùng cùng lúc."
-                )
-            }
-            
-            if code == -22421 || fullText.contains("-22421") || fullText.contains("invalid anisette") || fullText.contains("machine data") {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Dữ liệu Anisette không hợp lệ (Mã -22421)",
-                    cause: "Dữ liệu giả lập máy Mac bị lỗi hoặc quá hạn, máy chủ Apple từ chối nhận."
-                )
-            }
-            
-            if fullText.contains("anisette") || fullText.contains("adi.pb") || fullText.contains("provisioning session") {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Không lấy được dữ liệu Anisette (Failed to fetch Anisette)",
-                    cause: "Server Anisette đang chọn bị sập hoặc không phản hồi."
-                )
-            }
-            
-            if Self.isNotAuthenticatedOperationError(opError) || code == -29004 || fullText.contains("-29004") || fullText.contains("session has expired") || fullText.contains("not signed in") {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Phiên đăng nhập Apple ID đã hết hạn (-29004)",
-                    cause: "Phiên đăng nhập Apple ID đã hết hạn hoặc bị đăng xuất, cần xác thực lại."
-                )
-            }
-            
-            if code == 9412 || fullText.contains("maximum number of app ids") || fullText.contains("10 app ids") || fullText.contains("max quantity of app ids") {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Hết 10 lượt đăng ký App ID trong tuần (Max App IDs)",
-                    cause: "Đã dùng hết sạch 10 lượt đăng ký App ID trong 7 ngày của tài khoản Apple miễn phí."
-                )
-            }
-            
-            if fullText.contains("maximum number of installed apps") || fullText.contains("3 apps") || fullText.contains("more than 3") || fullText.contains("deactivate") || fullText.contains("active apps limit") {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Đã kịch trần 3 ứng dụng hoạt động (Max 3 Apps)",
-                    cause: "Tài khoản Apple miễn phí chỉ cho phép tối đa 3 ứng dụng hoạt động cùng lúc trên máy."
-                )
-            }
-            
-            if code == -20209 || fullText.contains("-20209") || fullText.contains("locked") || fullText.contains("disabled for security") {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Tài khoản Apple ID bị khóa bảo mật (Apple ID Locked)",
-                    cause: "Tài khoản Apple bị khóa bảo mật do đăng nhập từ địa chỉ IP lạ (của máy chủ Anisette)."
-                )
-            }
-            
-            if code == -20101 || code == -22406 || fullText.contains("-20101") || fullText.contains("incorrect") || fullText.contains("invalid username or password") || fullText.contains("bad password") {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Sai mật khẩu Apple ID (Incorrect Credentials -20101)",
-                    cause: "Nhập sai mật khẩu Apple ID hoặc bạn vừa đổi mật khẩu nhưng chưa cập nhật trong ứng dụng."
-                )
-            }
-            
-            if code == -21669 || fullText.contains("verification code") || fullText.contains("two-factor") || fullText.contains("2fa") || fullText.contains("security code") {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Lỗi mã xác thực 2 bước (2FA Verification Error)",
-                    cause: "Nhập sai mã xác thực 2 yếu tố (2FA) hoặc mã xác thực đã hết hạn."
-                )
-            }
-            
-            if fullText.contains("license agreement") || fullText.contains("terms") || fullText.contains("pla") || fullText.contains("accept the updated") {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Cần đồng ý Điều khoản Apple mới (License Agreement)",
-                    cause: "Apple vừa cập nhật điều khoản Developer mới, bắt buộc phải đồng ý trước khi ký ứng dụng."
-                )
-            }
-            
-            if let opError = opError, case .certificateRevoked = opError {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Chứng chỉ đã bị thu hồi (Certificate Revoked)",
-                    cause: "Chứng chỉ hiện tại bị thu hồi hoặc bạn vừa bấm 'Revoke' trên một thiết bị/máy tính khác."
-                )
-            }
-            if let opError = opError, case .customCertificateRevoked = opError {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Chứng chỉ đã bị thu hồi (Certificate Revoked)",
-                    cause: "Chứng chỉ hiện tại đã bị thu hồi trên cổng Apple Developer."
-                )
-            }
-            if fullText.contains("revoked") || fullText.contains("certificate expired") || fullText.contains("no signing certificate") {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Chứng chỉ bị thu hồi hoặc hết hạn (Certificate Revoked)",
-                    cause: "Chứng chỉ hiện tại bị thu hồi hoặc bạn vừa bấm 'Revoke' trên thiết bị khác."
-                )
-            }
-            
-            if code == 9401 || fullText.contains("not available") || fullText.contains("bundle identifier is not available") || fullText.contains("already in use") {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Tên định danh bị trùng (App ID Not Available)",
-                    cause: "Tên định danh (Bundle ID) của ứng dụng bị trùng với một người khác đã đăng ký trước trên Apple."
-                )
-            }
-            
-            if code == -1200 || code == -1202 || code == -9806 || fullText.contains("ssl") || fullText.contains("tls") || fullText.contains("handshake") || fullText.contains("secure connection") {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Lỗi kết nối bảo mật (SSL / TLS Handshake Failed)",
-                    cause: "Mạng đang dùng chặn kết nối bảo mật tới máy chủ Apple hoặc Anisette."
-                )
-            }
-            
-            if fullText.contains("maintenance") || fullText.contains("unavailable") || fullText.contains("down for maintenance") || code == 503 {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Máy chủ Apple đang bảo trì (Developer Maintenance)",
-                    cause: "Hệ thống máy chủ dành cho lập trình viên của Apple đang bảo trì định kỳ."
-                )
-            }
-            
-            if fullText.contains("entitlement") || (fullText.contains("provisioning profile") && fullText.contains("capability")) {
-                return DiagnosticErrorItem(
-                    badge: .apple,
-                    title: "Quyền hệ thống không được cấp (Invalid Entitlements)",
-                    cause: "IPA yêu cầu quyền hệ thống cao cấp (như Siri, iCloud đặc biệt) mà tài khoản Free không được cấp."
-                )
-            }
-        }
-        
-        // =========================================================================
-        // PHẦN 2: BƯỚC “ĐẨY VÀO HỆ THỐNG” (Kẹt ở 70% - 85%)
-        // =========================================================================
-        
-        // [2.3] Pairing File Not Found
-        if !hasPairingFile || Self.isPairingNotCompleteOperationError(opError) {
-            return DiagnosticErrorItem(
-                badge: .pairing,
-                title: "Chưa nạp File ghép đôi (Pairing File Not Found)",
-                cause: "Chưa nạp file ghép đôi (.mobiledevicepairing / rppairing) vào ứng dụng hoặc file đã bị xoá."
-            )
-        }
-        
-        // [2.4] Local Network Permission Denied
-        if fullText.contains("local network") || fullText.contains("necperror") || fullText.contains("permission denied") || fullText.contains("no route to host") || code == 65 {
-            return DiagnosticErrorItem(
-                badge: .vpn,
-                title: "Chưa bật quyền Mạng cục bộ (Local Network Denied)",
-                cause: "Quyền 'Mạng cục bộ' (Local Network) trong Cài đặt iOS đang bị tắt."
-            )
-        }
-        
-        // [2.5] Đã bật 4G nhưng tắt LocalDevVPN (không Wi-Fi)
-        if vpnState == .disconnectedOnCellularOnly {
-            return DiagnosticErrorItem(
-                badge: .vpn,
-                title: "Đang bật 4G nhưng đã tắt LocalDevVPN (Không có Wi-Fi)",
-                cause: "Máy đang sử dụng dữ liệu di động 4G (không có Wi-Fi) nhưng đã tắt LocalDevVPN nên không có đường truyền nội bộ (10.7.0.1) để đẩy vào hệ thống."
-            )
-        }
-        
-        // [2.1] Đã tắt LocalDevVPN (trên Wi-Fi hoặc mất kết nối VPN)
-        if vpnState == .disconnected {
-            return DiagnosticErrorItem(
-                badge: .vpn,
-                title: "Chưa bật LocalDevVPN (Unable to connect to device)",
-                cause: "LocalDevVPN đang tắt nên không tìm thấy đường truyền nội bộ (10.7.0.1) để giao tiếp với thiết bị."
-            )
-        }
-        
-        // [2.8] Lỗi mạng 4G / Cách ly Wi-Fi
-        if let opError = opError, case .invalidVPN(let reason) = opError, reason.lowercased().contains("wireguard") {
-            return DiagnosticErrorItem(
-                badge: .vpn,
-                title: "Đang bật 4G nhưng thiếu kết nối LocalDevVPN",
-                cause: "Đang dùng mạng 4G nhưng chưa chuyển sang đường truyền nội bộ LocalDevVPN để đẩy ứng dụng."
-            )
-        }
-        if let opError = opError, case .noConnection = opError {
-            return DiagnosticErrorItem(
-                badge: .vpn,
-                title: "Đang bật 4G (Không Wi-Fi) hoặc tắt LocalDevVPN",
-                cause: "Thiết bị đang bật 4G (không có Wi-Fi) và chưa kết nối LocalDevVPN."
-            )
-        }
-        
-        // [2.2] Invalid Pairing File / Lockdown Error
-        let isLockdownOrPairingError = isConnectionReset ||
-                                       fullText.contains("lockdown") ||
-                                       fullText.contains("invalid pairing") ||
-                                       fullText.contains("invalid hostid") ||
-                                       fullText.contains("pair record") ||
-                                       Self.isInvalidPairingFileOperationError(opError)
-        if isLockdownOrPairingError {
-            return DiagnosticErrorItem(
-                badge: .device,
-                title: "Thiết bị đã huỷ liên kết (Invalid Pairing / Lockdown Error)",
-                cause: "LocalDevVPN đã bật nhưng iOS từ chối kết nối (Code 54: Connection reset). Do đã xoá thiết bị liên kết, đổi mật khẩu màn hình khóa hoặc mới cập nhật iOS."
-            )
-        }
-        
-        // [2.6] Connection Timed Out (mux error)
-        let isMuxTimeout = Self.isTimedOutOperationError(opError) ||
-                           fullText.contains("timed out") ||
-                           fullText.contains("timeout") ||
-                           fullText.contains("mux error") ||
-                           (fullText.contains("afc") && fullText.contains("broken pipe"))
-        if isMuxTimeout {
-            return DiagnosticErrorItem(
-                badge: .vpn,
-                title: "Nghẽn đường truyền nội bộ (Connection Timed Out)",
-                cause: "Mạng nội bộ bị nghẽn hoặc quá hạn khi đang đẩy gói cài đặt IPA."
-            )
-        }
-        
-        // [2.7] Background Task Killed
-        if fullText.contains("background") || fullText.contains("interrupted") || fullText.contains("connection abort") || code == 53 || code == -997 {
-            return DiagnosticErrorItem(
-                badge: .system,
-                title: "Bị ngắt do thoát ứng dụng (Background Task Killed)",
-                cause: "Thoát ứng dụng ra ngoài hoặc màn hình tự tắt khiến iOS ngắt kết nối truyền dữ liệu ngầm."
-            )
-        }
-        
-        // [2.10] Mismatched Bundle ID
-        if fullText.contains("mismatchedbundleid") || fullText.contains("mismatchedapplicationidentifierentitlement") || fullText.contains("upgrade's application-identifier") || fullText.contains("already installed") {
-            return DiagnosticErrorItem(
-                badge: .system,
-                title: "Trùng ứng dụng khác tài khoản (Mismatched Bundle ID)",
-                cause: "Cố gắng Refresh / Cài đè một ứng dụng nhưng lại dùng Apple ID khác với lúc cài đặt ban đầu."
-            )
-        }
-        
-        // [2.11] Storage Full
-        if code == 28 || fullText.contains("disk quota") || fullText.contains("no space left") || fullText.contains("storage") || fullText.contains("not enough space") {
-            return DiagnosticErrorItem(
-                badge: .system,
-                title: "Bộ nhớ iPhone đã đầy (Storage Full)",
-                cause: "Bộ nhớ iPhone bị đầy khi hệ điều hành giải nén gói IPA ra để cài đặt."
-            )
-        }
-        
-        // [2.12] Minimum OS Version Mismatch
-        if fullText.contains("minimumosversion") || fullText.contains("deviceosversiontoohigh") || fullText.contains("deviceosversiontoolow") || fullText.contains("requires ios") {
-            return DiagnosticErrorItem(
-                badge: .system,
-                title: "Không hỗ trợ phiên bản iOS hiện tại (OS Version Mismatch)",
-                cause: "File IPA yêu cầu phiên bản iOS cao hơn phiên bản iOS hiện tại trên máy của bạn."
-            )
-        }
-        
-        // [2.13] Device Not Registered in Profile
-        if fullText.contains("not included in profile") || fullText.contains("device not registered") || fullText.contains("provisioneddevices") || fullText.contains("0xe800801c") || fullText.contains("no provisioning profile") {
-            return DiagnosticErrorItem(
-                badge: .device,
-                title: "Thiết bị chưa có trong hồ sơ cấp phép (Device Not Registered)",
-                cause: "File cấp phép (Provisioning Profile) tải về không chứa mã UDID của chiếc iPhone hiện tại."
-            )
-        }
-        
-        // [2.14] Corrupted IPA Payload
-        if fullText.contains("corrupt") || fullText.contains("invalid bundle") || fullText.contains("missing info.plist") || fullText.contains("missingappbundle") || fullText.contains("packageextractionfailed") || fullText.contains("zip") {
-            return DiagnosticErrorItem(
-                badge: .system,
-                title: "Gói cài đặt IPA bị hỏng (Corrupted IPA Payload)",
-                cause: "File IPA bị hỏng cấu trúc bên trong, khi đẩy vào tiến trình installd của iOS thì bị từ chối."
-            )
-        }
-        
-        // [2.15] Developer Mode Disabled (iOS 16+)
-        if fullText.contains("developer mode") || fullText.contains("chế độ nhà phát triển") || fullText.contains("requires developer mode") {
-            return DiagnosticErrorItem(
-                badge: .system,
-                title: "Chưa bật Chế độ nhà phát triển (Developer Mode Disabled)",
-                cause: "Đẩy ứng dụng thành công nhưng bị chặn do chưa bật 'Chế độ nhà phát triển' trên iOS 16+."
-            )
-        }
-        
-        // [2.9] ApplicationVerificationFailed
-        if fullText.contains("applicationverificationfailed") || fullText.contains("verification failed") || fullText.contains("0xe80080") || fullText.contains("code signature") {
-            return DiagnosticErrorItem(
-                badge: .system,
-                title: "Lỗi xác minh chữ ký số (ApplicationVerificationFailed)",
-                cause: "Chữ ký số ở bước trước bị sai lệch hoặc chứng chỉ bị lỗi, iOS kiểm tra phát hiện ra và từ chối cài."
-            )
-        }
-        
-        // Bắt mã lỗi Minimuxer 39 (ProfileInstall) hoặc các lỗi kết nối thiết bị khi VPN đã bật
-        if code == 39 || code == 8 || fullText.contains("profileinstall") || opError != nil {
-            return DiagnosticErrorItem(
-                badge: .device,
-                title: "Thiết bị từ chối giao tiếp (Invalid Pairing / Lockdown Error)",
-                cause: "LocalDevVPN đã bật nhưng iOS từ chối lệnh cài đặt (Mã \(code)). Thường do đã xoá thiết bị đã liên kết hoặc phiên ghép đôi bị kẹt."
-            )
-        }
-        
-        // Nhánh dự phòng cuối cùng theo từng Giai đoạn
-        let translatedFallback = Self.translateSystemNetworkError(error.localizedDescription)
-        switch phase {
-        case .authorization:
-            return DiagnosticErrorItem(
-                badge: .apple,
-                title: "Gián đoạn bước Xin cấp phép (Mã \(code))",
-                cause: translatedFallback
-            )
-        case .systemPush:
-            return DiagnosticErrorItem(
-                badge: .device,
-                title: "Gián đoạn đẩy ứng dụng vào hệ thống (Mã \(code))",
-                cause: translatedFallback
-            )
-        }
-    }
-
-    // MARK: - 💾 LƯU TRỰC TIẾP LỖI CHẨN ĐOÁN VÀO COREDATA (`LoggedError`) CHO `ErrorLogViewController`
+    // MARK: - 💾 LƯU TRỰC TIẾP LỖI VÀO COREDATA (`LoggedError`) CHO `ErrorLogViewController`
     static func recordDiagnosticErrorToDatabase(
         for group: RefreshGroup?,
         error: Error,
@@ -1117,30 +596,7 @@ extension PipelineExecutor {
         let appBundleID = operation.bundleIdentifier
         let appName = operation.app.name
         let loggedOp: LoggedError.Operation = operation.loggedErrorOperation
-        
-        let failureTitle: String = {
-            switch operation {
-            case .install, .reinstall:
-                return "Lỗi cài đặt \(appName)"
-            case .refresh:
-                return "Lỗi làm mới \(appName)"
-            case .update:
-                return "Lỗi cập nhật \(appName)"
-            case .activate:
-                return "Lỗi kích hoạt \(appName)"
-            case .deactivate, .deleteApp:
-                return "Lỗi tắt kích hoạt \(appName)"
-            case .backup:
-                return "Lỗi sao lưu \(appName)"
-            case .restore:
-                return "Lỗi khôi phục \(appName)"
-            case .resign:
-                return "Lỗi ký lại \(appName)"
-            case .removeApp, .removeDeactivatedApp:
-                return "Lỗi gỡ cài đặt \(appName)"
-            }
-        }()
-        
+        let failureTitle = Self.actionFailureTitle(for: operation)
         let fallbackApp = AnyApp(from: operation.app)
         
         await Self.recordDiagnosticErrorToDatabaseCore(
@@ -1156,7 +612,6 @@ extension PipelineExecutor {
         )
     }
 
-    /// Hàm lưu lỗi tổng quát (Dùng cho cả `executePipeline` và các bước ngoài Pipeline như `.injectBatchProfiles`)
     private static func recordDiagnosticErrorToDatabaseCore(
         for group: RefreshGroup?,
         error: Error,
@@ -1175,20 +630,18 @@ extension PipelineExecutor {
             return
         }
         
-        let diagnosis = Self.diagnoseError(error, phase: phase)
         let nsError = error as NSError
-        let info = Self.extractFullErrorInfo(error)
-        let translatedRaw = Self.translateSystemNetworkError(nsError.localizedDescription)
+        let techInfo = Self.extractTechnicalDetails(error)
         
-        // QUAN TRỌNG: Chỉ lưu các kiểu dữ liệu chuẩn NSSecureCoding (String) vào userInfo
-        // Tuyệt đối không gắn Swift Error (như MinimuxerError) vào NSUnderlyingErrorKey vì sẽ làm NSSecureUnarchiveFromDataTransformer lỗi khi save()
-        let cleanDomain = nsError.domain.isEmpty ? "SideStore.DiagnosticError" : nsError.domain
-        let cleanCode = (nsError.code != 0) ? nsError.code : info.code
+        let cleanDomain = nsError.domain.isEmpty ? techInfo.domain : nsError.domain
+        let cleanCode = (nsError.code != 0) ? nsError.code : techInfo.code
+        
+        // Chỉ lưu chuỗi String chuẩn NSSecureCoding vào userInfo để CoreData lưu an toàn 100%
         let cleanUserInfo: [String: Any] = [
             NSLocalizedFailureErrorKey: failureTitle,
             NSLocalizedFailureReasonErrorKey: failureTitle,
-            NSLocalizedDescriptionKey: "[\(diagnosis.badge.rawValue)] \(diagnosis.title)",
-            NSLocalizedRecoverySuggestionErrorKey: "Nguyên nhân: \(diagnosis.cause)\nChi tiết kỹ thuật (.\(stepName)): \(translatedRaw)"
+            NSLocalizedDescriptionKey: failureTitle,
+            NSLocalizedRecoverySuggestionErrorKey: "Chi tiết kỹ thuật (.\(stepName)):\n\(techInfo.detailText)"
         ]
         
         let enrichedError = NSError(domain: cleanDomain, code: cleanCode, userInfo: cleanUserInfo)
@@ -1200,7 +653,6 @@ extension PipelineExecutor {
                 var matchedInstalledApp: InstalledApp? = nil
                 var matchedStoreApp: StoreApp? = nil
                 
-                // 1. Tìm chính xác theo bundleIdentifier nếu có
                 if let bundleID = bundleIdentifier, !bundleID.isEmpty {
                     let installedFetch: NSFetchRequest<InstalledApp> = InstalledApp.fetchRequest()
                     installedFetch.predicate = NSPredicate(format: "%K == %@", #keyPath(InstalledApp.bundleIdentifier), bundleID)
@@ -1215,7 +667,6 @@ extension PipelineExecutor {
                     }
                 }
                 
-                // 2. Nếu chưa tìm thấy (ví dụ gọi từ .injectBatchProfiles chỉ có appName), tìm theo tên hoặc lấy InstalledApp đầu tiên
                 if matchedInstalledApp == nil && matchedStoreApp == nil {
                     let byNameFetch: NSFetchRequest<InstalledApp> = InstalledApp.fetchRequest()
                     byNameFetch.predicate = NSPredicate(format: "%K ==[c] %@", #keyPath(InstalledApp.name), appName)
@@ -1262,7 +713,7 @@ extension PipelineExecutor {
                 
                 do {
                     try bgContext.save()
-                    debugLog("[PipelineExecutor] ✅ Đã lưu lỗi '\(failureTitle)' (.\(stepName)) vào Nhật Ký Lỗi Hệ Thống.")
+                    debugLog("[PipelineExecutor] ✅ Đã lưu '\(failureTitle)' (.\(stepName)) vào Nhật Ký Lỗi Hệ Thống.")
                 } catch {
                     debugLog("[PipelineExecutor] ❌ Không thể lưu LoggedError vào CoreData: \(error)")
                 }
@@ -1273,7 +724,6 @@ extension PipelineExecutor {
     }
 
     /// Hiển thị Bảng Thông Báo Lỗi **CHỈ 1 LẦN DUY NHẤT** cho mỗi `RefreshGroup`
-    /// Đồng thời tự động đảm bảo lỗi (kể cả `.injectBatchProfiles`) luôn được lưu vào Nhật Ký Lỗi Hệ Thống.
     @MainActor
     static func presentDiagnosticErrorAlertOnce(
         for group: RefreshGroup?,
@@ -1286,25 +736,16 @@ extension PipelineExecutor {
             return
         }
         
-        // Tự động đảm bảo lỗi từ các bước ngoài executePipeline (như .injectBatchProfiles khi Làm mới 3 ứng dụng)
-        // cũng được lưu đầy đủ vào CoreData trước khi hiện bảng thông báo!
-        let inferredTitle: String = {
-            if appName.lowercased().hasPrefix("làm mới") || appName.lowercased().hasPrefix("cài đặt") || appName.lowercased().hasPrefix("lỗi") {
-                return "Lỗi \(appName)"
-            }
-            if stepName.lowercased().contains("refresh") || stepName.lowercased().contains("batch") {
-                return "Lỗi làm mới \(appName)"
-            }
-            return "Lỗi thao tác \(appName)"
-        }()
+        let displayFailureTitle = Self.normalizedFailureTitle(appNameOrTitle: appName, stepName: stepName)
         
         let inferredOperation: LoggedError.Operation = {
-            if stepName.lowercased().contains("refresh") || stepName.lowercased().contains("batch") || appName.lowercased().contains("làm mới") {
+            if stepName.lowercased().contains("refresh") || stepName.lowercased().contains("batch") || displayFailureTitle.lowercased().contains("làm mới") {
                 return .refresh
             }
             return .install
         }()
         
+        // Đảm bảo lỗi từ cả các bước ngoài executePipeline (như .injectBatchProfiles) cũng được lưu vào CoreData
         await Self.recordDiagnosticErrorToDatabaseCore(
             for: group,
             error: error,
@@ -1312,7 +753,7 @@ extension PipelineExecutor {
             stepName: stepName,
             appName: appName,
             bundleIdentifier: nil,
-            failureTitle: inferredTitle,
+            failureTitle: displayFailureTitle,
             loggedOperation: inferredOperation,
             fallbackApp: nil
         )
@@ -1330,10 +771,8 @@ extension PipelineExecutor {
             return
         }
         
-        let diagnosis = Self.diagnoseError(error, phase: phase)
-        let nsError = error as NSError
-        let translatedDesc = Self.translateSystemNetworkError(error.localizedDescription)
-        let rawDetail = "[\(nsError.domain) : \(nsError.code)] \(translatedDesc)"
+        let techInfo = Self.extractTechnicalDetails(error)
+        let rawDetail = "[\(techInfo.domain) : \(techInfo.code)]\n\(techInfo.detailText)"
         
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let lock = NSLock()
@@ -1354,8 +793,7 @@ extension PipelineExecutor {
             let modalView = CSSErrorPromptModalView(
                 phase: phase,
                 stepName: stepName,
-                appName: appName,
-                diagnosis: diagnosis,
+                failureTitle: displayFailureTitle,
                 rawErrorText: rawDetail,
                 onDismiss: {
                     if let hc = hostingController {
@@ -1377,7 +815,6 @@ extension PipelineExecutor {
         }
     }
 
-    /// Giữ hàm tương thích nếu được gọi từ nơi không truyền `group`
     @MainActor
     static func presentDiagnosticErrorAlert(
         phase: MonitoredPhase,
@@ -1414,18 +851,16 @@ extension PipelineExecutor {
     }
 }
 
-// MARK: - 🎨 GIAO DIỆN BẢNG THÔNG BÁO GỌN ĐẸP (1 NÚT “TẮT THÔNG BÁO”, KHÔNG HƯỚNG DẪN FIX LỖI)
+// MARK: - 🎨 GIAO DIỆN BẢNG THÔNG BÁO (HIỂN THỊ TRỰC TIẾP TIÊU ĐỀ & CHI TIẾT KỸ THUẬT)
 private enum CSSErrorTheme {
     static let cornerRadius: CGFloat = 15.0
     static let primary = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255)       // #007bff
     static let secondary = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)    // #6f42c1
-    static let green = SwiftUI.Color(red: 40/255, green: 167/255, blue: 69/255)         // #28a745
     static let red = SwiftUI.Color(red: 220/255, green: 53/255, blue: 69/255)           // #dc3545
     static let pureBlack = SwiftUI.Color.black
     static let cardBackground = SwiftUI.Color.white
     static let innerRowBackground = SwiftUI.Color(red: 246/255, green: 248/255, blue: 251/255)
     static let border = SwiftUI.Color(red: 218/255, green: 224/255, blue: 233/255)
-    static let innerBorder = SwiftUI.Color(red: 222/255, green: 228/255, blue: 236/255)
 
     static var pageGradient: SwiftUI.LinearGradient {
         SwiftUI.LinearGradient(
@@ -1461,12 +896,10 @@ private struct CSSErrorBounceButtonStyle: SwiftUI.ButtonStyle {
 private struct CSSErrorPromptModalView: SwiftUI.View {
     let phase: PipelineExecutor.MonitoredPhase
     let stepName: String
-    let appName: String
-    let diagnosis: PipelineExecutor.DiagnosticErrorItem
+    let failureTitle: String
     let rawErrorText: String
     let onDismiss: () -> Void
 
-    @State private var showRawDetails: Bool = false
     @State private var didTapDismiss: Bool = false
 
     var body: some SwiftUI.View {
@@ -1476,7 +909,7 @@ private struct CSSErrorPromptModalView: SwiftUI.View {
             
             SwiftUI.VStack(spacing: 12) {
                 headerBannerView
-                diagnosticCardView
+                technicalCardView
                 dismissButtonView
             }
             .padding(14)
@@ -1509,68 +942,36 @@ private struct CSSErrorPromptModalView: SwiftUI.View {
         .clipShape(SwiftUI.RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private var diagnosticCardView: some SwiftUI.View {
+    private var technicalCardView: some SwiftUI.View {
         SwiftUI.VStack(alignment: .leading, spacing: 10) {
-            SwiftUI.HStack {
-                SwiftUI.Text(appName)
-                    .font(.system(size: 15, weight: .heavy))
-                    .foregroundColor(CSSErrorTheme.primary)
-                    .lineLimit(1)
+            SwiftUI.HStack(alignment: .center, spacing: 8) {
+                SwiftUI.Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(CSSErrorTheme.red)
                 
-                SwiftUI.Spacer()
-                
-                SwiftUI.Text(diagnosis.badge.rawValue)
-                    .font(.system(size: 11, weight: .heavy))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(diagnosis.badge.color)
-                    .cornerRadius(6)
+                SwiftUI.Text(failureTitle)
+                    .font(.system(size: 15.5, weight: .heavy))
+                    .foregroundColor(CSSErrorTheme.pureBlack)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             
             SwiftUI.Divider()
             
-            SwiftUI.VStack(alignment: .leading, spacing: 4) {
-                SwiftUI.Text(diagnosis.title)
-                    .font(.system(size: 14.5, weight: .bold))
-                    .foregroundColor(CSSErrorTheme.pureBlack)
-                
-                SwiftUI.Text(diagnosis.cause)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(CSSErrorTheme.pureBlack.opacity(0.78))
+            SwiftUI.Text("Chi tiết kỹ thuật (.\(stepName)):")
+                .font(.system(size: 12.5, weight: .bold))
+                .foregroundColor(CSSErrorTheme.secondary)
+            
+            SwiftUI.ScrollView {
+                SwiftUI.Text(rawErrorText)
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundColor(CSSErrorTheme.pureBlack.opacity(0.88))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
             }
+            .frame(maxHeight: 160)
             .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
             .background(CSSErrorTheme.innerRowBackground)
             .cornerRadius(10)
-            
-            SwiftUI.Button {
-                SwiftUI.withAnimation(.easeInOut(duration: 0.18)) {
-                    showRawDetails.toggle()
-                }
-            } label: {
-                SwiftUI.HStack(spacing: 4) {
-                    SwiftUI.Image(systemName: showRawDetails ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 11, weight: .bold))
-                    SwiftUI.Text("Mã lỗi kỹ thuật (.\(stepName))")
-                        .font(.system(size: 12, weight: .semibold))
-                    SwiftUI.Spacer()
-                }
-                .foregroundColor(CSSErrorTheme.secondary)
-            }
-            
-            if showRawDetails {
-                SwiftUI.ScrollView {
-                    SwiftUI.Text(rawErrorText)
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundColor(CSSErrorTheme.pureBlack.opacity(0.8))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxHeight: 65)
-                .padding(8)
-                .background(CSSErrorTheme.innerRowBackground)
-                .cornerRadius(8)
-            }
         }
         .padding(13)
         .background(CSSErrorTheme.cardBackground)

@@ -1,4 +1,3 @@
-
 //
 //  UserCustomizationOperation.swift
 //  AltStore
@@ -9,7 +8,6 @@
 import Foundation
 import UIKit
 import AltStoreCore
-import AltSign
 import Roxas
 
 @objc(UserCustomizationOperation)

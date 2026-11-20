@@ -1,562 +1,692 @@
 
 //
 //  UserCustomizationOperation.swift
-//  SideStore
+//  AltStore
 //
-//  Created by Magesh K on 30/07/26.
-//  Copyright © 2026 AltStore. All rights reserved.
+//  Created by SideStore Team.
 //
 
 import Foundation
-import CoreData
-import SideSign
+import UIKit
+import AltStoreCore
+import AltSign
+import Roxas
 
-/// Thông tin một App ID rảnh rỗi có thể tái sử dụng ngay (tốn 0 slot ID mới)
-public struct ReusableAppIDCandidate: Identifiable, Hashable, Sendable {
-    public var id: String { fullBundleIdentifier }
-    public let name: String
-    /// Bundle ID đầy đủ chính xác trên Apple Portal (ví dụ: com.alone.37D6PWG5PP)
-    public let fullBundleIdentifier: String
-    /// Bundle ID đã bỏ đuôi Team ID để hiển thị gọn gàng trên UI (ví dụ: com.alone)
-    public let baseBundleIdentifier: String
-    public let requiresAppendingTeamID: Bool
-    public let expirationDate: Date?
-
-    public init(
-        name: String,
-        fullBundleIdentifier: String,
-        baseBundleIdentifier: String? = nil,
-        requiresAppendingTeamID: Bool = false,
-        expirationDate: Date?
-    ) {
-        self.name = name
-        self.fullBundleIdentifier = fullBundleIdentifier
-        self.baseBundleIdentifier = baseBundleIdentifier ?? fullBundleIdentifier
-        self.requiresAppendingTeamID = requiresAppendingTeamID
-        self.expirationDate = expirationDate
+@objc(UserCustomizationOperation)
+final class UserCustomizationOperation: ResultOperation<ALTApplication> {
+    let context: AppOperationContext
+    
+    init(context: AppOperationContext) {
+        self.context = context
+        super.init()
     }
-}
-
-final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperationContext, String?>, @unchecked Sendable {
-
-    override func execute(parentProgress: Progress?) async throws -> String? {
-        let startTime = CFAbsoluteTimeGetCurrent()
-        debugLog("[UserCustomizationOperation] execute() started")
-        defer {
-            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-            debugLog("[UserCustomizationOperation] execute() took: \(String(format: "%.3fs", elapsed))")
+    
+    override func main() {
+        super.main()
+        
+        if let error = self.context.error {
+            self.finish(.failure(error))
+            return
         }
-        try await super.executePreconditionCheck(parentProgress: parentProgress)
-        self.setProgress(10)
-
-        guard let targetAppBundle = context.targetAppBundle else {
-            throw OperationError.invalidParameters("UserCustomizationOperation: context.targetAppBundle is nil")
+        
+        guard let targetAppBundle = self.context.targetAppBundle else {
+            self.finish(.failure(OperationError.invalidParameters("UserCustomizationOperation.main: self.context.targetAppBundle is nil")))
+            return
         }
-
-        let authTeam = try await AuthManager.shared.getAuthenticatedTeam()
-        let teamID = authTeam.identifier
-        guard !teamID.isEmpty else {
-            debugLog("[UserCustomizationOperation] FAILED: authTeamID is empty")
-            throw OperationError.invalidParameters("Active developer team identifier is missing.")
+        
+        // 1. Không hiển thị bảng hỏi nếu đây là bản tự cài đặt/cập nhật của chính SideStore
+        if context.bundleIdentifier == StoreApp.altstoreAppID {
+            self.context.useMainProfile = true
+            self.context.appendTeamID = true
+            self.finish(.success(targetAppBundle))
+            return
         }
-
-        // Luôn bật cờ gộp chung 1 Provisioning Profile của App chính cho mọi phần mở rộng
-        self.context.useMainProfile = true
-
-        // Lấy Tên thật và ID gốc thật sự của file IPA đang đưa vào
-        let trueOriginalBundleID = targetAppBundle.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
-        let incomingOrigBaseLower = Self.stripTrailingTeamID(from: trueOriginalBundleID, teamID: teamID).lowercased()
-        let incomingNameLower = targetAppBundle.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
-        // 1. Quét danh sách App đang sống trên máy
-        let installedSnap = fetchInstalledAppSnapshots(teamID: teamID)
-
-        // =========================================================================
-        // THUẬT TOÁN NHẬN DIỆN THÔNG MINH (CHỐNG CÀI ĐÈ NHẦM KHI KHÁC TÊN APP)
-        // =========================================================================
-        // Nguyên tắc vàng:
-        // - Nếu KHÔNG PHẢI bấm Update từ Store (context.isStoreUpdate == false):
-        //   Hai app có thể dùng chung/mượn lại cùng một Bundle ID cũ, nên BẮT BUỘC
-        //   TÊN APP PHẢI GIỐNG HỆT NHAU (existingName == incomingNameLower) thì mới
-        //   được coi là tự động Cập Nhật (Update) không cần hỏi!
-        // - Nếu trùng Bundle ID (hoặc nhớ lại ID cũ trong UserDefaults) nhưng TÊN APP KHÁC NHAU:
-        //   Tuyệt đối KHÔNG được tự ý cài đè! Phải reset để hiện bảng hỏi cho người dùng chọn!
-        // =========================================================================
-
-        if !context.isStoreUpdate {
-            // BƯỚC 1A: Kiểm tra lại context.installedApp (nếu bước Preflight trước đó đã gán sẵn do trùng ID)
-            if let preMatchedApp = context.installedApp {
-                let isSameAppIdentity: Bool = context.dbBackgroundContext.performAndWait {
-                    let existingName = preMatchedApp.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                    // BẮT BUỘC TÊN APP PHẢI TRÙNG KHỚP! Nếu khác tên app -> Chắc chắn là 2 app khác nhau!
-                    return !incomingNameLower.isEmpty && existingName == incomingNameLower
-                }
-
-                if !isSameAppIdentity {
-                    debugLog("[UserCustomizationOperation] Blocked auto-overwrite: Incoming IPA '\(targetAppBundle.name)' has different name from existing app. Forcing prompt!")
-                    context.installedApp = nil
-                    context.customBundleIdentifier = nil
-                }
-            }
-
-            // BƯỚC 1B: Nếu context.installedApp đang nil, tìm xem có đúng App đó đang sống trên máy không
-            // Chỉ khớp tự động khi TÊN APP TRÙNG KHỚP HOÀN TOÀN (ưu tiên khớp cả ID + Tên trước, sau đó mới tới Tên duy nhất)
-            if context.installedApp == nil, !incomingNameLower.isEmpty {
-                let matchedObjectID = installedSnap.objectIDByExactNameAndBaseID["\(incomingNameLower)|\(incomingOrigBaseLower)"]
-                    ?? installedSnap.objectIDByUniqueAppName[incomingNameLower]
-
-                if let matchedObjectID {
-                    context.dbBackgroundContext.performAndWait {
-                        if let matchedApp = try? context.dbBackgroundContext.existingObject(with: matchedObjectID) as? InstalledApp {
-                            self.context.installedApp = matchedApp
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. NẾU LÀ CẬP NHẬT THẬT SỰ (Bấm Update từ Store HOẶC cài IPA mới của đúng App có cùng Tên đang sống trên máy):
+        
+        // 2. Nếu là cập nhật hoặc cài đè lên ứng dụng ĐÃ CÀI ĐẶT sẵn trên máy -> Giữ nguyên thiết lập cũ
         if context.isStoreUpdate || context.installedApp != nil {
-            let existingResignedID: String? = context.dbBackgroundContext.performAndWait {
+            self.context.useMainProfile = true
+            let existingCustomID: String? = self.context.dbBackgroundContext.performAndWait {
+                self.context.installedApp?.customBundleIdentifier
+            }
+            let existingResignedID: String? = self.context.dbBackgroundContext.performAndWait {
                 self.context.installedApp?.resignedBundleIdentifier
             }
-            if let trimmedResigned = existingResignedID?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !trimmedResigned.isEmpty {
+            let activeTeamID: String? = self.context.dbBackgroundContext.performAndWait {
+                DatabaseManager.shared.activeTeam(in: self.context.dbBackgroundContext)?.identifier
+            }
+            
+            if let existingResignedID, !existingResignedID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let trimmedResigned = existingResignedID.trimmingCharacters(in: .whitespacesAndNewlines)
                 context.customBundleIdentifier = trimmedResigned
                 context.appendTeamID = false
-            }
-            debugLog("[UserCustomizationOperation] Genuine existing app update detected ('\(targetAppBundle.name)'); keeping existing ID and skipping prompt.")
-            self.setProgress(100)
-            return context.customBundleIdentifier != nil ? context.targetBundleIdentifier : nil
-        }
-
-        // 3. NẾU LÀ APP MỚI (HOẶC APP KHÁC TÊN NHƯNG TRÙNG/NHỚ LẠI ID CŨ):
-        // Xóa sạch customBundleIdentifier cũ để hiện bảng hỏi với ID gốc sạch sẽ của IPA!
-        context.customBundleIdentifier = nil
-
-        let handler = context.handler.userCustomizationHandler
-        var didCustomizeBundleID = false
-
-        if UserDefaults.standard.customizeInfoPlist {
-            let installedApps: [InstalledApp] = context.dbBackgroundContext.performAndWait {
-                let request = InstalledApp.fetchRequest()
-                return (try? context.dbBackgroundContext.fetch(request)) ?? []
-            }
-            let installedAppIdentities = Dictionary(
-                installedApps.compactMap { app -> (String, String)? in
-                    (app.bundleIdentifier, app.name)
-                },
-                uniquingKeysWith: { first, _ in first }
-            )
-
-            let initialBundleID = trueOriginalBundleID
-            var targets: [InfoPlistTarget] = [
-                InfoPlistTarget(id: initialBundleID, name: targetAppBundle.name, isExtension: false, initialPlist: targetAppBundle.infoPlist)
-            ]
-            for ext in targetAppBundle.allAppBundles where ext.isExtension {
-                targets.append(InfoPlistTarget(id: ext.bundleIdentifier, name: ext.name, isExtension: true, initialPlist: ext.infoPlist))
-            }
-
-            self.setProgress(40)
-
-            guard let result = try await handler.resolveInfoPlistCustomization(
-                targets: targets,
-                initialBundleID: initialBundleID,
-                appendTeamID: true,
-                installedAppIdentities: installedAppIdentities,
-                teamID: teamID
-            ) else {
-                throw OperationError.cancelled
-            }
-
-            context.appendTeamID = true
-
-            let mainModifiedPlist = result.modifiedPlists[initialBundleID] ?? [:]
-            let customID = InfoPlistParser(dictionary: mainModifiedPlist).bundleIdentifier
-            if let customID = customID, !customID.isEmpty, customID != context.bundleIdentifier {
-                context.customBundleIdentifier = Self.stripTrailingTeamID(from: customID, teamID: teamID)
-                didCustomizeBundleID = true
+            } else if let existingCustomID = existingCustomID ?? context.customBundleIdentifier,
+                      !existingCustomID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let trimmed = existingCustomID.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let activeTeamID, trimmed.lowercased().hasSuffix(".\(activeTeamID.lowercased())") {
+                    context.customBundleIdentifier = trimmed
+                    context.appendTeamID = false
+                } else if let activeTeamID, !activeTeamID.isEmpty {
+                    let baseID = Self.stripTrailingTeamID(from: trimmed, teamID: activeTeamID)
+                    context.customBundleIdentifier = "\(baseID).\(activeTeamID)"
+                    context.appendTeamID = false
+                } else {
+                    context.customBundleIdentifier = trimmed
+                    context.appendTeamID = true
+                }
             } else {
-                context.customBundleIdentifier = nil
+                context.appendTeamID = true
             }
-
-            for (targetID, plist) in result.modifiedPlists {
-                let key = (targetID == initialBundleID) ? context.targetBundleIdentifier : targetID
-                context.customInfoPlistByBundleID[key] = plist
+            
+            self.finish(.success(targetAppBundle))
+            return
+        }
+        
+        let initialName = targetAppBundle.name
+        let initialBundleID = self.context.customBundleIdentifier ?? targetAppBundle.bundleIdentifier
+        
+        // 3. Tải danh sách App ID hiện có trên Apple Developer Portal để người dùng có thể chọn dùng lại
+        Task {
+            let (team, existingPortalAppIDs, installedResignedIDs) = await self.fetchExistingAppIDChoices()
+            let teamID = team?.identifier ?? ""
+            
+            let cleanInitialBundleID = Self.stripTrailingTeamID(from: initialBundleID, teamID: teamID)
+            
+            let result = await MainActor.run { () async -> CustomizationResult? in
+                guard let presenter = Self.topViewController() else {
+                    return CustomizationResult(
+                        customName: initialName,
+                        selectedBundleID: cleanInitialBundleID,
+                        isReusingPortalAppID: false
+                    )
+                }
+                
+                return await withCheckedContinuation { continuation in
+                    self.presentCustomizationSheet(
+                        on: presenter,
+                        initialName: initialName,
+                        initialBundleID: cleanInitialBundleID,
+                        teamID: teamID,
+                        portalAppIDs: existingPortalAppIDs,
+                        installedResignedIDs: installedResignedIDs,
+                        completion: { result in
+                            continuation.resume(returning: result)
+                        }
+                    )
+                }
             }
-
-            // Hậu kiểm: Chỉ gán installedApp (để ghi đè) nếu ID cuối cùng người dùng chốt trùng với một app đang có trên máy
-            syncInstalledAppWithFinalChosenBundleID(teamID: teamID, installedSnap: installedSnap)
-        } else {
-            self.setProgress(35)
-            let reusableCandidates = await fetchReusableAppIDCandidates(
-                authTeam: authTeam,
-                teamID: teamID,
-                activeMainIDsLowercased: installedSnap.activeMainIDsLowercased
-            )
-
-            let initialBundleID = trueOriginalBundleID
-            self.setProgress(50)
-
-            guard let result = try await handler.resolveBundleIDOverride(
-                initialBundleID: initialBundleID,
-                appName: targetAppBundle.name,
-                teamID: teamID,
-                reusableAppIDs: reusableCandidates
-            ) else {
-                throw OperationError.cancelled
+            
+            guard let result = result else {
+                self.finish(.failure(OperationError.cancelled))
+                return
             }
-
-            let chosenRawID = result.customID.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            if let matchedCandidate = reusableCandidates.first(where: {
-                $0.fullBundleIdentifier.caseInsensitiveCompare(chosenRawID) == .orderedSame ||
-                $0.baseBundleIdentifier.caseInsensitiveCompare(chosenRawID) == .orderedSame
-            }) {
-                // KHI CHỌN "DÙNG LẠI ID CŨ":
+            
+            let trimmedName = result.customName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let chosenRawID = result.selectedBundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            var didCustomizeName = false
+            var didCustomizeBundleID = false
+            
+            if !trimmedName.isEmpty && trimmedName != initialName {
+                didCustomizeName = true
+            }
+            
+            // Ép cứng sử dụng chung Profile của App chính cho toàn bộ Extensions (useMainProfile = true)
+            // để không bao giờ tạo thêm App ID phụ cho các Widget/Extensions.
+            self.context.useMainProfile = true
+            
+            if result.isReusingPortalAppID {
+                // KHI CHỌN DÙNG LẠI APP ID ĐÃ ĐĂNG KÝ TRÊN APPLE PORTAL:
+                // Giữ nguyên chính xác 100% Bundle Identifier đầy đủ của App ID đó (đã có đuôi .TEAM_ID)
+                // và tắt appendTeamID để không bao giờ bị nối chồng thành .TEAM_ID.TEAM_ID!
                 context.appendTeamID = false
-                context.customBundleIdentifier = matchedCandidate.fullBundleIdentifier
+                context.customBundleIdentifier = chosenRawID
                 didCustomizeBundleID = true
             } else {
                 // KHI DÙNG ID GỐC CỦA IPA HOẶC TỰ GÕ ID MỚI:
-                context.appendTeamID = true
-                let cleanCustomID = Self.stripTrailingTeamID(from: chosenRawID, teamID: teamID)
-                if !cleanCustomID.isEmpty, cleanCustomID != context.bundleIdentifier {
-                    context.customBundleIdentifier = cleanCustomID
+                // Luôn lưu đầy đủ cả hậu tố TeamID vào customBundleIdentifier ngay từ lần cài đầu tiên
+                // để khi Làm mới (Refresh) lần đầu không bao giờ bị lệch ID!
+                let baseID = Self.stripTrailingTeamID(
+                    from: chosenRawID.isEmpty ? cleanInitialBundleID : chosenRawID,
+                    teamID: teamID
+                )
+                if !teamID.isEmpty {
+                    context.appendTeamID = false
+                    context.customBundleIdentifier = "\(baseID).\(teamID)"
                     didCustomizeBundleID = true
                 } else {
-                    context.customBundleIdentifier = nil
+                    context.appendTeamID = true
+                    if !baseID.isEmpty, baseID != context.bundleIdentifier {
+                        context.customBundleIdentifier = baseID
+                        didCustomizeBundleID = true
+                    } else {
+                        context.customBundleIdentifier = nil
+                    }
                 }
             }
-
-            // Hậu kiểm: Sau khi người dùng đã được hỏi và tự tay chốt ID trên bảng chọn:
-            // - Nếu họ chọn 1 ID mới/ID cũ đang rảnh -> context.installedApp = nil (Cài thành App mới độc lập!)
-            // - Nếu họ cố tình nhập/chọn đúng cái ID đang thuộc về 1 App đang sống -> Gán installedApp để cài đè theo ý họ.
-            syncInstalledAppWithFinalChosenBundleID(teamID: teamID, installedSnap: installedSnap)
+            
+            if didCustomizeName {
+                do {
+                    try Self.applyDisplayName(trimmedName, to: targetAppBundle.fileURL)
+                } catch {
+                    self.finish(.failure(error))
+                    return
+                }
+            }
+            
+            guard let refreshedApplication = ALTApplication(fileURL: targetAppBundle.fileURL) else {
+                self.finish(.failure(OperationError.invalidApp))
+                return
+            }
+            
+            if didCustomizeName || didCustomizeBundleID {
+                self.context.targetAppBundle = refreshedApplication
+            }
+            
+            self.finish(.success(refreshedApplication))
         }
-
-        if UserDefaults.standard.customizeEntitlements {
-            let mainTargetID = context.targetBundleIdentifier
-            self.setProgress(70)
-
-            var targets: [EntitlementsTarget] = [
-                EntitlementsTarget(
-                    id: mainTargetID,
-                    name: targetAppBundle.name,
-                    isExtension: false,
-                    initialEntitlements: targetAppBundle.entitlements
-                )
-            ]
-
-            for ext in targetAppBundle.allAppBundles where ext.isExtension {
-                targets.append(
-                    EntitlementsTarget(
-                        id: ext.bundleIdentifier,
-                        name: ext.name,
-                        isExtension: true,
-                        initialEntitlements: ext.entitlements
+    }
+    
+    // MARK: - Data Models
+    
+    private struct PortalAppIDChoice {
+        let name: String
+        let fullBundleID: String
+        let baseBundleID: String
+        let expirationDate: Date?
+        let isCurrentlyInstalled: Bool
+    }
+    
+    private struct CustomizationResult {
+        let customName: String
+        let selectedBundleID: String
+        let isReusingPortalAppID: Bool
+    }
+    
+    // MARK: - Fetch Existing App IDs (Apple Portal + Local DB Fallback)
+    
+    private func fetchExistingAppIDChoices() async -> (ALTTeam?, [PortalAppIDChoice], Set<String>) {
+        // Lấy thông tin từ Core Data trước
+        let (localAppIDs, installedResignedIDs): ([(name: String, bundleID: String, expDate: Date?)], Set<String>) = await self.context.dbBackgroundContext.perform {
+            var localList: [(name: String, bundleID: String, expDate: Date?)] = []
+            var installedSet = Set<String>()
+            
+            let installedApps = InstalledApp.all(in: self.context.dbBackgroundContext)
+            for app in installedApps {
+                if !app.resignedBundleIdentifier.isEmpty {
+                    installedSet.insert(app.resignedBundleIdentifier.lowercased())
+                }
+                if let customID = app.customBundleIdentifier, !customID.isEmpty {
+                    installedSet.insert(customID.lowercased())
+                }
+            }
+            
+            if let activeTeam = DatabaseManager.shared.activeTeam(in: self.context.dbBackgroundContext) {
+                for appID in activeTeam.appIDs {
+                    localList.append((name: appID.name, bundleID: appID.bundleIdentifier, expDate: appID.expirationDate))
+                }
+            }
+            return (localList, installedSet)
+        }
+        
+        // Cố gắng lấy Team & danh sách App ID mới nhất từ Apple Portal
+        var resolvedTeam: ALTTeam? = self.context.sharedContext.team ?? self.context.team
+        if resolvedTeam == nil {
+            let fetchTeamOp = FetchTeamOperation(context: self.context)
+            resolvedTeam = try? await withCheckedThrowingContinuation { continuation in
+                fetchTeamOp.resultHandler = { result in
+                    continuation.resume(with: result)
+                }
+                AppManager.shared.operationQueue.addOperation(fetchTeamOp)
+            }
+            if let resolvedTeam {
+                self.context.sharedContext.team = resolvedTeam
+            }
+        }
+        
+        var portalChoices: [PortalAppIDChoice] = []
+        let teamID = resolvedTeam?.identifier ?? ""
+        
+        if let team = resolvedTeam {
+            let fetchedPortalIDs: [ALTAppID]? = try? await DeveloperPortalProxy.shared.fetchAppIDs(for: team)
+            if let fetchedPortalIDs {
+                self.context.sharedContext.appIDs = fetchedPortalIDs
+                
+                for item in fetchedPortalIDs {
+                    let fullID = item.bundleIdentifier
+                    let baseID = Self.stripTrailingTeamID(from: fullID, teamID: teamID)
+                    
+                    // Không liệt kê App ID của chính SideStore để tránh người dùng chọn nhầm đè lên SideStore
+                    if baseID.lowercased().contains("com.SideStore.SideStore".lowercased()) {
+                        continue
+                    }
+                    
+                    let localMatch = localAppIDs.first { $0.bundleID.lowercased() == fullID.lowercased() }
+                    let isInstalled = installedResignedIDs.contains(fullID.lowercased()) || installedResignedIDs.contains(baseID.lowercased())
+                    
+                    portalChoices.append(
+                        PortalAppIDChoice(
+                            name: item.name,
+                            fullBundleID: fullID,
+                            baseBundleID: baseID,
+                            expirationDate: localMatch?.expDate,
+                            isCurrentlyInstalled: isInstalled
+                        )
+                    )
+                }
+            }
+        }
+        
+        // Nếu không tải được trực tiếp từ Portal (hoặc lỗi mạng tạm thời), dùng dữ liệu cache trong Core Data
+        if portalChoices.isEmpty {
+            for local in localAppIDs {
+                let fullID = local.bundleID
+                let baseID = Self.stripTrailingTeamID(from: fullID, teamID: teamID)
+                if baseID.lowercased().contains("com.SideStore.SideStore".lowercased()) {
+                    continue
+                }
+                let isInstalled = installedResignedIDs.contains(fullID.lowercased()) || installedResignedIDs.contains(baseID.lowercased())
+                portalChoices.append(
+                    PortalAppIDChoice(
+                        name: local.name,
+                        fullBundleID: fullID,
+                        baseBundleID: baseID,
+                        expirationDate: local.expDate,
+                        isCurrentlyInstalled: isInstalled
                     )
                 )
             }
-
-            guard let result = try await handler.resolveEntitlementsCustomization(
-                targets: targets,
-                teamType: authTeam.type
-            ) else {
-                throw OperationError.cancelled
-            }
-
-            for (targetID, targetEntitlements) in result {
-                context.customEntitlementsByBundleID[targetID] = targetEntitlements
-            }
-
-            if let mainEntitlements = result[mainTargetID] {
-                for (key, value) in mainEntitlements {
-                    context.additionalEntitlements[ALTEntitlement(key)] = value
-                }
-            }
         }
-
-        if UserDefaults.standard.customizeAppIcon {
-            self.setProgress(85)
-            if let iconURL = try await handler.resolveAppIconCustomization(appName: targetAppBundle.name) {
-                context.alternateIconMode = .set(iconURL)
+        
+        // Sắp xếp: Ưu tiên các App ID ĐANG RẢNH (chưa có app cài trên máy) lên đầu để người dùng dễ tận dụng lại khi hết 10 App ID
+        portalChoices.sort { lhs, rhs in
+            if lhs.isCurrentlyInstalled != rhs.isCurrentlyInstalled {
+                return !lhs.isCurrentlyInstalled
             }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
-
-        if UserDefaults.standard.customizeProvisioningProfile {
-            self.setProgress(95)
-            let effectiveBundleID = context.customBundleIdentifier ?? context.targetBundleIdentifier
-            let choice = try await handler.resolveProvisioningProfileCustomization(
-                appName: targetAppBundle.name,
-                bundleID: effectiveBundleID
-            )
-            switch choice {
-            case .profile(let profile):
-                context.overrideProvisioningProfile = profile
-                ProfileManager.shared.assignProfile(uuid: profile.uuid, for: effectiveBundleID)
-            case .defaultProfile, .none:
-                break
-            }
-        }
-
-        self.setProgress(100)
-        if didCustomizeBundleID || UserDefaults.standard.customizeInfoPlist || UserDefaults.standard.customizeAppId || UserDefaults.standard.customizeAppIcon || UserDefaults.standard.customizeProvisioningProfile {
-            return context.targetBundleIdentifier
-        } else {
-            return nil
-        }
+        
+        return (resolvedTeam, portalChoices, installedResignedIDs)
     }
-
-    // MARK: - Helpers: Đồng bộ & Nhận diện Thông minh
-
-    /// Kiểm tra ID cuối cùng sau khi người dùng đã chọn trên bảng hỏi.
-    /// Đảm bảo nếu chọn ID rảnh thì cài mới độc lập (`installedApp = nil`),
-    /// còn nếu cố tình chọn trùng ID với một app đang sống thì cập nhật đúng vào slot đó.
-    private func syncInstalledAppWithFinalChosenBundleID(teamID: String, installedSnap: InstalledAppSnapshot) {
-        let baseChosen = (context.customBundleIdentifier ?? context.targetBundleIdentifier)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let finalFullID: String
-        if context.appendTeamID && !teamID.isEmpty && !baseChosen.lowercased().hasSuffix(".\(teamID.lowercased())") {
-            finalFullID = "\(baseChosen).\(teamID)"
-        } else {
-            finalFullID = baseChosen
-        }
-
-        let lowerFinal = finalFullID.lowercased()
-        let lowerBase = Self.stripTrailingTeamID(from: finalFullID, teamID: teamID).lowercased()
-
-        if let matchedID = installedSnap.objectIDByActiveBundleID[lowerFinal] ?? installedSnap.objectIDByActiveBundleID[lowerBase] {
-            context.dbBackgroundContext.performAndWait {
-                self.context.installedApp = try? context.dbBackgroundContext.existingObject(with: matchedID) as? InstalledApp
-            }
-        } else {
-            context.installedApp = nil
-        }
+    
+    // MARK: - UI Presentation
+    
+    @MainActor
+    private func presentCustomizationSheet(
+        on presenter: UIViewController,
+        initialName: String,
+        initialBundleID: String,
+        teamID: String,
+        portalAppIDs: [PortalAppIDChoice],
+        installedResignedIDs: Set<String>,
+        completion: @escaping (CustomizationResult?) -> Void
+    ) {
+        let vc = AppCustomizationSheetViewController(
+            initialName: initialName,
+            initialBundleID: initialBundleID,
+            teamID: teamID,
+            portalAppIDs: portalAppIDs,
+            completion: completion
+        )
+        let nav = UINavigationController(rootViewController: vc)
+        nav.modalPresentationStyle = .formSheet
+        nav.isModalInPresentation = true
+        presenter.present(nav, animated: true)
     }
-
-    private struct InstalledAppSnapshot {
-        /// Toàn bộ ID (cả gốc lẫn resigned) của các App đang sống -> dùng để ẩn khỏi danh sách "Dùng lại ID cũ"
-        let activeMainIDsLowercased: Set<String>
-        /// Khóa kép "tên_app|base_id" -> Nhận diện chuẩn xác 100% cùng Tên và cùng ID
-        let objectIDByExactNameAndBaseID: [String: NSManagedObjectID]
-        /// Chỉ lưu Tên App nếu trên máy có DUY NHẤT 1 App mang tên đó (dùng để nhận diện Update khi App đang mặc áo ID cũ khác với ID gốc trong IPA)
-        let objectIDByUniqueAppName: [String: NSManagedObjectID]
-        /// Bản đồ ID đang hoạt động -> ObjectID (chỉ dùng cho bước Hậu kiểm sau khi người dùng đã tự tay chọn trên bảng hỏi)
-        let objectIDByActiveBundleID: [String: NSManagedObjectID]
+    
+    // MARK: - Helpers
+    
+    /// Cắt bỏ mọi hậu tố `.TEAM_ID` bị lặp ở cuối chuỗi Bundle ID để tránh lỗi `.TEAM_ID.TEAM_ID`
+    static func stripTrailingTeamID(from bundleID: String, teamID: String) -> String {
+        var result = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !teamID.isEmpty else { return result }
+        
+        let suffix = ".\(teamID)"
+        while result.lowercased().hasSuffix(suffix.lowercased()), result.count > suffix.count {
+            result = String(result.dropLast(suffix.count))
+        }
+        return result
     }
-
-    private func fetchInstalledAppSnapshots(teamID: String) -> InstalledAppSnapshot {
-        context.dbBackgroundContext.performAndWait {
-            let request = InstalledApp.fetchRequest()
-            let installedApps = (try? context.dbBackgroundContext.fetch(request)) ?? []
-
-            var activeMainIDs = Set<String>()
-            var mapByNameAndBaseID: [String: NSManagedObjectID] = [:]
-            var mapByUniqueName: [String: NSManagedObjectID] = [:]
-            var duplicatedNames = Set<String>()
-            var mapByActiveBundleID: [String: NSManagedObjectID] = [:]
-
-            let hostMainBundleID = (Bundle.main.bundleIdentifier ?? "").lowercased()
-            let lowerTeam = teamID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
-            // Bảo vệ ứng dụng chủ SideStore đang chạy
-            if !hostMainBundleID.isEmpty {
-                activeMainIDs.insert(hostMainBundleID)
-                if !lowerTeam.isEmpty && !hostMainBundleID.hasSuffix(".\(lowerTeam)") {
-                    activeMainIDs.insert("\(hostMainBundleID).\(lowerTeam)")
-                }
-            }
-
-            for app in installedApps {
-                let rawID = app.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
-                let resignedID = app.resignedBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
-                let nameKey = app.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
-                let isHostApp = Self.isProtectedHostOrCoreApp(
-                    lowerFull: rawID.lowercased(),
-                    hostMainID: hostMainBundleID,
-                    teamID: teamID
-                )
-
-                for idVariant in [rawID, resignedID] where !idVariant.isEmpty {
-                    let lower = idVariant.lowercased()
-                    activeMainIDs.insert(lower)
-
-                    if !lowerTeam.isEmpty && !lower.hasSuffix(".\(lowerTeam)") {
-                        activeMainIDs.insert("\(lower).\(lowerTeam)")
-                    }
-
-                    if !isHostApp {
-                        let baseLower = Self.stripTrailingTeamID(from: idVariant, teamID: teamID).lowercased()
-                        mapByActiveBundleID[lower] = app.objectID
-                        mapByActiveBundleID[baseLower] = app.objectID
-
-                        if !nameKey.isEmpty {
-                            mapByNameAndBaseID["\(nameKey)|\(baseLower)"] = app.objectID
-                            mapByNameAndBaseID["\(nameKey)|\(lower)"] = app.objectID
+    
+    private static func applyDisplayName(_ newName: String, to appBundleURL: URL) throws {
+        let infoPlistURL = appBundleURL.appendingPathComponent("Info.plist")
+        let data = try Data(contentsOf: infoPlistURL)
+        
+        var format = PropertyListSerialization.PropertyListFormat.xml
+        guard var plist = try PropertyListSerialization.propertyList(
+            from: data,
+            options: [.mutableContainersAndLeaves],
+            format: &format
+        ) as? [String: Any] else {
+            throw OperationError.invalidApp
+        }
+        
+        plist["CFBundleDisplayName"] = newName
+        plist["CFBundleName"] = newName
+        
+        let updatedData = try PropertyListSerialization.data(fromPropertyList: plist, format: format, options: 0)
+        try updatedData.write(to: infoPlistURL, options: .atomic)
+        
+        // Cập nhật tất cả các file InfoPlist.strings đa ngôn ngữ để iOS hiển thị đúng tên đã đổi trên Màn hình chính
+        if let contents = try? FileManager.default.contentsOfDirectory(at: appBundleURL, includingPropertiesForKeys: nil) {
+            for itemURL in contents where itemURL.pathExtension.lowercased() == "lproj" {
+                let stringsURL = itemURL.appendingPathComponent("InfoPlist.strings")
+                guard FileManager.default.fileExists(atPath: stringsURL.path),
+                      let stringsData = try? Data(contentsOf: stringsURL) else { continue }
+                
+                var stringsFormat = PropertyListSerialization.PropertyListFormat.xml
+                if var stringsDict = (try? PropertyListSerialization.propertyList(
+                    from: stringsData,
+                    options: [.mutableContainersAndLeaves],
+                    format: &stringsFormat
+                )) as? [String: Any] {
+                    if stringsDict["CFBundleDisplayName"] != nil || stringsDict["CFBundleName"] != nil {
+                        stringsDict["CFBundleDisplayName"] = newName
+                        stringsDict["CFBundleName"] = newName
+                        if let outData = try? PropertyListSerialization.data(fromPropertyList: stringsDict, format: stringsFormat, options: 0) {
+                            try? outData.write(to: stringsURL, options: .atomic)
                         }
                     }
                 }
-
-                // Ghi nhận Tên App duy nhất (nếu có 2 bản clone trùng tên trên máy thì loại khỏi danh sách tự động khớp theo tên để luôn hỏi người dùng muốn cập nhật bản nào)
-                if !isHostApp, !nameKey.isEmpty {
-                    if duplicatedNames.contains(nameKey) {
-                        // Đã bị trùng tên -> không tự đoán mò
-                    } else if mapByUniqueName[nameKey] != nil {
-                        mapByUniqueName.removeValue(forKey: nameKey)
-                        duplicatedNames.insert(nameKey)
-                    } else {
-                        mapByUniqueName[nameKey] = app.objectID
+            }
+        }
+    }
+    
+    @MainActor
+    private static func topViewController() -> UIViewController? {
+        let scenes = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .filter { $0.activationState == .foregroundActive || $0.activationState == .foregroundInactive }
+        
+        guard let window = scenes.flatMap({ $0.windows }).first(where: { $0.isKeyWindow }) ?? scenes.flatMap({ $0.windows }).first,
+              var topController = window.rootViewController else {
+            return nil
+        }
+        
+        while let presented = topController.presentedViewController {
+            topController = presented
+        }
+        
+        return topController
+    }
+    
+    // MARK: - Sheet View Controller
+    
+    @MainActor
+    private final class AppCustomizationSheetViewController: UITableViewController {
+        private let initialName: String
+        private let initialBundleID: String
+        private let teamID: String
+        private let portalAppIDs: [PortalAppIDChoice]
+        private let completion: (CustomizationResult?) -> Void
+        
+        private let nameTextField = UITextField()
+        private let bundleIDTextField = UITextField()
+        
+        /// `nil` nghĩa là đang dùng Bundle ID gốc/tự nhập; nếu khác `nil` là đang chọn dùng lại 1 App ID có sẵn trên Portal
+        private var selectedPortalChoiceIndex: Int?
+        
+        init(
+            initialName: String,
+            initialBundleID: String,
+            teamID: String,
+            portalAppIDs: [PortalAppIDChoice],
+            completion: @escaping (CustomizationResult?) -> Void
+        ) {
+            self.initialName = initialName
+            self.initialBundleID = initialBundleID
+            self.teamID = teamID
+            self.portalAppIDs = portalAppIDs
+            self.completion = completion
+            super.init(style: .insetGrouped)
+            
+            // Nếu Bundle ID gốc của IPA trùng khớp sẵn với 1 App ID đã có trên Portal -> Tự động chọn sẵn luôn để không tốn thêm slot App ID!
+            let expectedFullID = teamID.isEmpty ? initialBundleID : "\(initialBundleID).\(teamID)"
+            if let existingIdx = portalAppIDs.firstIndex(where: {
+                $0.fullBundleID.lowercased() == expectedFullID.lowercased() ||
+                $0.baseBundleID.lowercased() == initialBundleID.lowercased()
+            }) {
+                self.selectedPortalChoiceIndex = existingIdx
+            }
+        }
+        
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+        
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            
+            self.title = "Tùy chỉnh cài đặt"
+            
+            self.navigationItem.leftBarButtonItem = UIBarButtonItem(
+                title: "Hủy",
+                style: .plain,
+                target: self,
+                action: #selector(didTapCancel)
+            )
+            
+            let installButton = UIBarButtonItem(
+                title: "Tiếp tục",
+                style: .done,
+                target: self,
+                action: #selector(didTapContinue)
+            )
+            self.navigationItem.rightBarButtonItem = installButton
+            
+            self.nameTextField.text = self.initialName
+            self.nameTextField.placeholder = "Tên hiển thị của ứng dụng"
+            self.nameTextField.clearButtonMode = .whileEditing
+            self.nameTextField.font = .systemFont(ofSize: 16)
+            
+            if let idx = self.selectedPortalChoiceIndex {
+                self.bundleIDTextField.text = self.portalAppIDs[idx].baseBundleID
+            } else {
+                self.bundleIDTextField.text = self.initialBundleID
+            }
+            self.bundleIDTextField.placeholder = "com.example.app"
+            self.bundleIDTextField.clearButtonMode = .whileEditing
+            self.bundleIDTextField.autocapitalizationType = .none
+            self.bundleIDTextField.autocorrectionType = .no
+            self.bundleIDTextField.keyboardType = .asciiCapable
+            self.bundleIDTextField.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
+            self.bundleIDTextField.addTarget(self, action: #selector(bundleIDTextDidChange), for: .editingChanged)
+        }
+        
+        @objc private func bundleIDTextDidChange() {
+            let currentText = (self.bundleIDTextField.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let cleanText = UserCustomizationOperation.stripTrailingTeamID(from: currentText, teamID: self.teamID)
+            
+            if let matchIdx = self.portalAppIDs.firstIndex(where: {
+                $0.baseBundleID.lowercased() == cleanText.lowercased() ||
+                $0.fullBundleID.lowercased() == currentText.lowercased()
+            }) {
+                if self.selectedPortalChoiceIndex != matchIdx {
+                    self.selectedPortalChoiceIndex = matchIdx
+                    self.tableView.reloadSections(IndexSet(integer: 2), with: .none)
+                }
+            } else if self.selectedPortalChoiceIndex != nil {
+                self.selectedPortalChoiceIndex = nil
+                self.tableView.reloadSections(IndexSet(integer: 2), with: .none)
+            }
+        }
+        
+        @objc private func didTapCancel() {
+            self.dismiss(animated: true) {
+                self.completion(nil)
+            }
+        }
+        
+        @objc private func didTapContinue() {
+            let finalName = (self.nameTextField.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolvedName = finalName.isEmpty ? self.initialName : finalName
+            
+            if let idx = self.selectedPortalChoiceIndex {
+                let choice = self.portalAppIDs[idx]
+                let result = CustomizationResult(
+                    customName: resolvedName,
+                    selectedBundleID: choice.fullBundleID,
+                    isReusingPortalAppID: true
+                )
+                self.dismiss(animated: true) {
+                    self.completion(result)
+                }
+            } else {
+                let rawID = (self.bundleIDTextField.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                let cleanID = UserCustomizationOperation.stripTrailingTeamID(
+                    from: rawID.isEmpty ? self.initialBundleID : rawID,
+                    teamID: self.teamID
+                )
+                
+                // Kiểm tra lần cuối xem cleanID có khớp với App ID nào đã có trên Portal không
+                if let matchChoice = self.portalAppIDs.first(where: {
+                    $0.baseBundleID.lowercased() == cleanID.lowercased() ||
+                    $0.fullBundleID.lowercased() == rawID.lowercased()
+                }) {
+                    let result = CustomizationResult(
+                        customName: resolvedName,
+                        selectedBundleID: matchChoice.fullBundleID,
+                        isReusingPortalAppID: true
+                    )
+                    self.dismiss(animated: true) {
+                        self.completion(result)
+                    }
+                } else {
+                    let result = CustomizationResult(
+                        customName: resolvedName,
+                        selectedBundleID: cleanID,
+                        isReusingPortalAppID: false
+                    )
+                    self.dismiss(animated: true) {
+                        self.completion(result)
                     }
                 }
             }
-
-            return InstalledAppSnapshot(
-                activeMainIDsLowercased: activeMainIDs,
-                objectIDByExactNameAndBaseID: mapByNameAndBaseID,
-                objectIDByUniqueAppName: mapByUniqueName,
-                objectIDByActiveBundleID: mapByActiveBundleID
-            )
         }
-    }
-
-    private func fetchReusableAppIDCandidates(
-        authTeam: ALTTeam,
-        teamID: String,
-        activeMainIDsLowercased: Set<String>
-    ) async -> [ReusableAppIDCandidate] {
-        var portalSnapshots: [(name: String, bundleID: String, expirationDate: Date?)] = []
-
-        if let remoteAppIDs = try? await DeveloperPortalProxy.shared.fetchAppIDs(for: authTeam) {
-            portalSnapshots = remoteAppIDs.map {
-                (name: $0.name, bundleID: $0.bundleIdentifier, expirationDate: $0.expirationDate)
+        
+        // MARK: - Table View Data Source
+        
+        override func numberOfSections(in tableView: UITableView) -> Int {
+            return 3
+        }
+        
+        override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+            switch section {
+            case 0: return 1
+            case 1: return 2
+            case 2: return max(1, self.portalAppIDs.count)
+            default: return 0
             }
         }
-
-        if portalSnapshots.isEmpty {
-            portalSnapshots = context.dbBackgroundContext.performAndWait {
-                let request = AppID.fetchRequest()
-                let localIDs = (try? context.dbBackgroundContext.fetch(request)) ?? []
-                return localIDs.map {
-                    (name: $0.name, bundleID: $0.bundleIdentifier, expirationDate: $0.expirationDate)
+        
+        override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+            switch section {
+            case 0:
+                return "Tên hiển thị ứng dụng"
+            case 1:
+                return "Bundle ID (Tạo mới hoặc chỉnh sửa)"
+            case 2:
+                return "Hoặc chọn lại App ID đã có (\(self.portalAppIDs.count)/10)"
+            default:
+                return nil
+            }
+        }
+        
+        override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
+            switch section {
+            case 1:
+                if !self.teamID.isEmpty {
+                    return "Hệ thống tự động quản lý hậu tố Team ID (.\(self.teamID)). Bạn không cần tự gõ hậu tố này."
                 }
+                return nil
+            case 2:
+                return "Khi bạn đã dùng hết 10/10 App ID của tài khoản Apple miễn phí, hãy chọn một App ID [Đang rảnh] bên trên để cài đặt ứng dụng mới mà không bị báo lỗi hết lượt App ID!"
+            default:
+                return nil
             }
         }
-
-        let hostMainBundleID = (Bundle.main.bundleIdentifier ?? "").lowercased()
-        let now = Date()
-
-        var seenFullIDs = Set<String>()
-        var candidates: [ReusableAppIDCandidate] = []
-
-        for item in portalSnapshots {
-            let fullID = item.bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !fullID.isEmpty else { continue }
-
-            if let exp = item.expirationDate, exp <= now {
-                continue
-            }
-
-            let lowerFull = fullID.lowercased()
-
-            // 1. Chặn ID chính và các ID phụ (.appex) của SideStore / AltStore hệ thống
-            if Self.isProtectedHostOrCoreApp(
-                lowerFull: lowerFull,
-                hostMainID: hostMainBundleID,
-                teamID: teamID
-            ) {
-                continue
-            }
-
-            // 2. Chặn cả ID chính LẪN mọi ID phụ (.appex) của các App ĐANG SỐNG trên máy
-            let isUsedByActiveAppOrItsExtensions = activeMainIDsLowercased.contains { activeID in
-                lowerFull == activeID || lowerFull.hasPrefix(activeID + ".")
-            }
-            if isUsedByActiveAppOrItsExtensions {
-                continue
-            }
-
-            guard !seenFullIDs.contains(lowerFull) else { continue }
-            seenFullIDs.insert(lowerFull)
-
-            let shortDisplayID = Self.stripTrailingTeamID(from: fullID, teamID: teamID)
-
-            candidates.append(
-                ReusableAppIDCandidate(
-                    name: item.name.isEmpty ? shortDisplayID : item.name,
-                    fullBundleIdentifier: fullID,
-                    baseBundleIdentifier: shortDisplayID,
-                    requiresAppendingTeamID: false,
-                    expirationDate: item.expirationDate
-                )
-            )
-        }
-
-        candidates.sort { lhs, rhs in
-            switch (lhs.expirationDate, rhs.expirationDate) {
-            case let (l?, r?):
-                if l != r { return l > r }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-            case (_?, nil):
-                return true
-            case (nil, _?):
-                return false
-            case (nil, nil):
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-            }
-        }
-
-        return candidates
-    }
-
-    private static func isProtectedHostOrCoreApp(
-        lowerFull: String,
-        hostMainID: String,
-        teamID: String
-    ) -> Bool {
-        let lowerTeam = teamID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
-        if !hostMainID.isEmpty {
-            if lowerFull == hostMainID || lowerFull.hasPrefix(hostMainID + ".") {
-                return true
-            }
-        }
-
-        let protectedMainBases = [
-            "com.sidestore.sidestore",
-            "com.rileytestut.altstore"
-        ]
-
-        for mainBase in protectedMainBases {
-            if lowerFull == mainBase || lowerFull.hasPrefix(mainBase + ".") {
-                return true
-            }
-            if !lowerTeam.isEmpty {
-                let withTeam = "\(mainBase).\(lowerTeam)"
-                if lowerFull == withTeam || lowerFull.hasPrefix(withTeam + ".") {
-                    return true
+        
+        override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+            switch indexPath.section {
+            case 0:
+                let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+                cell.selectionStyle = .none
+                self.embedTextField(self.nameTextField, in: cell.contentView)
+                return cell
+                
+            case 1:
+                if indexPath.row == 0 {
+                    let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+                    cell.selectionStyle = .none
+                    self.embedTextField(self.bundleIDTextField, in: cell.contentView)
+                    return cell
+                } else {
+                    let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+                    cell.textLabel?.text = "Khôi phục ID gốc của file IPA"
+                    cell.textLabel?.textColor = .systemBlue
+                    cell.textLabel?.font = .systemFont(ofSize: 15, weight: .medium)
+                    cell.detailTextLabel?.text = self.initialBundleID
+                    cell.detailTextLabel?.textColor = .secondaryLabel
+                    cell.accessoryType = (self.selectedPortalChoiceIndex == nil && self.bundleIDTextField.text == self.initialBundleID) ? .checkmark : .none
+                    return cell
                 }
+                
+            case 2:
+                if self.portalAppIDs.isEmpty {
+                    let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+                    cell.selectionStyle = .none
+                    cell.textLabel?.text = "Chưa có App ID nào được lưu"
+                    cell.textLabel?.textColor = .secondaryLabel
+                    return cell
+                }
+                
+                let choice = self.portalAppIDs[indexPath.row]
+                let cell = UITableViewCell(style: .subtitle, reuseIdentifier: "PortalAppIDCell")
+                
+                let statusBadge = choice.isCurrentlyInstalled ? "Đang cài trên máy" : "Đang rảnh - Khuyên dùng"
+                cell.textLabel?.text = "\(choice.name)  •  [\(statusBadge)]"
+                cell.textLabel?.font = .systemFont(ofSize: 15, weight: choice.isCurrentlyInstalled ? .regular : .semibold)
+                cell.textLabel?.textColor = choice.isCurrentlyInstalled ? .label : .systemGreen
+                cell.textLabel?.numberOfLines = 1
+                
+                cell.detailTextLabel?.text = choice.baseBundleID
+                cell.detailTextLabel?.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+                cell.detailTextLabel?.textColor = .secondaryLabel
+                cell.detailTextLabel?.numberOfLines = 1
+                
+                cell.accessoryType = (self.selectedPortalChoiceIndex == indexPath.row) ? .checkmark : .none
+                return cell
+                
+            default:
+                return UITableViewCell()
             }
         }
-
-        return false
-    }
-
-    static func stripTrailingTeamID(from bundleID: String, teamID: String) -> String {
-        let trimmed = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanTeamID = teamID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanTeamID.isEmpty else { return trimmed }
-
-        let middleToken = ".\(cleanTeamID)."
-        if let range = trimmed.range(of: middleToken, options: .caseInsensitive) {
-            return trimmed.replacingCharacters(in: range, with: ".")
+        
+        override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+            tableView.deselectRow(at: indexPath, animated: true)
+            
+            if indexPath.section == 1 && indexPath.row == 1 {
+                self.bundleIDTextField.text = self.initialBundleID
+                self.bundleIDTextDidChange()
+                tableView.reloadSections(IndexSet([1, 2]), with: .none)
+            } else if indexPath.section == 2, !self.portalAppIDs.isEmpty {
+                let choice = self.portalAppIDs[indexPath.row]
+                self.selectedPortalChoiceIndex = indexPath.row
+                self.bundleIDTextField.text = choice.baseBundleID
+                self.view.endEditing(true)
+                tableView.reloadSections(IndexSet([1, 2]), with: .none)
+            }
         }
-
-        let suffix = ".\(cleanTeamID)"
-        if trimmed.lowercased().hasSuffix(suffix.lowercased()), trimmed.count > suffix.count {
-            return String(trimmed.dropLast(suffix.count))
+        
+        private func embedTextField(_ textField: UITextField, in contentView: UIView) {
+            textField.translatesAutoresizingMaskIntoConstraints = false
+            contentView.addSubview(textField)
+            NSLayoutConstraint.activate([
+                textField.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+                textField.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+                textField.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 11),
+                textField.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -11),
+                textField.heightAnchor.constraint(greaterThanOrEqualToConstant: 24)
+            ])
         }
-        return trimmed
     }
 }

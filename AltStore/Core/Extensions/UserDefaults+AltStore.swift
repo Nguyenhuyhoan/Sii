@@ -1,4 +1,3 @@
-
 //
 //  UserDefaults+AltStore.swift
 //  AltStore
@@ -479,7 +478,10 @@ public extension UserDefaults
     }
     
     @objc var isCellularRefreshEnabled: Bool {
-        get { self.bool(forKey: #function) }
+        get {
+            guard self.object(forKey: #function) != nil else { return true }
+            return self.bool(forKey: #function)
+        }
         set { self.set(newValue, forKey: #function) }
     }
 
@@ -571,7 +573,7 @@ public extension UserDefaults
             #keyPath(UserDefaults.pairingFileEditSuppressedSHAs): [String: Bool](),
             #keyPath(UserDefaults.isRotateLogsOnStartupEnabled): false,
             #keyPath(UserDefaults.recreateDatabaseOnNextStart): false,
-            #keyPath(UserDefaults.isCellularRefreshEnabled): false,
+            #keyPath(UserDefaults.isCellularRefreshEnabled): true,
             #keyPath(UserDefaults.turnOffDataShortcutName): "TurnOffData",
             #keyPath(UserDefaults.turnOnDataShortcutName): "TurnOnData",
             #keyPath(UserDefaults.isPairingReset): true,

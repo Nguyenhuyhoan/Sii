@@ -1,5 +1,4 @@
 
-
 //
 //  UserCustomizationOperation.swift
 //  SideStore
@@ -7,7 +6,6 @@
 //  Created by Magesh K on 30/07/26.
 //  Copyright © 2026 AltStore. All rights reserved.
 //
-
 
 import Foundation
 import CoreData
@@ -281,7 +279,7 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         }
     }
 
-    // MARK: - Helpers: Quét và lọc Kho App ID Trống (Hiển thị bỏ đuôi Team ID, lưu ngầm Full ID)
+    // MARK: - Helpers: Quét và lọc Kho App ID Trống (Loại bỏ cả ID chính lẫn ID phụ .appex của App đang sống)
 
     private struct InstalledAppSnapshot {
         let activeMainIDsLowercased: Set<String>
@@ -299,6 +297,15 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
             var mapByName: [String: NSManagedObjectID] = [:]
 
             let hostMainBundleID = (Bundle.main.bundleIdentifier ?? "").lowercased()
+            let lowerTeam = teamID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+            // Bảo vệ ứng dụng chủ SideStore đang chạy (kèm các extension của chính nó)
+            if !hostMainBundleID.isEmpty {
+                activeMainIDs.insert(hostMainBundleID)
+                if !lowerTeam.isEmpty && !hostMainBundleID.hasSuffix(".\(lowerTeam)") {
+                    activeMainIDs.insert("\(hostMainBundleID).\(lowerTeam)")
+                }
+            }
 
             for app in installedApps {
                 let rawID = app.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -308,9 +315,15 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                     let lower = idVariant.lowercased()
                     activeMainIDs.insert(lower)
                     mapByID[lower] = app.objectID
+
+                    // Đưa cả biến thể có gắn .TEAM_ID của App đang sống vào danh sách bận
+                    // để chặn luôn các ID phụ (ví dụ: com.kdt.livecontainer.TEAMID.LaunchAppExtension)
+                    if !lowerTeam.isEmpty && !lower.hasSuffix(".\(lowerTeam)") {
+                        activeMainIDs.insert("\(lower).\(lowerTeam)")
+                    }
                 }
 
-                if !Self.isExactProtectedHostMainID(
+                if !Self.isProtectedHostOrCoreApp(
                     lowerFull: rawID.lowercased(),
                     hostMainID: hostMainBundleID,
                     teamID: teamID
@@ -369,7 +382,8 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
 
             let lowerFull = fullID.lowercased()
 
-            if Self.isExactProtectedHostMainID(
+            // 1. Chặn ID chính và các ID phụ (.appex) của SideStore / AltStore / LiveContainer hệ thống
+            if Self.isProtectedHostOrCoreApp(
                 lowerFull: lowerFull,
                 hostMainID: hostMainBundleID,
                 teamID: teamID
@@ -377,14 +391,19 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 continue
             }
 
-            if activeMainIDsLowercased.contains(lowerFull) {
+            // 2. Chặn cả ID chính LẪN mọi ID phụ (.appex) của các App ĐANG SỐNG trên máy
+            // (Vì iOS installd không cho phép cài 1 app mới trùng ID với .appex của app đang cài)
+            let isUsedByActiveAppOrItsExtensions = activeMainIDsLowercased.contains { activeID in
+                lowerFull == activeID || lowerFull.hasPrefix(activeID + ".")
+            }
+            if isUsedByActiveAppOrItsExtensions {
                 continue
             }
 
             guard !seenFullIDs.contains(lowerFull) else { continue }
             seenFullIDs.insert(lowerFull)
 
-            // Cắt bỏ đuôi .TEAM_ID để hiển thị trên giao diện gọn gàng, không chiếm chỗ
+            // Cắt bỏ .TEAM_ID (cả ở cuối lẫn ở giữa) để hiển thị trên giao diện gọn gàng
             let shortDisplayID = Self.stripTrailingTeamID(from: fullID, teamID: teamID)
 
             candidates.append(
@@ -415,37 +434,51 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         return candidates
     }
 
-    private static func isExactProtectedHostMainID(
+    /// Kiểm tra xem ID có thuộc về SideStore / AltStore (kể cả Widget/Extension của nó) hay không
+    private static func isProtectedHostOrCoreApp(
         lowerFull: String,
         hostMainID: String,
         teamID: String
     ) -> Bool {
-        let lowerTeam = teamID.lowercased()
+        let lowerTeam = teamID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
-        if !hostMainID.isEmpty && lowerFull == hostMainID {
-            return true
+        if !hostMainID.isEmpty {
+            if lowerFull == hostMainID || lowerFull.hasPrefix(hostMainID + ".") {
+                return true
+            }
         }
 
-        let exactProtectedMainBases = [
+        let protectedMainBases = [
             "com.sidestore.sidestore",
-            "com.rileytestut.altstore",
-            "com.kdt.livecontainer"
+            "com.rileytestut.altstore"
         ]
 
-        for mainBase in exactProtectedMainBases {
-            if lowerFull == mainBase || (!lowerTeam.isEmpty && lowerFull == "\(mainBase).\(lowerTeam)") {
+        for mainBase in protectedMainBases {
+            if lowerFull == mainBase || lowerFull.hasPrefix(mainBase + ".") {
                 return true
+            }
+            if !lowerTeam.isEmpty {
+                let withTeam = "\(mainBase).\(lowerTeam)"
+                if lowerFull == withTeam || lowerFull.hasPrefix(withTeam + ".") {
+                    return true
+                }
             }
         }
 
         return false
     }
 
-    /// Tự động cắt bỏ đuôi `.TEAM_ID` (ví dụ: `com.alone.37D6PWG5PP` -> `com.alone`)
+    /// Tự động cắt bỏ `.TEAM_ID` ở cuối (VD: `com.alone.37D6PWG5PP` -> `com.alone`)
+    /// hoặc `.TEAM_ID.` ở giữa của ID phụ thuộc app đã xóa (VD: `com.app.37D6PWG5PP.Widget` -> `com.app.Widget`)
     static func stripTrailingTeamID(from bundleID: String, teamID: String) -> String {
         let trimmed = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanTeamID = teamID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanTeamID.isEmpty else { return trimmed }
+
+        let middleToken = ".\(cleanTeamID)."
+        if let range = trimmed.range(of: middleToken, options: .caseInsensitive) {
+            return trimmed.replacingCharacters(in: range, with: ".")
+        }
 
         let suffix = ".\(cleanTeamID)"
         if trimmed.lowercased().hasSuffix(suffix.lowercased()), trimmed.count > suffix.count {

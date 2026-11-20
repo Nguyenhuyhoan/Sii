@@ -1,4 +1,3 @@
-
 //
 //  DatabaseManager.swift
 //  AltStore
@@ -178,6 +177,9 @@ public class DatabaseManager: @unchecked Sendable
             let installedApp: InstalledApp
             if let app = storeApp.installedApp {
                 installedApp = app
+                if !installedApp.useMainProfile {
+                    installedApp.useMainProfile = true
+                }
             } else {
                 installedApp = try InstalledApp(
                     resignedAppBundle: localAppBundle,
@@ -187,29 +189,20 @@ public class DatabaseManager: @unchecked Sendable
                     context: context
                 )
                 
-                repeat {
-                    guard let pluginURL = Bundle.main.builtInPlugInsURL,
-                          let pluginFolders = try? FileManager.default.contentsOfDirectory(at: pluginURL, includingPropertiesForKeys: nil),
-                          let pluginFolder = pluginFolders.first,
-                          let altPluginAppBundle = ALTApplication(fileURL: pluginFolder) else {
-                        installedApp.useMainProfile = true
-                        break
-                    }
-                    
-                    let entitlements = altPluginAppBundle.entitlements
-                    guard let appId = entitlements[ALTEntitlement.applicationIdentifier] as? String else {
-                        installedApp.useMainProfile = false
-                        break
-                    }
-                    
-                    installedApp.useMainProfile = appId.hasSuffix(Bundle.Info.activeBundleIdentifier)
-                } while(false)
+                // Ép cứng luôn dùng Profile của App chính, không xin thêm App ID cho LiveWidgetExtension hay các PlugIns khác
+                installedApp.useMainProfile = true
                 
                 installedApp.storeApp = storeApp
                 if installedApp.releaseTrack == nil,
                    let trackEntity = storeApp.latestSupportedVersion?.releaseTrack {
                     installedApp.releaseTrack = trackEntity
                 }
+            }
+            
+            // Đảm bảo tất cả các ứng dụng đã cài trong Database đều bật useMainProfile = true
+            let allInstalledApps = InstalledApp.all(in: context)
+            for app in allInstalledApps where !app.useMainProfile {
+                app.useMainProfile = true
             }
             
             /* App Extensions */
@@ -306,4 +299,3 @@ public class DatabaseManager: @unchecked Sendable
         exit(104)
     }
 }
-

@@ -1,4 +1,5 @@
 
+
 //
 //  PipelineHandler.swift
 //  SideStore
@@ -76,7 +77,8 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
 
     @State private var isManualExpanded: Bool = false
     @State private var customBundleIDText: String
-    @State private var appendTeamID: Bool = false
+    // Luôn bật mặc định gắn hậu tố Mã Nhóm (Team ID) = true
+    @State private var appendTeamID: Bool = true
 
     init(
         initialBundleID: String,
@@ -93,12 +95,26 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
         self._customBundleIDText = State(initialValue: initialBundleID)
     }
 
+    /// Đổi "Còn ... ngày" thành "...d" cực gọn
     private func remainingDaysText(for date: Date?) -> String {
-        guard let date else { return "Khả dụng" }
+        guard let date else { return "∞" }
         let seconds = date.timeIntervalSinceNow
-        guard seconds > 0 else { return "Hết hạn" }
+        guard seconds > 0 else { return "0d" }
         let days = Int(ceil(seconds / 86400.0))
-        return "Còn \(days) ngày"
+        return "\(days)d"
+    }
+
+    /// Bỏ đuôi .TEAM_ID khỏi Bundle ID khi hiển thị trên UI để dễ nhìn và không tốn chỗ
+    private func displayCleanBundleID(_ fullID: String) -> String {
+        let trimmed = fullID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTeam = teamID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTeam.isEmpty else { return trimmed }
+
+        let suffix = ".\(cleanTeam)"
+        if trimmed.lowercased().hasSuffix(suffix.lowercased()), trimmed.count > suffix.count {
+            return String(trimmed.dropLast(suffix.count))
+        }
+        return trimmed
     }
 
     var body: some SwiftUI.View {
@@ -106,7 +122,7 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
             SwiftUI.Color.black.opacity(0.44)
                 .ignoresSafeArea()
 
-            VStack(spacing: 12) {
+            VStack(spacing: 11) {
                 // Banner tiêu đề chuẩn Hero Tab Cài đặt
                 VStack(spacing: 4) {
                     HStack(spacing: 7) {
@@ -124,8 +140,8 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                         .foregroundColor(SwiftUI.Color.white.opacity(0.94))
                         .multilineTextAlignment(.center)
                 }
-                .padding(.vertical, 12)
-                .padding(.horizontal, 12)
+                .padding(.vertical, 11)
+                .padding(.horizontal, 10)
                 .frame(maxWidth: .infinity)
                 .background(PipelineCSSTheme.suiHeroGradient)
                 .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous))
@@ -137,35 +153,37 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                     SwiftUI.Button {
                         onComplete((initialBundleID, true))
                     } label: {
-                        HStack(spacing: 11) {
+                        HStack(spacing: 9) {
                             ZStack {
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                                     .fill(PipelineCSSTheme.suiPrimary.opacity(0.14))
-                                    .frame(width: 40, height: 40)
+                                    .frame(width: 36, height: 36)
                                 SwiftUI.Image(systemName: "plus.app.fill")
-                                    .font(.system(size: 18, weight: .bold))
+                                    .font(.system(size: 17, weight: .bold))
                                     .foregroundColor(PipelineCSSTheme.suiPrimary)
                             }
 
-                            VStack(alignment: .leading, spacing: 3) {
+                            VStack(alignment: .leading, spacing: 2.5) {
                                 SwiftUI.Text("Dùng ID gốc của IPA")
                                     .font(.system(size: 14.5, weight: .bold))
                                     .foregroundColor(PipelineCSSTheme.suiPureBlack)
 
-                                SwiftUI.Text(initialBundleID)
+                                SwiftUI.Text(displayCleanBundleID(initialBundleID))
                                     .font(.system(size: 12, weight: .medium, design: .monospaced))
-                                    .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.68))
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
+                                    .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.72))
+                                    .lineLimit(2)
+                                    .minimumScaleFactor(0.75)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .multilineTextAlignment(.leading)
                             }
-
-                            Spacer(minLength: 4)
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
                             SwiftUI.Image(systemName: "chevron.right")
-                                .font(.system(size: 12.5, weight: .bold))
+                                .font(.system(size: 12, weight: .bold))
                                 .foregroundColor(PipelineCSSTheme.suiPrimary.opacity(0.75))
                         }
-                        .padding(11)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 10)
                         .background(PipelineCSSTheme.suiInnerRowBackground)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .overlay(
@@ -175,7 +193,7 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                     }
                     .buttonStyle(PipelineBounceButtonStyle())
 
-                    // Lựa chọn 2: Dùng lại ID cũ (Giữ nguyên 100% ID đầy đủ dạng com.alone.37D6PWG5PP)
+                    // Lựa chọn 2: Dùng lại ID cũ (Hiển thị đã bỏ đuôi Team ID, nhưng khi bấm vẫn dùng 100% fullBundleIdentifier)
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 5) {
                             SwiftUI.Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
@@ -207,19 +225,20 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                             )
                         } else {
                             ScrollView(.vertical, showsIndicators: true) {
-                                VStack(spacing: 7) {
+                                VStack(spacing: 6) {
                                     ForEach(reusableAppIDs) { candidate in
                                         SwiftUI.Button {
-                                            // Dùng nguyên xi fullBundleIdentifier (VD: com.alone.37D6PWG5PP), không cắt/thêm đuôi
+                                            // KHI BẤM CHỌN: Truyền nguyên xi fullBundleIdentifier (VD: com.alone.37D6PWG5PP)
+                                            // và appendTeamID = false để luồng ngầm hoạt động chuẩn xác 100%!
                                             onComplete((candidate.fullBundleIdentifier, false))
                                         } label: {
-                                            HStack(spacing: 10) {
+                                            HStack(spacing: 8) {
                                                 ZStack {
                                                     Circle()
                                                         .fill(PipelineCSSTheme.suiGreen.opacity(0.14))
-                                                        .frame(width: 30, height: 30)
+                                                        .frame(width: 26, height: 26)
                                                     SwiftUI.Image(systemName: "bolt.shield.fill")
-                                                        .font(.system(size: 14, weight: .bold))
+                                                        .font(.system(size: 12.5, weight: .bold))
                                                         .foregroundColor(PipelineCSSTheme.suiGreen)
                                                 }
 
@@ -229,33 +248,36 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                                                         .foregroundColor(PipelineCSSTheme.suiPureBlack)
                                                         .lineLimit(1)
 
-                                                    SwiftUI.Text(candidate.fullBundleIdentifier)
+                                                    // HIỂN THỊ: Đã cắt đuôi Team ID + Tự co chữ nhẹ / xuống dòng để hiện đầy đủ 100%
+                                                    SwiftUI.Text(displayCleanBundleID(candidate.fullBundleIdentifier))
                                                         .font(.system(size: 11.5, weight: .medium, design: .monospaced))
-                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.65))
-                                                        .lineLimit(1)
-                                                        .truncationMode(.middle)
+                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.70))
+                                                        .lineLimit(2)
+                                                        .minimumScaleFactor(0.72)
+                                                        .fixedSize(horizontal: false, vertical: true)
+                                                        .multilineTextAlignment(.leading)
                                                 }
-
-                                                Spacer(minLength: 4)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
 
                                                 VStack(alignment: .trailing, spacing: 2) {
                                                     SwiftUI.Text("0 ID")
-                                                        .font(.system(size: 10.5, weight: .bold))
+                                                        .font(.system(size: 10, weight: .bold))
                                                         .foregroundColor(PipelineCSSTheme.suiGreen)
-                                                        .padding(.horizontal, 6)
-                                                        .padding(.vertical, 2)
+                                                        .padding(.horizontal, 5)
+                                                        .padding(.vertical, 1.5)
                                                         .background(
                                                             Capsule()
                                                                 .fill(PipelineCSSTheme.suiGreen.opacity(0.15))
                                                         )
 
                                                     SwiftUI.Text(remainingDaysText(for: candidate.expirationDate))
-                                                        .font(.system(size: 10.5, weight: .medium))
-                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.6))
+                                                        .font(.system(size: 10.5, weight: .bold))
+                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.65))
                                                 }
+                                                .fixedSize()
                                             }
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 8.5)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 8)
                                             .background(PipelineCSSTheme.suiCardBackground)
                                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                             .overlay(
@@ -266,12 +288,12 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                                         .buttonStyle(PipelineBounceButtonStyle())
                                     }
                                 }
-                                .padding(2)
+                                .padding(1)
                             }
-                            .frame(maxHeight: min(CGFloat(reusableAppIDs.count) * 60.0, 195.0))
+                            .frame(maxHeight: min(CGFloat(reusableAppIDs.count) * 62.0, 200.0))
                         }
                     }
-                    .padding(10)
+                    .padding(9)
                     .background(PipelineCSSTheme.suiInnerRowBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(
@@ -298,7 +320,7 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                                     .font(.system(size: 12, weight: .bold))
                                     .foregroundColor(PipelineCSSTheme.suiSecondary)
                             }
-                            .padding(.horizontal, 11)
+                            .padding(.horizontal, 10)
                             .padding(.vertical, 9)
                             .background(PipelineCSSTheme.suiInnerRowBackground)
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -325,18 +347,15 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                                             .stroke(PipelineCSSTheme.suiPrimary.opacity(0.4), lineWidth: 1)
                                     )
 
-                                Toggle("Tự động gắn hậu tố Mã Nhóm (Team ID)", isOn: $appendTeamID)
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundColor(PipelineCSSTheme.suiPureBlack)
-                                    .tint(PipelineCSSTheme.suiPrimary)
-
+                                // Đã bỏ dòng chữ và nút "Tự động gắn hậu tố Mã Nhóm (Team ID)"
+                                // Mặc định luôn truyền appendTeamID = true khi bấm "Bắt đầu Cài Đặt"
                                 SwiftUI.Button {
                                     let trimmed = customBundleIDText.trimmingCharacters(in: .whitespacesAndNewlines)
                                     let rawID = trimmed.isEmpty ? initialBundleID : trimmed
                                     let sanitized = InfoPlistParser.sanitizeBundleID(rawID)
-                                    onComplete((sanitized.isEmpty ? initialBundleID : sanitized, appendTeamID))
+                                    onComplete((sanitized.isEmpty ? initialBundleID : sanitized, true))
                                 } label: {
-                                    SwiftUI.Text("Áp dụng ID tùy chỉnh này")
+                                    SwiftUI.Text("Bắt đầu Cài Đặt")
                                         .font(.system(size: 13.5, weight: .bold))
                                         .foregroundColor(.white)
                                         .frame(maxWidth: .infinity)
@@ -346,7 +365,7 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                                 }
                                 .buttonStyle(PipelineBounceButtonStyle())
                             }
-                            .padding(10)
+                            .padding(9)
                             .background(PipelineCSSTheme.suiInnerRowBackground)
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                             .overlay(
@@ -356,7 +375,7 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                         }
                     }
                 }
-                .padding(12)
+                .padding(10)
                 .background(PipelineCSSTheme.suiCardBackground)
                 .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous))
                 .overlay(
@@ -390,7 +409,7 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                 }
                 .buttonStyle(PipelineBounceButtonStyle())
             }
-            .padding(14)
+            .padding(11)
             .background(PipelineCSSTheme.suiPageGradient)
             .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius + 3, style: .continuous))
             .overlay(
@@ -398,8 +417,9 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                     .stroke(SwiftUI.Color.white.opacity(0.85), lineWidth: 1.5)
             )
             .shadow(color: SwiftUI.Color.black.opacity(0.22), radius: 22, x: 0, y: 10)
-            .frame(maxWidth: 385)
-            .padding(.horizontal, 18)
+            // Mở rộng tối đa khung chứa ra sát mép màn hình hơn để Bundle ID luôn hiển thị trọn vẹn
+            .frame(maxWidth: 420)
+            .padding(.horizontal, 10)
         }
         .preferredColorScheme(.light)
     }

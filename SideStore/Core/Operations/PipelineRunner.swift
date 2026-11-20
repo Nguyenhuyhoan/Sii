@@ -3,84 +3,442 @@
 //  PipelineRunner.swift
 //  AltStore
 //
-//  Created by SideStore Team.
-//  Copyright © 2025 SideStore. All rights reserved.
+//  Created by Magesh K on 8/3/26.
+//  Copyright © 2026 SideStore. All rights reserved.
 //
 
-import Foundation
-import AltStoreCore
-import Roxas
-import minimuxer
+@preconcurrency import UIKit
+import CoreData
+import SideSign
+import Minimuxer
 
-@MainActor
-final class PipelineRunner {
-    static let shared = PipelineRunner()
-    
-    /// Thread-safe storage for active cancellation tasks keyed by operation UUID.
-    private actor CancellationRegistry {
-        private var tasks: [UUID: Task<Void, Never>] = [:]
-        
-        func register(_ task: Task<Void, Never>, for id: UUID) {
-            tasks[id] = task
+
+protocol PipelineProgress: Sendable{
+    func progress(for operation: AppOperation) -> Progress?
+    func set(_ progress: Progress?, for operation: AppOperation)
+}
+protocol PipelineExecutionContext: AnyObject, Sendable {
+    var isActivelyManagingAnyApp: Bool { get }
+}
+protocol PipelineErrorLogger: AnyObject, Sendable {
+    func log(_ error: Error, operation: LoggedError.Operation, app: AppProtocol)
+    func getMappedError(for operation: AppOperation, error: Error) -> Error
+}
+
+private final class SingleCompletionGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var didComplete = false
+    private let handler: (Result<InstalledApp, Error>) -> Void
+
+    init(_ handler: @escaping (Result<InstalledApp, Error>) -> Void) {
+        self.handler = handler
+    }
+
+    func complete(with result: Result<InstalledApp, Error>) {
+        let shouldInvoke = lock.withLock {
+            guard !didComplete else { return false }
+            didComplete = true
+            return true
         }
-        
-        func cancelAll(for id: UUID) {
-            tasks[id]?.cancel()
-            tasks[id] = nil
-        }
-        
-        func remove(for id: UUID) {
-            tasks[id] = nil
+        if shouldInvoke {
+            handler(result)
         }
     }
+}
+
+
+final class PipelineRunner: Sendable
+{
+    let progress: PipelineProgress
+    let context: PipelineExecutionContext
+    let logger: PipelineErrorLogger
+    let defaultEntitlements: [ALTEntitlement: any Sendable]
     
-    private let cancellationRegistry = CancellationRegistry()
+    init(progress: PipelineProgress,
+         context: PipelineExecutionContext,
+         logger: PipelineErrorLogger,
+         defaultEntitlements: [ALTEntitlement: any Sendable] = [:])
+    {
+        self.progress = progress
+        self.context = context
+        self.logger = logger
+        self.defaultEntitlements = defaultEntitlements
+    }
     
-    private init() {}
-    
-    func run(
-        _ operation: AppOperation,
-        in group: AppOperationGroup
-    ) -> Progress {
-        let operationProgress = Progress.discreteProgress(totalUnitCount: 0)
-        operation.steps.forEach { step in
-            let stepProgress = step.progress
-            operationProgress.totalUnitCount += stepProgress.totalUnitCount
-            operationProgress.addChild(stepProgress, withPendingUnitCount: stepProgress.totalUnitCount)
+    @discardableResult
+    func performSingleOperation(_ operation: AppOperation,
+                                handler: PipelineExecutionHandler,
+                                dbContext: NSManagedObjectContext,
+                                completionHandler: @escaping (Result<InstalledApp, Error>) -> Void) -> RefreshGroup
+    {
+        let completionGate = SingleCompletionGate(completionHandler)
+        let group = RefreshGroup(dbContext: dbContext)
+        group.completionHandler = { (results) in
+            do
+            {
+                guard let result = results.values.first else {
+                    throw group.error ?? OperationError.unknownResult
+                }
+                let installedApp = try result.get()
+                completionGate.complete(with: .success(installedApp))
+            }
+            catch
+            {
+                completionGate.complete(with: .failure(error))
+            }
         }
-        group.progress.addChild(operationProgress, withPendingUnitCount: 100)
-        
-        let operationID = operation.uuid
-        let pipelineTask = Task.detached(priority: .userInitiated) { [weak self] in
-            await self?.performPipeline(for: operation, in: group, progress: operationProgress)
-            await self?.cancellationRegistry.remove(for: operationID)
-        }
-        
-        Task {
-            await self.cancellationRegistry.register(pipelineTask, for: operationID)
-        }
-        
-        operationProgress.cancellationHandler = { [weak self] in
-            Task {
-                await self?.cancellationRegistry.cancelAll(for: operationID)
+        debugLog("[AppManager] performSingleOperation started for: \(operation.bundleIdentifier)")
+        group.activeTask = Task.detached {
+            do {
+                debugLog("[AppManager] performSingleOperation executing task for: \(operation.bundleIdentifier)")
+                try await self.perform([operation], handler: handler, group: group)
+            } catch {
+                if PipelineExecutor.isCancellationError(error) {
+                    debugLog("[AppManager] performSingleOperation task CANCELLED for: \(operation.bundleIdentifier)")
+                    completionGate.complete(with: .failure(OperationError.cancelled))
+                    return
+                }
+                debugLog("[AppManager] performSingleOperation task failed for: \(operation.bundleIdentifier) with error: \(error)")
+                completionGate.complete(with: .failure(error))
             }
         }
         
-        return operationProgress
+        return group
     }
     
-    // MARK: - Execution
+    func performVoidOperation(_ operation: AppOperation,
+                              handler: PipelineExecutionHandler,
+                              dbContext: NSManagedObjectContext,
+                              completionHandler: @escaping (Result<Void, Error>) -> Void)
+    {
+        self.performSingleOperation(operation, handler: handler, dbContext: dbContext) { (result) in
+            switch result {
+            case .success:
+                completionHandler(.success(()))
+            case .failure(let error):
+                completionHandler(.failure(error))
+            }
+        }
+    }
     
-    private func performPipeline(
-        for operation: AppOperation,
-        in group: AppOperationGroup,
-        progress: Progress
-    ) async {
-        let context = AppOperationContext(
-            bundleIdentifier: operation.app.bundleIdentifier,
-            sharedContext: group.context,
-            dbBackgroundContext: group.dbContext
+    @discardableResult
+    func perform(_ operations: [AppOperation],
+                 handler: PipelineExecutionHandler,
+                 group: RefreshGroup) async throws -> RefreshGroup
+    {
+        let operations = operations.filter { progress.progress(for: $0) == nil || progress.progress(for: $0)?.isCancelled == true }
+        guard !operations.isEmpty else { throw OperationError.cancelled }
+        
+        let backgroundTaskID = await MainActor.run {
+            var taskID = UIBackgroundTaskIdentifier.invalid
+            taskID = UIApplication.shared.beginBackgroundTask(withName: "com.altstore.AppManager.perform") {
+                UIApplication.shared.endBackgroundTask(taskID)
+            }
+            return taskID
+        }
+        
+        await MainActor.run {
+            if !UIApplication.shared.isIdleTimerDisabled {
+                UIApplication.shared.isIdleTimerDisabled = UserDefaults.standard.isIdleTimeoutDisableEnabled
+            }
+        }
+        
+        defer {
+            for operation in operations {
+                progress.set(nil, for: operation)
+            }
+            if let error = group.error {
+                for operation in operations {
+                    group.set(.failure(error), forAppWithBundleIdentifier: operation.bundleIdentifier)
+                }
+            }
+            
+            Task { @MainActor in
+                if UIApplication.shared.isIdleTimerDisabled && !context.isActivelyManagingAnyApp {
+                    UIApplication.shared.isIdleTimerDisabled = false
+                }
+                if backgroundTaskID != .invalid {
+                    UIApplication.shared.endBackgroundTask(backgroundTaskID)
+                }
+            }
+        }
+        
+        let allAreRefresh = operations.allSatisfy {
+            if case .refresh = $0 { return true }
+            return false
+        }
+        
+        let isCellularActive = CellularRefreshManager.shared.isShortcutTwoStageMode || CellularRefreshManager.shared.isCellularMode
+        let isCellularRefreshGroup = isCellularActive && allAreRefresh
+        group.isCellularRefreshGroup = isCellularRefreshGroup
+        
+        // Không bắt buộc Wi-Fi ở đầu nếu đang ở chế độ 4G (cả khi Cài IPA lẫn Làm mới ứng dụng)
+        if !isCellularActive {
+            do {
+                try await ensureMinimuxerReady()
+            } catch {
+                let targetAppName = operations.first?.app.name ?? "SideStore"
+                await PipelineExecutor.presentDiagnosticErrorAlertOnce(
+                    for: group,
+                    phase: .systemPush,
+                    stepName: "ensureMinimuxerReady",
+                    appName: targetAppName,
+                    error: error
+                )
+                let cancelError = OperationError.cancelled
+                group.error = cancelError
+                for operation in operations {
+                    let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
+                    operation.logSummary(status: "CANCELLED", elapsed: elapsed, error: cancelError)
+                }
+                throw cancelError
+            }
+        } else if (try? await fetchUDID(forceLive: false)) == nil {
+            // Đảm bảo luôn có UDID từ Keychain hoặc Minimuxer trước khi gọi Apple API
+            _ = await CellularRefreshManager.shared.waitForMinimuxerReady(timeout: 5.0)
+        }
+        
+        group.progress.totalUnitCount = Int64(operations.count * 100)
+        group.progress.completedUnitCount = 1
+        
+        for operation in operations
+        {
+            let progress = Progress.discreteProgress(totalUnitCount: 100)
+            self.progress.set(progress, for: operation)
+            group.progress.addChild(progress, withPendingUnitCount: 100)
+        }
+        
+        if !isCellularActive {
+            let unhandledOperations = operations.filter { operation in
+                let isSideStore = (operation.app as? ALTApplication)?.isAltStoreApp == true ||
+                                   operation.bundleIdentifier.isAltStoreAppID
+                
+                if isSideStore {
+                    return handler.preflightChecksHandler.isResignActive == true
+                }
+                return true
+            }
+            
+            do {
+                let preflightContext = StandaloneOperationContext(steps: .preflightChecks, dbBackgroundContext: group.dbContext)
+                let validateOp = try PreflightChecksOperation(
+                    operations: unhandledOperations,
+                    handler: handler.preflightChecksHandler,
+                    context: preflightContext
+                )
+                try await validateOp.execute()
+            } catch {
+                if PipelineExecutor.isCancellationError(error) {
+                    group.error = OperationError.cancelled
+                    for operation in operations {
+                        let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
+                        operation.logSummary(status: "CANCELLED", elapsed: elapsed, error: error)
+                    }
+                    throw OperationError.cancelled
+                }
+                
+                let targetAppName = operations.first?.app.name ?? "SideStore"
+                await PipelineExecutor.presentDiagnosticErrorAlertOnce(
+                    for: group,
+                    phase: .authorization,
+                    stepName: "preflightChecks",
+                    appName: targetAppName,
+                    error: error
+                )
+                let cancelError = OperationError.cancelled
+                group.error = cancelError
+                for operation in operations {
+                    let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
+                    operation.logSummary(status: "CANCELLED", elapsed: elapsed, error: cancelError)
+                }
+                throw cancelError
+            }
+        }
+        
+        let sortedOperations = operations.sorted { op1, op2 in
+            let isOp1Self = (op1.app as? ALTApplication)?.isAltStoreApp == true || op1.bundleIdentifier.isAltStoreAppID || op1.bundleIdentifier == Bundle.main.bundleIdentifier
+            let isOp2Self = (op2.app as? ALTApplication)?.isAltStoreApp == true || op2.bundleIdentifier.isAltStoreAppID || op2.bundleIdentifier == Bundle.main.bundleIdentifier
+            if isOp1Self != isOp2Self {
+                return !isOp1Self
+            }
+            return false
+        }
+        
+        let operationsCount = sortedOperations.count
+        debugLog("[PipelineRunner] Configured fast pipeline for \(operationsCount) operation(s): isCellularRefreshGroup = \(isCellularRefreshGroup)")
+
+        for operation in sortedOperations {
+            // Nếu người dùng đã nhấn "Tắt Thông Báo" ở ứng dụng trước đó trong cùng group -> dừng ngay lập tức, không chạy tiếp ứng dụng sau
+            if PipelineExecutor.hasPresentedAlert(for: group) || Task.isCancelled {
+                progress.set(nil, for: operation)
+                group.set(.failure(OperationError.cancelled), forAppWithBundleIdentifier: operation.bundleIdentifier)
+                continue
+            }
+            
+            try await self.performOperation(for: operation, handler: handler, group: group, operationsCount: operationsCount)
+        }
+
+        // Chỉ thực hiện tiêm batch profile nếu chưa từng bị lỗi / bấm tắt thông báo
+        if isCellularRefreshGroup && !group.sharedContext.pendingProfiles.isEmpty && !PipelineExecutor.hasPresentedAlert(for: group) {
+            let orderedBatches = sortedOperations.compactMap { group.sharedContext.pendingProfiles[$0.bundleIdentifier] }
+            
+            if CellularRefreshManager.shared.isShortcutTwoStageMode {
+                debugLog("[PipelineRunner] Shortcut Stage 1: Staged \(orderedBatches.count) app(s) for Stage 2 injection.")
+                CellularRefreshManager.shared.stagedBatches = orderedBatches
+                for op in sortedOperations {
+                    self.progress.progress(for: op)?.completedUnitCount = 100
+                }
+            } else {
+                debugLog("[PipelineRunner] Starting batch profile injection for \(group.sharedContext.pendingProfiles.count) app(s)...")
+                do {
+                    let injectContext = StandaloneOperationContext(steps: .injectBatchProfiles, dbBackgroundContext: group.dbContext)
+                    let injectOp = try InjectBatchProfilesOperation(
+                        batches: orderedBatches,
+                        context: injectContext,
+                        onAppCompleted: { [weak self] bundleID in
+                            if let op = sortedOperations.first(where: { $0.bundleIdentifier == bundleID }) {
+                                self?.progress.progress(for: op)?.completedUnitCount = 100
+                            }
+                        }
+                    )
+                    try await injectOp.execute()
+                } catch {
+                    await PipelineExecutor.presentDiagnosticErrorAlertOnce(
+                        for: group,
+                        phase: .systemPush,
+                        stepName: "injectBatchProfiles",
+                        appName: "Làm mới (\(orderedBatches.count) ứng dụng)",
+                        error: error
+                    )
+                    group.error = OperationError.cancelled
+                    throw OperationError.cancelled
+                }
+            }
+        }
+
+        let shouldReloadWidgets = !(isCellularRefreshGroup && CellularRefreshManager.shared.isShortcutTwoStageMode)
+        let hasSuccessfulOperation = group.results.values.contains {
+            if case .success = $0 { return true }
+            return false
+        }
+        if shouldReloadWidgets && hasSuccessfulOperation {
+            debugLog("[PipelineRunner] Reloading widget timelines once for completed batch...")
+            await WidgetDataManager.publishCurrentInstalledApps(in: group.dbContext)
+            debugLog("[PipelineRunner] Reloading COMPLETE for widget timelines.")
+        }
+
+        await MainActor.run {
+            group.completionHandler?(group.results)
+        }
+        
+        return group
+    }
+    
+    func performOperation(for operation: AppOperation, handler: PipelineExecutionHandler, group: RefreshGroup, operationsCount: Int = 1) async throws {
+        debugLog("[AppManager] performOperation: Starting execution for app: \(operation.bundleIdentifier)")
+        defer {
+            Task { @MainActor in
+                DatabaseManager.shared.viewContext.processPendingChanges()
+            }
+        }
+        do {
+            let result = try await self.performPipeline(for: operation, handler: handler, group: group, operationsCount: operationsCount)
+            if !group.isCellularRefreshGroup {
+                progress.set(nil, for: operation)
+                debugLog("[AppManager] performOperation: completed successfully. progress was reset for installedApp: \(result.bundleIdentifier)")
+            }
+            
+            let bundleID = result.bundleIdentifier
+            let dbContext = group.dbContext
+            do {
+                try await dbContext.perform {
+                    let hasChanges = dbContext.hasChanges
+                    if hasChanges {
+                        try dbContext.save()
+                    }
+                    debugLog("[AppManager] performOperation: Context changes were saved for installedApp: \(bundleID)")
+                }
+            } catch {
+                debugLog("[AppManager] perform(): Failed to save InstalledApp to database. \(error.localizedDescription)")
+            }
+            
+            group.set(.success(result), forAppWithBundleIdentifier: bundleID)
+            debugLog("[AppManager] performOperation: Execution SUCCESS for app: \(operation.bundleIdentifier)")
+            
+            let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
+            operation.logSummary(status: "SUCCESS", elapsed: elapsed)
+            
+            if result.bundleIdentifier == StoreApp.altstoreAppID {
+                let context = StandaloneOperationContext(steps: .scheduleExpirationWarningNotification, dbBackgroundContext: group.dbContext)
+                let scheduleNotifOp = try ScheduleExpirationWarningNotificationOperation(
+                    installedApp: result,
+                    context: context
+                )
+                try await scheduleNotifOp.execute()
+            }
+            
+            if !group.isCellularRefreshGroup {
+                await CellularRefreshManager.shared.turnOnDataIfNeeded()
+            }
+        } catch {
+            if !group.isCellularRefreshGroup {
+                await CellularRefreshManager.shared.turnOnDataIfNeeded()
+            }
+            progress.set(nil, for: operation)
+            
+            let elapsed = CFAbsoluteTimeGetCurrent() - group.operationStartTime
+            // Nhận diện đầy đủ cả OperationError.cancelled khi người dùng đã nhấn "Tắt Thông Báo"
+            let isCancelled = PipelineExecutor.isCancellationError(error) || PipelineExecutor.hasPresentedAlert(for: group)
+            let status = isCancelled ? "CANCELLED" : "FAILED"
+            if isCancelled {
+                debugLog("[AppManager] performOperation: Execution CANCELLED for app: \(operation.bundleIdentifier)")
+            } else {
+                debugLog("[AppManager] performOperation: Execution FAILED for app: \(operation.bundleIdentifier) with error: \(error.localizedDescription)")
+            }
+            operation.logSummary(status: status, elapsed: elapsed, error: error)
+            
+            if isCancelled {
+                group.set(.failure(OperationError.cancelled), forAppWithBundleIdentifier: operation.bundleIdentifier)
+                return
+            }
+            
+            let mappedError = logger.getMappedError(for: operation, error: error)
+            
+            logger.log(error, operation: operation.loggedErrorOperation, app: operation.app)
+            
+            group.set(.failure(mappedError), forAppWithBundleIdentifier: operation.bundleIdentifier)
+        }
+    }
+    
+    private func performPipeline(for operation: AppOperation, handler: PipelineExecutionHandler, group: RefreshGroup, operationsCount: Int = 1) async throws -> InstalledApp
+    {
+        let pipelineSteps = PipelineStepDefinition.steps(for: operation)
+        let context = InstallAppOperationContext(
+            pipelineSteps: pipelineSteps,
+            bundleIdentifier: operation.bundleIdentifier,
+            dbBackgroundContext: group.dbContext,
+            sharedContext: group.sharedContext,
+            handler: handler,
+            additionalEntitlements: defaultEntitlements,
+            activeSigningCertificate: CertificateManager.shared.activeCertificate?.certificate
         )
+        context.isCellularRefreshGroup = group.isCellularRefreshGroup
+        context.groupOperationsCount = operationsCount
+        
+        // Luôn mặc định chỉ xin chứng chỉ/Provisioning Profile cho App chính
+        context.useMainProfile = true
+        
+        switch operation {
+            case .install(_, let customID), .reinstall(_, let customID):
+                context.customBundleIdentifier = customID
+            case .update(_, let customID):
+                context.customBundleIdentifier = customID
+                context.isStoreUpdate = true
+            case .resign(_, let mode):
+                context.alternateIconMode = mode
+            default:
+                break
+        }
         
         if let app = operation.app as? InstalledApp {
             context.installedApp = app
@@ -102,409 +460,57 @@ final class PipelineRunner {
             // Ép cứng luôn dùng Profile của App chính, không bao giờ tạo thêm App ID cho Extensions khi Refresh
             context.useMainProfile = true
             
-            // QUAN TRỌNG: Ưu tiên dùng chính xác resignedBundleIdentifier đang sống trên máy khi Refresh
+            // QUAN TRỌNG: Khi Refresh / Resign một InstalledApp đã có sẵn trên máy,
+            // ưu tiên lấy trực tiếp resignedBundleIdentifier (đã có đuôi .TEAM_ID)
             // để tuyệt đối không bị mất đuôi TeamID gây lỗi 9120!
             if !resignedID.isEmpty {
                 context.customBundleIdentifier = resignedID
                 context.appendTeamID = false
-            } else if let customID, !customID.isEmpty {
+            } else {
                 context.customBundleIdentifier = customID
                 context.appendTeamID = true
             }
             
             context.targetAppBundle = ALTApplication(fileURL: fileURL)
-        } else if let storeApp = operation.app as? StoreApp {
-            let dbContext = group.dbContext
-            let installedApp = await dbContext.perform {
-                storeApp.installedApp
-            }
-            context.installedApp = installedApp
-            if let installedApp {
-                let (fingerprint, resignedID, customID) = await dbContext.perform {
-                    if !installedApp.useMainProfile {
-                        installedApp.useMainProfile = true
-                    }
-                    return (
-                        installedApp.appBundleFingerprint,
-                        installedApp.resignedBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines),
-                        installedApp.customBundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines)
-                    )
-                }
-                context.appBundleFingerprint = fingerprint
-                context.useMainProfile = true
-                if !resignedID.isEmpty {
-                    context.customBundleIdentifier = resignedID
-                    context.appendTeamID = false
-                } else {
-                    context.customBundleIdentifier = customID
-                }
-                context.isStoreUpdate = true
+        }
+        
+        context.beginInstallationHandler = { (installedApp) in
+            group.beginInstallationHandler?(installedApp)
+        }
+        
+        var downloadingApp = operation.app
+        if let installedApp = operation.app as? InstalledApp {
+            if case .resign = operation { downloadingApp = installedApp }
+            else if let storeApp = installedApp.storeApp, !FileManager.default.fileExists(atPath: installedApp.fileURL.path) {
+                downloadingApp = storeApp
             }
         }
         
-        if let backupAction = operation.backupAction {
-            context.backupOperationAction = backupAction
+        let permissionReviewMode: PermissionReviewMode
+        switch operation {
+            case .install, .reinstall: permissionReviewMode = .all
+            case .update: permissionReviewMode = .added
+            default: permissionReviewMode = .none
         }
         
-        switch operation.type {
-        case .install(let source):
-            switch source {
-            case .url(let url):
-                context.sourceFileURL = url
-            case .app(let storeApp):
-                context.storeApp = storeApp
-            case .application(let app):
-                context.targetAppBundle = app
-            }
-            context.useMainProfile = true
-        case .update, .restore, .removeAppExtensions:
-            if let storeApp = operation.app as? StoreApp {
-                context.storeApp = storeApp
-            }
-            context.useMainProfile = true
-        case .refresh, .resign:
-            context.useMainProfile = true
-        case .backup, .activate, .deactivate, .export:
-            break
-        }
-        
-        await self.logStart(for: operation)
-        
-        let needsMinimuxer: Bool = {
-            switch operation.type {
-            case .install, .update, .refresh, .resign, .activate, .deactivate, .backup, .restore, .removeAppExtensions:
-                return true
-            case .export:
-                return false
-            }
-        }()
-        
-        do {
-            if needsMinimuxer {
-                try await self.ensureMinimuxerReady(for: operation, context: context)
-            }
-            
-            for step in operation.steps {
-                try Task.checkCancellation()
-                if progress.isCancelled {
-                    throw CancellationError()
-                }
-                
-                try await self.runStep(step, context: context, operation: operation)
-            }
-            
-            try Task.checkCancellation()
-            if progress.isCancelled {
-                throw CancellationError()
-            }
-        } catch {
-            context.error = error
-        }
-        
-        await self.finishOperation(operation, in: group, context: context, progress: progress)
-    }
-    
-    // MARK: - Minimuxer Readiness Gate
-    
-    private func ensureMinimuxerReady(
-        for operation: AppOperation,
-        context: AppOperationContext
-    ) async throws {
-        if Minimuxer.shared.isReady {
-            return
-        }
-        
-        // KHI BẮT ĐẦU CHUỖI LÀM MỚI BẰNG 4G:
-        // Không đòi hỏi VPN / WiFi ở bước đầu này vì bước FetchProvisioningProfilesOperation
-        // sẽ kết nối thẳng lên Apple Server bằng mạng 4G bình thường.
-        // Đến bước InjectBatchProfilesOperation (hoặc InstallAppOperation), hệ thống sẽ tự kích hoạt
-        // Local Stub / Minimuxer ngay sau khi đã tải xong toàn bộ Profile từ Apple!
-        if case .refresh = operation.type, CellularRefreshManager.shared.isEnabled {
-            let status = Minimuxer.shared.status
-            if status == .notStarted {
-                try? Minimuxer.shared.startWithLogger()
-            }
-            Logger.sidestore.info("[PipelineRunner] Cellular Refresh mode active: bypassing initial VPN/WiFi readiness gate so Apple Portal fetch can proceed over 4G.")
-            return
-        }
-        
-        let status = Minimuxer.shared.status
-        if status == .notStarted {
-            do {
-                try Minimuxer.shared.startWithLogger()
-            } catch {
-                Logger.sidestore.error("Failed to start minimuxer before pipeline: \(error.localizedDescription, privacy: .public)")
-                throw error
-            }
-        }
-        
-        let isReady = await Minimuxer.shared.waitForReady(timeout: 8.0)
-        if !isReady {
-            try Task.checkCancellation()
-            
-            do {
-                try Minimuxer.shared.ensureReadyForOperations()
-            } catch {
-                Logger.sidestore.warning("Minimuxer did not become ready within timeout for \(operation.app.name, privacy: .public): \(error.localizedDescription, privacy: .public)")
-                throw error
-            }
-        }
-    }
-    
-    // MARK: - Step Runner
-    
-    private func runStep(
-        _ step: AppOperationStep,
-        context: AppOperationContext,
-        operation: AppOperation
-    ) async throws {
-        let stepName = String(describing: step)
-        Logger.sidestore.debug("[Pipeline] Starting step \(stepName, privacy: .public) for \(operation.app.name, privacy: .public)")
-        
-        let op = step.makeOperation(context: context)
-        
-        try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                let resumeGate = ContinuationGate(continuation)
-                
-                op.resultHandler = { result in
-                    switch result {
-                    case .success:
-                        resumeGate.resume()
-                    case .failure(let error):
-                        resumeGate.resume(throwing: error)
-                    }
-                }
-                
-                if Task.isCancelled {
-                    op.cancel()
-                    resumeGate.resume(throwing: CancellationError())
-                    return
-                }
-                
-                AppManager.shared.LegacyOperationQueueAdd(op)
-            }
-        } onCancel: {
-            op.cancel()
-        }
-        
-        if let contextError = context.error {
-            throw contextError
-        }
-        
-        Logger.sidestore.debug("[Pipeline] Completed step \(stepName, privacy: .public) for \(operation.app.name, privacy: .public)")
-    }
-    
-    // MARK: - Finalize
-    
-    private func finishOperation(
-        _ operation: AppOperation,
-        in group: AppOperationGroup,
-        context: AppOperationContext,
-        progress: Progress
-    ) async {
-        // Clean up temporary directory
-        do {
-            if FileManager.default.fileExists(atPath: context.temporaryDirectory.path) {
-                try FileManager.default.removeItem(at: context.temporaryDirectory)
-            }
-        } catch {
-            Logger.sidestore.error("Failed to remove temporary directory after operation: \(error.localizedDescription, privacy: .public)")
-        }
-        
-        let finalResult: Result<InstalledApp?, Error>
-        
-        if let error = context.error {
-            finalResult = .failure(error)
-            await self.logFailure(for: operation, error: error, context: context)
-        } else {
-            let remainingUnits = max(0, progress.totalUnitCount - progress.completedUnitCount)
-            if remainingUnits > 0 {
-                progress.completedUnitCount = progress.totalUnitCount
-            }
-            
-            finalResult = .success(context.installedApp)
-            await self.logSuccess(for: operation, context: context)
-        }
-        
-        // Save installedApp changes on background context
-        let installedApp = context.installedApp
-        let opType = operation.type
-        let opError = context.error
-        await context.dbBackgroundContext.perform {
-            if let installedApp, let managedObjectContext = installedApp.managedObjectContext {
-                do {
-                    if opError == nil {
-                        switch opType {
-                        case .install, .update, .refresh, .resign:
-                            installedApp.refreshedDate = Date()
-                        case .activate:
-                            installedApp.isActive = true
-                        case .deactivate:
-                            installedApp.isActive = false
-                        case .removeAppExtensions:
-                            installedApp.useMainProfile = true
-                        case .backup, .restore, .export:
-                            break
-                        }
-                    }
-                    
-                    if managedObjectContext.hasChanges {
-                        try managedObjectContext.save()
-                    }
-                } catch {
-                    Logger.sidestore.error("Failed to save context in PipelineRunner finishOperation: \(error.localizedDescription, privacy: .public)")
-                }
-            }
-        }
-        
-        // Store result on group
-        let appBundleID = operation.app.bundleIdentifier
-        await MainActor.run {
-            group.set(finalResult, forAppWithBundleID: appBundleID)
-            operation.finish(with: finalResult)
-        }
-        
-        // Post notifications
-        self.postNotifications(for: operation, result: finalResult, context: context)
-    }
-    
-    // MARK: - Notifications & Logging
-    
-    private func postNotifications(
-        for operation: AppOperation,
-        result: Result<InstalledApp?, Error>,
-        context: AppOperationContext
-    ) {
-        guard case .success(let installedApp) = result, let installedApp else { return }
-        
-        let objectID = installedApp.objectID
-        Task { @MainActor in
-            guard let mainApp = DatabaseManager.shared.viewContext.object(with: objectID) as? InstalledApp else { return }
-            
-            switch operation.type {
-            case .install:
-                NotificationCenter.default.post(name: AppManager.didInstallAppNotification, object: mainApp)
-            case .update:
-                NotificationCenter.default.post(name: AppManager.didUpdateAppNotification, object: mainApp)
-            case .refresh, .resign:
-                NotificationCenter.default.post(name: AppManager.didRefreshAppNotification, object: mainApp)
-            case .activate:
-                NotificationCenter.default.post(name: AppManager.didActivateAppNotification, object: mainApp)
-            case .deactivate:
-                NotificationCenter.default.post(name: AppManager.didDeactivateAppNotification, object: mainApp)
-            case .backup:
-                NotificationCenter.default.post(name: AppManager.didBackupAppNotification, object: mainApp)
-            case .restore:
-                NotificationCenter.default.post(name: AppManager.didRestoreAppNotification, object: mainApp)
-            case .removeAppExtensions, .export:
-                break
-            }
-        }
-    }
-    
-    private func logStart(for operation: AppOperation) async {
-        let appName = operation.app.name
-        let bundleID = operation.app.bundleIdentifier
-        Logger.sidestore.notice("Starting \(String(describing: operation.type), privacy: .public) pipeline for \(appName, privacy: .public) (\(bundleID, privacy: .public))")
-    }
-    
-    private func logSuccess(for operation: AppOperation, context: AppOperationContext) async {
-        let appName = operation.app.name
-        let bundleID = operation.app.bundleIdentifier
-        Logger.sidestore.notice("Successfully finished \(String(describing: operation.type), privacy: .public) pipeline for \(appName, privacy: .public) (\(bundleID, privacy: .public))")
-        
-        guard !context.isQuietRefresh else { return }
-        
-        await context.dbBackgroundContext.perform {
-            let loggedError = LoggedError(
-                error: OperationSuccessDummyError(),
-                app: context.installedApp,
-                appBundleID: bundleID,
-                appName: appName,
-                type: operation.type.loggedOperationType,
-                result: .success,
-                context: context.dbBackgroundContext
-            )
-            _ = loggedError
-            try? context.dbBackgroundContext.save()
-        }
-    }
-    
-    private func logFailure(for operation: AppOperation, error: Error, context: AppOperationContext) async {
-        let appName = operation.app.name
-        let bundleID = operation.app.bundleIdentifier
-        Logger.sidestore.error("Pipeline \(String(describing: operation.type), privacy: .public) failed for \(appName, privacy: .public) (\(bundleID, privacy: .public)): \(error.localizedDescription, privacy: .public)")
-        
-        await context.dbBackgroundContext.perform {
-            let nsError = error as NSError
-            let isCancelled = (error is CancellationError) || (nsError.domain == NSCocoaErrorDomain && nsError.code == NSUserCancelledError)
-            guard !isCancelled else { return }
-            
-            let loggedError = LoggedError(
-                error: nsError,
-                app: context.installedApp,
-                appBundleID: bundleID,
-                appName: appName,
-                type: operation.type.loggedOperationType,
-                result: .failure,
-                context: context.dbBackgroundContext
-            )
-            _ = loggedError
-            try? context.dbBackgroundContext.save()
-        }
+        let permissionsMode = UserDefaults.standard.permissionCheckingDisabled ? .none : permissionReviewMode
+        let operationProgress = progress.progress(for: operation)
+        return try await PipelineExecutor.shared.executePipeline(
+            steps: pipelineSteps,
+            context: context,
+            operation: operation,
+            group: group,
+            downloadingApp: downloadingApp,
+            permissionsMode: permissionsMode,
+            operationProgress: operationProgress
+        )
     }
 }
 
-// MARK: - Helpers
-
-private final class ContinuationGate: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<Void, Error>?
-    
-    init(_ continuation: CheckedContinuation<Void, Error>) {
-        self.continuation = continuation
-    }
-    
-    func resume() {
-        lock.lock()
-        let cont = continuation
-        continuation = nil
-        lock.unlock()
-        cont?.resume()
-    }
-    
-    func resume(throwing error: Error) {
-        lock.lock()
-        let cont = continuation
-        continuation = nil
-        lock.unlock()
-        cont?.resume(throwing: error)
-    }
-}
-
-private struct OperationSuccessDummyError: LocalizedError {
-    var errorDescription: String? { nil }
-}
-
-private extension AppOperationType {
-    var loggedOperationType: LoggedOperationType {
-        switch self {
-        case .install: return .install
-        case .update: return .update
-        case .refresh, .resign: return .refresh
-        case .activate: return .activate
-        case .deactivate: return .deactivate
-        case .backup: return .backup
-        case .restore: return .restore
-        case .removeAppExtensions: return .update
-        case .export: return .backup
-        }
-    }
-}
-
-extension AppManager {
-    fileprivate func LegacyOperationQueueAdd(_ operation: Operation) {
-        self.operationQueue.addOperation(operation)
+extension RefreshGroup {
+    var context: StandaloneOperationContext {
+        let ctx = StandaloneOperationContext(steps: [], dbBackgroundContext: dbContext)
+        ctx.error = self.error
+        return ctx
     }
 }

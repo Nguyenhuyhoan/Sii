@@ -1,3 +1,4 @@
+
 //
 //  UserCustomizationOperation.swift
 //  SideStore
@@ -130,7 +131,6 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         }
 
         // 3. NẾU LÀ APP MỚI (HOẶC APP KHÁC TÊN NHƯNG TRÙNG/NHỚ LẠI ID CŨ):
-        // Xóa sạch customBundleIdentifier cũ để hiện bảng hỏi với ID gốc sạch sẽ của IPA!
         context.customBundleIdentifier = nil
 
         let handler = context.handler.userCustomizationHandler
@@ -152,9 +152,11 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
             var targets: [InfoPlistTarget] = [
                 InfoPlistTarget(id: initialBundleID, name: targetAppBundle.name, isExtension: false, initialPlist: targetAppBundle.infoPlist)
             ]
+            /* [ĐÃ ẨN TUỲ CHỈNH TIỆN ÍCH MỞ RỘNG TRONG INFO.PLIST]
             for ext in targetAppBundle.allAppBundles where ext.isExtension {
                 targets.append(InfoPlistTarget(id: ext.bundleIdentifier, name: ext.name, isExtension: true, initialPlist: ext.infoPlist))
             }
+            */
 
             self.setProgress(40)
 
@@ -168,24 +170,37 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 throw OperationError.cancelled
             }
 
+            /* [ĐÃ ẨN LẤY MÃ ĐỊNH DANH TUỲ CHỈNH TỪ INFO.PLIST]
             let mainModifiedPlist = result.modifiedPlists[initialBundleID] ?? [:]
             let customID = InfoPlistParser(dictionary: mainModifiedPlist).bundleIdentifier
             let resolvedBaseID = Self.stripTrailingTeamID(
                 from: (customID?.isEmpty == false ? customID! : initialBundleID),
                 teamID: teamID
             )
+            */
+            let resolvedBaseID = Self.stripTrailingTeamID(
+                from: initialBundleID,
+                teamID: teamID
+            )
             context.appendTeamID = false
             context.customBundleIdentifier = "\(resolvedBaseID).\(teamID)"
             didCustomizeBundleID = true
 
-            for (targetID, plist) in result.modifiedPlists {
-                let key = (targetID == initialBundleID) ? context.targetBundleIdentifier : targetID
-                context.customInfoPlistByBundleID[key] = plist
+            for (targetID, plist) in result.modifiedPlists where targetID == initialBundleID {
+                var sanitizedPlist = plist
+                // Đảm bảo giữ nguyên mã định danh gốc trong plist, bỏ qua mọi thay đổi Bundle ID
+                sanitizedPlist[kCFBundleIdentifierKey as String] = initialBundleID
+                let key = context.targetBundleIdentifier
+                context.customInfoPlistByBundleID[key] = sanitizedPlist
             }
 
-            // Hậu kiểm: Chỉ gán installedApp (để ghi đè) nếu ID cuối cùng người dùng chốt trùng với một app đang có trên máy
+            // Hậu kiểm: Chỉ gán installedApp (để ghi đè) nếu ID cuối cùng trùng với một app đang có trên máy
             syncInstalledAppWithFinalChosenBundleID(teamID: teamID, installedSnap: installedSnap)
         } else {
+            self.setProgress(50)
+            let initialBundleID = trueOriginalBundleID
+
+            /* [ĐÃ ẨN BẢNG HỎI TUỲ CHỈNH MÃ ĐỊNH DANH ỨNG DỤNG (BUNDLE ID)]
             self.setProgress(35)
             let reusableCandidates = await fetchReusableAppIDCandidates(
                 authTeam: authTeam,
@@ -227,10 +242,18 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 context.customBundleIdentifier = "\(cleanCustomID).\(teamID)"
                 didCustomizeBundleID = true
             }
+            */
 
-            // Hậu kiểm: Sau khi người dùng đã được hỏi và tự tay chốt ID trên bảng chọn:
-            // - Nếu họ chọn 1 ID mới/ID cũ đang rảnh -> context.installedApp = nil (Cài thành App mới độc lập!)
-            // - Nếu họ cố tình nhập/chọn đúng cái ID đang thuộc về 1 App đang sống -> Gán installedApp để cài đè theo ý họ.
+            // Tự động dùng thẳng ID gốc của IPA kèm hậu tố TeamID mà không hiện bảng hỏi tuỳ chỉnh Bundle ID
+            let cleanCustomID = Self.stripTrailingTeamID(
+                from: initialBundleID,
+                teamID: teamID
+            )
+            context.appendTeamID = false
+            context.customBundleIdentifier = "\(cleanCustomID).\(teamID)"
+            didCustomizeBundleID = true
+
+            // Hậu kiểm đồng bộ trạng thái installedApp
             syncInstalledAppWithFinalChosenBundleID(teamID: teamID, installedSnap: installedSnap)
         }
 
@@ -247,6 +270,7 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 )
             ]
 
+            /* [ĐÃ ẨN TUỲ CHỈNH TIỆN ÍCH MỞ RỘNG TRONG ENTITLEMENTS]
             for ext in targetAppBundle.allAppBundles where ext.isExtension {
                 targets.append(
                     EntitlementsTarget(
@@ -257,6 +281,7 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                     )
                 )
             }
+            */
 
             guard let result = try await handler.resolveEntitlementsCustomization(
                 targets: targets,
@@ -265,7 +290,7 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 throw OperationError.cancelled
             }
 
-            for (targetID, targetEntitlements) in result {
+            for (targetID, targetEntitlements) in result where targetID == mainTargetID {
                 context.customEntitlementsByBundleID[targetID] = targetEntitlements
             }
 
@@ -300,7 +325,7 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         }
 
         self.setProgress(100)
-        if didCustomizeBundleID || UserDefaults.standard.customizeInfoPlist || UserDefaults.standard.customizeAppId || UserDefaults.standard.customizeAppIcon || UserDefaults.standard.customizeProvisioningProfile {
+        if didCustomizeBundleID || UserDefaults.standard.customizeInfoPlist || UserDefaults.standard.customizeAppIcon || UserDefaults.standard.customizeProvisioningProfile {
             return context.targetBundleIdentifier
         } else {
             return nil
@@ -309,9 +334,7 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
 
     // MARK: - Helpers: Đồng bộ & Nhận diện Thông minh
 
-    /// Kiểm tra ID cuối cùng sau khi người dùng đã chọn trên bảng hỏi.
-    /// Đảm bảo nếu chọn ID rảnh thì cài mới độc lập (`installedApp = nil`),
-    /// còn nếu cố tình chọn trùng ID với một app đang sống thì cập nhật đúng vào slot đó.
+    /// Kiểm tra ID cuối cùng để đồng bộ trạng thái cài mới (`installedApp = nil`) hoặc cập nhật.
     private func syncInstalledAppWithFinalChosenBundleID(teamID: String, installedSnap: InstalledAppSnapshot) {
         let baseChosen = (context.customBundleIdentifier ?? context.targetBundleIdentifier)
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -341,7 +364,7 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         let objectIDByExactNameAndBaseID: [String: NSManagedObjectID]
         /// Chỉ lưu Tên App nếu trên máy có DUY NHẤT 1 App mang tên đó (dùng để nhận diện Update khi App đang mặc áo ID cũ khác với ID gốc trong IPA)
         let objectIDByUniqueAppName: [String: NSManagedObjectID]
-        /// Bản đồ ID đang hoạt động -> ObjectID (chỉ dùng cho bước Hậu kiểm sau khi người dùng đã tự tay chọn trên bảng hỏi)
+        /// Bản đồ ID đang hoạt động -> ObjectID (chỉ dùng cho bước Hậu kiểm)
         let objectIDByActiveBundleID: [String: NSManagedObjectID]
     }
 
@@ -398,7 +421,7 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                     }
                 }
 
-                // Ghi nhận Tên App duy nhất (nếu có 2 bản clone trùng tên trên máy thì loại khỏi danh sách tự động khớp theo tên để luôn hỏi người dùng muốn cập nhật bản nào)
+                // Ghi nhận Tên App duy nhất (nếu có 2 bản clone trùng tên trên máy thì loại khỏi danh sách tự động khớp theo tên)
                 if !isHostApp, !nameKey.isEmpty {
                     if duplicatedNames.contains(nameKey) {
                         // Đã bị trùng tên -> không tự đoán mò

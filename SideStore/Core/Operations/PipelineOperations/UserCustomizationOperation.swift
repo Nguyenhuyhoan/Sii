@@ -1,4 +1,5 @@
 
+
 //
 //  UserCustomizationOperation.swift
 //  SideStore
@@ -89,13 +90,19 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         // Luôn bật cờ gộp chung 1 Provisioning Profile của App chính cho mọi phần mở rộng
         self.context.useMainProfile = true
 
+        // Nếu chính gói IPA đang cài là SideStore / AltStore thì cài luôn không hỏi
+        if targetAppBundle.isAltStoreApp || targetAppBundle.bundleIdentifier.isAltStoreAppID {
+            self.setProgress(100)
+            return context.customBundleIdentifier != nil ? context.targetBundleIdentifier : nil
+        }
+
         // Lấy tất cả các biến thể Tên và ID gốc thật sự của file IPA đang đưa vào
         let trueOriginalBundleID = targetAppBundle.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
         let incomingOrigBaseLower = Self.stripTrailingTeamID(from: trueOriginalBundleID, teamID: teamID).lowercased()
         let incomingNamesLower = Self.extractNormalizedAppNames(from: targetAppBundle)
 
         // 1. Quét danh sách App ĐANG SỐNG THẬT SỰ trên máy
-        let installedSnap = fetchInstalledAppSnapshots(teamID: teamID)
+        let installedSnap = fetchInstalledAppSnapshots(teamID: teamID, teamType: authTeam.type)
 
         // =========================================================================
         // THUẬT TOÁN NHẬN DIỆN THÔNG MINH:
@@ -118,7 +125,17 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 let isValidSameApp: Bool = context.dbBackgroundContext.performAndWait {
                     guard Self.isTrulyLiveInstalledApp(preMatchedApp) else { return false }
                     let existingName = Self.normalizeAppName(preMatchedApp.name)
-                    return !existingName.isEmpty && incomingNamesLower.contains(existingName)
+                    let existingBaseID = Self.stripTrailingTeamID(from: preMatchedApp.bundleIdentifier, teamID: teamID).lowercased()
+                    let existingResignedBaseID = Self.stripTrailingTeamID(from: preMatchedApp.resignedBundleIdentifier, teamID: teamID).lowercased()
+
+                    // Khớp tên App HOẶC khớp cả tên lẫn ID
+                    if !existingName.isEmpty && incomingNamesLower.contains(existingName) {
+                        return true
+                    }
+                    if incomingNamesLower.isEmpty && (existingBaseID == incomingOrigBaseLower || existingResignedBaseID == incomingOrigBaseLower) {
+                        return true
+                    }
+                    return false
                 }
                 if isValidSameApp {
                     matchedLiveObjectID = preMatchedApp.objectID
@@ -155,10 +172,10 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         if context.isStoreUpdate || context.installedApp != nil {
             let existingEffectiveID: String? = context.dbBackgroundContext.performAndWait {
                 guard let app = self.context.installedApp else { return nil }
-                let resigned = app.resignedBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !resigned.isEmpty { return resigned }
                 let custom = (app.customBundleIdentifier ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 if !custom.isEmpty { return custom }
+                let resigned = app.resignedBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !resigned.isEmpty { return resigned }
                 let raw = app.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
                 return raw.isEmpty ? nil : raw
             }
@@ -188,9 +205,7 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
 
         if UserDefaults.standard.customizeInfoPlist {
             let installedApps: [InstalledApp] = context.dbBackgroundContext.performAndWait {
-                let request = InstalledApp.fetchRequest()
-                let all = (try? context.dbBackgroundContext.fetch(request)) ?? []
-                return all.filter { Self.isTrulyLiveInstalledApp($0) }
+                InstalledApp.fetchActiveApps(in: context.dbBackgroundContext)
             }
             let installedAppIdentities = Dictionary(
                 installedApps.compactMap { app -> (String, String)? in
@@ -393,16 +408,15 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
     }
 
     /// Kiểm tra một bản ghi `InstalledApp` trong Database có phải là App ĐANG SỐNG THỰC SỰ trên thiết bị hay không
-    /// (Loại bỏ các app đã xóa ngoài màn hình chính, app đang deactive, hoặc bản nháp vừa tạo khi mới tải IPA)
     private static func isTrulyLiveInstalledApp(_ app: InstalledApp) -> Bool {
-        guard !app.isDeleted else { return false }
-        // Phải đang active và thực sự được cài đặt trên iOS
-        guard app.isActive && app.isInstalledOnDevice else { return false }
-        // Phải có resignedBundleIdentifier (đã từng ký và cài thành công)
+        if app.isDeleted { return false }
+        guard app.isActive else { return false }
         let resigned = app.resignedBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !resigned.isEmpty else { return false }
-        // Không tính các slot backup đã deactivate
-        if app.installedAppBackup != nil && !app.isActive {
+        // Không lấy các app đã bị thu hồi hoặc hết hạn hoàn toàn mà không còn file
+        if app.certificateStatus == .revoked { return false }
+        if !FileManager.default.fileExists(atPath: app.directoryURL.path) &&
+           !FileManager.default.fileExists(atPath: app.fileURL.path) {
             return false
         }
         return true
@@ -414,8 +428,16 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         hostMainID: String,
         teamID: String
     ) -> Bool {
-        // 1. Cờ chính thức của SideStore / AltStore
-        if app.isAltStoreApp {
+        // 1. Kiểm tra bằng thuộc tính chuẩn của SideStore (StoreApp.altstoreAppID & .isAltStoreAppID)
+        if app.bundleIdentifier == StoreApp.altstoreAppID ||
+           app.bundleIdentifier.isAltStoreAppID ||
+           app.resignedBundleIdentifier.isAltStoreAppID ||
+           (app.customBundleIdentifier?.isAltStoreAppID == true) {
+            return true
+        }
+
+        // 2. Kiểm tra đường dẫn bundle trùng với activeBundleURL đang chạy
+        if app.fileURL.standardizedFileURL == Bundle.Info.activeBundleURL.standardizedFileURL {
             return true
         }
 
@@ -424,16 +446,19 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         let customID = (app.customBundleIdentifier ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let appNameLower = normalizeAppName(app.name)
 
-        // 2. Kiểm tra theo ID chính và Tên App
+        // 3. Kiểm tra theo ID chính và Tên App (bao gồm cả LiveContainer / LC+SS)
         if isProtectedHostOrCoreApp(lowerFull: rawID, appNameLower: appNameLower, hostMainID: hostMainID, teamID: teamID) ||
            isProtectedHostOrCoreApp(lowerFull: resignedID, appNameLower: appNameLower, hostMainID: hostMainID, teamID: teamID) ||
            (!customID.isEmpty && isProtectedHostOrCoreApp(lowerFull: customID, appNameLower: appNameLower, hostMainID: hostMainID, teamID: teamID)) {
             return true
         }
 
-        // 3. Kiểm tra các App Extension (.appex) bên trong:
-        // Bản LC+SS (LiveContainer + SideStore) nhúng SideStore dưới dạng Extension hoặc dùng chung cấu trúc -> bắt dính 100% dù đổi tên hay đổi ID!
+        // 4. Kiểm tra các App Extension (.appex) bên trong:
+        // Bản LC+SS (LiveContainer + SideStore) nhúng SideStore dưới dạng Extension -> bắt dính 100% dù người dùng đổi tên hay đổi ID!
         for ext in app.appExtensions {
+            if ext.bundleIdentifier.isAltStoreAppID || ext.resignedBundleIdentifier.isAltStoreAppID {
+                return true
+            }
             let extRaw = ext.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let extResigned = ext.resignedBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let extName = normalizeAppName(ext.name)
@@ -485,10 +510,9 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         let objectIDByActiveBundleID: [String: NSManagedObjectID]
     }
 
-    private func fetchInstalledAppSnapshots(teamID: String) -> InstalledAppSnapshot {
+    private func fetchInstalledAppSnapshots(teamID: String, teamType: ALTTeamType) -> InstalledAppSnapshot {
         context.dbBackgroundContext.performAndWait {
-            let request = InstalledApp.fetchRequest()
-            let allFetchedApps = (try? context.dbBackgroundContext.fetch(request)) ?? []
+            let allFetchedApps = InstalledApp.fetchActiveApps(in: context.dbBackgroundContext)
 
             var activeAndProtectedIDs = Set<String>()
             var overwritableList: [OverwritableAppCandidate] = []
@@ -515,9 +539,14 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 }
             }
 
-            // Luôn bảo vệ ứng dụng chủ đang chạy (SideStore / LC+SS) và các App Extension trong Bundle của nó
+            // Luôn bảo vệ StoreApp.altstoreAppID và ứng dụng chủ đang chạy (SideStore / LC+SS) cùng các App Extension của nó
+            insertAllForms(StoreApp.altstoreAppID)
             if !hostMainBundleID.isEmpty {
                 insertAllForms(hostMainBundleID)
+            }
+            if let activeBundle = Bundle(url: Bundle.Info.activeBundleURL),
+               let activeID = activeBundle.bundleIdentifier {
+                insertAllForms(activeID)
             }
             if let plugInsURL = Bundle.main.builtInPlugInsURL,
                let pluginURLs = try? FileManager.default.contentsOfDirectory(at: plugInsURL, includingPropertiesForKeys: nil) {
@@ -528,12 +557,28 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 }
             }
 
+            // Bảo vệ cả bản ghi AltStore/SideStore trong DB nếu có
+            if let altStoreApp = InstalledApp.fetchAltStore(in: context.dbBackgroundContext) {
+                insertAllForms(altStoreApp.bundleIdentifier)
+                insertAllForms(altStoreApp.resignedBundleIdentifier)
+                if let custom = altStoreApp.customBundleIdentifier {
+                    insertAllForms(custom)
+                }
+                for ext in altStoreApp.appExtensions {
+                    insertAllForms(ext.bundleIdentifier)
+                    insertAllForms(ext.resignedBundleIdentifier)
+                }
+            }
+
+            // Phân loại: Bảo vệ SideStore / LC+SS trước, sau đó lọc các App thường đang sống
+            var liveUserApps: [InstalledApp] = []
+
             for app in allFetchedApps {
                 let rawID = app.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
                 let resignedID = app.resignedBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
                 let customID = (app.customBundleIdentifier ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
-                // 1. Nếu là SideStore hoặc LC+SS (dù trạng thái nào) -> Đưa toàn bộ ID chính + Extension vào danh sách bảo vệ tuyệt đối, và KHÔNG BAO GIỜ đưa vào danh sách cài đè!
+                // 1. Nếu là SideStore hoặc LC+SS -> Đưa toàn bộ ID chính + Extension vào danh sách bảo vệ tuyệt đối, và KHÔNG BAO GIỜ đưa vào danh sách cài đè!
                 if Self.isProtectedInstalledApp(app, hostMainID: hostMainBundleID, teamID: teamID) {
                     for idVariant in [rawID, resignedID, customID] where !idVariant.isEmpty {
                         insertAllForms(idVariant)
@@ -545,12 +590,35 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                     continue
                 }
 
-                // 2. Bắt buộc kiểm tra App có ĐANG SỐNG THỰC SỰ trên thiết bị hay không!
-                // (Nếu App đã gỡ khỏi máy hoặc đang deactive thì bỏ qua, không tính là đang chiếm ID và không hiện trong "Cài đè lên App")
+                // 2. Chỉ giữ lại những App đang sống thực sự trên máy
                 guard Self.isTrulyLiveInstalledApp(app) else {
                     continue
                 }
 
+                liveUserApps.append(app)
+            }
+
+            // Sắp xếp các App đang sống theo ngày làm mới/cài đặt mới nhất trước.
+            // Trên tài khoản Free (InstalledApp.freeAccountActiveAppsLimit == 3, trừ 1 slot của SideStore/LC+SS còn tối đa 2 App ngoài),
+            // nếu chưa bật MacDirtyCow (isAppLimitDisabled == false) thì chỉ giữ đúng tối đa (freeAccountActiveAppsLimit - 1) = 2 App đang sống!
+            liveUserApps.sort { lhs, rhs in
+                if lhs.refreshedDate != rhs.refreshedDate {
+                    return lhs.refreshedDate > rhs.refreshedDate
+                }
+                return lhs.installedDate > rhs.installedDate
+            }
+
+            if teamType == .free {
+                let maxUserAppsOnDevice = max(1, InstalledApp.freeAccountActiveAppsLimit - 1)
+                if liveUserApps.count > maxUserAppsOnDevice {
+                    liveUserApps = Array(liveUserApps.prefix(maxUserAppsOnDevice))
+                }
+            }
+
+            for app in liveUserApps {
+                let rawID = app.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+                let resignedID = app.resignedBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+                let customID = (app.customBundleIdentifier ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 let appName = app.name.trimmingCharacters(in: .whitespacesAndNewlines)
                 let nameKey = Self.normalizeAppName(appName)
 
@@ -580,8 +648,19 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                     }
                 }
 
-                // Tạo ứng viên cho mục "Cài đè lên App" (chỉ lấy App đang sống thực sự, không trùng lặp)
-                let effectiveIDSource = !resignedID.isEmpty ? resignedID : (!customID.isEmpty ? customID : rawID)
+                // Cũng đọc thêm CFBundleDisplayName / CFBundleName từ fileURL của App đang sống (nếu có) để khớp Tên App chính xác 100%
+                if let installedBundle = ALTApplication(fileURL: app.fileURL) {
+                    let extraNames = Self.extractNormalizedAppNames(from: installedBundle)
+                    for extraName in extraNames {
+                        for idVariant in [rawID, resignedID, customID] where !idVariant.isEmpty {
+                            let baseLower = Self.stripTrailingTeamID(from: idVariant, teamID: teamID).lowercased()
+                            mapByNameAndBaseID["\(extraName)|\(baseLower)"] = app.objectID
+                        }
+                    }
+                }
+
+                // Tạo ứng viên cho mục "Cài đè lên App"
+                let effectiveIDSource = !customID.isEmpty ? customID : (!resignedID.isEmpty ? resignedID : rawID)
                 if !effectiveIDSource.isEmpty {
                     let cleanBase = Self.stripTrailingTeamID(from: effectiveIDSource, teamID: teamID)
                     let fullWithTeam: String
@@ -680,17 +759,18 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
             let lowerItemName = Self.normalizeAppName(item.name)
 
             // 1. Trừ sạch ID chính và mọi ID mở rộng (.appex) của SideStore, AltStore và LC+SS (LiveContainer)
-            if Self.isProtectedHostOrCoreApp(
+            if fullID.isAltStoreAppID || shortDisplayID.isAltStoreAppID ||
+               Self.isProtectedHostOrCoreApp(
                 lowerFull: lowerFull,
                 appNameLower: lowerItemName,
                 hostMainID: hostMainBundleID,
                 teamID: teamID
-            ) || Self.isProtectedHostOrCoreApp(
+               ) || Self.isProtectedHostOrCoreApp(
                 lowerFull: lowerBase,
                 appNameLower: lowerItemName,
                 hostMainID: hostMainBundleID,
                 teamID: teamID
-            ) {
+               ) {
                 continue
             }
 
@@ -750,6 +830,10 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         let lowerTeam = teamID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let lowerBase = Self.stripTrailingTeamID(from: lowerFull, teamID: teamID).lowercased()
 
+        if lowerFull.isAltStoreAppID || lowerBase.isAltStoreAppID {
+            return true
+        }
+
         // 1. Bảo vệ chính ứng dụng chủ đang chạy (SideStore hoặc LC+SS) và mọi mở rộng của nó
         if !hostMainID.isEmpty {
             let hostBase = Self.stripTrailingTeamID(from: hostMainID, teamID: teamID).lowercased()
@@ -763,12 +847,13 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
 
         // 2. Danh sách gốc Bundle ID của SideStore, AltStore và LiveContainer / LC+SS
         let protectedMainBases = [
+            StoreApp.altstoreAppID.lowercased(),
             "com.sidestore.sidestore",
             "com.rileytestut.altstore",
             "com.kdt.livecontainer"
         ]
 
-        for mainBase in protectedMainBases {
+        for mainBase in protectedMainBases where !mainBase.isEmpty {
             if lowerFull == mainBase || lowerFull.hasPrefix(mainBase + ".") ||
                lowerBase == mainBase || lowerBase.hasPrefix(mainBase + ".") {
                 return true

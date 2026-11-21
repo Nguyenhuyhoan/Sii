@@ -1,4 +1,3 @@
-
 //
 //  PipelineHandler.swift
 //  SideStore
@@ -19,7 +18,6 @@ private struct PipelineCSSTheme {
     static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0) // #28a745
     static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0) // #dc3545
     static let magenta = UIColor(red: 255/255, green: 0/255, blue: 255/255, alpha: 1.0) // #ff00ff
-    static let orange = UIColor(red: 253/255, green: 126/255, blue: 20/255, alpha: 1.0) // #fd7e14
 
     static let cornerRadius: CGFloat = 15.0
 
@@ -27,7 +25,7 @@ private struct PipelineCSSTheme {
     static let suiPrimary = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255)
     static let suiSecondary = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)
     static let suiGreen = SwiftUI.Color(red: 40/255, green: 167/255, blue: 69/255)
-    static let suiOrange = SwiftUI.Color(red: 245/255, green: 124/255, blue: 0/255)
+    static let suiOrange = SwiftUI.Color(red: 253/255, green: 126/255, blue: 20/255)
     static let suiRed = SwiftUI.Color(red: 220/255, green: 53/255, blue: 69/255)
     static let suiMagenta = SwiftUI.Color(red: 255/255, green: 0/255, blue: 255/255)
     static let suiPureBlack = SwiftUI.Color.black
@@ -74,12 +72,11 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
     let appName: String
     let teamID: String
     let reusableAppIDs: [ReusableAppIDCandidate]
-    let overwritableApps: [OverwriteAppCandidate]
+    let overwritableApps: [OverwritableAppCandidate]
     let onComplete: ((String, Bool)?) -> Void
 
     @State private var isManualExpanded: Bool = false
     @State private var customBundleIDText: String
-    // Luôn bật mặc định gắn hậu tố Mã Nhóm (Team ID) = true
     @State private var appendTeamID: Bool = true
 
     init(
@@ -87,7 +84,7 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
         appName: String,
         teamID: String,
         reusableAppIDs: [ReusableAppIDCandidate],
-        overwritableApps: [OverwriteAppCandidate],
+        overwritableApps: [OverwritableAppCandidate],
         onComplete: @escaping ((String, Bool)?) -> Void
     ) {
         self.initialBundleID = initialBundleID
@@ -151,344 +148,346 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                 .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous))
                 .shadow(color: PipelineCSSTheme.suiPrimary.opacity(0.22), radius: 10, x: 0, y: 4)
 
-                // Khối thẻ trắng chính chứa các lựa chọn ID (có ScrollView tự động co giãn mượt mà khi danh sách dài)
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 10) {
-                        // Lựa chọn 1: Dùng ID gốc của IPA
-                        SwiftUI.Button {
-                            onComplete((initialBundleID, true))
-                        } label: {
-                            HStack(spacing: 9) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(PipelineCSSTheme.suiPrimary.opacity(0.14))
-                                        .frame(width: 36, height: 36)
-                                    SwiftUI.Image(systemName: "plus.app.fill")
-                                        .font(.system(size: 17, weight: .bold))
-                                        .foregroundColor(PipelineCSSTheme.suiPrimary)
-                                }
-
-                                VStack(alignment: .leading, spacing: 2.5) {
-                                    SwiftUI.Text("Dùng ID gốc của IPA")
-                                        .font(.system(size: 14.5, weight: .bold))
-                                        .foregroundColor(PipelineCSSTheme.suiPureBlack)
-
-                                    SwiftUI.Text(displayCleanBundleID(initialBundleID))
-                                        .font(.system(size: 12, weight: .medium, design: .monospaced))
-                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.72))
-                                        .lineLimit(2)
-                                        .minimumScaleFactor(0.75)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                        .multilineTextAlignment(.leading)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-
-                                SwiftUI.Image(systemName: "chevron.right")
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundColor(PipelineCSSTheme.suiPrimary.opacity(0.75))
+                // Khối thẻ trắng chính chứa các lựa chọn ID
+                VStack(spacing: 10) {
+                    // Lựa chọn 1: Dùng ID gốc của IPA
+                    SwiftUI.Button {
+                        onComplete((initialBundleID, true))
+                    } label: {
+                        HStack(spacing: 9) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(PipelineCSSTheme.suiPrimary.opacity(0.14))
+                                    .frame(width: 36, height: 36)
+                                SwiftUI.Image(systemName: "plus.app.fill")
+                                    .font(.system(size: 17, weight: .bold))
+                                    .foregroundColor(PipelineCSSTheme.suiPrimary)
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 10)
-                            .background(PipelineCSSTheme.suiInnerRowBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(PipelineCSSTheme.suiPrimary.opacity(0.55), lineWidth: 1.2)
-                            )
+
+                            VStack(alignment: .leading, spacing: 2.5) {
+                                SwiftUI.Text("Dùng ID gốc của IPA")
+                                    .font(.system(size: 14.5, weight: .bold))
+                                    .foregroundColor(PipelineCSSTheme.suiPureBlack)
+
+                                SwiftUI.Text(displayCleanBundleID(initialBundleID))
+                                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                    .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.72))
+                                    .lineLimit(2)
+                                    .minimumScaleFactor(0.75)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            SwiftUI.Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(PipelineCSSTheme.suiPrimary.opacity(0.75))
                         }
-                        .buttonStyle(PipelineBounceButtonStyle())
-
-                        // Lựa chọn 2: Dùng lại ID cũ (10 ID từ Apple trừ đi ID của app đang sống và trừ đi các ID tiện ích của các app đang sống)
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 5) {
-                                SwiftUI.Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                                    .font(.system(size: 13.5, weight: .bold))
-                                    .foregroundColor(PipelineCSSTheme.suiGreen)
-                                SwiftUI.Text("Dùng lại ID cũ")
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundColor(PipelineCSSTheme.suiGreen)
-                                Spacer()
-                            }
-
-                            if reusableAppIDs.isEmpty {
-                                HStack(spacing: 8) {
-                                    SwiftUI.Image(systemName: "info.circle.fill")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(PipelineCSSTheme.suiSecondary.opacity(0.75))
-                                    SwiftUI.Text("Hiện không có ID cũ nào rảnh rỗi ngoài các ứng dụng đang hoạt động.")
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.68))
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(10)
-                                .background(PipelineCSSTheme.suiCardBackground)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
-                                )
-                            } else {
-                                ScrollView(.vertical, showsIndicators: true) {
-                                    VStack(spacing: 6) {
-                                        ForEach(reusableAppIDs) { candidate in
-                                            SwiftUI.Button {
-                                                // KHI BẤM CHỌN: Truyền nguyên xi fullBundleIdentifier (VD: com.alone.37D6PWG5PP)
-                                                // và appendTeamID = false để luồng ngầm hoạt động chuẩn xác 100%!
-                                                onComplete((candidate.fullBundleIdentifier, false))
-                                            } label: {
-                                                HStack(spacing: 8) {
-                                                    ZStack {
-                                                        Circle()
-                                                            .fill(PipelineCSSTheme.suiGreen.opacity(0.14))
-                                                            .frame(width: 26, height: 26)
-                                                        SwiftUI.Image(systemName: "bolt.shield.fill")
-                                                            .font(.system(size: 12.5, weight: .bold))
-                                                            .foregroundColor(PipelineCSSTheme.suiGreen)
-                                                    }
-
-                                                    VStack(alignment: .leading, spacing: 2) {
-                                                        SwiftUI.Text(candidate.name)
-                                                            .font(.system(size: 13.5, weight: .bold))
-                                                            .foregroundColor(PipelineCSSTheme.suiPureBlack)
-                                                            .lineLimit(1)
-
-                                                        // HIỂN THỊ: Đã cắt đuôi Team ID + Tự co chữ nhẹ / xuống dòng để hiện đầy đủ 100%
-                                                        SwiftUI.Text(displayCleanBundleID(candidate.fullBundleIdentifier))
-                                                            .font(.system(size: 11.5, weight: .medium, design: .monospaced))
-                                                            .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.70))
-                                                            .lineLimit(2)
-                                                            .minimumScaleFactor(0.72)
-                                                            .fixedSize(horizontal: false, vertical: true)
-                                                            .multilineTextAlignment(.leading)
-                                                    }
-                                                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                                                    VStack(alignment: .trailing, spacing: 2) {
-                                                        SwiftUI.Text("0 ID")
-                                                            .font(.system(size: 10, weight: .bold))
-                                                            .foregroundColor(PipelineCSSTheme.suiGreen)
-                                                            .padding(.horizontal, 5)
-                                                            .padding(.vertical, 1.5)
-                                                            .background(
-                                                                Capsule()
-                                                                    .fill(PipelineCSSTheme.suiGreen.opacity(0.15))
-                                                            )
-
-                                                        SwiftUI.Text(remainingDaysText(for: candidate.expirationDate))
-                                                            .font(.system(size: 10.5, weight: .bold))
-                                                            .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.65))
-                                                    }
-                                                    .fixedSize()
-                                                }
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 8)
-                                                .background(PipelineCSSTheme.suiCardBackground)
-                                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                                        .stroke(PipelineCSSTheme.suiGreen.opacity(0.38), lineWidth: 1.1)
-                                                )
-                                            }
-                                            .buttonStyle(PipelineBounceButtonStyle())
-                                        }
-                                    }
-                                    .padding(1)
-                                }
-                                .frame(maxHeight: min(CGFloat(reusableAppIDs.count) * 58.0, 148.0))
-                            }
-                        }
-                        .padding(9)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 10)
                         .background(PipelineCSSTheme.suiInnerRowBackground)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1.1)
+                                .stroke(PipelineCSSTheme.suiPrimary.opacity(0.55), lineWidth: 1.2)
                         )
+                    }
+                    .buttonStyle(PipelineBounceButtonStyle())
 
-                        // Lựa chọn 3: Cài đè lên app (Hiện các app đang sống phía dưới trừ SideStore hoặc LC+SS, giống hiện các ID cũ)
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 5) {
-                                SwiftUI.Image(systemName: "arrow.down.doc.fill")
-                                    .font(.system(size: 13.5, weight: .bold))
-                                    .foregroundColor(PipelineCSSTheme.suiOrange)
-                                SwiftUI.Text("Cài đè lên app")
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundColor(PipelineCSSTheme.suiOrange)
-                                Spacer()
+                    // Lựa chọn 2: Dùng lại ID cũ (10 ID từ Apple trừ đi app còn sống & mở rộng, trừ luôn SideStore và LC+SS & mở rộng)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 5) {
+                            SwiftUI.Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                                .font(.system(size: 13.5, weight: .bold))
+                                .foregroundColor(PipelineCSSTheme.suiGreen)
+                            SwiftUI.Text("Dùng lại ID cũ")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(PipelineCSSTheme.suiGreen)
+                            Spacer()
+                        }
+
+                        if reusableAppIDs.isEmpty {
+                            HStack(spacing: 8) {
+                                SwiftUI.Image(systemName: "info.circle.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(PipelineCSSTheme.suiSecondary.opacity(0.75))
+                                SwiftUI.Text("Hiện không có ID cũ nào rảnh rỗi ngoài các ứng dụng đang hoạt động.")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.68))
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                            .background(PipelineCSSTheme.suiCardBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
+                            )
+                        } else {
+                            ScrollView(.vertical, showsIndicators: true) {
+                                VStack(spacing: 6) {
+                                    ForEach(reusableAppIDs) { candidate in
+                                        SwiftUI.Button {
+                                            onComplete((candidate.fullBundleIdentifier, false))
+                                        } label: {
+                                            HStack(spacing: 8) {
+                                                ZStack {
+                                                    Circle()
+                                                        .fill(PipelineCSSTheme.suiGreen.opacity(0.14))
+                                                        .frame(width: 26, height: 26)
+                                                    SwiftUI.Image(systemName: "bolt.shield.fill")
+                                                        .font(.system(size: 12.5, weight: .bold))
+                                                        .foregroundColor(PipelineCSSTheme.suiGreen)
+                                                }
 
-                            if overwritableApps.isEmpty {
-                                HStack(spacing: 8) {
-                                    SwiftUI.Image(systemName: "info.circle.fill")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(PipelineCSSTheme.suiSecondary.opacity(0.75))
-                                    SwiftUI.Text("Hiện chưa có ứng dụng nào đang hoạt động để cài đè (ngoài SideStore / LC+SS).")
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.68))
-                                        .fixedSize(horizontal: false, vertical: true)
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    SwiftUI.Text(candidate.name)
+                                                        .font(.system(size: 13.5, weight: .bold))
+                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack)
+                                                        .lineLimit(1)
+
+                                                    SwiftUI.Text(displayCleanBundleID(candidate.fullBundleIdentifier))
+                                                        .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.70))
+                                                        .lineLimit(2)
+                                                        .minimumScaleFactor(0.72)
+                                                        .fixedSize(horizontal: false, vertical: true)
+                                                        .multilineTextAlignment(.leading)
+                                                }
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                                                VStack(alignment: .trailing, spacing: 2) {
+                                                    SwiftUI.Text("0 ID")
+                                                        .font(.system(size: 10, weight: .bold))
+                                                        .foregroundColor(PipelineCSSTheme.suiGreen)
+                                                        .padding(.horizontal, 5)
+                                                        .padding(.vertical, 1.5)
+                                                        .background(
+                                                            Capsule()
+                                                                .fill(PipelineCSSTheme.suiGreen.opacity(0.15))
+                                                        )
+
+                                                    SwiftUI.Text(remainingDaysText(for: candidate.expirationDate))
+                                                        .font(.system(size: 10.5, weight: .bold))
+                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.65))
+                                                }
+                                                .fixedSize()
+                                            }
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 8)
+                                            .background(PipelineCSSTheme.suiCardBackground)
+                                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                    .stroke(PipelineCSSTheme.suiGreen.opacity(0.38), lineWidth: 1.1)
+                                            )
+                                        }
+                                        .buttonStyle(PipelineBounceButtonStyle())
+                                    }
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(10)
-                                .background(PipelineCSSTheme.suiCardBackground)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
-                                )
-                            } else {
-                                ScrollView(.vertical, showsIndicators: true) {
-                                    VStack(spacing: 6) {
-                                        ForEach(overwritableApps) { appCandidate in
-                                            SwiftUI.Button {
-                                                // KHI BẤM CHỌN CÀI ĐÈ: Truyền đúng fullBundleIdentifier của app đang sống đó
-                                                // và appendTeamID = false để cài đè trực tiếp lên app đó!
-                                                onComplete((appCandidate.fullBundleIdentifier, false))
-                                            } label: {
-                                                HStack(spacing: 8) {
-                                                    ZStack {
-                                                        Circle()
-                                                            .fill(PipelineCSSTheme.suiOrange.opacity(0.14))
-                                                            .frame(width: 26, height: 26)
-                                                        SwiftUI.Image(systemName: "square.and.arrow.down.on.square.fill")
-                                                            .font(.system(size: 12, weight: .bold))
-                                                            .foregroundColor(PipelineCSSTheme.suiOrange)
-                                                    }
+                                .padding(1)
+                            }
+                            .frame(maxHeight: min(CGFloat(reusableAppIDs.count) * 60.0, 155.0))
+                        }
+                    }
+                    .padding(9)
+                    .background(PipelineCSSTheme.suiInnerRowBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1.1)
+                    )
 
-                                                    VStack(alignment: .leading, spacing: 2) {
+                    // Lựa chọn 3: Cài đè lên App (nằm ngay dưới "Dùng lại ID cũ", hiển thị các app có thể cài đè trừ SideStore và LC+SS)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 5) {
+                            SwiftUI.Image(systemName: "arrow.down.doc.fill")
+                                .font(.system(size: 13.5, weight: .bold))
+                                .foregroundColor(PipelineCSSTheme.suiOrange)
+                            SwiftUI.Text("Cài đè lên App")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(PipelineCSSTheme.suiOrange)
+                            Spacer()
+                        }
+
+                        if overwritableApps.isEmpty {
+                            HStack(spacing: 8) {
+                                SwiftUI.Image(systemName: "info.circle.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(PipelineCSSTheme.suiSecondary.opacity(0.75))
+                                SwiftUI.Text("Chưa có ứng dụng nào trên máy có thể cài đè.")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.68))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                            .background(PipelineCSSTheme.suiCardBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
+                            )
+                        } else {
+                            ScrollView(.vertical, showsIndicators: true) {
+                                VStack(spacing: 6) {
+                                    ForEach(overwritableApps) { appCandidate in
+                                        SwiftUI.Button {
+                                            // KHI BẤM CHỌN APP ĐỂ CÀI ĐÈ:
+                                            // Truyền fullBundleIdentifier của app bị cài đè để gán cho IPA mới và các mở rộng của IPA mới
+                                            onComplete((appCandidate.fullBundleIdentifier, false))
+                                        } label: {
+                                            HStack(spacing: 8) {
+                                                ZStack {
+                                                    Circle()
+                                                        .fill(PipelineCSSTheme.suiOrange.opacity(0.15))
+                                                        .frame(width: 26, height: 26)
+                                                    SwiftUI.Image(systemName: "square.and.arrow.down.on.square.fill")
+                                                        .font(.system(size: 12, weight: .bold))
+                                                        .foregroundColor(PipelineCSSTheme.suiOrange)
+                                                }
+
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    HStack(spacing: 5) {
                                                         SwiftUI.Text(appCandidate.name)
                                                             .font(.system(size: 13.5, weight: .bold))
                                                             .foregroundColor(PipelineCSSTheme.suiPureBlack)
                                                             .lineLimit(1)
 
-                                                        SwiftUI.Text(displayCleanBundleID(appCandidate.fullBundleIdentifier))
-                                                            .font(.system(size: 11.5, weight: .medium, design: .monospaced))
-                                                            .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.70))
-                                                            .lineLimit(2)
-                                                            .minimumScaleFactor(0.72)
-                                                            .fixedSize(horizontal: false, vertical: true)
-                                                            .multilineTextAlignment(.leading)
+                                                        if let ver = appCandidate.version, !ver.isEmpty {
+                                                            SwiftUI.Text("v\(ver)")
+                                                                .font(.system(size: 10.5, weight: .semibold))
+                                                                .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.55))
+                                                                .lineLimit(1)
+                                                        }
                                                     }
-                                                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                                                    VStack(alignment: .trailing, spacing: 2) {
-                                                        SwiftUI.Text("Đè App")
-                                                            .font(.system(size: 10, weight: .bold))
-                                                            .foregroundColor(PipelineCSSTheme.suiOrange)
-                                                            .padding(.horizontal, 5)
-                                                            .padding(.vertical, 1.5)
-                                                            .background(
-                                                                Capsule()
-                                                                    .fill(PipelineCSSTheme.suiOrange.opacity(0.15))
-                                                            )
-
-                                                        SwiftUI.Text(remainingDaysText(for: appCandidate.expirationDate))
-                                                            .font(.system(size: 10.5, weight: .bold))
-                                                            .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.65))
-                                                    }
-                                                    .fixedSize()
+                                                    SwiftUI.Text(displayCleanBundleID(appCandidate.fullBundleIdentifier))
+                                                        .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.70))
+                                                        .lineLimit(2)
+                                                        .minimumScaleFactor(0.72)
+                                                        .fixedSize(horizontal: false, vertical: true)
+                                                        .multilineTextAlignment(.leading)
                                                 }
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 8)
-                                                .background(PipelineCSSTheme.suiCardBackground)
-                                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                                        .stroke(PipelineCSSTheme.suiOrange.opacity(0.42), lineWidth: 1.1)
-                                                )
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                                                VStack(alignment: .trailing, spacing: 2) {
+                                                    SwiftUI.Text("Cài đè")
+                                                        .font(.system(size: 10, weight: .bold))
+                                                        .foregroundColor(PipelineCSSTheme.suiOrange)
+                                                        .padding(.horizontal, 5.5)
+                                                        .padding(.vertical, 1.5)
+                                                        .background(
+                                                            Capsule()
+                                                                .fill(PipelineCSSTheme.suiOrange.opacity(0.15))
+                                                        )
+
+                                                    SwiftUI.Text(remainingDaysText(for: appCandidate.expirationDate))
+                                                        .font(.system(size: 10.5, weight: .bold))
+                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.65))
+                                                }
+                                                .fixedSize()
                                             }
-                                            .buttonStyle(PipelineBounceButtonStyle())
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 8)
+                                            .background(PipelineCSSTheme.suiCardBackground)
+                                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                    .stroke(PipelineCSSTheme.suiOrange.opacity(0.42), lineWidth: 1.1)
+                                            )
                                         }
+                                        .buttonStyle(PipelineBounceButtonStyle())
                                     }
-                                    .padding(1)
                                 }
-                                .frame(maxHeight: min(CGFloat(overwritableApps.count) * 58.0, 148.0))
+                                .padding(1)
                             }
-                        }
-                        .padding(9)
-                        .background(PipelineCSSTheme.suiInnerRowBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1.1)
-                        )
-
-                        // Lựa chọn 4: Tự nhập mã Bundle ID tùy chỉnh
-                        VStack(spacing: 8) {
-                            SwiftUI.Button {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    isManualExpanded.toggle()
-                                }
-                            } label: {
-                                HStack(spacing: 8) {
-                                    SwiftUI.Image(systemName: "pencil.and.outline")
-                                        .font(.system(size: 13.5, weight: .bold))
-                                        .foregroundColor(PipelineCSSTheme.suiSecondary)
-                                    SwiftUI.Text("Tự nhập Bundle ID tùy chỉnh khác")
-                                        .font(.system(size: 13, weight: .bold))
-                                        .foregroundColor(PipelineCSSTheme.suiPureBlack)
-                                    Spacer()
-                                    SwiftUI.Image(systemName: isManualExpanded ? "chevron.up" : "chevron.down")
-                                        .font(.system(size: 12, weight: .bold))
-                                        .foregroundColor(PipelineCSSTheme.suiSecondary)
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 9)
-                                .background(PipelineCSSTheme.suiInnerRowBackground)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
-                                )
-                            }
-                            .buttonStyle(PipelineBounceButtonStyle())
-
-                            if isManualExpanded {
-                                VStack(spacing: 8) {
-                                    TextField("com.example.app", text: $customBundleIDText)
-                                        .textInputAutocapitalization(.never)
-                                        .disableAutocorrection(true)
-                                        .font(.system(size: 13, weight: .medium, design: .monospaced))
-                                        .foregroundColor(PipelineCSSTheme.suiPureBlack)
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 8.5)
-                                        .background(PipelineCSSTheme.suiCardBackground)
-                                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                                .stroke(PipelineCSSTheme.suiPrimary.opacity(0.4), lineWidth: 1)
-                                        )
-
-                                    // Mặc định luôn truyền appendTeamID = true khi bấm "Bắt đầu Cài Đặt"
-                                    SwiftUI.Button {
-                                        let trimmed = customBundleIDText.trimmingCharacters(in: .whitespacesAndNewlines)
-                                        let rawID = trimmed.isEmpty ? initialBundleID : trimmed
-                                        let sanitized = InfoPlistParser.sanitizeBundleID(rawID)
-                                        onComplete((sanitized.isEmpty ? initialBundleID : sanitized, true))
-                                    } label: {
-                                        SwiftUI.Text("Bắt đầu Cài Đặt")
-                                            .font(.system(size: 13.5, weight: .bold))
-                                            .foregroundColor(.white)
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 9.5)
-                                            .background(PipelineCSSTheme.suiPrimary)
-                                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                                    }
-                                    .buttonStyle(PipelineBounceButtonStyle())
-                                }
-                                .padding(9)
-                                .background(PipelineCSSTheme.suiInnerRowBackground)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
-                                )
-                            }
+                            .frame(maxHeight: min(CGFloat(overwritableApps.count) * 60.0, 145.0))
                         }
                     }
-                    .padding(10)
+                    .padding(9)
+                    .background(PipelineCSSTheme.suiInnerRowBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1.1)
+                    )
+
+                    // Lựa chọn 4: Tự nhập mã Bundle ID tùy chỉnh
+                    VStack(spacing: 8) {
+                        SwiftUI.Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isManualExpanded.toggle()
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                SwiftUI.Image(systemName: "pencil.and.outline")
+                                    .font(.system(size: 13.5, weight: .bold))
+                                    .foregroundColor(PipelineCSSTheme.suiSecondary)
+                                SwiftUI.Text("Tự nhập Bundle ID tùy chỉnh khác")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(PipelineCSSTheme.suiPureBlack)
+                                Spacer()
+                                SwiftUI.Image(systemName: isManualExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(PipelineCSSTheme.suiSecondary)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 9)
+                            .background(PipelineCSSTheme.suiInnerRowBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(PipelineBounceButtonStyle())
+
+                        if isManualExpanded {
+                            VStack(spacing: 8) {
+                                TextField("com.example.app", text: $customBundleIDText)
+                                    .textInputAutocapitalization(.never)
+                                    .disableAutocorrection(true)
+                                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                    .foregroundColor(PipelineCSSTheme.suiPureBlack)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8.5)
+                                    .background(PipelineCSSTheme.suiCardBackground)
+                                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                            .stroke(PipelineCSSTheme.suiPrimary.opacity(0.4), lineWidth: 1)
+                                    )
+
+                                SwiftUI.Button {
+                                    let trimmed = customBundleIDText.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    let rawID = trimmed.isEmpty ? initialBundleID : trimmed
+                                    let sanitized = InfoPlistParser.sanitizeBundleID(rawID)
+                                    onComplete((sanitized.isEmpty ? initialBundleID : sanitized, true))
+                                } label: {
+                                    SwiftUI.Text("Bắt đầu Cài Đặt")
+                                        .font(.system(size: 13.5, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 9.5)
+                                        .background(PipelineCSSTheme.suiPrimary)
+                                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                }
+                                .buttonStyle(PipelineBounceButtonStyle())
+                            }
+                            .padding(9)
+                            .background(PipelineCSSTheme.suiInnerRowBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
+                            )
+                        }
+                    }
                 }
-                .frame(maxHeight: 490)
+                .padding(10)
                 .background(PipelineCSSTheme.suiCardBackground)
                 .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous))
                 .overlay(
@@ -530,7 +529,6 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                     .stroke(SwiftUI.Color.white.opacity(0.85), lineWidth: 1.5)
             )
             .shadow(color: SwiftUI.Color.black.opacity(0.22), radius: 22, x: 0, y: 10)
-            // Mở rộng tối đa khung chứa ra sát mép màn hình hơn để Bundle ID luôn hiển thị trọn vẹn
             .frame(maxWidth: 420)
             .padding(.horizontal, 10)
         }
@@ -552,15 +550,11 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
 
     var body: some SwiftUI.View {
         ZStack {
-            // Lớp nền tối mờ nhẹ phía sau khung giữa màn hình
             SwiftUI.Color.black.opacity(0.42)
                 .ignoresSafeArea()
 
-            // Khung chính nằm giữa màn hình (Đồng bộ chuẩn thẻ SettingsViewController)
             VStack(spacing: 12) {
-                // Khối thẻ trắng chứa đúng 4 cách xử lý App ID
                 VStack(spacing: 9) {
-                    // Cách 1: Giữ tất cả (Dùng chung Profile chính)
                     optionButton(
                         icon: "shield.lefthalf.filled.badge.checkmark",
                         iconColor: PipelineCSSTheme.suiGreen,
@@ -571,7 +565,6 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
                         onSelect(.keepAllMainProfile)
                     }
 
-                    // Cách 2: Giữ tất cả (Tạo App ID riêng)
                     optionButton(
                         icon: "key.radiowaves.forward.fill",
                         iconColor: PipelineCSSTheme.suiPrimary,
@@ -582,7 +575,6 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
                         onSelect(.keepAllSeparateAppIDs)
                     }
 
-                    // Cách 3: Tùy chọn từng tiện ích
                     optionButton(
                         icon: "checklist",
                         iconColor: PipelineCSSTheme.suiSecondary,
@@ -593,7 +585,6 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
                         onSelect(.chooseCustom)
                     }
 
-                    // Cách 4: Gỡ bỏ tất cả tiện ích
                     optionButton(
                         icon: "trash.fill",
                         iconColor: PipelineCSSTheme.suiRed,
@@ -613,7 +604,6 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
                 )
                 .shadow(color: PipelineCSSTheme.suiPrimary.opacity(0.08), radius: 10, x: 0, y: 5)
 
-                // Nút Hủy cài đặt
                 SwiftUI.Button {
                     onSelect(.cancel)
                 } label: {
@@ -1074,7 +1064,7 @@ final class PipelineHandler: PipelineExecutionHandler,
         appName: String,
         teamID: String,
         reusableAppIDs: [ReusableAppIDCandidate],
-        overwritableApps: [OverwriteAppCandidate]
+        overwritableApps: [OverwritableAppCandidate]
     ) async throws -> (customID: String, appendTeamID: Bool)? {
         let cleanInitialID: String = {
             let trimmed = initialBundleID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1134,7 +1124,7 @@ final class PipelineHandler: PipelineExecutionHandler,
         teamID: String,
         reusableAppIDs: [ReusableAppIDCandidate]
     ) async throws -> (customID: String, appendTeamID: Bool)? {
-        return try await resolveBundleIDOverride(
+        try await resolveBundleIDOverride(
             initialBundleID: initialBundleID,
             appName: appName,
             teamID: teamID,

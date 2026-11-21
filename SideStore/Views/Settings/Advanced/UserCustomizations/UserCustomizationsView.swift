@@ -580,6 +580,7 @@ struct UserCustomizationsView: View {
                 
                 divider
                 
+                /* [ĐÃ ẨN GIAO DIỆN: TÙY CHỈNH MÃ ĐỊNH DANH ỨNG DỤNG (ID) & TÙY CHỈNH TIỆN ÍCH MỞ RỘNG]
                 toggleRow(title: "Tùy chỉnh Mã định danh ứng dụng (ID)", isOn: Binding(
                     get: { customizeInfoPlist ? true : customizeAppId },
                     set: { newValue in
@@ -625,6 +626,7 @@ struct UserCustomizationsView: View {
                 .frame(minHeight: 54)
                 
                 divider
+                */
                 
                 // Nút chọn Chế độ nhập tệp mặc định dạng Viên thuốc (Capsule) mở rộng chứa trọn 1 hàng tiếng Việt
                 HStack(spacing: 10) {
@@ -880,5 +882,3 @@ struct UserCustomizationsView: View {
         }
     }
 }
-
-	

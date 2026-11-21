@@ -75,7 +75,7 @@ protocol UserCustomizationHandler: AnyObject, Sendable {
         appName: String,
         teamID: String,
         reusableAppIDs: [ReusableAppIDCandidate],
-        overwritableApps: [OverwriteAppCandidate]
+        overwritableApps: [OverwritableAppCandidate]
     ) async throws -> (customID: String, appendTeamID: Bool)?
     func resolveInfoPlistCustomization(
         targets: [InfoPlistTarget],
@@ -120,7 +120,7 @@ extension UserCustomizationHandler {
         appName: String,
         teamID: String,
         reusableAppIDs: [ReusableAppIDCandidate],
-        overwritableApps: [OverwriteAppCandidate]
+        overwritableApps: [OverwritableAppCandidate]
     ) async throws -> (customID: String, appendTeamID: Bool)? {
         try await resolveBundleIDOverride(
             initialBundleID: initialBundleID,

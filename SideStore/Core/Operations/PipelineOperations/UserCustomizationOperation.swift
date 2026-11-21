@@ -1,5 +1,4 @@
 
-
 //
 //  UserCustomizationOperation.swift
 //  SideStore
@@ -187,17 +186,15 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 // gán context.installedApp vào đúng ứng dụng đang sống đó để thực hiện cài đè chuẩn xác!
                 await self.bindActiveInstalledAppForOverwriteIfNeeded(chosenBundleID: chosenID, teamID: teamID)
 
-                let cleanBaseChosenID = Self.stripTrailingTeamID(from: chosenID, teamID: teamID)
-                let sanitizedChosenBase = InfoPlistParser.sanitizeBundleID(cleanBaseChosenID)
-                let resolvedBaseID = sanitizedChosenBase.isEmpty ? cleanBaseChosenID : sanitizedChosenBase
+                let finalEffectiveID = Self.computeEffectiveBundleID(from: chosenID, teamID: teamID, appendTeamID: appendTeamID)
 
                 var basePlist = workingMainPlist ?? [:]
-                basePlist[kCFBundleIdentifierKey as String] = resolvedBaseID
+                basePlist[kCFBundleIdentifierKey as String] = finalEffectiveID
                 workingMainPlist = basePlist
                 workingAllPlists[targetAppBundle.bundleIdentifier] = basePlist
-                initialBundleID = resolvedBaseID
+                initialBundleID = Self.stripTrailingTeamID(from: chosenID, teamID: teamID)
 
-                debugLog("[UserCustomization] Smart Bundle ID chosen -> raw='\(chosenID)', base='\(resolvedBaseID)', appendTeamID=\(appendTeamID), overwriteApp=\(String(describing: self.context.installedApp?.name))")
+                debugLog("[UserCustomization] Smart Bundle ID chosen -> raw='\(chosenID)', effective='\(finalEffectiveID)', appendTeamID=\(appendTeamID), overwriteApp=\(String(describing: self.context.installedApp?.name))")
             }
         } else if customizeBundleID && !customizePlist {
             guard let result = try await self.context.handler.userCustomizationHandler.resolveBundleIDOverride(
@@ -212,17 +209,15 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
             appendTeamID = result.appendTeamID
             self.context.appendTeamID = appendTeamID
 
-            let cleanBaseChosenID = Self.stripTrailingTeamID(from: chosenID, teamID: teamID)
-            let sanitizedChosenBase = InfoPlistParser.sanitizeBundleID(cleanBaseChosenID)
-            let resolvedBaseID = sanitizedChosenBase.isEmpty ? cleanBaseChosenID : sanitizedChosenBase
+            let finalEffectiveID = Self.computeEffectiveBundleID(from: chosenID, teamID: teamID, appendTeamID: appendTeamID)
 
             var basePlist = workingMainPlist ?? [:]
-            basePlist[kCFBundleIdentifierKey as String] = resolvedBaseID
+            basePlist[kCFBundleIdentifierKey as String] = finalEffectiveID
             workingMainPlist = basePlist
             workingAllPlists[targetAppBundle.bundleIdentifier] = basePlist
-            initialBundleID = resolvedBaseID
+            initialBundleID = Self.stripTrailingTeamID(from: chosenID, teamID: teamID)
 
-            debugLog("[UserCustomization] Bundle ID override -> '\(resolvedBaseID)' (appendTeamID: \(appendTeamID))")
+            debugLog("[UserCustomization] Bundle ID override -> '\(finalEffectiveID)' (appendTeamID: \(appendTeamID))")
         }
         self.setProgress(25)
 
@@ -289,6 +284,13 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
             self.context.appendTeamID = appendTeamID
             workingAllPlists = result.modifiedPlists
             workingMainPlist = workingAllPlists[targetAppBundle.bundleIdentifier]
+
+            // Nếu trong trình sửa Info.plist người dùng chọn/nhập đúng ID của một app đang sống khi cài mới, tự động liên kết để cài đè
+            if isNewInstall && !isSideStoreItself,
+               let editedMainID = workingMainPlist?[kCFBundleIdentifierKey as String] as? String {
+                await self.bindActiveInstalledAppForOverwriteIfNeeded(chosenBundleID: editedMainID, teamID: teamID)
+            }
+
             debugLog("[UserCustomization] Multi-target Info.plist customization applied (\(workingAllPlists.count) target(s)).")
         }
         self.setProgress(50)
@@ -734,19 +736,22 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         let cleanBaseID = Self.stripTrailingTeamID(from: rawEditedID, teamID: teamID)
         let sanitizedBase = InfoPlistParser.sanitizeBundleID(cleanBaseID)
         let resolvedBaseID = sanitizedBase.isEmpty ? cleanBaseID : sanitizedBase
-
-        mainModifiedPlist[kCFBundleIdentifierKey as String] = resolvedBaseID
+        let effectiveBundleID = Self.computeEffectiveBundleID(from: resolvedBaseID, teamID: teamID, appendTeamID: appendTeamID)
 
         let isNewInstall = (self.context.installedApp == nil)
         let oldBaseBundleID = Self.stripTrailingTeamID(from: oldMainBundleID, teamID: teamID)
-        let bundleIDChanged = (resolvedBaseID != oldBaseBundleID)
+        let baseBundleIDChanged = (resolvedBaseID != oldBaseBundleID)
 
-        if bundleIDChanged || !isNewInstall {
+        // Gán resolvedBaseID vào customBundleIdentifier khi ID thay đổi hoặc khi đang cài đè/gia hạn
+        if baseBundleIDChanged || !isNewInstall {
             self.context.customBundleIdentifier = resolvedBaseID
         }
 
+        // Đặt CFBundleIdentifier = resolvedBaseID trong Info.plist tùy chỉnh để PatchInfoPlistOperation và PrepareAppExtensionBundleIDsOperation xử lý đồng nhất với phần còn lại của pipeline
+        mainModifiedPlist[kCFBundleIdentifierKey as String] = resolvedBaseID
+
         // Nếu cài đặt mới như một bản nhân bản (Bundle ID khác gốc), tự động thêm dấu "+" vào tên hiển thị (nếu chưa có)
-        if isNewInstall && bundleIDChanged {
+        if isNewInstall && baseBundleIDChanged {
             let currentDisplayName = (mainModifiedPlist["CFBundleDisplayName"] as? String)
                 ?? (mainModifiedPlist[kCFBundleNameKey as String] as? String)
                 ?? targetAppBundle.name
@@ -760,7 +765,26 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
 
         var updatedMap = workingAllPlists
         updatedMap[oldMainBundleID] = mainModifiedPlist
+
+        // Đồng bộ tiền tố Bundle ID cho toàn bộ App Extensions trong customInfoPlistByBundleID nếu người dùng đổi sang ID khác
+        for ext in targetAppBundle.appExtensions {
+            let extOrigID = ext.bundleIdentifier
+            guard var extMod = updatedMap[extOrigID] else { continue }
+            let extEditedID = (extMod[kCFBundleIdentifierKey as String] as? String) ?? extOrigID
+            let cleanExtID = Self.stripTrailingTeamID(from: extEditedID, teamID: teamID)
+
+            if cleanExtID.hasPrefix(oldBaseBundleID + ".") {
+                let suffix = String(cleanExtID.dropFirst(oldBaseBundleID.count))
+                extMod[kCFBundleIdentifierKey as String] = resolvedBaseID + suffix
+            } else if extOrigID.hasPrefix(oldMainBundleID + ".") {
+                let suffix = String(extOrigID.dropFirst(oldMainBundleID.count))
+                extMod[kCFBundleIdentifierKey as String] = resolvedBaseID + suffix
+            }
+            updatedMap[extOrigID] = extMod
+        }
+
         self.context.customInfoPlistByBundleID = updatedMap
+        debugLog("[UserCustomization] Prepared customInfoPlistByBundleID — base='\(resolvedBaseID)', effective='\(effectiveBundleID)', targets=\(updatedMap.count)")
     }
 
     static func stripTrailingTeamID(from bundleID: String, teamID: String) -> String {

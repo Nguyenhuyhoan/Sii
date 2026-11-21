@@ -1,4 +1,3 @@
-
 //
 //  FetchProvisioningProfilesOperation.swift
 //  AltStore
@@ -102,7 +101,7 @@ class FetchProvisioningProfilesOperation: BasePipelineOperation<InstallAppOperat
 
 
     private func getPreferredBundleID(for targetAppBundle: ALTApplication, team: ALTTeam) async -> String? {
-        // 1. Ưu tiên đọc trực tiếp từ self.context.installedApp (khi đang Refresh / Resign / Update / Cài đè lên app)
+        // 1. Ưu tiên đọc trực tiếp từ self.context.installedApp (khi đang Refresh / Resign / Update / Cài đè lên App)
         if let currentInstalledApp = self.context.installedApp {
             let directResigned: String? = await self.context.dbBackgroundContext.perform {
                 let resigned = currentInstalledApp.resignedBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -110,42 +109,28 @@ class FetchProvisioningProfilesOperation: BasePipelineOperation<InstallAppOperat
                 return resigned
             }
             if let directResigned {
-                let teamSuffix = ".\(team.identifier)"
-                let result = directResigned.lowercased().hasSuffix(teamSuffix.lowercased()) || directResigned.localizedCaseInsensitiveContains(team.identifier)
+                let result = directResigned.localizedCaseInsensitiveContains(team.identifier)
                     ? directResigned
-                    : "\(directResigned)\(teamSuffix)"
+                    : "\(directResigned).\(team.identifier)"
                 self.debugLog("[FetchProvisioningProfiles] preferredBundleID from context.installedApp: \(result)")
                 return result
             }
         }
 
-        // 2. Nếu người dùng đã chủ động chọn 1 customBundleIdentifier cho lần cài mới (context.installedApp == nil),
-        // tôn trọng tuyệt đối ID đã chọn (ví dụ: dùng lại ID cũ hoặc tự nhập ID mới) và không bị kéo về app cũ đã tắt.
-        if let explicitCustomID = self.context.customBundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !explicitCustomID.isEmpty {
-            let teamSuffix = ".\(team.identifier)"
-            let result = explicitCustomID.lowercased().hasSuffix(teamSuffix.lowercased())
-                ? explicitCustomID
-                : "\(explicitCustomID)\(teamSuffix)"
-            self.debugLog("[FetchProvisioningProfiles] preferredBundleID from explicit customBundleIdentifier: \(result)")
-            return result
-        }
-
-        // 3. Fallback: Chỉ tìm trong các ứng dụng ĐANG SỐNG (isActive == YES) theo targetBundleIdentifier / bundleIdentifier
+        // 2. Fallback: Tìm trong Database theo cả bundleIdentifier gốc, customBundleIdentifier và resignedBundleIdentifier
         return await DatabaseManager.shared.persistentContainer.performBackgroundTask { [weak self] (context) -> String? in
             guard let self else { return nil }
             let target = self.context.targetBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
             let origBundleID = self.context.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
             let predicate = NSPredicate(
-                format: "(%K == YES) AND ((%K ==[c] %@) OR (%K ==[c] %@) OR (%K ==[c] %@) OR (%K ==[c] %@))",
-                #keyPath(InstalledApp.isActive),
+                format: "(%K ==[c] %@) OR (%K ==[c] %@) OR (%K ==[c] %@) OR (%K ==[c] %@)",
                 #keyPath(InstalledApp.bundleIdentifier), target,
                 #keyPath(InstalledApp.bundleIdentifier), origBundleID,
                 #keyPath(InstalledApp.customBundleIdentifier), target,
                 #keyPath(InstalledApp.resignedBundleIdentifier), target
             )
             guard let installedApp = InstalledApp.first(satisfying: predicate, in: context) else {
-                self.verboseLog("[FetchProvisioningProfiles] No active InstalledApp found for target: \(target)")
+                self.verboseLog("[FetchProvisioningProfiles] No existing InstalledApp found for target: \(target)")
                 return nil
             }
             
@@ -185,7 +170,8 @@ class FetchProvisioningProfilesOperation: BasePipelineOperation<InstallAppOperat
                 throw OperationError.invalidApp(reason: "Extension bundle ID '\(targetAppBundle.bundleIdentifier)' does not start with parent bundle ID '\(parentAppBundle.bundleIdentifier)'.")
             }
             let suffix = String(targetAppBundle.bundleIdentifier.dropFirst(parentAppBundle.bundleIdentifier.count))
-            bundleID = parentID + suffix
+            let cleanParentBase = UserCustomizationOperation.stripTrailingTeamID(from: parentID, teamID: team.identifier)
+            bundleID = "\(cleanParentBase)\(suffix).\(team.identifier)"
             self.debugLog("[FetchProvisioningProfiles] Extension bundleID with suffix: \(bundleID)")
         } else {
             bundleID = parentID

@@ -1,3 +1,4 @@
+
 //
 //  FetchProvisioningProfilesOperation.swift
 //  AltStore
@@ -101,7 +102,7 @@ class FetchProvisioningProfilesOperation: BasePipelineOperation<InstallAppOperat
 
 
     private func getPreferredBundleID(for targetAppBundle: ALTApplication, team: ALTTeam) async -> String? {
-        // 1. Ưu tiên đọc trực tiếp từ self.context.installedApp (khi đang Refresh / Resign / Update)
+        // 1. Ưu tiên đọc trực tiếp từ self.context.installedApp (khi đang Refresh / Resign / Activate / Update)
         if let currentInstalledApp = self.context.installedApp {
             let directResigned: String? = await self.context.dbBackgroundContext.perform {
                 let resigned = currentInstalledApp.resignedBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -109,23 +110,31 @@ class FetchProvisioningProfilesOperation: BasePipelineOperation<InstallAppOperat
                 return resigned
             }
             if let directResigned {
-                let result = directResigned.localizedCaseInsensitiveContains(team.identifier)
-                    ? directResigned
-                    : "\(directResigned).\(team.identifier)"
+                let result = Self.ensureTeamIDIncluded(in: directResigned, teamID: team.identifier)
                 self.debugLog("[FetchProvisioningProfiles] preferredBundleID from context.installedApp: \(result)")
                 return result
             }
         }
 
-        // 2. Fallback: Tìm trong Database theo cả bundleIdentifier gốc, customBundleIdentifier và resignedBundleIdentifier
+        // 2. Nếu người dùng đã chủ động chọn ID thông qua UserCustomizationOperation (cài App mới hoặc cài bản Clone)
+        // thì context.installedApp == nil và context.customBundleIdentifier != nil -> Tôn trọng tuyệt đối ID đã chọn!
+        if let chosenCustomID = self.context.customBundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !chosenCustomID.isEmpty {
+            let result = Self.ensureTeamIDIncluded(in: chosenCustomID, teamID: team.identifier)
+            self.debugLog("[FetchProvisioningProfiles] preferredBundleID from chosen customBundleIdentifier: \(result)")
+            return result
+        }
+
+        // 3. Fallback (Chỉ dành cho các luồng ngầm không gán installedApp lẫn customBundleIdentifier):
+        // Chỉ tìm theo đúng targetBundleIdentifier, tuyệt đối KHÔNG quét bừa theo origBundleID để tránh lấy nhầm ID của bản Clone khác.
         return await DatabaseManager.shared.persistentContainer.performBackgroundTask { [weak self] (context) -> String? in
             guard let self else { return nil }
             let target = self.context.targetBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
-            let origBundleID = self.context.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !target.isEmpty else { return nil }
+
             let predicate = NSPredicate(
-                format: "(%K ==[c] %@) OR (%K ==[c] %@) OR (%K ==[c] %@) OR (%K ==[c] %@)",
+                format: "(%K ==[c] %@) OR (%K ==[c] %@) OR (%K ==[c] %@)",
                 #keyPath(InstalledApp.bundleIdentifier), target,
-                #keyPath(InstalledApp.bundleIdentifier), origBundleID,
                 #keyPath(InstalledApp.customBundleIdentifier), target,
                 #keyPath(InstalledApp.resignedBundleIdentifier), target
             )
@@ -137,15 +146,23 @@ class FetchProvisioningProfilesOperation: BasePipelineOperation<InstallAppOperat
             let resigned = installedApp.resignedBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !resigned.isEmpty else { return nil }
 
-            let teamsMatch = (installedApp.team?.identifier == team.identifier || installedApp.team == nil)
-                             && resigned.localizedCaseInsensitiveContains(team.identifier)
-            
-            self.verboseLog("[FetchProvisioningProfiles] preferredBundleID check: app=\(targetAppBundle.bundleIdentifier), installedResignedID=\(resigned), installedTeam=\(installedApp.team?.identifier ?? "nil"), targetTeam=\(team.identifier), teamsMatch=\(teamsMatch)")
-
-            let result = teamsMatch ? resigned : "\(resigned).\(team.identifier)"
-            self.debugLog("[FetchProvisioningProfiles] preferredBundleID result: \(result)")
+            let result = Self.ensureTeamIDIncluded(in: resigned, teamID: team.identifier)
+            self.debugLog("[FetchProvisioningProfiles] preferredBundleID fallback result: \(result)")
             return result
         }
+    }
+
+    private static func ensureTeamIDIncluded(in bundleID: String, teamID: String) -> String {
+        let trimmed = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTeam = teamID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTeam.isEmpty else { return trimmed }
+
+        let lowerTrimmed = trimmed.lowercased()
+        let lowerTeam = cleanTeam.lowercased()
+        if lowerTrimmed.hasSuffix(".\(lowerTeam)") || lowerTrimmed.contains(".\(lowerTeam).") {
+            return trimmed
+        }
+        return "\(trimmed).\(cleanTeam)"
     }
     
     private func provisionAndFetchProfile(for targetAppBundle: ALTApplication,
@@ -156,12 +173,7 @@ class FetchProvisioningProfilesOperation: BasePipelineOperation<InstallAppOperat
             parentID = preferredBundleID
         } else {
             let rawTarget = self.context.targetBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
-            let teamSuffix = ".\(team.identifier)"
-            if rawTarget.lowercased().hasSuffix(teamSuffix.lowercased()) {
-                parentID = rawTarget
-            } else {
-                parentID = "\(rawTarget)\(teamSuffix)"
-            }
+            parentID = Self.ensureTeamIDIncluded(in: rawTarget, teamID: team.identifier)
         }
 
         let bundleID: String
@@ -188,6 +200,15 @@ class FetchProvisioningProfilesOperation: BasePipelineOperation<InstallAppOperat
         self.debugLog("[FetchProvisioningProfiles] Registering App ID with name '\(preferredName)' and bundleID '\(bundleID)'...")
         let appID = try await self.registerAppID(for: targetAppBundle, name: preferredName, bundleIdentifier: bundleID, team: team)
         self.debugLog("[FetchProvisioningProfiles] App ID registered successfully: \(appID.bundleIdentifier) (\(appID.identifier))")
+
+        // Nếu là App chính (không phải .appex), lưu lại tên hiển thị đẹp vào lịch sử để khung "Dùng lại ID cũ" luôn hiển thị tên đẹp
+        if parentAppBundle == nil {
+            UserCustomizationOperation.recordAppIDDisplayName(
+                appName: targetAppBundle.name,
+                fullBundleID: appID.bundleIdentifier,
+                teamID: team.identifier
+            )
+        }
         
         self.debugLog("[FetchProvisioningProfiles] Updating features for App ID \(appID.bundleIdentifier)...")
         let updatedAppID = try await self.updateFeatures(for: appID, targetAppBundle: targetAppBundle, team: team)
@@ -240,9 +261,7 @@ private extension FetchProvisioningProfilesOperation{
         
         let trimmedTarget = bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
         let teamSuffix = ".\(team.identifier)"
-        let targetWithTeam = trimmedTarget.lowercased().hasSuffix(teamSuffix.lowercased())
-            ? trimmedTarget
-            : "\(trimmedTarget)\(teamSuffix)"
+        let targetWithTeam = Self.ensureTeamIDIncluded(in: trimmedTarget, teamID: team.identifier)
         let targetWithoutTeam = UserCustomizationOperation.stripTrailingTeamID(from: trimmedTarget, teamID: team.identifier)
 
         if let appID = appIDs.first(where: {
@@ -257,7 +276,7 @@ private extension FetchProvisioningProfilesOperation{
             let availableAppIDs = max(0, Team.maximumFreeAppIDs - appIDs.count)
             self.verboseLog("[FetchProvisioningProfiles] App ID not found on portal for '\(targetWithTeam)'. Required: \(requiredAppIDs), Available: \(availableAppIDs) (teamType: \(team.type))")
             
-            let appIDName = self.sanitizeAppIDName(name: name, bundleIdentifier: targetWithTeam)
+            let appIDName = self.sanitizeAppIDName(name: name, bundleIdentifier: targetWithoutTeam, teamID: team.identifier)
             
             self.debugLog("[FetchProvisioningProfiles] Calling DeveloperPortalProxy.shared.addAppID with name '\(appIDName)' and identifier '\(targetWithTeam)'...")
             let appID = try await DeveloperPortalProxy.shared.addAppID(name: appIDName, bundleIdentifier: targetWithTeam, team: team)
@@ -403,7 +422,8 @@ private extension FetchProvisioningProfilesOperation{
                 if let existing = self.context.sharedContext.appGroups?.first(where: { $0.groupIdentifier == adjustedGroupIdentifier }) {
                     group = existing
                 } else {
-                    let name = "SideStore " + groupIdentifier.replacingOccurrences(of: ".", with: " ")
+                    let cleanGroupBase = UserCustomizationOperation.stripTrailingTeamID(from: groupIdentifier, teamID: team.identifier)
+                    let name = "SideStore " + cleanGroupBase.replacingOccurrences(of: ".", with: " ")
                     do {
                         group = try await TaskChainCoalescer.shared.coalesce(key: "add_app_group_\(adjustedGroupIdentifier)") {
                             if let existing = self.context.sharedContext.appGroups?.first(where: { $0.groupIdentifier == adjustedGroupIdentifier }) {
@@ -428,7 +448,7 @@ private extension FetchProvisioningProfilesOperation{
             
             return appID
         } catch {
-            let groupIDs = Array(seenGroupIDs.isEmpty ? Set(applicationGroups.map { $0 + "." + team.identifier }) : seenGroupIDs)
+            let groupIDs = Array(seenGroupIDs.isEmpty ? Set(applicationGroups.map { Self.ensureTeamIDIncluded(in: $0, teamID: team.identifier) }) : seenGroupIDs)
             self.debugLog("[FetchProvisioningProfiles] Failed to assign/create App Groups \(groupIDs) for App ID \(appID.bundleIdentifier): \(error.localizedDescription)")
             throw error
         }
@@ -451,7 +471,7 @@ private extension FetchProvisioningProfilesOperation{
 
         if matchesBundleID && !isExactCaseMatch {
             let correctedGroup = "group." + appID.bundleIdentifier
-            let originalGroupWithTeam = groupIdentifier + "." + team.identifier
+            let originalGroupWithTeam = Self.ensureTeamIDIncluded(in: groupIdentifier, teamID: team.identifier)
             
             if UserDefaults.standard.autoFixAppGroupIDs {
                 return correctedGroup
@@ -469,18 +489,21 @@ private extension FetchProvisioningProfilesOperation{
             }
         }
 
-        return groupIdentifier + "." + team.identifier
+        return Self.ensureTeamIDIncluded(in: groupIdentifier, teamID: team.identifier)
     }
 }
 
 private extension FetchProvisioningProfilesOperation {
-    func sanitizeAppIDName(name: String, bundleIdentifier: String) -> String {
-        let sanitizedName = self.sanitizeToAscii(name)
+    func sanitizeAppIDName(name: String, bundleIdentifier: String, teamID: String) -> String {
+        let cleanNameWithoutTeam = UserCustomizationOperation.stripTrailingTeamID(from: name, teamID: teamID)
+        let sanitizedName = self.sanitizeToAscii(cleanNameWithoutTeam)
         if !sanitizedName.isEmpty {
             return sanitizedName
         }
 
-        return self.sanitizeToAscii(bundleIdentifier)
+        let cleanBundleWithoutTeam = UserCustomizationOperation.stripTrailingTeamID(from: bundleIdentifier, teamID: teamID)
+        let fallback = self.sanitizeToAscii(cleanBundleWithoutTeam)
+        return fallback.isEmpty ? "SideStore App" : fallback
     }
 
     func sanitizeToAscii(_ string: String) -> String {

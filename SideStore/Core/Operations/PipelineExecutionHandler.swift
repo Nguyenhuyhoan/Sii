@@ -70,6 +70,13 @@ protocol UserCustomizationHandler: AnyObject, Sendable {
         teamID: String,
         reusableAppIDs: [ReusableAppIDCandidate]
     ) async throws -> (customID: String, appendTeamID: Bool)?
+    func resolveBundleIDOverride(
+        initialBundleID: String,
+        appName: String,
+        teamID: String,
+        reusableAppIDs: [ReusableAppIDCandidate],
+        overwritableApps: [OverwriteAppCandidate]
+    ) async throws -> (customID: String, appendTeamID: Bool)?
     func resolveInfoPlistCustomization(
         targets: [InfoPlistTarget],
         initialBundleID: String,
@@ -106,5 +113,20 @@ extension UserCustomizationHandler {
         reusableAppIDs: [ReusableAppIDCandidate]
     ) async throws -> (customID: String, appendTeamID: Bool)? {
         try await resolveBundleIDOverride(initialBundleID: initialBundleID)
+    }
+
+    func resolveBundleIDOverride(
+        initialBundleID: String,
+        appName: String,
+        teamID: String,
+        reusableAppIDs: [ReusableAppIDCandidate],
+        overwritableApps: [OverwriteAppCandidate]
+    ) async throws -> (customID: String, appendTeamID: Bool)? {
+        try await resolveBundleIDOverride(
+            initialBundleID: initialBundleID,
+            appName: appName,
+            teamID: teamID,
+            reusableAppIDs: reusableAppIDs
+        )
     }
 }

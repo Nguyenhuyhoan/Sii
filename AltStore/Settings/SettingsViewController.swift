@@ -22,62 +22,80 @@ import SemanticVersion
 import SideSign
 import UniformTypeIdentifiers
 
-// MARK: - 🍎 BỘ GIAO DIỆN APPLE LUXURY DESIGN (HIG STANDARD - Độc lập, an toàn tuyệt đối)
+// MARK: - 🌸✨ BỘ GIAO DIỆN ĐỘC QUYỀN: AURORA PASTEL LUXURY ✨🌸
+// (Xanh Da Trời Nhạt • Hồng Phấn • Trắng Sữa • Tím Mộng Mơ)
 private struct CSSTheme {
-    // 1. Nền & Bề mặt (Surfaces)
-    static let white = UIColor.white
-    static let light = UIColor(red: 242/255, green: 242/255, blue: 247/255, alpha: 1.0)      // #F2F2F7 (Apple Grouped BG)
-    static let border = UIColor(red: 229/255, green: 229/255, blue: 234/255, alpha: 1.0)     // #E5E5EA (Apple Separator)
-    static let hairlineBorder = UIColor.black.withAlphaComponent(0.06)                       // Viền siêu mảnh tinh tế
+    // 1. Trắng Sữa Ngọc Trai (Milky Cream White) & Viền Tím Phấn
+    static let white = UIColor(red: 255/255, green: 252/255, blue: 250/255, alpha: 1.0)       // #FFFCFA (Trắng sữa sang trọng)
+    static let light = UIColor(red: 249/255, green: 245/255, blue: 255/255, alpha: 1.0)       // #F9F5FF (Trắng ánh tím mộng mơ)
+    static let border = UIColor(red: 230/255, green: 218/255, blue: 248/255, alpha: 1.0)      // #E6DAF8 (Viền tím phấn dịu)
+    static let separator = UIColor(red: 238/255, green: 228/255, blue: 252/255, alpha: 0.85)  // Đường kẻ phân cách pastel
 
-    // 2. Bảng màu Hệ thống Apple (System Tint Colors)
-    static let blue = UIColor(red: 0/255, green: 122/255, blue: 255/255, alpha: 1.0)         // #007AFF (Apple System Blue)
-    static let purple = UIColor(red: 88/255, green: 86/255, blue: 214/255, alpha: 1.0)       // #5856D6 (Apple System Indigo)
-    static let green = UIColor(red: 52/255, green: 199/255, blue: 89/255, alpha: 1.0)        // #34C759 (Apple System Green)
-    static let red = UIColor(red: 255/255, green: 59/255, blue: 48/255, alpha: 1.0)          // #FF3B30 (Apple System Red)
+    // 2. Bảng màu Chủ đạo: Xanh Da Trời - Tím Mộng Mơ - Hồng Phấn
+    static let skyBlue = UIColor(red: 56/255, green: 165/255, blue: 255/255, alpha: 1.0)      // #38A5FF (Xanh da trời thanh lịch)
+    static let softSky = UIColor(red: 130/255, green: 202/255, blue: 255/255, alpha: 1.0)     // #82CAFF (Xanh da trời nhạt)
+    static let dreamyPurple = UIColor(red: 148/255, green: 102/255, blue: 242/255, alpha: 1.0)// #9466F2 (Tím mộng mơ chủ đạo)
+    static let blushPink = UIColor(red: 244/255, green: 114/255, blue: 176/255, alpha: 1.0)   // #F472B0 (Hồng phấn kiêu sa)
+    static let pastelGreen = UIColor(red: 46/255, green: 196/255, blue: 138/255, alpha: 1.0)  // #2EC48A (Xanh ngọc lục bảo dịu)
 
-    // Thay màu Hồng cánh sen (#FF00FF) bằng Đỏ San Hô (Apple Destructive Red) sang trọng
-    static let magenta = UIColor(red: 255/255, green: 59/255, blue: 48/255, alpha: 1.0)      // #FF3B30
+    // Giữ tên biến tương thích hoàn toàn với cấu trúc cũ
+    static let blue = skyBlue
+    static let purple = dreamyPurple
+    static let green = pastelGreen
+    static let magenta = blushPink
 
-    // 3. Màu chữ phân cấp (Typography Hierarchy)
-    static let dark = UIColor(red: 28/255, green: 28/255, blue: 30/255, alpha: 1.0)          // #1C1C1E (Apple Label Black)
-    static let textPrimary = UIColor(red: 28/255, green: 28/255, blue: 30/255, alpha: 1.0)   // #1C1C1E
-    static let textSecondary = UIColor(red: 108/255, green: 108/255, blue: 112/255, alpha: 1.0) // #6C6C70 (Apple Secondary)
+    // 3. Màu chữ Tím Than Đậm (Deep Velvet Indigo - Thanh lịch hơn màu đen thuần)
+    static let dark = UIColor(red: 45/255, green: 34/255, blue: 76/255, alpha: 1.0)           // #2D224C
+    static let textPrimary = UIColor(red: 45/255, green: 34/255, blue: 76/255, alpha: 1.0)    // #2D224C
+    static let textSecondary = UIColor(red: 126/255, green: 110/255, blue: 162/255, alpha: 1.0)// #7E6EA2
 
-    // 4. Nền Gradient Ngọc Trai (Dịu nhẹ, tôn bật hoàn toàn các thẻ Card trắng)
-    static let bgGradientStart = UIColor(red: 245/255, green: 246/255, blue: 250/255, alpha: 1.0).cgColor
-    static let bgGradientEnd = UIColor(red: 235/255, green: 238/255, blue: 245/255, alpha: 1.0).cgColor
+    // 4. Nền Cực Quang 3 Tầng: Xanh Da Trời Nhạt -> Tím Mộng Mơ -> Hồng Phấn
+    static let bgGradientTop = UIColor(red: 224/255, green: 243/255, blue: 255/255, alpha: 1.0).cgColor    // #E0F3FF (Xanh da trời nhạt)
+    static let bgGradientMiddle = UIColor(red: 242/255, green: 232/255, blue: 255/255, alpha: 1.0).cgColor // #F2E8FF (Tím mộng mơ nhạt)
+    static let bgGradientBottom = UIColor(red: 255/255, green: 233/255, blue: 244/255, alpha: 1.0).cgColor // #FFE9F4 (Hồng phấn nhạt)
 
-    // 5. Hero Banner Gradient (Apple Deep Blue -> Indigo sang trọng)
-    static let heroStart = UIColor(red: 10/255, green: 102/255, blue: 240/255, alpha: 1.0).cgColor
-    static let heroEnd = UIColor(red: 72/255, green: 70/255, blue: 198/255, alpha: 1.0).cgColor
+    // 5. Hero Banner Gradient 3 Màu: Xanh Da Trời -> Tím Mộng Mơ -> Hồng Phấn
+    static let heroStart = UIColor(red: 78/255, green: 178/255, blue: 255/255, alpha: 1.0).cgColor         // #4EB2FF
+    static let heroMiddle = UIColor(red: 158/255, green: 112/255, blue: 248/255, alpha: 1.0).cgColor        // #9E70F8
+    static let heroEnd = UIColor(red: 248/255, green: 128/255, blue: 188/255, alpha: 1.0).cgColor           // #F880BC
 
-    // 6. Bo góc Squircle chuẩn iOS
-    static let cornerRadius: CGFloat = 16.0
+    static let cornerRadius: CGFloat = 20.0
 
-    // 7. SwiftUI Colors (Phục vụ bảng Máy chủ Anisette đồng bộ chuẩn Apple)
-    static let suiPrimary = SwiftUI.Color(red: 0/255, green: 122/255, blue: 255/255)
-    static let suiSecondary = SwiftUI.Color(red: 88/255, green: 86/255, blue: 214/255)
-    static let suiGreen = SwiftUI.Color(red: 52/255, green: 199/255, blue: 89/255)
-    static let suiRed = SwiftUI.Color(red: 255/255, green: 59/255, blue: 48/255)
-    static let suiPureBlack = SwiftUI.Color(red: 28/255, green: 28/255, blue: 30/255)
-    static let suiTextSecondary = SwiftUI.Color(red: 108/255, green: 108/255, blue: 112/255)
-    static let suiCardBackground = SwiftUI.Color.white
-    static let suiInnerRowBackground = SwiftUI.Color(red: 246/255, green: 247/255, blue: 250/255)
-    static let suiBorder = SwiftUI.Color.black.opacity(0.06)
-    static let suiInnerBorder = SwiftUI.Color(red: 229/255, green: 229/255, blue: 234/255)
+    // 6. SwiftUI Colors (Đồng bộ tuyệt đối cho bảng Máy chủ Anisette)
+    static let suiPrimary = SwiftUI.Color(red: 148/255, green: 102/255, blue: 242/255)        // Tím mộng mơ
+    static let suiSkyBlue = SwiftUI.Color(red: 56/255, green: 165/255, blue: 255/255)         // Xanh da trời
+    static let suiBlushPink = SwiftUI.Color(red: 244/255, green: 114/255, blue: 176/255)      // Hồng phấn
+    static let suiSecondary = SwiftUI.Color(red: 244/255, green: 114/255, blue: 176/255)
+    static let suiGreen = SwiftUI.Color(red: 46/255, green: 196/255, blue: 138/255)
+    static let suiRed = SwiftUI.Color(red: 244/255, green: 96/255, blue: 148/255)
+    static let suiPureBlack = SwiftUI.Color(red: 45/255, green: 34/255, blue: 76/255)         // Chữ tím than sang trọng
+    static let suiTextSecondary = SwiftUI.Color(red: 126/255, green: 110/255, blue: 162/255)
+    static let suiCardBackground = SwiftUI.Color(red: 255/255, green: 252/255, blue: 250/255) // Trắng sữa #FFFCFA
+    static let suiInnerRowBackground = SwiftUI.Color(red: 250/255, green: 246/255, blue: 255/255)
+    static let suiBorder = SwiftUI.Color(red: 228/255, green: 214/255, blue: 250/255)
+    static let suiInnerBorder = SwiftUI.Color(red: 234/255, green: 222/255, blue: 252/255)
+
     static var suiPageGradient: LinearGradient {
         LinearGradient(
             colors: [
-                SwiftUI.Color(red: 245/255, green: 246/255, blue: 250/255),
-                SwiftUI.Color(red: 235/255, green: 238/255, blue: 245/255)
+                SwiftUI.Color(red: 224/255, green: 243/255, blue: 255/255), // Xanh da trời nhạt
+                SwiftUI.Color(red: 242/255, green: 232/255, blue: 255/255), // Tím mộng mơ
+                SwiftUI.Color(red: 255/255, green: 233/255, blue: 244/255)  // Hồng phấn
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
     }
 
-    // Hỗ trợ Font SF Pro Rounded sang trọng & Phản hồi xúc giác Haptic
+    static var suiAccentGradient: LinearGradient {
+        LinearGradient(
+            colors: [suiSkyBlue, suiPrimary, suiBlushPink],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    // Font chữ bo tròn mềm mại thanh lịch (SF Rounded)
     static func roundedFont(ofSize size: CGFloat, weight: UIFont.Weight) -> UIFont {
         let systemFont = UIFont.systemFont(ofSize: size, weight: weight)
         if let descriptor = systemFont.fontDescriptor.withDesign(.rounded) {
@@ -95,7 +113,7 @@ private struct CSSTheme {
     }
 }
 
-// MARK: - 🌈 LỚP NỀN GRADIENT NGỌC TRAI CỐ ĐỊNH (KHÔNG BỊ TRẮNG KHI CUỘN XUỐNG DƯỚI)
+// MARK: - 🌈 LỚP NỀN CỰC QUANG MỘNG MƠ 3 TẦNG CỐ ĐỊNH (XANH SKY -> TÍM -> HỒNG PHẤN)
 private final class CSSGradientBackgroundView: UIView {
     override class var layerClass: AnyClass {
         return CAGradientLayer.self
@@ -113,13 +131,18 @@ private final class CSSGradientBackgroundView: UIView {
 
     private func setupGradient() {
         guard let gradientLayer = self.layer as? CAGradientLayer else { return }
-        gradientLayer.colors = [CSSTheme.bgGradientStart, CSSTheme.bgGradientEnd]
+        gradientLayer.colors = [
+            CSSTheme.bgGradientTop,
+            CSSTheme.bgGradientMiddle,
+            CSSTheme.bgGradientBottom
+        ]
+        gradientLayer.locations = [0.0, 0.52, 1.0]
         gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
         gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
     }
 }
 
-// MARK: - 🌐 BỘ QUẢN LÝ & GIAO DIỆN MÁY CHỦ ANISETTE (CHUẨN APPLE HIG)
+// MARK: - 🌐 BỘ QUẢN LÝ & GIAO DIỆN MÁY CHỦ ANISETTE (PHONG CÁCH PASTEL DREAMY)
 private enum SettingsAnisetteDefaultsHelper {
     static var currentServerURL: String {
         let menuURL = UserDefaults.standard.menuAnisetteURL.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
@@ -158,8 +181,8 @@ private enum SettingsAnisetteDefaultsHelper {
 private struct SettingsBounceButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some SwiftUI.View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
-            .animation(.spring(response: 0.26, dampingFraction: 0.7), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.spring(response: 0.26, dampingFraction: 0.68), value: configuration.isPressed)
     }
 }
 
@@ -171,26 +194,36 @@ private struct SettingsSkySectionCard<Content: SwiftUI.View>: SwiftUI.View {
     @ViewBuilder let content: Content
 
     var body: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Section Header chuẩn Apple: Không gạch chân, chữ in hoa 13pt Semibold xám thanh lịch
-            HStack(spacing: 6) {
-                SwiftUI.Image(systemName: icon)
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundColor(CSSTheme.suiTextSecondary)
+        VStack(alignment: .leading, spacing: 9) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(color.opacity(0.15))
+                            .frame(width: 24, height: 24)
+                        SwiftUI.Image(systemName: icon)
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(color)
+                    }
 
-                SwiftUI.Text(title.uppercased())
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(CSSTheme.suiTextSecondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                    SwiftUI.Text(title.uppercased())
+                        .font(.system(size: 13.5, weight: .heavy, design: .rounded))
+                        .foregroundColor(CSSTheme.suiPureBlack)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
 
-                Spacer(minLength: 4)
+                    Spacer(minLength: 4)
 
-                if let trailingView = trailingView {
-                    trailingView
+                    if let trailingView = trailingView {
+                        trailingView
+                    }
                 }
+
+                Capsule()
+                    .fill(CSSTheme.suiAccentGradient)
+                    .frame(width: 48, height: 3.5)
             }
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 4)
 
             VStack(alignment: .leading, spacing: 10) {
                 content
@@ -201,9 +234,9 @@ private struct SettingsSkySectionCard<Content: SwiftUI.View>: SwiftUI.View {
             .clipShape(RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                    .stroke(CSSTheme.suiBorder, lineWidth: 0.5)
+                    .stroke(CSSTheme.suiBorder, lineWidth: 1.2)
             )
-            .shadow(color: SwiftUI.Color.black.opacity(0.04), radius: 12, x: 0, y: 4)
+            .shadow(color: CSSTheme.suiPrimary.opacity(0.10), radius: 14, x: 0, y: 6)
         }
     }
 }
@@ -330,11 +363,11 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                     HStack(spacing: 14) {
                         ZStack {
                             Circle()
-                                .fill(vm.isAnisetteOK ? CSSTheme.suiGreen.opacity(0.14) : CSSTheme.suiRed.opacity(0.14))
-                                .frame(width: 48, height: 48)
-                            SwiftUI.Image(systemName: vm.isAnisetteOK ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                .fill(vm.isAnisetteOK ? CSSTheme.suiGreen.opacity(0.16) : CSSTheme.suiBlushPink.opacity(0.18))
+                                .frame(width: 50, height: 50)
+                            SwiftUI.Image(systemName: vm.isAnisetteOK ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                                 .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(vm.isAnisetteOK ? CSSTheme.suiGreen : CSSTheme.suiRed)
+                                .foregroundColor(vm.isAnisetteOK ? CSSTheme.suiGreen : CSSTheme.suiBlushPink)
                         }
                         VStack(alignment: .leading, spacing: 4) {
                             SwiftUI.Text(vm.isAnisetteOK
@@ -343,7 +376,7 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                 .font(.system(size: 16.5, weight: .bold, design: .rounded))
                                 .foregroundColor(CSSTheme.suiPureBlack)
                             SwiftUI.Text(vm.anisetteDetail)
-                                .font(.system(size: 13.5, weight: .medium))
+                                .font(.system(size: 13.5, weight: .medium, design: .rounded))
                                 .foregroundColor(CSSTheme.suiTextSecondary)
                         }
                         Spacer()
@@ -353,14 +386,14 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                     .clipShape(RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                            .stroke(CSSTheme.suiBorder, lineWidth: 0.5)
+                            .stroke(CSSTheme.suiBorder, lineWidth: 1.2)
                     )
-                    .shadow(color: SwiftUI.Color.black.opacity(0.04), radius: 12, x: 0, y: 4)
+                    .shadow(color: CSSTheme.suiPrimary.opacity(0.10), radius: 14, x: 0, y: 6)
 
                     SettingsSkySectionCard(
                         title: "CHẾ ĐỘ XÁC THỰC ANISETTE",
-                        icon: "switch.2",
-                        color: CSSTheme.suiPrimary
+                        icon: "sparkles",
+                        color: CSSTheme.suiSkyBlue
                     ) {
                         Toggle(isOn: Binding(
                             get: { vm.useOnDeviceAnisette },
@@ -368,22 +401,22 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                         )) {
                             VStack(alignment: .leading, spacing: 4) {
                                 SwiftUI.Text("Use On-Device Anisette")
-                                    .font(.system(size: 15, weight: .semibold))
+                                    .font(.system(size: 15, weight: .bold, design: .rounded))
                                     .foregroundColor(CSSTheme.suiPureBlack)
                                 SwiftUI.Text(vm.useOnDeviceAnisette
                                              ? "Đang BẬT (Khuyên tắt để ổn định hơn)"
                                              : "(Nên Tắt Để Dễ Đăng Nhập)")
-                                    .font(.system(size: 12.5, weight: .medium))
-                                    .foregroundColor(vm.useOnDeviceAnisette ? CSSTheme.suiRed : CSSTheme.suiGreen)
+                                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                                    .foregroundColor(vm.useOnDeviceAnisette ? CSSTheme.suiBlushPink : CSSTheme.suiGreen)
                             }
                         }
                         .tint(CSSTheme.suiPrimary)
                         .padding(12)
                         .background(CSSTheme.suiInnerRowBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(CSSTheme.suiInnerBorder, lineWidth: 0.7)
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(CSSTheme.suiInnerBorder, lineWidth: 1)
                         )
 
                         Toggle(isOn: Binding(
@@ -392,22 +425,22 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                         )) {
                             VStack(alignment: .leading, spacing: 4) {
                                 SwiftUI.Text("Enable Auto Rotation")
-                                    .font(.system(size: 15, weight: .semibold))
+                                    .font(.system(size: 15, weight: .bold, design: .rounded))
                                     .foregroundColor(CSSTheme.suiPureBlack)
                                 SwiftUI.Text(vm.isAnisetteAutoRotationEnabled
                                              ? "(Tự Động Đổi Máy Chủ Khi Lỗi)"
                                              : "Đang Tắt “Nên chọn SideStore (New)”")
-                                    .font(.system(size: 12.5, weight: .medium))
-                                    .foregroundColor(vm.isAnisetteAutoRotationEnabled ? CSSTheme.suiGreen : CSSTheme.suiRed)
+                                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                                    .foregroundColor(vm.isAnisetteAutoRotationEnabled ? CSSTheme.suiGreen : CSSTheme.suiBlushPink)
                             }
                         }
                         .tint(CSSTheme.suiPrimary)
                         .padding(12)
                         .background(CSSTheme.suiInnerRowBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(CSSTheme.suiInnerBorder, lineWidth: 0.7)
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(CSSTheme.suiInnerBorder, lineWidth: 1)
                         )
 
                         if vm.useOnDeviceAnisette {
@@ -417,14 +450,14 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                 HStack(spacing: 8) {
                                     SwiftUI.Image(systemName: "checkmark.shield.fill")
                                     SwiftUI.Text("Tắt ngay Use On-Device Anisette")
-                                        .font(.system(size: 15, weight: .semibold))
+                                        .font(.system(size: 15, weight: .bold, design: .rounded))
                                 }
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
-                                .background(CSSTheme.suiPrimary)
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .shadow(color: CSSTheme.suiPrimary.opacity(0.22), radius: 8, x: 0, y: 4)
+                                .background(CSSTheme.suiAccentGradient)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .shadow(color: CSSTheme.suiPrimary.opacity(0.28), radius: 8, x: 0, y: 4)
                             }
                             .buttonStyle(SettingsBounceButtonStyle())
                         }
@@ -433,10 +466,10 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                     SettingsSkySectionCard(
                         title: "CHỌN MÁY CHỦ ANISETTE",
                         icon: "server.rack",
-                        color: CSSTheme.suiSecondary,
+                        color: CSSTheme.suiPrimary,
                         trailingView: vm.isLoading ? AnyView(ProgressView().tint(CSSTheme.suiPrimary)) : nil
                     ) {
-                        VStack(spacing: 8) {
+                        VStack(spacing: 9) {
                             ForEach(vm.servers) { server in
                                 let isSelected = (vm.selectedAnisetteServerURL.caseInsensitiveCompare(server.address) == .orderedSame)
                                 let isRecommended = isRecommendedSideStoreNew(server)
@@ -447,51 +480,51 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                 } label: {
                                     HStack(spacing: 12) {
                                         SwiftUI.Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                                            .font(.system(size: 20, weight: .semibold))
-                                            .foregroundColor(isSelected ? CSSTheme.suiPrimary : CSSTheme.suiTextSecondary.opacity(0.6))
+                                            .font(.system(size: 20, weight: .bold))
+                                            .foregroundColor(isSelected ? CSSTheme.suiPrimary : CSSTheme.suiTextSecondary.opacity(0.5))
 
                                         VStack(alignment: .leading, spacing: 3) {
                                             HStack(spacing: 6) {
                                                 SwiftUI.Text(server.name)
-                                                    .font(.system(size: 15, weight: .semibold))
+                                                    .font(.system(size: 15, weight: .bold, design: .rounded))
                                                     .foregroundColor(CSSTheme.suiPureBlack)
 
                                                 if isRecommended {
                                                     SwiftUI.Text("★ Khuyên dùng")
-                                                        .font(.system(size: 10.5, weight: .bold))
-                                                        .padding(.horizontal, 7)
+                                                        .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                                                        .padding(.horizontal, 8)
                                                         .padding(.vertical, 2.5)
-                                                        .background(CSSTheme.suiGreen.opacity(0.14))
-                                                        .foregroundColor(CSSTheme.suiGreen)
+                                                        .background(CSSTheme.suiBlushPink.opacity(0.15))
+                                                        .foregroundColor(CSSTheme.suiBlushPink)
                                                         .clipShape(Capsule())
                                                 }
                                             }
                                             SwiftUI.Text(server.address)
-                                                .font(.system(size: 12.5, weight: .regular))
+                                                .font(.system(size: 12.5, weight: .medium))
                                                 .foregroundColor(CSSTheme.suiTextSecondary)
                                                 .lineLimit(1)
                                         }
                                         Spacer()
                                         if isSelected {
                                             SwiftUI.Text("Đang dùng")
-                                                .font(.system(size: 11.5, weight: .semibold))
-                                                .padding(.horizontal, 8)
+                                                .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                                                .padding(.horizontal, 9)
                                                 .padding(.vertical, 4)
-                                                .background(CSSTheme.suiPrimary.opacity(0.12))
-                                                .foregroundColor(CSSTheme.suiPrimary)
+                                                .background(CSSTheme.suiSkyBlue.opacity(0.15))
+                                                .foregroundColor(CSSTheme.suiSkyBlue)
                                                 .clipShape(Capsule())
                                         }
                                     }
                                     .padding(12)
                                     .background(CSSTheme.suiInnerRowBackground)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                     .overlay(
-                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                                             .stroke(
                                                 isSelected
-                                                ? CSSTheme.suiPrimary.opacity(0.55)
-                                                : (isRecommended ? CSSTheme.suiGreen.opacity(0.4) : CSSTheme.suiInnerBorder),
-                                                lineWidth: isSelected ? 1.2 : 0.7
+                                                ? CSSTheme.suiPrimary.opacity(0.75)
+                                                : (isRecommended ? CSSTheme.suiBlushPink.opacity(0.45) : CSSTheme.suiInnerBorder),
+                                                lineWidth: isSelected ? 1.6 : 1.0
                                             )
                                     )
                                 }
@@ -503,22 +536,22 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
 
                         VStack(alignment: .leading, spacing: 8) {
                             SwiftUI.Text("Hoặc nhập URL máy chủ tùy chỉnh:")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
                                 .foregroundColor(CSSTheme.suiTextSecondary)
 
                             HStack(spacing: 8) {
                                 TextField(AppConstants.Anisette.Servers.defaultServerURL, text: $customServerInput)
-                                    .font(.system(size: 14, weight: .regular))
+                                    .font(.system(size: 14, weight: .medium))
                                     .foregroundColor(CSSTheme.suiPureBlack)
                                     .keyboardType(.URL)
                                     .autocapitalization(.none)
                                     .disableAutocorrection(true)
                                     .padding(11)
                                     .background(CSSTheme.suiInnerRowBackground)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                     .overlay(
-                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                            .stroke(CSSTheme.suiInnerBorder, lineWidth: 0.7)
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .stroke(CSSTheme.suiInnerBorder, lineWidth: 1.0)
                                     )
 
                                 SwiftUI.Button {
@@ -529,13 +562,13 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                     customServerInput = ""
                                 } label: {
                                     SwiftUI.Text("Lưu")
-                                        .font(.system(size: 14.5, weight: .semibold))
+                                        .font(.system(size: 14.5, weight: .bold, design: .rounded))
                                         .foregroundColor(.white)
                                         .padding(.horizontal, 18)
                                         .padding(.vertical, 11)
-                                        .background(CSSTheme.suiPrimary)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                        .shadow(color: CSSTheme.suiPrimary.opacity(0.2), radius: 6, x: 0, y: 3)
+                                        .background(CSSTheme.suiAccentGradient)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                        .shadow(color: CSSTheme.suiPrimary.opacity(0.25), radius: 6, x: 0, y: 3)
                                 }
                                 .buttonStyle(SettingsBounceButtonStyle())
                             }
@@ -549,8 +582,8 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    SwiftUI.Text("Máy Chủ Anisette")
-                        .font(.system(size: 17, weight: .semibold))
+                    SwiftUI.Text("✨ Máy Chủ Anisette")
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
                         .foregroundColor(CSSTheme.suiPureBlack)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -559,7 +592,7 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                         onDismiss?()
                         dismiss()
                     }
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundColor(CSSTheme.suiPrimary)
                 }
             }
@@ -670,8 +703,6 @@ extension SettingsViewController
     }
 
     // MARK: - 📦 GỘP TẤT CẢ CÁC MỤC CÀI ĐẶT THÀNH 1 MỤC DUY NHẤT CHUẨN GỐC
-    // Đã xoá Beta Updates, Beta Track và Developer Options theo yêu cầu.
-    // Đưa Máy chủ Anisette lên vị trí đầu tiên (trên Lịch sử làm mới ứng dụng).
     fileprivate enum UnifiedSettingsItem: CaseIterable
     {
         case anisetteServers
@@ -692,6 +723,31 @@ extension SettingsViewController
                 .errorLog,
                 .clearCache
             ]
+        }
+
+        // Biểu tượng SF Symbols & Màu Pastel riêng biệt cho từng mục
+        var iconSymbol: String {
+            switch self {
+            case .anisetteServers: return "server.rack"
+            case .refreshAttempts: return "clock.arrow.circlepath"
+            case .refreshSideJITServer: return "bolt.horizontal.circle.fill"
+            case .certificateManagement: return "checkmark.seal.fill"
+            case .userCustomizations: return "paintbrush.pointed.fill"
+            case .errorLog: return "doc.text.magnifyingglass"
+            case .clearCache: return "sparkles.rectangle.stack.fill"
+            }
+        }
+
+        var iconTintColor: UIColor {
+            switch self {
+            case .anisetteServers: return CSSTheme.skyBlue
+            case .refreshAttempts: return CSSTheme.dreamyPurple
+            case .refreshSideJITServer: return CSSTheme.blushPink
+            case .certificateManagement: return CSSTheme.skyBlue
+            case .userCustomizations: return CSSTheme.dreamyPurple
+            case .errorLog: return CSSTheme.skyBlue
+            case .clearCache: return CSSTheme.blushPink
+            }
         }
 
         // Ánh xạ chính xác về IndexPath gốc trên Storyboard để giữ nguyên UI và Segue
@@ -728,7 +784,7 @@ final class SettingsViewController: UITableViewController
     private var prototypeHeaderFooterView: SettingsHeaderFooterView!
     private var heroGradientLayer: CAGradientLayer?
 
-    // Nút quay lại nhỏ cố định bằng kính mờ (Glassmorphism) ở góc trên bên trái khi vào mục con
+    // Nút quay lại nhỏ cố định ở góc trên bên trái khi vào mục con
     private var floatingBackButton: UIButton?
 
     @IBOutlet private var betaTrackLabel: UILabel!
@@ -830,7 +886,7 @@ final class SettingsViewController: UITableViewController
             self.tableView.sectionHeaderTopPadding = 0
         }
         
-        // ✨ KÍCH HOẠT GIAO DIỆN APPLE LUXURY HIG & VIỆT HÓA ✨
+        // ✨ KÍCH HOẠT GIAO DIỆN ĐỘC QUYỀN AURORA PASTEL LUXURY ✨
         self.applySmartWebCSSTheme()
         
         self.update()
@@ -847,7 +903,6 @@ final class SettingsViewController: UITableViewController
     override func viewWillAppear(_ animated: Bool)
     {
         super.viewWillAppear(animated)
-        // Đảm bảo ẩn thanh màu trắng và chữ Cài đặt ở trên cùng để tràn viền toàn màn hình
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
         self.forceDisableRemovedSettings()
         self.update()
@@ -866,7 +921,6 @@ final class SettingsViewController: UITableViewController
     }
 
     override func shouldPerformSegue(withIdentifier identifier: String, sender: Any?) -> Bool {
-        // Chặn Segue mặc định của anisetteServers để mở bảng SwiftUI Anisette tùy chỉnh
         if identifier == "anisetteServers" {
             return false
         }
@@ -889,10 +943,9 @@ final class SettingsViewController: UITableViewController
     }
 }
 
-// MARK: - 🧭 QUẢN LÝ ẨN THANH ĐIỀU HƯỚNG & NÚT QUAY LẠI KÍNH MỜ (GLASSMORPHISM)
+// MARK: - 🧭 QUẢN LÝ ẨN THANH ĐIỀU HƯỚNG & NÚT QUAY LẠI PHA LÊ MỘNG MƠ
 extension SettingsViewController: UINavigationControllerDelegate {
     func navigationController(_ navigationController: UINavigationController, willShow viewController: UIViewController, animated: Bool) {
-        // Luôn ẩn thanh điều hướng và tiêu đề ở cả trang chính lẫn mọi mục con
         navigationController.setNavigationBarHidden(true, animated: false)
         viewController.title = nil
         viewController.navigationItem.title = nil
@@ -909,39 +962,19 @@ extension SettingsViewController: UINavigationControllerDelegate {
             let btn = UIButton(type: .system)
             btn.translatesAutoresizingMaskIntoConstraints = false
             
-            // Hiệu ứng kính mờ chuẩn Safari & Apple Maps
-            #if !os(tvOS)
-            let blurEffect = UIBlurEffect(style: .systemUltraThinMaterialLight)
-            let blurView = UIVisualEffectView(effect: blurEffect)
-            blurView.isUserInteractionEnabled = false
-            blurView.translatesAutoresizingMaskIntoConstraints = false
-            blurView.layer.cornerRadius = 18
-            blurView.layer.cornerCurve = .continuous
-            blurView.clipsToBounds = true
-            btn.insertSubview(blurView, at: 0)
-            NSLayoutConstraint.activate([
-                blurView.leadingAnchor.constraint(equalTo: btn.leadingAnchor),
-                blurView.trailingAnchor.constraint(equalTo: btn.trailingAnchor),
-                blurView.topAnchor.constraint(equalTo: btn.topAnchor),
-                blurView.bottomAnchor.constraint(equalTo: btn.bottomAnchor)
-            ])
-            #else
-            btn.backgroundColor = CSSTheme.white.withAlphaComponent(0.92)
-            #endif
-            
-            let config = UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+            let config = UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)
             btn.setImage(UIImage(systemName: "chevron.left", withConfiguration: config), for: .normal)
-            btn.tintColor = CSSTheme.blue
+            btn.tintColor = CSSTheme.dreamyPurple
+            btn.backgroundColor = CSSTheme.white.withAlphaComponent(0.95)
             
-            // Nút tròn nhỏ 36x36 cố định với viền mảnh tinh tế
             btn.layer.cornerRadius = 18
             btn.layer.cornerCurve = .continuous
-            btn.layer.borderWidth = 0.5
-            btn.layer.borderColor = CSSTheme.hairlineBorder.cgColor
-            btn.layer.shadowColor = UIColor.black.cgColor
-            btn.layer.shadowOffset = CGSize(width: 0, height: 3)
-            btn.layer.shadowRadius = 8
-            btn.layer.shadowOpacity = 0.08
+            btn.layer.borderWidth = 1.2
+            btn.layer.borderColor = CSSTheme.border.cgColor
+            btn.layer.shadowColor = CSSTheme.dreamyPurple.cgColor
+            btn.layer.shadowOffset = CGSize(width: 0, height: 4)
+            btn.layer.shadowRadius = 10
+            btn.layer.shadowOpacity = 0.22
             
             btn.addTarget(self, action: #selector(handleFloatingBackTap), for: .touchUpInside)
             nav.view.addSubview(btn)
@@ -958,9 +991,6 @@ extension SettingsViewController: UINavigationControllerDelegate {
         
         guard let btn = self.floatingBackButton else { return }
         nav.view.bringSubviewToFront(btn)
-        if let imageView = btn.imageView {
-            btn.bringSubviewToFront(imageView)
-        }
         
         UIView.animate(withDuration: 0.2) {
             btn.alpha = show ? 1.0 : 0.0
@@ -974,39 +1004,39 @@ extension SettingsViewController: UINavigationControllerDelegate {
     }
 }
 
-// MARK: - ✨ HỆ THỐNG RENDER APPLE LUXURY DESIGN & VIỆT HÓA TOÀN DIỆN
+// MARK: - ✨ HỆ THỐNG RENDER AURORA PASTEL LUXURY & BIỂU TƯỢNG THÔNG MINH ✨
 private extension SettingsViewController {
 
     private func applySmartWebCSSTheme() {
-        // 1. Nền Body Ngọc Trai cố định: Không bao giờ bị trắng khi lướt xuống dưới
+        // 1. Nền Cực Quang 3 tầng (Xanh da trời nhạt -> Tím mộng mơ -> Hồng phấn)
         let bgView = CSSGradientBackgroundView(frame: UIScreen.main.bounds)
         bgView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         self.tableView.backgroundView = bgView
         self.tableView.backgroundColor = .clear
         self.tableView.separatorStyle = .none
         
-        // 2. Tạo khối Hero Banner chuẩn Apple Wallet nằm sát phía trên
+        // 2. Tạo khối Hero Banner Pha Lê 3 Màu kèm hiệu ứng ánh sáng Bokeh
         setupCSSHeroBanner()
         
-        // 3. Tạo Footer hiển thị Lời cảm ơn gọn gàng + Phiên bản
+        // 3. Tạo Footer hiển thị Lời cảm ơn Trắng Sữa + Phiên bản
         setupVersionTableFooterView()
         
-        // 4. Cấu hình TabBar kính mờ đồng bộ chuẩn iOS
+        // 4. Cấu hình TabBar trắng sữa ánh tím mộng mơ
         #if !os(tvOS)
         if let tabBar = self.tabBarController?.tabBar {
             let tabAppearance = tabBar.standardAppearance
             tabAppearance.configureWithDefaultBackground()
-            tabAppearance.backgroundEffect = UIBlurEffect(style: .systemChromeMaterialLight)
-            tabAppearance.stackedLayoutAppearance.normal.badgeBackgroundColor = CSSTheme.blue
+            tabAppearance.backgroundColor = CSSTheme.white.withAlphaComponent(0.92)
+            tabAppearance.stackedLayoutAppearance.normal.badgeBackgroundColor = CSSTheme.blushPink
             tabBar.standardAppearance = tabAppearance
             if #available(iOS 15.0, *) {
                 tabBar.scrollEdgeAppearance = tabAppearance
             }
-            tabBar.tintColor = CSSTheme.blue
+            tabBar.tintColor = CSSTheme.dreamyPurple
         }
         #endif
         
-        // 5. Làm đẹp các công tắc UISwitch chuẩn Apple (Tinh tế, bỏ bóng neon loè loẹt)
+        // 5. Làm đẹp các công tắc UISwitch với tông Tím Mộng Mơ & Hồng Phấn
         let switches = [
             self.backgroundRefreshSwitch, self.noIdleTimeoutSwitch, self.disableAppLimitSwitch,
             self.betaUpdatesSwitch, self.verboseOperationsLoggingSwitch, self.altSignVerboseLoggingSwitch,
@@ -1016,53 +1046,93 @@ private extension SettingsViewController {
         
         for sw in switches {
             guard let sw = sw else { continue }
-            sw.onTintColor = CSSTheme.blue
+            sw.onTintColor = CSSTheme.dreamyPurple
             sw.thumbTintColor = CSSTheme.white
-            sw.layer.shadowOpacity = 0.0
+            sw.layer.shadowColor = CSSTheme.dreamyPurple.cgColor
+            sw.layer.shadowOffset = CGSize(width: 0, height: 3)
+            sw.layer.shadowRadius = 6
+            sw.layer.shadowOpacity = 0.25
         }
     }
 
-    // Tạo khối Hero Banner sang trọng như thẻ Apple Card & dùng font SF Pro Rounded
+    // Tạo khối Hero Banner Aurora Pastel 3 màu (Xanh Sky -> Tím Mộng Mơ -> Hồng Phấn)
     private func setupCSSHeroBanner() {
-        let headerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 108))
+        let headerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 122))
         headerContainer.backgroundColor = .clear
         
         let heroCard = UIView()
         heroCard.translatesAutoresizingMaskIntoConstraints = false
-        heroCard.layer.cornerRadius = CSSTheme.cornerRadius
+        heroCard.layer.cornerRadius = 22.0
         heroCard.layer.cornerCurve = .continuous
         heroCard.layer.masksToBounds = false
-        heroCard.layer.borderWidth = 0.5
-        heroCard.layer.borderColor = UIColor.white.withAlphaComponent(0.22).cgColor
-        heroCard.layer.shadowColor = CSSTheme.blue.cgColor
-        heroCard.layer.shadowOffset = CGSize(width: 0, height: 6)
-        heroCard.layer.shadowRadius = 16
-        heroCard.layer.shadowOpacity = 0.16
+        heroCard.layer.borderWidth = 1.2
+        heroCard.layer.borderColor = UIColor.white.withAlphaComponent(0.55).cgColor
+        heroCard.layer.shadowColor = CSSTheme.dreamyPurple.cgColor
+        heroCard.layer.shadowOffset = CGSize(width: 0, height: 8)
+        heroCard.layer.shadowRadius = 18
+        heroCard.layer.shadowOpacity = 0.28
         
         let gradient = CAGradientLayer()
-        gradient.colors = [CSSTheme.heroStart, CSSTheme.heroEnd]
-        gradient.startPoint = CGPoint(x: 0, y: 0)
-        gradient.endPoint = CGPoint(x: 1, y: 1)
-        gradient.cornerRadius = CSSTheme.cornerRadius
+        gradient.colors = [CSSTheme.heroStart, CSSTheme.heroMiddle, CSSTheme.heroEnd]
+        gradient.locations = [0.0, 0.52, 1.0]
+        gradient.startPoint = CGPoint(x: 0.0, y: 0.0)
+        gradient.endPoint = CGPoint(x: 1.0, y: 1.0)
+        gradient.cornerRadius = 22.0
         gradient.cornerCurve = .continuous
         heroCard.layer.insertSublayer(gradient, at: 0)
         self.heroGradientLayer = gradient
+
+        // Lớp trang trí Bokeh lấp lánh bên trong Banner
+        let bokehContainer = UIView()
+        bokehContainer.translatesAutoresizingMaskIntoConstraints = false
+        bokehContainer.clipsToBounds = true
+        bokehContainer.layer.cornerRadius = 22.0
+        bokehContainer.layer.cornerCurve = .continuous
+        bokehContainer.isUserInteractionEnabled = false
+
+        let circleRight = UIView(frame: CGRect(x: 240, y: -28, width: 110, height: 110))
+        circleRight.backgroundColor = UIColor.white.withAlphaComponent(0.16)
+        circleRight.layer.cornerRadius = 55
+        bokehContainer.addSubview(circleRight)
+
+        let circleLeft = UIView(frame: CGRect(x: -25, y: 45, width: 86, height: 86))
+        circleLeft.backgroundColor = UIColor.white.withAlphaComponent(0.14)
+        circleLeft.layer.cornerRadius = 43
+        bokehContainer.addSubview(circleLeft)
+
+        heroCard.addSubview(bokehContainer)
+
+        // Huy hiệu nhỏ phía trên chữ SideStore
+        let pillBadge = UILabel()
+        pillBadge.translatesAutoresizingMaskIntoConstraints = false
+        pillBadge.text = "  ✨ AURORA DREAMY EDITION ✨  "
+        pillBadge.font = CSSTheme.roundedFont(ofSize: 10, weight: .heavy)
+        pillBadge.textColor = UIColor.white
+        pillBadge.backgroundColor = UIColor.white.withAlphaComponent(0.22)
+        pillBadge.layer.cornerRadius = 9
+        pillBadge.layer.cornerCurve = .continuous
+        pillBadge.layer.masksToBounds = true
         
         let titleLabel = UILabel()
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.text = "SideStore"
-        titleLabel.font = CSSTheme.roundedFont(ofSize: 25, weight: .bold)
-        titleLabel.textColor = CSSTheme.white
+        titleLabel.font = CSSTheme.roundedFont(ofSize: 26, weight: .heavy)
+        titleLabel.textColor = UIColor.white
         titleLabel.textAlignment = .center
+        titleLabel.layer.shadowColor = CSSTheme.dark.cgColor
+        titleLabel.layer.shadowOffset = CGSize(width: 0, height: 2)
+        titleLabel.layer.shadowRadius = 6
+        titleLabel.layer.shadowOpacity = 0.20
         
         let subLabel = UILabel()
         subLabel.translatesAutoresizingMaskIntoConstraints = false
-        subLabel.text = "Tùy chỉnh & quản lý trải nghiệm cài đặt ứng dụng của bạn"
-        subLabel.font = UIFont.systemFont(ofSize: 13, weight: .medium)
-        subLabel.textColor = CSSTheme.white.withAlphaComponent(0.92)
+        subLabel.text = "Không gian cài đặt thanh lịch • Tùy chỉnh ứng dụng theo phong cách của bạn"
+        subLabel.font = CSSTheme.roundedFont(ofSize: 12.5, weight: .semibold)
+        subLabel.textColor = UIColor.white.withAlphaComponent(0.96)
         subLabel.textAlignment = .center
         subLabel.numberOfLines = 2
         
+        heroCard.addSubview(pillBadge)
         heroCard.addSubview(titleLabel)
         heroCard.addSubview(subLabel)
         headerContainer.addSubview(heroCard)
@@ -1070,20 +1140,29 @@ private extension SettingsViewController {
         NSLayoutConstraint.activate([
             heroCard.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor, constant: 16),
             heroCard.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -16),
-            heroCard.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 4),
+            heroCard.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 6),
             heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -8),
+
+            bokehContainer.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor),
+            bokehContainer.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor),
+            bokehContainer.topAnchor.constraint(equalTo: heroCard.topAnchor),
+            bokehContainer.bottomAnchor.constraint(equalTo: heroCard.bottomAnchor),
+
+            pillBadge.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
+            pillBadge.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 11),
+            pillBadge.heightAnchor.constraint(equalToConstant: 18),
             
             titleLabel.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
-            titleLabel.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 15),
+            titleLabel.topAnchor.constraint(equalTo: pillBadge.bottomAnchor, constant: 4),
             
-            subLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
+            subLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 3),
             subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 14),
             subLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -14)
         ])
         
         heroCard.alpha = 0
-        heroCard.transform = CGAffineTransform(translationX: 0, y: -8)
-        UIView.animate(withDuration: 0.48, delay: 0.04, usingSpringWithDamping: 0.86, initialSpringVelocity: 0.5, options: .curveEaseOut) {
+        heroCard.transform = CGAffineTransform(translationX: 0, y: -10)
+        UIView.animate(withDuration: 0.52, delay: 0.04, usingSpringWithDamping: 0.82, initialSpringVelocity: 0.5, options: .curveEaseOut) {
             heroCard.alpha = 1
             heroCard.transform = .identity
         }
@@ -1096,42 +1175,41 @@ private extension SettingsViewController {
         btn.translatesAutoresizingMaskIntoConstraints = false
         btn.setTitle("  \(title)  ", for: .normal)
         btn.setTitleColor(color, for: .normal)
-        btn.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .semibold)
-        btn.backgroundColor = color.withAlphaComponent(0.08)
+        btn.titleLabel?.font = CSSTheme.roundedFont(ofSize: 11.5, weight: .bold)
+        btn.backgroundColor = color.withAlphaComponent(0.12)
         btn.layer.cornerRadius = 12
         btn.layer.cornerCurve = .continuous
-        btn.layer.borderWidth = 0.5
-        btn.layer.borderColor = color.withAlphaComponent(0.22).cgColor
+        btn.layer.borderWidth = 1.0
+        btn.layer.borderColor = color.withAlphaComponent(0.30).cgColor
         btn.addTarget(self, action: action, for: .touchUpInside)
         NSLayoutConstraint.activate([
-            btn.heightAnchor.constraint(equalToConstant: 24)
+            btn.heightAnchor.constraint(equalToConstant: 25)
         ])
         return btn
     }
 
-    // Chân trang gọn đẹp chuẩn Apple: Thẻ Lời cảm ơn rút gọn + Phiên bản ứng dụng
+    // Chân trang Trắng Sữa Pastel: Thẻ Lời cảm ơn + Phiên bản ứng dụng
     private func setupVersionTableFooterView() {
-        let footerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 194))
+        let footerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 196))
         footerContainer.backgroundColor = .clear
 
-        // Khung Card Lời cảm ơn chuẩn Apple Squircle + Ambient Shadow
         let thanksCard = UIView()
         thanksCard.translatesAutoresizingMaskIntoConstraints = false
         thanksCard.backgroundColor = CSSTheme.white
         thanksCard.layer.cornerRadius = CSSTheme.cornerRadius
         thanksCard.layer.cornerCurve = .continuous
-        thanksCard.layer.borderWidth = 0.5
-        thanksCard.layer.borderColor = CSSTheme.hairlineBorder.cgColor
-        thanksCard.layer.shadowColor = UIColor.black.cgColor
-        thanksCard.layer.shadowOffset = CGSize(width: 0, height: 4)
-        thanksCard.layer.shadowRadius = 12
-        thanksCard.layer.shadowOpacity = 0.04
+        thanksCard.layer.borderWidth = 1.2
+        thanksCard.layer.borderColor = CSSTheme.border.cgColor
+        thanksCard.layer.shadowColor = CSSTheme.dreamyPurple.cgColor
+        thanksCard.layer.shadowOffset = CGSize(width: 0, height: 6)
+        thanksCard.layer.shadowRadius = 14
+        thanksCard.layer.shadowOpacity = 0.10
 
         let titleLabel = UILabel()
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.text = "LỜI CẢM ƠN"
-        titleLabel.font = UIFont.systemFont(ofSize: 12, weight: .semibold)
-        titleLabel.textColor = CSSTheme.textSecondary
+        titleLabel.text = "🌸 LỜI CẢM ƠN & TRI ÂN 🌸"
+        titleLabel.font = CSSTheme.roundedFont(ofSize: 12.5, weight: .heavy)
+        titleLabel.textColor = CSSTheme.blushPink
         titleLabel.textAlignment = .center
 
         let bodyLabel = UILabel()
@@ -1151,15 +1229,15 @@ private extension SettingsViewController {
         bodyLabel.attributedText = NSAttributedString(
             string: bodyText,
             attributes: [
-                .font: UIFont.systemFont(ofSize: 12, weight: .regular),
-                .foregroundColor: CSSTheme.textPrimary.withAlphaComponent(0.85),
+                .font: CSSTheme.roundedFont(ofSize: 11.5, weight: .medium),
+                .foregroundColor: CSSTheme.textPrimary.withAlphaComponent(0.86),
                 .paragraphStyle: paragraph
             ]
         )
 
-        let btnSideStore = createCompactCreditChip(title: "@sidestoreio", color: CSSTheme.blue, action: #selector(openSideStoreTwitterChip))
-        let btnLitRitt = createCompactCreditChip(title: "@lit_ritt", color: CSSTheme.purple, action: #selector(openLitRittTwitterChip))
-        let btnGitHub = createCompactCreditChip(title: "GitHub", color: CSSTheme.dark, action: #selector(followAltStoreGitHub))
+        let btnSideStore = createCompactCreditChip(title: "@sidestoreio", color: CSSTheme.skyBlue, action: #selector(openSideStoreTwitterChip))
+        let btnLitRitt = createCompactCreditChip(title: "@lit_ritt", color: CSSTheme.dreamyPurple, action: #selector(openLitRittTwitterChip))
+        let btnGitHub = createCompactCreditChip(title: "GitHub", color: CSSTheme.blushPink, action: #selector(followAltStoreGitHub))
 
         let chipStack = UIStackView(arrangedSubviews: [btnSideStore, btnLitRitt, btnGitHub])
         chipStack.translatesAutoresizingMaskIntoConstraints = false
@@ -1219,9 +1297,8 @@ private extension SettingsViewController {
         self.openTwitter(username: "lit_ritt")
     }
 
-    // Bóc tách lớp nền của InsetGroupTableViewCell để áp dụng Squircle + Ambient Shadow chuẩn Apple
+    // ✨ BÓC TÁCH LỚP NỀN CELL & GẮN BIỂU TƯỢNG PASTEL THÔNG MINH ✨
     private func styleInnerCardOfCell(_ cell: UITableViewCell, at indexPath: IndexPath, totalRows: Int) {
-        // Khóa hiệu ứng tô xám mặc định của UITableViewCell để không bị kẹt màu khi mở/đóng Sheet
         cell.selectionStyle = .none
         cell.selectedBackgroundView = UIView()
         cell.selectedBackgroundView?.backgroundColor = .clear
@@ -1233,6 +1310,7 @@ private extension SettingsViewController {
             $0 !== cell.contentView && $0 !== cell.selectedBackgroundView && $0.frame.width > 100 && !($0 is UIButton)
         }) ?? cell.contentView
         
+        // Màu Trắng Sữa Ngọc Trai (#FFFCFA) cực kỳ sang trọng
         targetCardView.backgroundColor = CSSTheme.white
         
         var corners: CACornerMask = []
@@ -1247,38 +1325,115 @@ private extension SettingsViewController {
         targetCardView.layer.cornerRadius = corners.isEmpty ? 0 : CSSTheme.cornerRadius
         targetCardView.layer.cornerCurve = .continuous
         targetCardView.layer.maskedCorners = corners
-        targetCardView.layer.borderWidth = 0.5
-        targetCardView.layer.borderColor = CSSTheme.hairlineBorder.cgColor
+        targetCardView.layer.borderWidth = 1.0
+        targetCardView.layer.borderColor = CSSTheme.border.cgColor
         
-        // Ambient Shadow nhẹ nhàng tự nhiên chuẩn Apple
+        // Đổ bóng Tím Mộng Mơ dịu nhẹ
         cell.layer.masksToBounds = false
-        cell.layer.shadowColor = UIColor.black.cgColor
-        cell.layer.shadowOffset = CGSize(width: 0, height: 4)
+        cell.layer.shadowColor = CSSTheme.dreamyPurple.cgColor
+        cell.layer.shadowOffset = CGSize(width: 0, height: 5)
         cell.layer.shadowRadius = 12
-        cell.layer.shadowOpacity = 0.04
+        cell.layer.shadowOpacity = 0.08
         
-        // Đường kẻ phân cách Hairline 0.5pt chuẩn iOS Settings
+        // Đường kẻ phân cách Pastel giữa các dòng
         let sepTag = 8888
         cell.contentView.viewWithTag(sepTag)?.removeFromSuperview()
         if indexPath.row < totalRows - 1 {
             let sep = UIView()
             sep.tag = sepTag
-            sep.backgroundColor = CSSTheme.border
+            sep.backgroundColor = CSSTheme.separator
             sep.translatesAutoresizingMaskIntoConstraints = false
             cell.contentView.addSubview(sep)
             NSLayoutConstraint.activate([
-                sep.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 20),
+                sep.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 54),
                 sep.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -20),
                 sep.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor),
-                sep.heightAnchor.constraint(equalToConstant: 0.5)
+                sep.heightAnchor.constraint(equalToConstant: 1.0)
             ])
         }
         
-        // Việt hóa và làm đẹp toàn bộ chữ bên trong Cell theo phân cấp Apple Typography
-        translateAndStyleLabelsInside(view: cell.contentView, section: Section.allCases[indexPath.section], row: indexPath.row)
+        let section = Section.allCases[indexPath.section]
+        // Gắn Huy hiệu Icon Pastel thông minh cho từng dòng
+        configurePastelIconBadge(in: cell.contentView, section: section, row: indexPath.row)
+        // Việt hóa và làm đẹp toàn bộ chữ bên trong Cell
+        translateAndStyleLabelsInside(view: cell.contentView, section: section, row: indexPath.row)
     }
 
-    // Khôi phục ngay lập tức nền trắng #FFFFFF cho tất cả các Cell đang hiển thị
+    // Tự động tạo Huy hiệu Icon Pastel (Squircle 30x30) ở đầu mỗi dòng cài đặt
+    private func configurePastelIconBadge(in contentView: UIView, section: Section, row: Int) {
+        let badgeTag = 7766
+        contentView.viewWithTag(badgeTag)?.removeFromSuperview()
+
+        var symbolName: String? = nil
+        var tintColor: UIColor = CSSTheme.dreamyPurple
+
+        if section == .signIn {
+            symbolName = "person.crop.circle.badge.plus"
+            tintColor = CSSTheme.skyBlue
+        } else if section == .account && row < 3 {
+            switch row {
+            case 0:
+                symbolName = "person.text.rectangle.fill"
+                tintColor = CSSTheme.skyBlue
+            case 1:
+                symbolName = "envelope.fill"
+                tintColor = CSSTheme.dreamyPurple
+            default:
+                symbolName = "crown.fill"
+                tintColor = CSSTheme.blushPink
+            }
+        } else if section == .advancedSettings {
+            let activeItems = UnifiedSettingsItem.activeItems
+            if activeItems.indices.contains(row) {
+                let item = activeItems[row]
+                symbolName = item.iconSymbol
+                tintColor = item.iconTintColor
+            }
+        }
+
+        guard let iconName = symbolName else { return }
+
+        let badgeView = UIView()
+        badgeView.tag = badgeTag
+        badgeView.translatesAutoresizingMaskIntoConstraints = false
+        badgeView.backgroundColor = tintColor.withAlphaComponent(0.14)
+        badgeView.layer.cornerRadius = 9.5
+        badgeView.layer.cornerCurve = .continuous
+        badgeView.layer.borderWidth = 0.8
+        badgeView.layer.borderColor = tintColor.withAlphaComponent(0.28).cgColor
+        badgeView.isUserInteractionEnabled = false
+
+        let imgConfig = UIImage.SymbolConfiguration(pointSize: 13.5, weight: .bold)
+        let imgView = UIImageView(image: UIImage(systemName: iconName, withConfiguration: imgConfig))
+        imgView.translatesAutoresizingMaskIntoConstraints = false
+        imgView.tintColor = tintColor
+        imgView.contentMode = .scaleAspectFit
+
+        badgeView.addSubview(imgView)
+        contentView.addSubview(badgeView)
+
+        NSLayoutConstraint.activate([
+            badgeView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            badgeView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            badgeView.widthAnchor.constraint(equalToConstant: 30),
+            badgeView.heightAnchor.constraint(equalToConstant: 30),
+
+            imgView.centerXAnchor.constraint(equalTo: badgeView.centerXAnchor),
+            imgView.centerYAnchor.constraint(equalTo: badgeView.centerYAnchor)
+        ])
+
+        // Tự động dịch nhẹ tiêu đề bên trái sang phải 34pt để nhường chỗ cho Icon Pastel mà không phá vỡ AutoLayout gốc
+        for subview in contentView.subviews {
+            if let label = subview as? UILabel,
+               label !== self.accountNameLabel,
+               label !== self.accountEmailLabel,
+               label !== self.accountTypeLabel {
+                label.transform = CGAffineTransform(translationX: 34, y: 0)
+            }
+        }
+    }
+
+    // Khôi phục ngay lập tức nền Trắng Sữa cho tất cả các Cell đang hiển thị
     private func restoreVisibleCellsWhiteBackground() {
         for cell in self.tableView.visibleCells {
             guard let indexPath = self.tableView.indexPath(for: cell) else { continue }
@@ -1345,23 +1500,24 @@ private extension SettingsViewController {
                 }
                 
                 if label == self.accountNameLabel || label == self.accountEmailLabel || label == self.accountTypeLabel {
+                    label.transform = .identity
                     if label == self.accountTypeLabel, let typeText = label.text {
                         label.text = translateStaticText(typeText)
                     }
-                    label.textColor = (label == self.accountNameLabel) ? CSSTheme.blue : CSSTheme.textSecondary
-                    label.font = UIFont.systemFont(ofSize: 15, weight: .medium)
+                    label.textColor = (label == self.accountNameLabel) ? CSSTheme.skyBlue : CSSTheme.dreamyPurple
+                    label.font = CSSTheme.roundedFont(ofSize: 15, weight: .bold)
                 } else if section == .signIn {
-                    label.textColor = CSSTheme.blue
-                    label.font = UIFont.systemFont(ofSize: 16.5, weight: .semibold)
+                    label.textColor = CSSTheme.skyBlue
+                    label.font = CSSTheme.roundedFont(ofSize: 16.5, weight: .bold)
                 } else if isClearCacheRow {
-                    label.textColor = CSSTheme.red
-                    label.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
+                    label.textColor = CSSTheme.blushPink
+                    label.font = CSSTheme.roundedFont(ofSize: 16, weight: .bold)
                 } else if label.textColor == .systemRed {
-                    label.textColor = CSSTheme.red
+                    label.textColor = CSSTheme.blushPink
                 } else {
                     label.textColor = CSSTheme.textPrimary
-                    if label.font.pointSize >= 16 {
-                        label.font = UIFont.systemFont(ofSize: 16, weight: .medium)
+                    if label.font.pointSize >= 15 {
+                        label.font = CSSTheme.roundedFont(ofSize: 15.5, weight: .semibold)
                     }
                 }
             }
@@ -1378,12 +1534,10 @@ private extension SettingsViewController {
             self.tableView.beginUpdates()
             self.tableView.endUpdates()
             
-            // Cập nhật tiêu đề nút Tài Khoản ngay lập tức
             if let headerView = self.tableView.headerView(forSection: Section.account.rawValue) as? SettingsHeaderFooterView {
                 self.prepare(headerView, for: .account, isHeader: true)
             }
             
-            // Ẩn/hiện mượt các dòng tài khoản
             for row in 0..<3 {
                 if let cell = self.tableView.cellForRow(at: IndexPath(row: row, section: Section.account.rawValue)) {
                     cell.alpha = self.isAccountDetailsExpanded ? 1.0 : 0.0
@@ -1408,10 +1562,10 @@ private extension SettingsViewController
         let fullString = NSMutableAttributedString()
         
         let appVersionAttr = NSAttributedString(
-            string: appVersion,
+            string: "✨ " + appVersion + " ✨",
             attributes: [
-                .font: UIFont.systemFont(ofSize: 13, weight: .semibold),
-                .foregroundColor: CSSTheme.textPrimary,
+                .font: CSSTheme.roundedFont(ofSize: 13.5, weight: .bold),
+                .foregroundColor: CSSTheme.dreamyPurple,
                 .paragraphStyle: paragraphStyle
             ]
         )
@@ -1419,7 +1573,7 @@ private extension SettingsViewController
         let iosVersionAttr = NSAttributedString(
             string: "\n" + iosVersion,
             attributes: [
-                .font: UIFont.systemFont(ofSize: 11.5, weight: .regular),
+                .font: CSSTheme.roundedFont(ofSize: 11.5, weight: .semibold),
                 .foregroundColor: CSSTheme.textSecondary,
                 .paragraphStyle: paragraphStyle
             ]
@@ -1444,14 +1598,14 @@ private extension SettingsViewController
         let attributed = NSMutableAttributedString(
             string: "Đã sao chép phiên bản! ",
             attributes: [
-                .font: UIFont.systemFont(ofSize: 13.5, weight: .semibold),
-                .foregroundColor: CSSTheme.blue,
+                .font: CSSTheme.roundedFont(ofSize: 14, weight: .bold),
+                .foregroundColor: CSSTheme.dreamyPurple,
                 .paragraphStyle: paragraphStyle
             ]
         )
-        attributed.append(NSAttributedString(string: "✓", attributes: [
-            .font: UIFont.systemFont(ofSize: 13.5, weight: .bold),
-            .foregroundColor: CSSTheme.green
+        attributed.append(NSAttributedString(string: "♥", attributes: [
+            .font: CSSTheme.roundedFont(ofSize: 14, weight: .bold),
+            .foregroundColor: CSSTheme.blushPink
         ]))
         
         self.versionLabel?.attributedText = attributed
@@ -1497,7 +1651,6 @@ private extension SettingsViewController
             self.tableView.reloadData()
         }
         
-        // Đảm bảo Làm mới ứng dụng, Beta và Developer luôn tắt cứng
         self.forceDisableRemovedSettings()
         
         self.disableResponseCachingSwitch?.isOn = UserDefaults.standard.responseCachingDisabled
@@ -1557,62 +1710,86 @@ private extension SettingsViewController
         settingsHeaderFooterView.secondaryLabel.isHidden = isHeader
         settingsHeaderFooterView.button.isHidden = true
         
-        // Chuẩn Apple HIG: Chữ in hoa 13pt Semibold màu xám lạnh (#6C6C70), bỏ hoàn toàn gạch chân xanh
-        settingsHeaderFooterView.primaryLabel.textColor = CSSTheme.textSecondary
-        settingsHeaderFooterView.primaryLabel.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        settingsHeaderFooterView.primaryLabel.textColor = CSSTheme.dark
+        settingsHeaderFooterView.primaryLabel.font = CSSTheme.roundedFont(ofSize: 14, weight: .heavy)
         settingsHeaderFooterView.secondaryLabel.textColor = CSSTheme.textSecondary
-        settingsHeaderFooterView.secondaryLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .regular)
+        settingsHeaderFooterView.secondaryLabel.font = CSSTheme.roundedFont(ofSize: 12.5, weight: .medium)
         
-        // Xóa nút Tài Khoản cũ và xóa gạch chân cũ nếu có
         let toggleAccountTag = 9992
         let underlineTag = 9991
         settingsHeaderFooterView.contentView.viewWithTag(toggleAccountTag)?.removeFromSuperview()
         settingsHeaderFooterView.contentView.viewWithTag(underlineTag)?.removeFromSuperview()
         
-        settingsHeaderFooterView.layoutMargins.bottom = isHeader ? 6 : 8
+        // Thanh gạch chân Gradient 3 màu (Xanh Sky -> Tím Mộng Mơ -> Hồng Phấn) cực xinh dưới tiêu đề
+        if isHeader {
+            let underline = UIView(frame: CGRect(x: 0, y: 0, width: 52, height: 3.5))
+            underline.tag = underlineTag
+            underline.layer.cornerRadius = 1.75
+            underline.clipsToBounds = true
+            underline.translatesAutoresizingMaskIntoConstraints = false
+
+            let grad = CAGradientLayer()
+            grad.frame = CGRect(x: 0, y: 0, width: 52, height: 3.5)
+            grad.colors = [CSSTheme.skyBlue.cgColor, CSSTheme.dreamyPurple.cgColor, CSSTheme.blushPink.cgColor]
+            grad.startPoint = CGPoint(x: 0, y: 0.5)
+            grad.endPoint = CGPoint(x: 1, y: 0.5)
+            underline.layer.insertSublayer(grad, at: 0)
+
+            settingsHeaderFooterView.contentView.addSubview(underline)
+            NSLayoutConstraint.activate([
+                underline.leadingAnchor.constraint(equalTo: settingsHeaderFooterView.primaryLabel.leadingAnchor),
+                underline.topAnchor.constraint(equalTo: settingsHeaderFooterView.primaryLabel.bottomAnchor, constant: 3),
+                underline.widthAnchor.constraint(equalToConstant: 52),
+                underline.heightAnchor.constraint(equalToConstant: 3.5)
+            ])
+        }
+        
+        settingsHeaderFooterView.layoutMargins.bottom = isHeader ? 8 : 8
         
         switch section
         {
         case .signIn:
             if isHeader {
-                settingsHeaderFooterView.primaryLabel.text = "TÀI KHOẢN"
+                settingsHeaderFooterView.primaryLabel.text = "✦ TÀI KHOẢN APPLE ID"
             } else {
                 settingsHeaderFooterView.secondaryLabel.text = "Đăng nhập bằng ID Apple của bạn để tải xuống và làm mới ứng dụng từ SideStore."
             }
             
         case .account:
-            settingsHeaderFooterView.primaryLabel.text = "TÀI KHOẢN"
+            settingsHeaderFooterView.primaryLabel.text = "✦ TÀI KHOẢN"
             
-            // 1. Nút "Tài Khoản" kiểu Pill mềm mại chuẩn Apple để bấm Ẩn/Hiện thông tin nhạy cảm
+            // 1. Nút "Tài Khoản" Pastel Pill sang trọng
             let toggleBtn = UIButton(type: .system)
             toggleBtn.tag = toggleAccountTag
             toggleBtn.translatesAutoresizingMaskIntoConstraints = false
-            let toggleTitle = self.isAccountDetailsExpanded ? "  Ẩn chi tiết ▲  " : "  Chi tiết ▼  "
+            let toggleTitle = self.isAccountDetailsExpanded ? "  Ẩn Tài Khoản ▲  " : "  Xem Tài Khoản ▼  "
             toggleBtn.setTitle(toggleTitle, for: .normal)
-            let activeTint = self.isAccountDetailsExpanded ? CSSTheme.purple : CSSTheme.blue
-            toggleBtn.setTitleColor(activeTint, for: .normal)
-            toggleBtn.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .semibold)
-            toggleBtn.backgroundColor = activeTint.withAlphaComponent(0.12)
+            toggleBtn.setTitleColor(CSSTheme.white, for: .normal)
+            toggleBtn.titleLabel?.font = CSSTheme.roundedFont(ofSize: 11.5, weight: .bold)
+            toggleBtn.backgroundColor = self.isAccountDetailsExpanded ? CSSTheme.dreamyPurple : CSSTheme.skyBlue
             toggleBtn.layer.cornerRadius = 12
             toggleBtn.layer.cornerCurve = .continuous
-            toggleBtn.layer.borderWidth = 0.5
-            toggleBtn.layer.borderColor = activeTint.withAlphaComponent(0.25).cgColor
+            toggleBtn.layer.shadowColor = CSSTheme.dreamyPurple.cgColor
+            toggleBtn.layer.shadowOffset = CGSize(width: 0, height: 3)
+            toggleBtn.layer.shadowRadius = 6
+            toggleBtn.layer.shadowOpacity = 0.25
             toggleBtn.addTarget(self, action: #selector(toggleAccountDetailsVisibility(_:)), for: .touchUpInside)
             
             settingsHeaderFooterView.contentView.addSubview(toggleBtn)
             
-            // 2. Nút "ĐĂNG XUẤT" màu Đỏ San Hô (Apple Coral Red) tinh tế nằm bên phải
+            // 2. Nút "ĐĂNG XUẤT" màu Hồng Phấn (Blush Pink) ngọt ngào & nổi bật
             let signOutBtn = settingsHeaderFooterView.button!
             signOutBtn.removeTarget(nil, action: nil, for: .allEvents)
-            signOutBtn.setTitle("  Đăng xuất  ", for: .normal)
-            signOutBtn.setTitleColor(CSSTheme.red, for: .normal)
-            signOutBtn.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .semibold)
-            signOutBtn.backgroundColor = CSSTheme.red.withAlphaComponent(0.12)
+            signOutBtn.setTitle("  ĐĂNG XUẤT  ", for: .normal)
+            signOutBtn.setTitleColor(CSSTheme.white, for: .normal)
+            signOutBtn.titleLabel?.font = CSSTheme.roundedFont(ofSize: 11, weight: .bold)
+            signOutBtn.backgroundColor = CSSTheme.blushPink
             signOutBtn.layer.cornerRadius = 12
             signOutBtn.layer.cornerCurve = .continuous
-            signOutBtn.layer.borderWidth = 0.5
-            signOutBtn.layer.borderColor = CSSTheme.red.withAlphaComponent(0.25).cgColor
-            signOutBtn.layer.shadowOpacity = 0.0
+            signOutBtn.layer.shadowColor = CSSTheme.blushPink.cgColor
+            signOutBtn.layer.shadowOffset = CGSize(width: 0, height: 3)
+            signOutBtn.layer.shadowRadius = 6
+            signOutBtn.layer.shadowOpacity = 0.28
             signOutBtn.addTarget(self, action: #selector(SettingsViewController.signOut(_:)), for: .primaryActionTriggered)
             signOutBtn.isHidden = false
             
@@ -1624,7 +1801,7 @@ private extension SettingsViewController
             
         case .advancedSettings:
             if isHeader {
-                settingsHeaderFooterView.primaryLabel.text = "TRUNG TÂM CÀI ĐẶT & HỆ THỐNG"
+                settingsHeaderFooterView.primaryLabel.text = "✦ TRUNG TÂM CÀI ĐẶT & HỆ THỐNG"
             } else {
                 settingsHeaderFooterView.secondaryLabel.text = "Quản lý máy chủ Anisette, cấu hình chứng chỉ, tùy chỉnh giao diện và dọn dẹp bộ nhớ đệm để tối ưu hóa hiệu suất hoạt động của SideStore."
             }
@@ -1644,12 +1821,11 @@ private extension SettingsViewController
         
         let size = settingsHeaderFooterView.contentView.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
         if section == .account && isHeader {
-            return max(34, size.height)
+            return max(36, size.height)
         }
-        return size.height + (isHeader ? 4 : 0)
+        return size.height + (isHeader ? 6 : 0)
     }
 
-    // Chỉ giữ lại phần Đăng nhập/Tài khoản và 1 mục gộp chung duy nhất (.advancedSettings)
     private func isSectionHidden(_ section: Section) -> Bool
     {
         switch section {
@@ -1770,7 +1946,7 @@ private extension SettingsViewController
                 DispatchQueue.main.async {
                     guard UserDefaults.standard.recreateDatabaseOnNextStart else { return }
                     let toast = ToastView(text: "Đã lên lịch xóa Cơ sở dữ liệu ở lần mở tới", detailText: "Ứng dụng sẽ đóng sau \(time) giây...")
-                    toast.tintColor = CSSTheme.purple
+                    toast.tintColor = CSSTheme.dreamyPurple
                     toast.preferredDuration = 1
                     toast.show(in: self)
                 }
@@ -1835,7 +2011,6 @@ private extension SettingsViewController
         }
     }
 
-    // Tắt hoàn toàn thao tác kích hoạt Developer Mode
     @IBAction private func handleDebugModeGesture(_ gestureRecognizer: UISwipeGestureRecognizer)
     {
         UserDefaults.standard.isDebugModeEnabled = false
@@ -1851,7 +2026,7 @@ private extension SettingsViewController
                 }
             } else {
                 let safariURL = URL(string: "https://twitter.com/" + username)!
-                self.openWebURL(safariURL, preferredTintColor: CSSTheme.blue)
+                self.openWebURL(safariURL, preferredTintColor: CSSTheme.dreamyPurple)
             }
         }
     }
@@ -1934,7 +2109,6 @@ extension SettingsViewController
         }
         
         if section == .account {
-            // Nếu đang thu gọn khung Tài khoản, cho chiều cao 3 dòng Tên/Email/Loại về 0
             if indexPath.row < 3 && !self.isAccountDetailsExpanded {
                 return 0.0
             }
@@ -1946,13 +2120,13 @@ extension SettingsViewController
         if section == .advancedSettings {
             let activeItems = UnifiedSettingsItem.activeItems
             guard activeItems.indices.contains(indexPath.row) else { return 0.0 }
-            return super.tableView(tableView, heightForRowAt: activeItems[indexPath.row].originalIndexPath)
+            let baseHeight = super.tableView(tableView, heightForRowAt: activeItems[indexPath.row].originalIndexPath)
+            return max(baseHeight, 52.0)
         }
         
         return super.tableView(tableView, heightForRowAt: indexPath)
     }
 
-    // ✨ CAN THIỆP SÂU VÀO TỪNG CELL ĐỂ ÁP DỤNG APPLE LUXURY CARD & ẨN/HIỆN TÀI KHOẢN ✨
     override func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath)
     {
         let section = Section.allCases[indexPath.section]
@@ -1978,7 +2152,6 @@ extension SettingsViewController
             }
         }
         
-        // Áp dụng cấu trúc Card Apple HIG & Việt hóa cho tất cả các dòng
         self.styleInnerCardOfCell(cell, at: indexPath, totalRows: totalRows)
     }
 
@@ -2037,7 +2210,6 @@ extension SettingsViewController
             }
         }
         
-        // Cập nhật lại bo góc (top/middle/bottom) cho mục gộp chung duy nhất
         if section == .advancedSettings,
            let insetCell = cell as? InsetGroupTableViewCell {
             let total = self.tableView(tableView, numberOfRowsInSection: indexPath.section)
@@ -2153,13 +2325,12 @@ extension SettingsViewController
         tableView.deselectRow(at: indexPath, animated: false)
         self.restoreVisibleCellsWhiteBackground()
 
-        // Hiệu ứng nhấn lún nhẹ (Spring Scale 0.97) chuẩn Apple App Store / Wallet
         if let cell = tableView.cellForRow(at: indexPath) {
-            UIView.animate(withDuration: 0.1, animations: {
-                cell.transform = CGAffineTransform(scaleX: 0.97, y: 0.97)
+            UIView.animate(withDuration: 0.11, animations: {
+                cell.transform = CGAffineTransform(scaleX: 0.96, y: 0.96)
             }) { [weak self] _ in
                 self?.restoreVisibleCellsWhiteBackground()
-                UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 0.65, initialSpringVelocity: 0.5, options: .curveEaseOut, animations: {
+                UIView.animate(withDuration: 0.34, delay: 0, usingSpringWithDamping: 0.62, initialSpringVelocity: 0.5, options: .curveEaseOut, animations: {
                     cell.transform = .identity
                 }, completion: { [weak self] _ in
                     self?.restoreVisibleCellsWhiteBackground()
@@ -2189,7 +2360,6 @@ extension SettingsViewController
                 self.presentAnisetteSheet()
                 
             case .refreshAttempts, .errorLog:
-                // Được kích hoạt tự động qua Storyboard Segue gắn liền trên Cell gốc
                 break
                 
             case .refreshSideJITServer:

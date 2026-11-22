@@ -10,18 +10,20 @@
 import SwiftUI
 import Minimuxer
 
-// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI TAB CÀI ĐẶT)
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI TOÀN BỘ ỨNG DỤNG & CHỮ ĐEN TUYỀN)
 private enum CustomizationsCSSTheme {
     static let white = Color.white
-    static let light = Color(red: 248/255, green: 249/255, blue: 250/255)               // #f8f9fa
-    static let border = Color(red: 233/255, green: 236/255, blue: 239/255)              // #e9ecef
-    static let blue = Color(red: 0/255, green: 123/255, blue: 255/255)                  // #007bff
-    static let purple = Color(red: 111/255, green: 66/255, blue: 193/255)               // #6f42c1
-    static let green = Color(red: 40/255, green: 167/255, blue: 69/255)                 // #28a745
-    static let magenta = Color(red: 255/255, green: 0/255, blue: 255/255)               // #ff00ff
-    static let red = Color(red: 220/255, green: 53/255, blue: 69/255)                   // #dc3545
-    static let darkText = Color(red: 52/255, green: 58/255, blue: 64/255)               // #343a40
-    static let secondaryText = Color(red: 52/255, green: 58/255, blue: 64/255).opacity(0.75)
+    static let pureBlack = Color.black                                               // #000000 (Chữ đen tuyền độ tương phản tuyệt đối)
+    static let light = Color(red: 245/255, green: 248/255, blue: 255/255)            // #f5f8ff (Đồng bộ innerRowBackground)
+    static let border = Color(red: 220/255, green: 226/255, blue: 236/255)           // #dce2ec (Viền chuẩn toàn hệ thống)
+    static let innerBorder = Color(red: 222/255, green: 229/255, blue: 240/255)      // #dee5f0
+    static let blue = Color(red: 0/255, green: 123/255, blue: 255/255)               // #007bff
+    static let purple = Color(red: 111/255, green: 66/255, blue: 193/255)            // #6f42c1
+    static let green = Color(red: 40/255, green: 167/255, blue: 69/255)              // #28a745
+    static let magenta = Color(red: 255/255, green: 0/255, blue: 255/255)            // #ff00ff
+    static let red = Color(red: 220/255, green: 53/255, blue: 69/255)                // #dc3545
+    static let darkText = Color.black                                                // #000000
+    static let secondaryText = Color.black                                           // #000000
 
     // Gradient Background (#f3e0ff -> #e0f7ff) giống hệt CSSGradientBackgroundView
     static let bgGradientStart = Color(red: 243/255, green: 224/255, blue: 255/255)
@@ -35,9 +37,9 @@ private enum CustomizationsCSSTheme {
         )
     }
 
-    // Hero Banner Gradient (rgba(0,123,255,.92) -> rgba(111,66,193,.88))
-    static let heroStart = Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.92)
-    static let heroEnd = Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.88)
+    // Hero Banner Gradient (rgba(0,123,255,.95) -> rgba(111,66,193,.92))
+    static let heroStart = Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.95)
+    static let heroEnd = Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.92)
 
     static var heroGradient: LinearGradient {
         LinearGradient(
@@ -47,16 +49,26 @@ private enum CustomizationsCSSTheme {
         )
     }
 
-    static let cornerRadius: CGFloat = 15.0
-    static let cardShadow = Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.08)
+    static var accentUnderlineGradient: LinearGradient {
+        LinearGradient(
+            colors: [blue, purple],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    static let cornerRadius: CGFloat = 18.0
+    static let innerCornerRadius: CGFloat = 14.0
+    static let cardShadow = Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.09)
 }
 
-// MARK: - Hiệu ứng nhấn nút thu nhỏ mượt mà chuẩn Tab Cài đặt
+// MARK: - Hiệu ứng nhấn nút thu nhỏ mượt mà chuẩn toàn hệ thống
 private struct CustomizationsBounceButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
-            .animation(.spring(response: 0.26, dampingFraction: 0.68), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .offset(x: configuration.isPressed ? 3 : 0, y: configuration.isPressed ? -1 : 0)
+            .animation(.spring(response: 0.28, dampingFraction: 0.62), value: configuration.isPressed)
     }
 }
 
@@ -107,7 +119,7 @@ struct UserCustomizationsView: View {
 
                 // Section 1: DỮ LIỆU ĐỊNH DANH ANISETTE
                 VStack(alignment: .leading, spacing: 10) {
-                    sectionHeader(title: "DỮ LIỆU ĐỊNH DANH ANISETTE")
+                    sectionHeader(title: "DỮ LIỆU ĐỊNH DANH ANISETTE", icon: "person.badge.shield.checkmark.fill")
                     
                     sectionCard {
                         toggleRow(
@@ -128,18 +140,18 @@ struct UserCustomizationsView: View {
                             HStack(spacing: 12) {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text("Cấu hình máy khách Anisette")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(CustomizationsCSSTheme.darkText)
+                                        .font(.system(size: 15.5, weight: .bold))
+                                        .foregroundColor(CustomizationsCSSTheme.pureBlack)
                                         .fixedSize(horizontal: false, vertical: true)
                                     Text("Xem và quản lý thông tin định danh thiết bị cùng dữ liệu cấp phép Anisette")
-                                        .font(.system(size: 12.5, weight: .regular))
-                                        .foregroundColor(CustomizationsCSSTheme.secondaryText)
+                                        .font(.system(size: 12.2, weight: .medium))
+                                        .foregroundColor(CustomizationsCSSTheme.pureBlack)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                                 Spacer()
                                 ZStack {
                                     Circle()
-                                        .fill(CustomizationsCSSTheme.blue.opacity(0.12))
+                                        .fill(CustomizationsCSSTheme.blue.opacity(0.14))
                                         .frame(width: 34, height: 34)
                                     Image(systemName: "chevron.right")
                                         .font(.system(size: 13, weight: .bold))
@@ -161,16 +173,16 @@ struct UserCustomizationsView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text("Đặt lại dữ liệu adi.pb")
-                                        .font(.system(size: 16, weight: .bold))
+                                        .font(.system(size: 15.5, weight: .bold))
                                         .foregroundColor(CustomizationsCSSTheme.magenta)
                                     Text("Xoá dữ liệu cấp phép Anisette cục bộ khỏi Chuỗi khóa bảo mật")
-                                        .font(.system(size: 12.5, weight: .regular))
-                                        .foregroundColor(CustomizationsCSSTheme.secondaryText)
+                                        .font(.system(size: 12.2, weight: .medium))
+                                        .foregroundColor(CustomizationsCSSTheme.pureBlack)
                                 }
                                 Spacer()
                                 ZStack {
                                     Circle()
-                                        .fill(CustomizationsCSSTheme.magenta.opacity(0.12))
+                                        .fill(CustomizationsCSSTheme.magenta.opacity(0.14))
                                         .frame(width: 34, height: 34)
                                     Image(systemName: "trash.fill")
                                         .font(.system(size: 14, weight: .bold))
@@ -190,7 +202,7 @@ struct UserCustomizationsView: View {
 
                 // Section 3: XÁC MINH ỨNG DỤNG
                 VStack(alignment: .leading, spacing: 10) {
-                    sectionHeader(title: "XÁC MINH ỨNG DỤNG")
+                    sectionHeader(title: "XÁC MINH ỨNG DỤNG", icon: "checkmark.shield.fill")
                     
                     sectionCard {
                         toggleRow(title: "Tắt tất cả bước xác minh", isOn: Binding(
@@ -252,7 +264,7 @@ struct UserCustomizationsView: View {
 
                 // Section 5: NHÂN KẾT NỐI MINIMUXER
                 VStack(alignment: .leading, spacing: 10) {
-                    sectionHeader(title: "NHÂN KẾT NỐI MINIMUXER")
+                    sectionHeader(title: "NHÂN KẾT NỐI MINIMUXER", icon: "cpu.fill")
                     
                     sectionCard {
                         ForEach(GatewayBackend.allCases, id: \.self) { backend in
@@ -268,17 +280,22 @@ struct UserCustomizationsView: View {
                             }) {
                                 HStack {
                                     Text(localizedBackendTitle(backend.rawValue))
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(CustomizationsCSSTheme.darkText)
+                                        .font(.system(size: 15.5, weight: .bold))
+                                        .foregroundColor(CustomizationsCSSTheme.pureBlack)
                                     Spacer()
                                     if selectedBackend == backend {
                                         Image(systemName: "checkmark.circle.fill")
-                                            .font(.system(size: 18, weight: .bold))
+                                            .font(.system(size: 19, weight: .bold))
                                             .foregroundColor(CustomizationsCSSTheme.blue)
+                                    } else {
+                                        Image(systemName: "circle")
+                                            .font(.system(size: 19, weight: .semibold))
+                                            .foregroundColor(CustomizationsCSSTheme.border)
                                     }
                                 }
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 14)
+                                .contentShape(Rectangle())
                             }
                             .buttonStyle(CustomizationsBounceButtonStyle())
                             
@@ -293,6 +310,7 @@ struct UserCustomizationsView: View {
             .padding(.top, 8)
             .padding(.bottom, 50)
         }
+        .preferredColorScheme(.light)
         .background(CustomizationsCSSTheme.pageBackgroundGradient.ignoresSafeArea())
         .navigationTitle("")
         #if !os(tvOS)
@@ -357,42 +375,75 @@ struct UserCustomizationsView: View {
         }
     }
 
-    // MARK: - 🌈 HERO BANNER CHUẨN TAB CÀI ĐẶT
+    // MARK: - 🌈 HERO BANNER CHUẨN TAB CÀI ĐẶT (ĐỒNG BỘ KÍNH MỜ & VÒNG TRÒN TRANG TRÍ)
     private var heroBannerView: some View {
-        VStack(spacing: 4) {
-            Text("Tùy chỉnh của người dùng")
-                .font(.system(size: 22, weight: .heavy))
-                .foregroundColor(CustomizationsCSSTheme.white)
-                .multilineTextAlignment(.center)
-                .shadow(color: Color.black.opacity(0.35), radius: 4, x: 1, y: 2)
+        ZStack(alignment: .topTrailing) {
+            Circle()
+                .fill(Color.white.opacity(0.12))
+                .frame(width: 110, height: 110)
+                .offset(x: 32, y: -42)
 
-            Text("Thiết lập chuyên sâu quy trình cài đặt, xác minh và làm mới ứng dụng")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(CustomizationsCSSTheme.white.opacity(0.95))
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
+            VStack(spacing: 6) {
+                HStack(spacing: 8) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.22))
+                            .frame(width: 30, height: 30)
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 13.5, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+
+                    Text("Tùy Chỉnh Người Dùng")
+                        .font(.system(size: 22, weight: .heavy, design: .rounded))
+                        .foregroundColor(CustomizationsCSSTheme.white)
+                        .multilineTextAlignment(.center)
+                        .shadow(color: Color.black.opacity(0.28), radius: 4, x: 0, y: 2)
+                }
+
+                Text("Thiết lập chuyên sâu quy trình cài đặt, xác minh và làm mới ứng dụng")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(CustomizationsCSSTheme.white.opacity(0.96))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+            .padding(.vertical, 16)
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity)
         }
-        .padding(.vertical, 16)
-        .padding(.horizontal, 14)
-        .frame(maxWidth: .infinity)
         .background(CustomizationsCSSTheme.heroGradient)
         .clipShape(RoundedRectangle(cornerRadius: CustomizationsCSSTheme.cornerRadius, style: .continuous))
-        .shadow(color: CustomizationsCSSTheme.blue.opacity(0.25), radius: 16, x: 0, y: 6)
+        .overlay(
+            RoundedRectangle(cornerRadius: CustomizationsCSSTheme.cornerRadius, style: .continuous)
+                .stroke(Color.white.opacity(0.32), lineWidth: 1.2)
+        )
+        .shadow(color: CustomizationsCSSTheme.blue.opacity(0.26), radius: 14, x: 0, y: 7)
         .opacity(animateHero ? 1.0 : 0.0)
         .offset(y: animateHero ? 0 : -10)
     }
 
-    // MARK: - 🧩 THÀNH PHẦN GIAO DIỆN CHUẨN CSS TAB CÀI ĐẶT
+    // MARK: - 🧩 THÀNH PHẦN GIAO DIỆN CHUẨN CSS TAB CÀI ĐẶT (ĐỒNG BỘ ICON BOX & GẠCH CHÂN GRADIENT 38x3.5PT)
 
-    private func sectionHeader(title: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.system(size: 15, weight: .heavy))
-                .foregroundColor(CustomizationsCSSTheme.blue)
+    private func sectionHeader(title: String, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 7) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                        .fill(CustomizationsCSSTheme.blue.opacity(0.14))
+                        .frame(width: 22, height: 22)
+                    Image(systemName: icon)
+                        .font(.system(size: 11.5, weight: .heavy))
+                        .foregroundColor(CustomizationsCSSTheme.blue)
+                }
 
-            RoundedRectangle(cornerRadius: 1.5)
-                .fill(CustomizationsCSSTheme.blue)
-                .frame(width: 38, height: 3)
+                Text(title)
+                    .font(.system(size: 14, weight: .heavy, design: .rounded))
+                    .foregroundColor(CustomizationsCSSTheme.blue)
+            }
+
+            RoundedRectangle(cornerRadius: 1.75)
+                .fill(CustomizationsCSSTheme.accentUnderlineGradient)
+                .frame(width: 38, height: 3.5)
         }
         .padding(.horizontal, 4)
         .padding(.top, 4)
@@ -406,22 +457,22 @@ struct UserCustomizationsView: View {
         .clipShape(RoundedRectangle(cornerRadius: CustomizationsCSSTheme.cornerRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: CustomizationsCSSTheme.cornerRadius, style: .continuous)
-                .stroke(CustomizationsCSSTheme.border, lineWidth: 1.0)
+                .stroke(CustomizationsCSSTheme.border, lineWidth: 1.1)
         )
-        .shadow(color: CustomizationsCSSTheme.cardShadow, radius: 10, x: 0, y: 5)
+        .shadow(color: CustomizationsCSSTheme.cardShadow, radius: 14, x: 0, y: 6)
     }
 
     private func toggleRow(title: String, subtitle: String? = nil, isOn: Binding<Bool>) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(CustomizationsCSSTheme.darkText)
+                    .font(.system(size: 15.5, weight: .bold))
+                    .foregroundColor(CustomizationsCSSTheme.pureBlack)
                     .fixedSize(horizontal: false, vertical: true)
                 if let subtitle = subtitle {
                     Text(subtitle)
-                        .font(.system(size: 12.5, weight: .regular))
-                        .foregroundColor(CustomizationsCSSTheme.secondaryText)
+                        .font(.system(size: 12.2, weight: .medium))
+                        .foregroundColor(CustomizationsCSSTheme.pureBlack)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -440,7 +491,7 @@ struct UserCustomizationsView: View {
     @ViewBuilder
     private var cellularRefreshShortcutsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader(title: "LÀM MỚI QUA MẠNG DI ĐỘNG (4G/5G)")
+            sectionHeader(title: "LÀM MỚI QUA MẠNG DI ĐỘNG (4G/5G)", icon: "antenna.radiowaves.left.and.right")
 
             sectionCard {
                 toggleRow(
@@ -459,8 +510,8 @@ struct UserCustomizationsView: View {
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("2 phím tắt cần thiết để làm mới ứng dụng qua 4G:")
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundColor(CustomizationsCSSTheme.darkText)
+                        .font(.system(size: 13.5, weight: .bold))
+                        .foregroundColor(CustomizationsCSSTheme.pureBlack)
 
                     HStack(spacing: 10) {
                         shortcutBadgeButton(
@@ -492,14 +543,19 @@ struct UserCustomizationsView: View {
     ) -> some View {
         SwiftUI.Button(action: action) {
             HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(CustomizationsCSSTheme.blue)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(CustomizationsCSSTheme.blue.opacity(0.14))
+                        .frame(width: 26, height: 26)
+                    Image(systemName: icon)
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundColor(CustomizationsCSSTheme.blue)
+                }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(label)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(CustomizationsCSSTheme.secondaryText)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(CustomizationsCSSTheme.pureBlack)
                         .lineLimit(1)
 
                     Text(shortcutName)
@@ -512,17 +568,17 @@ struct UserCustomizationsView: View {
                 Spacer(minLength: 2)
 
                 Image(systemName: "pencil")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(CustomizationsCSSTheme.purple.opacity(0.75))
+                    .font(.system(size: 11.5, weight: .bold))
+                    .foregroundColor(CustomizationsCSSTheme.purple)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(CustomizationsCSSTheme.light)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: CustomizationsCSSTheme.innerCornerRadius, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(CustomizationsCSSTheme.blue.opacity(0.32), lineWidth: 1.1)
+                RoundedRectangle(cornerRadius: CustomizationsCSSTheme.innerCornerRadius, style: .continuous)
+                    .stroke(CustomizationsCSSTheme.innerBorder, lineWidth: 1.1)
             )
             .shadow(color: CustomizationsCSSTheme.purple.opacity(0.08), radius: 4, x: 0, y: 2)
         }
@@ -567,7 +623,7 @@ struct UserCustomizationsView: View {
     @ViewBuilder
     private var generalSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader(title: "CÀI ĐẶT CHUNG")
+            sectionHeader(title: "CÀI ĐẶT CHUNG", icon: "gearshape.2.fill")
             
             sectionCard {
                 toggleRow(title: "Tùy chỉnh tệp cấu hình Info.plist", isOn: Binding(
@@ -596,8 +652,8 @@ struct UserCustomizationsView: View {
                 // Nút chọn Tiện ích mở rộng dạng Viên thuốc (Capsule) mở rộng chứa trọn 1 hàng tiếng Việt
                 HStack(spacing: 10) {
                     Text("Tùy chỉnh Tiện ích mở rộng")
-                        .font(.system(size: 15.5, weight: .medium))
-                        .foregroundColor(CustomizationsCSSTheme.darkText)
+                        .font(.system(size: 15.5, weight: .bold))
+                        .foregroundColor(CustomizationsCSSTheme.pureBlack)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -631,8 +687,8 @@ struct UserCustomizationsView: View {
                 // Nút chọn Chế độ nhập tệp mặc định dạng Viên thuốc (Capsule) mở rộng chứa trọn 1 hàng tiếng Việt
                 HStack(spacing: 10) {
                     Text("Chế độ nhập tệp mặc định")
-                        .font(.system(size: 15.5, weight: .medium))
-                        .foregroundColor(CustomizationsCSSTheme.darkText)
+                        .font(.system(size: 15.5, weight: .bold))
+                        .foregroundColor(CustomizationsCSSTheme.pureBlack)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -758,7 +814,7 @@ struct UserCustomizationsView: View {
             Capsule()
                 .stroke(CustomizationsCSSTheme.blue.opacity(0.35), lineWidth: 1.2)
         )
-        .shadow(color: CustomizationsCSSTheme.purple.opacity(0.18), radius: 6, x: 0, y: 3)
+        .shadow(color: CustomizationsCSSTheme.purple.opacity(0.14), radius: 6, x: 0, y: 3)
     }
 
     private var divider: some View {

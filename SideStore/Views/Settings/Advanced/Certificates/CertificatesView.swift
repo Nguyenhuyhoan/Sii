@@ -11,16 +11,18 @@ import SwiftUI
 import SideSign
 import UniformTypeIdentifiers
 
-// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI SETTINGSVIEWCONTROLLER)
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI TOÀN BỘ ỨNG DỤNG & CHỮ ĐEN TUYỀN)
 private enum CertCSSTheme {
     static let white = Color.white
-    static let light = Color(red: 248/255, green: 249/255, blue: 250/255) // #f8f9fa
-    static let border = Color(red: 233/255, green: 236/255, blue: 239/255) // #e9ecef
-    static let blue = Color(red: 0/255, green: 123/255, blue: 255/255) // #007bff
-    static let purple = Color(red: 111/255, green: 66/255, blue: 193/255) // #6f42c1
-    static let green = Color(red: 40/255, green: 167/255, blue: 69/255) // #28a745
-    static let magenta = Color(red: 255/255, green: 0/255, blue: 255/255) // #ff00ff
-    static let dark = Color(red: 52/255, green: 58/255, blue: 64/255) // #343a40
+    static let pureBlack = Color.black                                              // #000000 (Chữ đen tuyền độ tương phản tuyệt đối)
+    static let light = Color(red: 245/255, green: 248/255, blue: 255/255)           // #f5f8ff (Đồng bộ innerRowBackground)
+    static let border = Color(red: 220/255, green: 226/255, blue: 236/255)          // #dce2ec (Viền chuẩn toàn hệ thống)
+    static let innerBorder = Color(red: 222/255, green: 229/255, blue: 240/255)     // #dee5f0
+    static let blue = Color(red: 0/255, green: 123/255, blue: 255/255)              // #007bff (--primary-blue)
+    static let purple = Color(red: 111/255, green: 66/255, blue: 193/255)           // #6f42c1 (--primary-purple)
+    static let green = Color(red: 40/255, green: 167/255, blue: 69/255)             // #28a745 (--primary-green)
+    static let magenta = Color(red: 255/255, green: 0/255, blue: 255/255)           // #ff00ff
+    static let dark = Color.black                                                   // #000000
 
     // Gradient Background (#f3e0ff -> #e0f7ff)
     static let bgGradient = LinearGradient(
@@ -32,17 +34,25 @@ private enum CertCSSTheme {
         endPoint: .bottomTrailing
     )
 
-    // Hero Gradient (rgba(0,123,255,.92) -> rgba(111,66,193,.88))
+    // Hero Gradient (rgba(0,123,255,.95) -> rgba(111,66,255,.92))
     static let heroGradient = LinearGradient(
         gradient: Gradient(colors: [
-            Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.92),
-            Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.88)
+            Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.95),
+            Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.92)
         ]),
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
-    static let cornerRadius: CGFloat = 15.0
+    // Thanh gạch chân Gradient Xanh - Tím đồng bộ toàn hệ thống
+    static let accentUnderlineGradient = LinearGradient(
+        gradient: Gradient(colors: [blue, purple]),
+        startPoint: .leading,
+        endPoint: .trailing
+    )
+
+    static let cornerRadius: CGFloat = 18.0
+    static let innerCornerRadius: CGFloat = 14.0
 }
 
 // MARK: - 🛠 MODIFIER ẨN NỀN MẶC ĐỊNH CỦA LIST / FORM ĐỂ HIỂN THỊ GRADIENT CSS
@@ -121,6 +131,7 @@ struct CertificatesView: View {
                         hasCopiedActiveSerial: $hasCopiedActiveSerial,
                         onDeactivate: { showDeactivateConfirmation = true }
                     )
+                    .foregroundColor(CertCSSTheme.pureBlack)
                     .listRowBackground(CertCSSTheme.white)
                     
                     // KHUNG 3: Danh sách chứng chỉ (Sử dụng trực tiếp Component chuẩn của File Gốc)
@@ -145,6 +156,7 @@ struct CertificatesView: View {
                         },
                         onDelete: { certificateToDelete = $0; showDeleteConfirmation = true }
                     )
+                    .foregroundColor(CertCSSTheme.pureBlack)
                     .listRowBackground(CertCSSTheme.white)
                 }
                 #if !os(tvOS)
@@ -261,9 +273,9 @@ struct CertificatesView: View {
                     List {
                         ForEach(viewModel.failedImportsList, id: \.self) { failure in
                             Text(failure)
-                                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                .font(.system(size: 12.5, weight: .semibold, design: .monospaced))
                                 .foregroundColor(CertCSSTheme.magenta)
-                                .padding(.vertical, 4)
+                                .padding(.vertical, 6)
                                 .listRowBackground(CertCSSTheme.white)
                         }
                     }
@@ -359,7 +371,7 @@ struct CertificatesView: View {
         }
     }
     
-    // MARK: - 🧭 THANH CÔNG CỤ NỔI THÔNG MINH
+    // MARK: - 🧭 THANH CÔNG CỤ NỔI THÔNG MINH (ĐỒNG BỘ KÍNH MỜ & ĐỔ BÓNG)
     private var topFloatingActionToolbar: some View {
         HStack(spacing: 10) {
             // Chừa khoảng trống bên trái (54pt) cho nút Back nổi (34x34 tại x:16) của SettingsViewController
@@ -378,18 +390,18 @@ struct CertificatesView: View {
                     Image(systemName: viewModel.isGlobalHideActive ? "eye.slash.fill" : "eye.fill")
                         .font(.system(size: 13, weight: .bold))
                     Text(viewModel.isGlobalHideActive ? "Đang ẩn" : "Hiển thị")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(size: 12.5, weight: .bold))
                 }
                 .foregroundColor(viewModel.isGlobalHideActive ? CertCSSTheme.purple : CertCSSTheme.blue)
                 .padding(.horizontal, 12)
                 .frame(height: 34)
-                .background(CertCSSTheme.white.opacity(0.92))
+                .background(CertCSSTheme.white.opacity(0.95))
                 .cornerRadius(17)
                 .overlay(
                     RoundedRectangle(cornerRadius: 17)
                         .stroke(CertCSSTheme.border, lineWidth: 1)
                 )
-                .shadow(color: Color.black.opacity(0.12), radius: 5, x: 0, y: 2)
+                .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 2)
             }
             .buttonStyle(.plain)
             
@@ -401,13 +413,13 @@ struct CertificatesView: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundColor(viewModel.team == nil ? Color.gray.opacity(0.5) : CertCSSTheme.blue)
                     .frame(width: 34, height: 34)
-                    .background(CertCSSTheme.white.opacity(0.92))
+                    .background(CertCSSTheme.white.opacity(0.95))
                     .cornerRadius(17)
                     .overlay(
                         RoundedRectangle(cornerRadius: 17)
                             .stroke(CertCSSTheme.border, lineWidth: 1)
                     )
-                    .shadow(color: Color.black.opacity(0.12), radius: 5, x: 0, y: 2)
+                    .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 2)
             }
             .buttonStyle(.plain)
             .disabled(viewModel.team == nil)
@@ -420,13 +432,13 @@ struct CertificatesView: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(CertCSSTheme.purple)
                     .frame(width: 34, height: 34)
-                    .background(CertCSSTheme.white.opacity(0.92))
+                    .background(CertCSSTheme.white.opacity(0.95))
                     .cornerRadius(17)
                     .overlay(
                         RoundedRectangle(cornerRadius: 17)
                             .stroke(CertCSSTheme.border, lineWidth: 1)
                     )
-                    .shadow(color: Color.black.opacity(0.12), radius: 5, x: 0, y: 2)
+                    .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 2)
             }
             .buttonStyle(.plain)
         }
@@ -435,70 +447,93 @@ struct CertificatesView: View {
         .padding(.bottom, 6)
     }
     
-    // MARK: - 🌈 KHUNG 1: HERO BANNER CHUẨN CSS THEME
+    // MARK: - 🌈 KHUNG 1: HERO BANNER CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI NEWS & SOURCES)
     private var heroBannerSection: some View {
-        VStack(spacing: 6) {
-            Text("Quản Lý Chứng Chỉ")
-                .font(.system(size: 23, weight: .heavy))
-                .foregroundColor(CertCSSTheme.white)
-                .shadow(color: Color.black.opacity(0.3), radius: 4, x: 1, y: 2)
+        ZStack(alignment: .topTrailing) {
+            // Vòng tròn kính mờ trang trí góc trên bên phải
+            Circle()
+                .fill(Color.white.opacity(0.12))
+                .frame(width: 120, height: 120)
+                .offset(x: 35, y: -45)
             
-            Text("Tạo mới, nhập tệp .p12 và quản lý chứng chỉ ký ứng dụng của bạn")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(CertCSSTheme.white.opacity(0.95))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 10)
-            
-            HStack(spacing: 10) {
-                SwiftUI.Button {
-                    showCreateSheet = true
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 13, weight: .bold))
-                        Text("Tạo mới")
-                            .font(.system(size: 12, weight: .bold))
+            VStack(spacing: 6) {
+                HStack(spacing: 8) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.22))
+                            .frame(width: 30, height: 30)
+                        Image(systemName: "checkmark.shield.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.white)
                     }
-                    .foregroundColor(CertCSSTheme.blue)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(CertCSSTheme.white)
-                    .cornerRadius(12)
-                    .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
+                    
+                    Text("Quản Lý Chứng Chỉ")
+                        .font(.system(size: 22.5, weight: .heavy, design: .rounded))
+                        .foregroundColor(CertCSSTheme.white)
+                        .shadow(color: Color.black.opacity(0.28), radius: 4, x: 0, y: 2)
                 }
-                .buttonStyle(.plain)
-                .disabled(viewModel.team == nil)
-                .opacity(viewModel.team == nil ? 0.55 : 1.0)
                 
-                SwiftUI.Button {
-                    importCertificatesAction()
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "square.and.arrow.down.fill")
-                            .font(.system(size: 13, weight: .bold))
-                        Text("Nhập tệp")
-                            .font(.system(size: 12, weight: .bold))
+                Text("Tạo mới, nhập tệp .p12 và quản lý chứng chỉ ký ứng dụng của bạn")
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundColor(CertCSSTheme.white.opacity(0.96))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 10)
+                
+                HStack(spacing: 10) {
+                    SwiftUI.Button {
+                        showCreateSheet = true
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 13.5, weight: .bold))
+                            Text("Tạo mới")
+                                .font(.system(size: 12.5, weight: .bold))
+                        }
+                        .foregroundColor(CertCSSTheme.blue)
+                        .padding(.horizontal, 15)
+                        .padding(.vertical, 8)
+                        .background(CertCSSTheme.white)
+                        .cornerRadius(13)
+                        .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
                     }
-                    .foregroundColor(CertCSSTheme.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(CertCSSTheme.white.opacity(0.22))
-                    .cornerRadius(12)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(CertCSSTheme.white.opacity(0.45), lineWidth: 1)
-                    )
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.team == nil)
+                    .opacity(viewModel.team == nil ? 0.55 : 1.0)
+                    
+                    SwiftUI.Button {
+                        importCertificatesAction()
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "square.and.arrow.down.fill")
+                                .font(.system(size: 13.5, weight: .bold))
+                            Text("Nhập tệp")
+                                .font(.system(size: 12.5, weight: .bold))
+                        }
+                        .foregroundColor(CertCSSTheme.white)
+                        .padding(.horizontal, 15)
+                        .padding(.vertical, 8)
+                        .background(CertCSSTheme.white.opacity(0.22))
+                        .cornerRadius(13)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 13)
+                                .stroke(CertCSSTheme.white.opacity(0.45), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+                .padding(.top, 5)
             }
-            .padding(.top, 4)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 17)
+            .padding(.horizontal, 12)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .padding(.horizontal, 12)
         .background(CertCSSTheme.heroGradient)
-        .cornerRadius(CertCSSTheme.cornerRadius)
-        .shadow(color: CertCSSTheme.blue.opacity(0.25), radius: 14, x: 0, y: 6)
+        .clipShape(RoundedRectangle(cornerRadius: CertCSSTheme.cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: CertCSSTheme.cornerRadius, style: .continuous)
+                .stroke(Color.white.opacity(0.32), lineWidth: 1.2)
+        )
+        .shadow(color: CertCSSTheme.blue.opacity(0.26), radius: 14, x: 0, y: 7)
     }
     
     // MARK: - CÁC HÀM ĐIỀU HƯỚNG & XỬ LÝ SỰ KIỆN GỐC
@@ -608,29 +643,29 @@ struct CertificatesView: View {
 private struct LoadingOverlay: View {
     var body: some View {
         ZStack {
-            Color.black.opacity(0.22).ignoresSafeArea()
+            Color.black.opacity(0.24).ignoresSafeArea()
             VStack(spacing: 12) {
                 ProgressView()
                     .tint(CertCSSTheme.blue)
                     .scaleEffect(1.2)
                 Text("Đang xử lý...")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(CertCSSTheme.blue)
+                    .font(.system(size: 13.5, weight: .bold))
+                    .foregroundColor(CertCSSTheme.pureBlack)
             }
-            .padding(.horizontal, 26)
-            .padding(.vertical, 20)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 22)
             .background(CertCSSTheme.white)
-            .cornerRadius(CertCSSTheme.cornerRadius)
+            .clipShape(RoundedRectangle(cornerRadius: CertCSSTheme.cornerRadius, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: CertCSSTheme.cornerRadius)
-                    .stroke(CertCSSTheme.border, lineWidth: 1)
+                RoundedRectangle(cornerRadius: CertCSSTheme.cornerRadius, style: .continuous)
+                    .stroke(CertCSSTheme.border, lineWidth: 1.1)
             )
             .shadow(color: CertCSSTheme.blue.opacity(0.22), radius: 14, x: 0, y: 6)
         }
     }
 }
 
-// MARK: - ➕ MÀN HÌNH TẠO CHỨNG CHỈ MỚI (ĐỒNG BỘ CSS THEME & VIỆT HÓA)
+// MARK: - ➕ MÀN HÌNH TẠO CHỨNG CHỈ MỚI (ĐỒNG BỘ CSS THEME & CHỮ ĐEN TUYỀN)
 private struct CreateCertificateSheetView: View {
     @ObservedObject var viewModel: CertificatesViewModel
     var presentingViewController: UIViewController?
@@ -655,40 +690,67 @@ private struct CreateCertificateSheetView: View {
                 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        // Banner tiêu đề nhỏ trong Sheet
-                        VStack(spacing: 4) {
-                            Text("Khởi Tạo Chứng Chỉ Mới")
-                                .font(.system(size: 19, weight: .heavy))
-                                .foregroundColor(CertCSSTheme.white)
-                            Text("Đăng ký chứng chỉ trực tiếp với máy chủ Apple và lưu khóa riêng tư trên máy")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(CertCSSTheme.white.opacity(0.92))
-                                .multilineTextAlignment(.center)
+                        // Banner tiêu đề nhỏ trong Sheet đồng bộ với Hero Banner
+                        ZStack(alignment: .topTrailing) {
+                            Circle()
+                                .fill(Color.white.opacity(0.12))
+                                .frame(width: 90, height: 90)
+                                .offset(x: 28, y: -32)
+                            
+                            VStack(spacing: 5) {
+                                HStack(spacing: 7) {
+                                    Image(systemName: "plus.seal.fill")
+                                        .font(.system(size: 15, weight: .bold))
+                                        .foregroundColor(.white)
+                                    Text("Khởi Tạo Chứng Chỉ Mới")
+                                        .font(.system(size: 19.5, weight: .heavy, design: .rounded))
+                                        .foregroundColor(CertCSSTheme.white)
+                                }
+                                Text("Đăng ký chứng chỉ trực tiếp với máy chủ Apple và lưu khóa riêng tư trên máy")
+                                    .font(.system(size: 12.5, weight: .semibold))
+                                    .foregroundColor(CertCSSTheme.white.opacity(0.95))
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .padding(.horizontal, 12)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .padding(.horizontal, 12)
                         .background(CertCSSTheme.heroGradient)
-                        .cornerRadius(CertCSSTheme.cornerRadius)
-                        .shadow(color: CertCSSTheme.blue.opacity(0.22), radius: 10, x: 0, y: 4)
+                        .clipShape(RoundedRectangle(cornerRadius: CertCSSTheme.cornerRadius, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: CertCSSTheme.cornerRadius, style: .continuous)
+                                .stroke(Color.white.opacity(0.32), lineWidth: 1.2)
+                        )
+                        .shadow(color: CertCSSTheme.blue.opacity(0.24), radius: 12, x: 0, y: 5)
                         
-                        // Khung nhập thông tin nền trắng chữ đen
-                        VStack(alignment: .leading, spacing: 8) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("THÔNG TIN CHỨNG CHỈ")
-                                    .font(.system(size: 13, weight: .heavy))
-                                    .foregroundColor(CertCSSTheme.blue)
-                                RoundedRectangle(cornerRadius: 1.5)
-                                    .fill(CertCSSTheme.blue)
-                                    .frame(width: 34, height: 3)
+                        // Khung nhập thông tin nền trắng chữ đen tuyền #000000
+                        VStack(alignment: .leading, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack(spacing: 7) {
+                                    ZStack {
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .fill(CertCSSTheme.blue.opacity(0.14))
+                                            .frame(width: 22, height: 22)
+                                        Image(systemName: "doc.badge.gearshape.fill")
+                                            .font(.system(size: 11.5, weight: .heavy))
+                                            .foregroundColor(CertCSSTheme.blue)
+                                    }
+                                    Text("THÔNG TIN CHỨNG CHỈ")
+                                        .font(.system(size: 13.5, weight: .heavy, design: .rounded))
+                                        .foregroundColor(CertCSSTheme.blue)
+                                }
+                                RoundedRectangle(cornerRadius: 1.75)
+                                    .fill(CertCSSTheme.accentUnderlineGradient)
+                                    .frame(width: 38, height: 3.5)
                             }
                             .padding(.leading, 4)
                             
-                            VStack(spacing: 0) {
+                            VStack(spacing: 10) {
+                                // Hàng 1: Loại chứng chỉ
                                 HStack {
                                     Text("Loại chứng chỉ")
-                                        .font(.system(size: 15, weight: .semibold))
-                                        .foregroundColor(.black)
+                                        .font(.system(size: 15, weight: .bold))
+                                        .foregroundColor(CertCSSTheme.pureBlack)
                                     Spacer()
                                     Picker("Loại chứng chỉ", selection: $selectedCertificateType) {
                                         ForEach(viewModel.availableCertificateTypes, id: \.rawValue) { certType in
@@ -698,40 +760,49 @@ private struct CreateCertificateSheetView: View {
                                     .pickerStyle(.menu)
                                     .tint(CertCSSTheme.blue)
                                 }
-                                .padding(.horizontal, 16)
+                                .padding(.horizontal, 14)
                                 .padding(.vertical, 12)
+                                .background(CertCSSTheme.light)
+                                .clipShape(RoundedRectangle(cornerRadius: CertCSSTheme.innerCornerRadius, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: CertCSSTheme.innerCornerRadius, style: .continuous)
+                                        .stroke(CertCSSTheme.innerBorder, lineWidth: 1)
+                                )
                                 
-                                Rectangle()
-                                    .fill(CertCSSTheme.border)
-                                    .frame(height: 1)
-                                    .padding(.horizontal, 16)
-                                
+                                // Hàng 2: Tên thiết bị
                                 HStack {
                                     Text("Tên thiết bị")
-                                        .font(.system(size: 15, weight: .semibold))
-                                        .foregroundColor(.black)
+                                        .font(.system(size: 15, weight: .bold))
+                                        .foregroundColor(CertCSSTheme.pureBlack)
                                     Spacer()
                                     TextField("Nhập tên thiết bị...", text: $machineName)
                                         .multilineTextAlignment(.trailing)
-                                        .font(.system(size: 15, weight: .medium))
+                                        .font(.system(size: 15, weight: .semibold))
                                         .foregroundColor(CertCSSTheme.purple)
                                 }
-                                .padding(.horizontal, 16)
+                                .padding(.horizontal, 14)
                                 .padding(.vertical, 12)
+                                .background(CertCSSTheme.light)
+                                .clipShape(RoundedRectangle(cornerRadius: CertCSSTheme.innerCornerRadius, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: CertCSSTheme.innerCornerRadius, style: .continuous)
+                                        .stroke(CertCSSTheme.innerBorder, lineWidth: 1)
+                                )
                             }
+                            .padding(14)
                             .background(CertCSSTheme.white)
-                            .cornerRadius(CertCSSTheme.cornerRadius)
+                            .clipShape(RoundedRectangle(cornerRadius: CertCSSTheme.cornerRadius, style: .continuous))
                             .overlay(
-                                RoundedRectangle(cornerRadius: CertCSSTheme.cornerRadius)
-                                    .stroke(CertCSSTheme.border, lineWidth: 1)
+                                RoundedRectangle(cornerRadius: CertCSSTheme.cornerRadius, style: .continuous)
+                                    .stroke(CertCSSTheme.border, lineWidth: 1.1)
                             )
-                            .shadow(color: CertCSSTheme.blue.opacity(0.07), radius: 10, x: 0, y: 5)
+                            .shadow(color: CertCSSTheme.blue.opacity(0.09), radius: 14, x: 0, y: 6)
                             
                             Text(isPaidWarningVisible
                                 ? "⚠️ Loại chứng chỉ này yêu cầu Tài khoản Nhà phát triển Apple trả phí (Paid Developer Account)."
                                 : "Chọn loại chứng chỉ và đặt tên thiết bị dễ nhớ để quản lý.")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(isPaidWarningVisible ? CertCSSTheme.magenta : CertCSSTheme.dark.opacity(0.8))
+                                .font(.system(size: 12.5, weight: .semibold))
+                                .foregroundColor(isPaidWarningVisible ? CertCSSTheme.magenta : CertCSSTheme.pureBlack)
                                 .padding(.horizontal, 4)
                                 .padding(.top, 2)
                         }
@@ -748,7 +819,7 @@ private struct CreateCertificateSheetView: View {
                     SwiftUI.Button("Hủy") {
                         isPresented = false
                     }
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 15, weight: .bold))
                     .foregroundColor(CertCSSTheme.magenta)
                 }
                 ToolbarItem(placement: .confirmationAction) {

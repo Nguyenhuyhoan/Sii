@@ -1,5 +1,4 @@
 
-
 //
 //  MyAppsViewController.swift
 //  AltStore
@@ -775,7 +774,8 @@ private extension MyAppsViewController {
             "MORE": "THÊM",
             "More": "Xem thêm",
             "LESS": "THU GỌN",
-            "Less": "Thu gọn"
+            "Less": "Thu gọn",
+            "View App IDs": "Xem danh sách App ID"
         ]
         if let mapped = staticMap[trimmed] {
             return mapped
@@ -826,14 +826,59 @@ private extension MyAppsViewController {
         }
     }
     
-    // ✨ HIỂN THỊ BUNDLE ID NGAY DƯỚI TÊN ỨNG DỤNG ĐÃ CÀI (ĐẸP, GỌN & ĐỒNG BỘ CSS THEME) ✨
+    // ✨ TRÍCH XUẤT BUNDLE ID THỰC TẾ SAU KHI SIDESTORE ĐÃ KÝ CHỨNG CHỈ & ĐÃ LOẠI BỎ HẬU TỐ TEAM ID CỦA APPLE ✨
+    func cleanSignedBundleID(from rawSignedBundleID: String) -> String {
+        let trimmed = rawSignedBundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+        
+        // 1. Ưu tiên kiểm tra và gỡ bỏ chính xác hậu tố Team ID đang đăng nhập (nếu có)
+        let currentTeamID = self.activeTeam?.identifier ?? self.resolveCurrentManagedTeam()?.identifier
+        if let teamID = currentTeamID, !teamID.isEmpty {
+            let suffix = "." + teamID
+            if trimmed.lowercased().hasSuffix(suffix.lowercased()) {
+                return String(trimmed.dropLast(suffix.count))
+            }
+        }
+        
+        // 2. Kiểm tra tất cả các Team đã lưu trong CoreData để loại bỏ hậu tố kể cả khi app được ký bởi tài khoản khác trước đó
+        let allTeams = Team.all(in: DatabaseManager.shared.viewContext)
+        for team in allTeams {
+            let suffix = "." + team.identifier
+            if !team.identifier.isEmpty && trimmed.lowercased().hasSuffix(suffix.lowercased()) {
+                return String(trimmed.dropLast(suffix.count))
+            }
+        }
+        
+        // 3. Fallback thông minh: Nếu thành phần cuối cùng sau dấu chấm là mã Apple Team ID chuẩn (đúng 10 ký tự chữ IN HOA + số, ví dụ .ABC1234567)
+        let parts = trimmed.components(separatedBy: ".")
+        if parts.count > 2, let lastComponent = parts.last, lastComponent.count == 10 {
+            let upperAlphanumeric = CharacterSet.uppercaseLetters.union(.decimalDigits)
+            let isUpperAlphanumeric = lastComponent.unicodeScalars.allSatisfy { upperAlphanumeric.contains($0) }
+            let hasDigit = lastComponent.unicodeScalars.contains { CharacterSet.decimalDigits.contains($0) }
+            if isUpperAlphanumeric && hasDigit {
+                return parts.dropLast().joined(separator: ".")
+            }
+        }
+        
+        return trimmed
+    }
+    
+    func cleanSignedBundleID(for installedApp: InstalledApp) -> String {
+        let signedID = installedApp.resignedBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !signedID.isEmpty {
+            return cleanSignedBundleID(from: signedID)
+        }
+        return cleanSignedBundleID(from: installedApp.bundleIdentifier)
+    }
+    
+    // ✨ HIỂN THỊ BUNDLE ID ĐÃ KÝ (ĐÃ BỎ HẬU TỐ TEAM ID) NGAY DƯỚI TÊN ỨNG DỤNG ĐÃ CÀI (ĐẸP, GỌN & ĐỒNG BỘ CSS THEME) ✨
     func applyAppSubtitleWithBundleID(on banner: AppBannerView, bundleID: String, primarySubtitle: String? = nil) {
-        let cleanBundleID = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanBundleID.isEmpty else { return }
+        let displayBundleID = cleanSignedBundleID(from: bundleID)
+        guard !displayBundleID.isEmpty else { return }
         
         let rawFirstLine: String
         if let primarySubtitle = primarySubtitle {
-            rawFirstLine = primarySubtitle
+            rawFirstLine = primarySubtitle.trimmingCharacters(in: .whitespacesAndNewlines)
         } else {
             let existing = (banner.subtitleLabel.text ?? "")
                 .components(separatedBy: .newlines)
@@ -848,8 +893,8 @@ private extension MyAppsViewController {
         
         let attributed = NSMutableAttributedString()
         
-        // Nếu dòng 1 (Nhà phát triển / Phiên bản) khác với Bundle ID thì giữ ở dòng trên, dòng dưới là Bundle ID
-        if !rawFirstLine.isEmpty && rawFirstLine.caseInsensitiveCompare(cleanBundleID) != .orderedSame {
+        // Nếu dòng 1 (Nhà phát triển / Phiên bản) khác với Bundle ID thì giữ ở dòng trên, dòng dưới là Bundle ID thực tế đã loại bỏ hậu tố Team ID
+        if !rawFirstLine.isEmpty && rawFirstLine.caseInsensitiveCompare(displayBundleID) != .orderedSame {
             attributed.append(NSAttributedString(string: rawFirstLine, attributes: [
                 .font: UIFont.systemFont(ofSize: 12.0, weight: .medium),
                 .foregroundColor: CSSTheme.textSecondary,
@@ -860,7 +905,7 @@ private extension MyAppsViewController {
             ]))
         }
         
-        // Dòng Bundle ID sử dụng font Monospaced sắc nét, màu xanh-xám hiện đại đồng bộ với SettingsViewController
+        // Dòng Bundle ID sử dụng font Monospaced sắc nét, màu xanh dương hiện đại đồng bộ với SettingsViewController
         let bundleFont: UIFont
         if #available(iOS 13.0, *) {
             bundleFont = UIFont.monospacedSystemFont(ofSize: 11.0, weight: .semibold)
@@ -868,15 +913,15 @@ private extension MyAppsViewController {
             bundleFont = UIFont.systemFont(ofSize: 11.0, weight: .semibold)
         }
         
-        attributed.append(NSAttributedString(string: cleanBundleID, attributes: [
+        attributed.append(NSAttributedString(string: displayBundleID, attributes: [
             .font: bundleFont,
-            .foregroundColor: CSSTheme.blue.withAlphaComponent(0.85),
+            .foregroundColor: CSSTheme.blue.withAlphaComponent(0.88),
             .paragraphStyle: paragraphStyle
         ]))
         
         banner.subtitleLabel.numberOfLines = 2
         banner.subtitleLabel.adjustsFontSizeToFitWidth = true
-        banner.subtitleLabel.minimumScaleFactor = 0.8
+        banner.subtitleLabel.minimumScaleFactor = 0.78
         banner.subtitleLabel.lineBreakMode = .byTruncatingMiddle
         banner.subtitleLabel.attributedText = attributed
     }
@@ -934,7 +979,7 @@ private extension MyAppsViewController {
         }
     }
     
-    // Làm đẹp từng thẻ Ứng dụng: Cố định nền trắng sáng gốc, bo góc mượt, bóng đổ xanh dịu và hiển thị Bundle ID dưới tên App
+    // Làm đẹp từng thẻ Ứng dụng: Cố định nền trắng sáng gốc, bo góc mượt, bóng đổ xanh dịu và hiển thị Bundle ID thực tế (đã loại bỏ Team ID) dưới tên App
     func styleAppCardCell(_ cell: UICollectionViewCell) {
         cell.overrideUserInterfaceStyle = .light
         cell.contentView.overrideUserInterfaceStyle = .light
@@ -975,7 +1020,7 @@ private extension MyAppsViewController {
             banner.buttonLabel.textColor = CSSTheme.textSecondary
             banner.buttonLabel.font = UIFont.systemFont(ofSize: 10.5, weight: .semibold)
             
-            // Hiển thị Bundle ID ngay dưới tên App đã cài
+            // Hiển thị Bundle ID thực tế đã ký (đã loại bỏ hậu tố Team ID) ngay dưới tên App đã cài
             if let bundleID = appCell.bundleIdentifier, !bundleID.isEmpty {
                 applyAppSubtitleWithBundleID(on: banner, bundleID: bundleID)
             } else {
@@ -1020,7 +1065,7 @@ private extension MyAppsViewController {
             banner.titleLabel.textColor = CSSTheme.textPrimary
             banner.titleLabel.font = UIFont.systemFont(ofSize: 15.5, weight: .bold)
             
-            // Hiển thị Phiên bản cập nhật + Bundle ID ngay dưới tên App
+            // Hiển thị Phiên bản cập nhật + Bundle ID thực tế đã ký (đã loại bỏ hậu tố Team ID) ngay dưới tên App
             if let bundleID = updateCell.bundleIdentifier, !bundleID.isEmpty {
                 applyAppSubtitleWithBundleID(on: banner, bundleID: bundleID)
             } else {
@@ -1069,6 +1114,70 @@ private extension MyAppsViewController {
             underline.heightAnchor.constraint(equalToConstant: 3)
         ])
     }
+    
+    // ✨ VIỆT HÓA "View App IDs" & LÀM KHUNG CHỨA NHỎ GỌN HƠN ✨
+    func styleCompactAppIDsFooter(_ footerView: InstalledAppsCollectionFooterView) {
+        footerView.overrideUserInterfaceStyle = .light
+        footerView.isHidden = false
+        footerView.textLabel.textColor = CSSTheme.textSecondary
+        footerView.textLabel.font = UIFont.systemFont(ofSize: 12.0, weight: .semibold)
+        
+        guard let btn = footerView.button else { return }
+        btn.overrideUserInterfaceStyle = .light
+        btn.isHidden = false
+        btn.tintColor = CSSTheme.blue
+        
+        let vietnameseTitle = "Xem danh sách App ID"
+        if #available(iOS 15.0, *), var config = btn.configuration {
+            var attrTitle = AttributedString(vietnameseTitle)
+            attrTitle.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
+            attrTitle.foregroundColor = CSSTheme.blue
+            config.attributedTitle = attrTitle
+            config.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12)
+            config.background.backgroundColor = CSSTheme.white.withAlphaComponent(0.9)
+            config.background.strokeColor = CSSTheme.pillBorder
+            config.background.strokeWidth = 1.0
+            config.background.cornerRadius = 13
+            btn.configuration = config
+        } else {
+            btn.setTitle(vietnameseTitle, for: .normal)
+            btn.setTitleColor(CSSTheme.blue, for: .normal)
+            btn.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
+            btn.contentEdgeInsets = UIEdgeInsets(top: 4, left: 12, bottom: 4, right: 12)
+            btn.backgroundColor = CSSTheme.white.withAlphaComponent(0.9)
+            btn.layer.cornerRadius = 13
+            btn.layer.borderWidth = 1.0
+            btn.layer.borderColor = CSSTheme.pillBorder.cgColor
+        }
+        
+        // Khoá kích thước khung nút nhỏ gọn (cao 26pt, tự co giãn vừa khít chữ thay vì trải rộng cả chiều ngang)
+        let compactTag = 9992
+        if btn.viewWithTag(compactTag) == nil {
+            let marker = UIView(frame: .zero)
+            marker.tag = compactTag
+            marker.isHidden = true
+            btn.addSubview(marker)
+            
+            // Hạ độ ưu tiên các constraint chiều ngang/dọc cũ từ Storyboard (nếu có) để khung nút thu gọn vừa vặn
+            for constraint in footerView.constraints {
+                if (constraint.firstItem as? UIView) === btn || (constraint.secondItem as? UIView) === btn {
+                    if constraint.firstAttribute == .leading || constraint.firstAttribute == .trailing || constraint.firstAttribute == .width {
+                        constraint.priority = UILayoutPriority(250)
+                    }
+                }
+            }
+            for constraint in btn.constraints where constraint.firstAttribute == .height || constraint.firstAttribute == .width {
+                constraint.priority = UILayoutPriority(250)
+            }
+            
+            btn.translatesAutoresizingMaskIntoConstraints = false
+            let centerX = btn.centerXAnchor.constraint(equalTo: footerView.centerXAnchor)
+            centerX.priority = .required
+            let heightConstraint = btn.heightAnchor.constraint(equalToConstant: 26)
+            heightConstraint.priority = .required
+            NSLayoutConstraint.activate([centerX, heightConstraint])
+        }
+    }
 }
 
 private extension MyAppsViewController
@@ -1113,9 +1222,11 @@ private extension MyAppsViewController
             cell.versionDescriptionTextView.maximumNumberOfLines = 3
             cell.versionDescriptionTextView.text = latestSupportedVersion.localizedDescription ?? "Không có mô tả chi tiết cho bản cập nhật này."
             
-            if cell.bundleIdentifier != app.bundleIdentifier
+            // Lấy Bundle ID thực tế sau khi ký và đã loại bỏ hậu tố Team ID của Apple
+            let signedCleanID = self.cleanSignedBundleID(for: installedApp)
+            if cell.bundleIdentifier != signedCleanID
             {
-                cell.bundleIdentifier = app.bundleIdentifier
+                cell.bundleIdentifier = signedCleanID
                 cell.bannerView.iconImageView.image = nil
                 cell.bannerView.iconImageView.isIndicatingActivity = true
             }
@@ -1134,7 +1245,7 @@ private extension MyAppsViewController
             }
             
             let versionLine = String(format: "Phiên bản %@", versionText)
-            self.applyAppSubtitleWithBundleID(on: cell.bannerView, bundleID: app.bundleIdentifier, primarySubtitle: versionLine)
+            self.applyAppSubtitleWithBundleID(on: cell.bannerView, bundleID: signedCleanID, primarySubtitle: versionLine)
 
             let appName: String
             
@@ -1231,16 +1342,18 @@ private extension MyAppsViewController
             cell.bannerView.button.isIndicatingActivity = false
             cell.bannerView.configure(for: installedApp, action: .custom(translatedButtonTitle))
             
-            if cell.bundleIdentifier != installedApp.bundleIdentifier
+            // Lấy Bundle ID thực tế sau khi SideStore đã ký chứng chỉ & đã loại bỏ hậu tố Team ID của Apple
+            let signedCleanID = self.cleanSignedBundleID(for: installedApp)
+            if cell.bundleIdentifier != signedCleanID
             {
-                cell.bundleIdentifier = installedApp.bundleIdentifier
+                cell.bundleIdentifier = signedCleanID
                 cell.bannerView.iconImageView.image = nil
                 cell.bannerView.iconImageView.isIndicatingActivity = true
             }
             
-            // Gắn Bundle ID ngay dưới tên ứng dụng đã cài
+            // Gắn Bundle ID thực tế (đã loại bỏ hậu tố Team ID) ngay dưới tên ứng dụng đã cài
             let defaultDeveloperSubtitle = cell.bannerView.subtitleLabel.text
-            self.applyAppSubtitleWithBundleID(on: cell.bannerView, bundleID: installedApp.bundleIdentifier, primarySubtitle: defaultDeveloperSubtitle)
+            self.applyAppSubtitleWithBundleID(on: cell.bannerView, bundleID: signedCleanID, primarySubtitle: defaultDeveloperSubtitle)
             
             let currentDate = Date()
             let isExpired = currentDate > installedApp.expirationDate
@@ -1313,9 +1426,11 @@ private extension MyAppsViewController
             cell.layoutMargins.right = self.view.layoutMargins.right
             cell.tintColor = CSSTheme.blue
             
-            if cell.bundleIdentifier != installedApp.bundleIdentifier
+            // Lấy Bundle ID thực tế sau khi SideStore đã ký chứng chỉ & đã loại bỏ hậu tố Team ID của Apple
+            let signedCleanID = self.cleanSignedBundleID(for: installedApp)
+            if cell.bundleIdentifier != signedCleanID
             {
-                cell.bundleIdentifier = installedApp.bundleIdentifier
+                cell.bundleIdentifier = signedCleanID
                 cell.bannerView.iconImageView.image = nil
                 cell.bannerView.iconImageView.isIndicatingActivity = true
             }
@@ -1329,9 +1444,9 @@ private extension MyAppsViewController
             cell.bannerView.button.isIndicatingActivity = false
             cell.bannerView.configure(for: installedApp, action: .custom("KÍCH HOẠT"))
             
-            // Gắn Bundle ID ngay dưới tên ứng dụng không hoạt động
+            // Gắn Bundle ID thực tế (đã loại bỏ hậu tố Team ID) ngay dưới tên ứng dụng không hoạt động
             let defaultDeveloperSubtitle = cell.bannerView.subtitleLabel.text
-            self.applyAppSubtitleWithBundleID(on: cell.bannerView, bundleID: installedApp.bundleIdentifier, primarySubtitle: defaultDeveloperSubtitle)
+            self.applyAppSubtitleWithBundleID(on: cell.bannerView, bundleID: signedCleanID, primarySubtitle: defaultDeveloperSubtitle)
             
             cell.bannerView.button.tintColor = CSSTheme.blue
             cell.bannerView.button.removeTarget(self, action: nil, for: .primaryActionTriggered)
@@ -2759,20 +2874,8 @@ extension MyAppsViewController
         case .activeApps, .inactiveApps:
             let footerView = collectionView.dequeueReusableSupplementaryView(ofKind: UICollectionView.elementKindSectionFooter, withReuseIdentifier: "InstalledAppsFooter", for: indexPath) as! InstalledAppsCollectionFooterView
             
-            footerView.overrideUserInterfaceStyle = .light
-            footerView.isHidden = false
-            footerView.textLabel.textColor = CSSTheme.blue
-            footerView.textLabel.font = UIFont.systemFont(ofSize: 13.5, weight: .bold)
-            footerView.button?.tintColor = CSSTheme.blue
-            footerView.button?.isHidden = false
-            
-            // Đồng bộ khung thẻ trắng bo góc cho nút xem App IDs ở Footer
-            if let btn = footerView.button {
-                btn.backgroundColor = CSSTheme.white.withAlphaComponent(0.85)
-                btn.layer.cornerRadius = 14
-                btn.layer.borderWidth = 1.0
-                btn.layer.borderColor = CSSTheme.border.cgColor
-            }
+            // Dịch "View App IDs" sang tiếng Việt và thu gọn khung chứa nút bấm
+            self.styleCompactAppIDsFooter(footerView)
             
             let managedTeam = self.resolveCurrentManagedTeam()
             guard let teamType = self.activeTeam?.type ?? managedTeam?.type else {
@@ -3222,7 +3325,8 @@ extension MyAppsViewController: UICollectionViewDelegateFlowLayout
         func appIDsFooterSize() -> CGSize
         {
             guard self.activeTeam != nil || self.resolveCurrentManagedTeam() != nil else { return .zero }
-            return CGSize(width: collectionView.bounds.width, height: 60.5)
+            // Đã thu gọn chiều cao khung Footer chứa nút "Xem danh sách App ID"
+            return CGSize(width: collectionView.bounds.width, height: 48.0)
         }
         
         switch section

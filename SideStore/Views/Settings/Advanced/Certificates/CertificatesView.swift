@@ -665,7 +665,7 @@ private struct LoadingOverlay: View {
     }
 }
 
-// MARK: - ➕ MÀN HÌNH TẠO CHỨNG CHỈ MỚI (ĐỒNG BỘ CSS THEME & CHỮ ĐEN TUYỀN)
+// MARK: - ➕ MÀN HÌNH TẠO CHỨNG CHỈ MỚI (ĐỒNG BỘ CSS THEME, VIỆT HÓA & BỎ NÚT LÊN/XUỐNG)
 private struct CreateCertificateSheetView: View {
     @ObservedObject var viewModel: CertificatesViewModel
     var presentingViewController: UIViewController?
@@ -680,6 +680,34 @@ private struct CreateCertificateSheetView: View {
 
     private var canCreate: Bool {
         !machineName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Việt hoá tên các loại chứng chỉ sang tiếng Việt ngắn gọn, rõ nghĩa để hiển thị đầy đủ trên 1 dòng
+    private func localizedCertificateTypeName(_ certType: CertificateType, forMenu: Bool = false) -> String {
+        let raw = certType.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = raw.lowercased()
+
+        if lower == "apple development" {
+            return forMenu ? "Phát triển Apple (Apple Development)" : "Phát triển Apple (Apple Development)"
+        } else if lower == "apple distribution" {
+            return forMenu ? "Phân phối Apple (Apple Distribution)" : "Phân phối Apple (Apple Distribution)"
+        } else if lower.contains("ios app development") || lower == "ios development" {
+            return forMenu ? "Phát triển ứng dụng iOS (iOS Development)" : "Phát triển ứng dụng iOS"
+        } else if lower.contains("ios distribution") {
+            return forMenu ? "Phân phối iOS (App Store & Ad Hoc)" : "Phân phối iOS (App Store & Ad Hoc)"
+        } else if lower == "mac development" {
+            return forMenu ? "Phát triển ứng dụng Mac (Mac Development)" : "Phát triển ứng dụng Mac"
+        } else if lower == "mac app distribution" {
+            return forMenu ? "Phân phối ứng dụng Mac (Mac App Distribution)" : "Phân phối ứng dụng Mac"
+        } else if lower.contains("mac installer") {
+            return forMenu ? "Bộ cài đặt Mac (Mac Installer Distribution)" : "Phân phối bộ cài đặt Mac"
+        } else if lower.contains("developer id application") {
+            return forMenu ? "Ứng dụng Developer ID (Developer ID App)" : "Ứng dụng Developer ID"
+        } else if lower.contains("developer id installer") {
+            return forMenu ? "Bộ cài đặt Developer ID" : "Bộ cài đặt Developer ID"
+        }
+
+        return raw
     }
 
     var body: some View {
@@ -746,22 +774,40 @@ private struct CreateCertificateSheetView: View {
                             .padding(.leading, 4)
                             
                             VStack(spacing: 10) {
-                                // Hàng 1: Loại chứng chỉ
-                                HStack {
+                                // Hàng 1: Loại chứng chỉ (Dùng Menu tùy chỉnh bỏ 2 nút mũi tên lên/xuống, chữ nhỏ gọn cùng màu tím với Tên thiết bị)
+                                HStack(spacing: 8) {
                                     Text("Loại chứng chỉ")
-                                        .font(.system(size: 15, weight: .bold))
+                                        .font(.system(size: 14.5, weight: .bold))
                                         .foregroundColor(CertCSSTheme.pureBlack)
-                                    Spacer()
-                                    Picker("Loại chứng chỉ", selection: $selectedCertificateType) {
+                                        .layoutPriority(1)
+                                    
+                                    Spacer(minLength: 4)
+                                    
+                                    Menu {
                                         ForEach(viewModel.availableCertificateTypes, id: \.rawValue) { certType in
-                                            Text(certType.displayName).tag(certType)
+                                            SwiftUI.Button {
+                                                selectedCertificateType = certType
+                                            } label: {
+                                                HStack {
+                                                    Text(localizedCertificateTypeName(certType, forMenu: true))
+                                                    if selectedCertificateType == certType {
+                                                        Image(systemName: "checkmark")
+                                                    }
+                                                }
+                                            }
                                         }
+                                    } label: {
+                                        Text(localizedCertificateTypeName(selectedCertificateType, forMenu: false))
+                                            .font(.system(size: 13.5, weight: .semibold))
+                                            .foregroundColor(CertCSSTheme.purple)
+                                            .multilineTextAlignment(.trailing)
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.72)
+                                            .frame(maxWidth: .infinity, alignment: .trailing)
                                     }
-                                    .pickerStyle(.menu)
-                                    .tint(CertCSSTheme.blue)
                                 }
                                 .padding(.horizontal, 14)
-                                .padding(.vertical, 12)
+                                .padding(.vertical, 13)
                                 .background(CertCSSTheme.light)
                                 .clipShape(RoundedRectangle(cornerRadius: CertCSSTheme.innerCornerRadius, style: .continuous))
                                 .overlay(
@@ -769,19 +815,24 @@ private struct CreateCertificateSheetView: View {
                                         .stroke(CertCSSTheme.innerBorder, lineWidth: 1)
                                 )
                                 
-                                // Hàng 2: Tên thiết bị
-                                HStack {
+                                // Hàng 2: Tên thiết bị (Đồng bộ cỡ chữ và màu tím với Loại chứng chỉ)
+                                HStack(spacing: 8) {
                                     Text("Tên thiết bị")
-                                        .font(.system(size: 15, weight: .bold))
+                                        .font(.system(size: 14.5, weight: .bold))
                                         .foregroundColor(CertCSSTheme.pureBlack)
-                                    Spacer()
+                                        .layoutPriority(1)
+                                    
+                                    Spacer(minLength: 4)
+                                    
                                     TextField("Nhập tên thiết bị...", text: $machineName)
                                         .multilineTextAlignment(.trailing)
-                                        .font(.system(size: 15, weight: .semibold))
+                                        .font(.system(size: 13.5, weight: .semibold))
                                         .foregroundColor(CertCSSTheme.purple)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.75)
                                 }
                                 .padding(.horizontal, 14)
-                                .padding(.vertical, 12)
+                                .padding(.vertical, 13)
                                 .background(CertCSSTheme.light)
                                 .clipShape(RoundedRectangle(cornerRadius: CertCSSTheme.innerCornerRadius, style: .continuous))
                                 .overlay(
@@ -800,7 +851,7 @@ private struct CreateCertificateSheetView: View {
                             
                             Text(isPaidWarningVisible
                                 ? "⚠️ Loại chứng chỉ này yêu cầu Tài khoản Nhà phát triển Apple trả phí (Paid Developer Account)."
-                                : "Chọn loại chứng chỉ và đặt tên thiết bị dễ nhớ để quản lý.")
+                                : "Chạm vào tên loại chứng chỉ màu tím để đổi loại khác và đặt tên thiết bị dễ nhớ để quản lý.")
                                 .font(.system(size: 12.5, weight: .semibold))
                                 .foregroundColor(isPaidWarningVisible ? CertCSSTheme.magenta : CertCSSTheme.pureBlack)
                                 .padding(.horizontal, 4)

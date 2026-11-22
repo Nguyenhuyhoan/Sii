@@ -1,4 +1,5 @@
 
+
 //
 //  SettingsViewController.swift
 //  AltStore
@@ -750,6 +751,9 @@ final class SettingsViewController: UITableViewController
     // Nút quay lại nhỏ cố định ở góc trên bên trái khi vào mục con
     private var floatingBackButton: UIButton?
 
+    // Bộ đệm hình ảnh Icon (28x28) gắn trực tiếp vào Label giúp không bao giờ đè viền hoặc đè chữ
+    private static var inlineBadgeImageCache: [String: UIImage] = [:]
+
     @IBOutlet private var betaTrackLabel: UILabel!
     @IBOutlet private var betaTrackPopupButton: UIButton!
 
@@ -817,17 +821,14 @@ final class SettingsViewController: UITableViewController
     {
         super.viewDidLoad()
         
-        // Tắt cứng Làm mới ứng dụng, Beta và Developer Mode
         self.forceDisableRemovedSettings()
         
-        // Xóa bỏ tiêu đề "Cài đặt" và ẩn hoàn toàn thanh điều hướng
         self.title = nil
         self.navigationItem.title = nil
         self.navigationController?.delegate = self
         self.navigationController?.setNavigationBarHidden(true, animated: false)
         #if !os(tvOS)
         self.navigationItem.largeTitleDisplayMode = .never
-        // Giữ tính năng vuốt từ cạnh trái màn hình để quay lại khi ẩn thanh điều hướng
         self.navigationController?.interactivePopGestureRecognizer?.delegate = self
         self.navigationController?.interactivePopGestureRecognizer?.isEnabled = true
         #endif
@@ -884,7 +885,6 @@ final class SettingsViewController: UITableViewController
     }
 
     override func shouldPerformSegue(withIdentifier identifier: String, sender: Any?) -> Bool {
-        // Chặn Segue mặc định của anisetteServers để mở bảng SwiftUI Anisette tùy chỉnh
         if identifier == "anisetteServers" {
             return false
         }
@@ -966,7 +966,7 @@ extension SettingsViewController: UINavigationControllerDelegate {
     }
 }
 
-// MARK: - ✨ HỆ THỐNG RENDER CSS, ICON BADGE & VIỆT HÓA TOÀN DIỆN
+// MARK: - ✨ HỆ THỐNG RENDER CSS, ICON INLINE & VIỆT HÓA TOÀN DIỆN
 private extension SettingsViewController {
 
     private func applySmartWebCSSTheme() {
@@ -1010,7 +1010,6 @@ private extension SettingsViewController {
         }
     }
 
-    // Lấy App Icon chính thức của SideStore từ Bundle (hoặc SF Symbol dự phòng)
     private func loadSideStoreAppIcon() -> UIImage? {
         if let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
            let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
@@ -1049,7 +1048,6 @@ private extension SettingsViewController {
         heroCard.layer.insertSublayer(gradient, at: 0)
         self.heroGradientLayer = gradient
         
-        // Khung chứa Icon SideStore (Glassmorphism)
         let iconBadge = UIView()
         iconBadge.translatesAutoresizingMaskIntoConstraints = false
         iconBadge.backgroundColor = UIColor.white.withAlphaComponent(0.20)
@@ -1287,91 +1285,66 @@ private extension SettingsViewController {
         }
     }
 
-    // Gắn huy hiệu Icon vuông bo góc chuẩn iOS Settings + Đẩy lề chữ mượt mà
-    private func attachModernIconBadge(to cell: UITableViewCell, section: Section, row: Int) {
+    // Vẽ biểu tượng ô vuông bo góc (28x28) sắc nét để nhúng trực tiếp vào Label (không bao giờ đè lên chữ hoặc viền)
+    private func renderInlineBadgeImage(symbol: String, color: UIColor) -> UIImage {
+        let key = "\(symbol)_\(color.description)"
+        if let cached = Self.inlineBadgeImageCache[key] {
+            return cached
+        }
+        let size = CGSize(width: 28, height: 28)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let image = renderer.image { _ in
+            let rect = CGRect(origin: .zero, size: size)
+            let bgPath = UIBezierPath(roundedRect: rect, cornerRadius: 7.5)
+            color.withAlphaComponent(0.14).setFill()
+            bgPath.fill()
+
+            let borderPath = UIBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerRadius: 7.5)
+            color.withAlphaComponent(0.28).setStroke()
+            borderPath.lineWidth = 1.0
+            borderPath.stroke()
+
+            let config = UIImage.SymbolConfiguration(pointSize: 13.5, weight: .bold)
+            if let symImg = UIImage(systemName: symbol, withConfiguration: config)?.withTintColor(color, renderingMode: .alwaysOriginal) {
+                let symOrigin = CGPoint(
+                    x: (size.width - symImg.size.width) / 2.0,
+                    y: (size.height - symImg.size.height) / 2.0
+                )
+                symImg.draw(at: symOrigin)
+            }
+        }
+        Self.inlineBadgeImageCache[key] = image
+        return image
+    }
+
+    // Gắn mũi tên điều hướng > cách lề phải của khung trắng (targetCardView) 18pt thoáng đẹp
+    private func attachChevronInsideCard(cell: UITableViewCell, targetCardView: UIView, section: Section, row: Int) {
         let badgeTag = 8889
         let chevronTag = 8890
         cell.contentView.viewWithTag(badgeTag)?.removeFromSuperview()
         cell.contentView.viewWithTag(chevronTag)?.removeFromSuperview()
+        targetCardView.viewWithTag(chevronTag)?.removeFromSuperview()
 
-        guard let spec = iconSpecForRow(section: section, row: row) else { return }
+        cell.accessoryType = .none
+        cell.accessoryView = nil
 
-        // 1. Tạo khung vuông bo góc 30x30 chứa SF Symbol
-        let badgeView = UIView()
-        badgeView.tag = badgeTag
-        badgeView.translatesAutoresizingMaskIntoConstraints = false
-        badgeView.backgroundColor = spec.color.withAlphaComponent(0.13)
-        badgeView.layer.cornerRadius = 8.5
-        badgeView.layer.borderWidth = 1.0
-        badgeView.layer.borderColor = spec.color.withAlphaComponent(0.26).cgColor
+        guard let spec = iconSpecForRow(section: section, row: row), spec.showChevron else { return }
 
-        let iconImageView = UIImageView()
-        iconImageView.translatesAutoresizingMaskIntoConstraints = false
-        iconImageView.contentMode = .scaleAspectFit
-        iconImageView.tintColor = spec.color
-        let symConfig = UIImage.SymbolConfiguration(pointSize: 14.5, weight: .bold)
-        iconImageView.image = UIImage(systemName: spec.symbol, withConfiguration: symConfig)
-            ?? UIImage(systemName: "gearshape.fill", withConfiguration: symConfig)
-
-        badgeView.addSubview(iconImageView)
-        cell.contentView.addSubview(badgeView)
+        let chevronView = UIImageView()
+        chevronView.tag = chevronTag
+        chevronView.translatesAutoresizingMaskIntoConstraints = false
+        let chevConfig = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
+        chevronView.image = UIImage(systemName: "chevron.right", withConfiguration: chevConfig)
+        chevronView.tintColor = spec.color.withAlphaComponent(0.65)
+        cell.contentView.addSubview(chevronView)
 
         NSLayoutConstraint.activate([
-            badgeView.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 14),
-            badgeView.centerYAnchor.constraint(equalTo: cell.contentView.centerYAnchor),
-            badgeView.widthAnchor.constraint(equalToConstant: 30),
-            badgeView.heightAnchor.constraint(equalToConstant: 30),
-
-            iconImageView.centerXAnchor.constraint(equalTo: badgeView.centerXAnchor),
-            iconImageView.centerYAnchor.constraint(equalTo: badgeView.centerYAnchor)
+            chevronView.trailingAnchor.constraint(equalTo: targetCardView.trailingAnchor, constant: -18),
+            chevronView.centerYAnchor.constraint(equalTo: cell.contentView.centerYAnchor)
         ])
-
-        // 2. Tạo mũi tên điều hướng bên phải (nếu dòng mở ra màn hình con)
-        if spec.showChevron {
-            cell.accessoryType = .none
-            let chevronView = UIImageView()
-            chevronView.tag = chevronTag
-            chevronView.translatesAutoresizingMaskIntoConstraints = false
-            let chevConfig = UIImage.SymbolConfiguration(pointSize: 12.5, weight: .bold)
-            chevronView.image = UIImage(systemName: "chevron.right", withConfiguration: chevConfig)
-            chevronView.tintColor = spec.color.withAlphaComponent(0.55)
-            cell.contentView.addSubview(chevronView)
-
-            NSLayoutConstraint.activate([
-                chevronView.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -16),
-                chevronView.centerYAnchor.constraint(equalTo: cell.contentView.centerYAnchor)
-            ])
-        }
-
-        // 3. Tự động dời lề trái của Label chính để không đè lên Icon 30x30
-        shiftLeadingLabelConstraintForIcon(in: cell.contentView)
     }
 
-    private func shiftLeadingLabelConstraintForIcon(in contentView: UIView) {
-        let minIconPadding: CGFloat = 54.0
-
-        for constraint in contentView.constraints {
-            if let label = constraint.firstItem as? UILabel,
-               label !== self.accountNameLabel,
-               label !== self.accountEmailLabel,
-               label !== self.accountTypeLabel,
-               (constraint.firstAttribute == .leading || constraint.firstAttribute == .left),
-               (constraint.secondItem === contentView || constraint.secondItem === contentView.layoutMarginsGuide),
-               constraint.constant >= 0 && constraint.constant < 42 {
-                constraint.constant = (constraint.secondItem === contentView.layoutMarginsGuide) ? 38 : minIconPadding
-            } else if let label = constraint.secondItem as? UILabel,
-                      label !== self.accountNameLabel,
-                      label !== self.accountEmailLabel,
-                      label !== self.accountTypeLabel,
-                      (constraint.secondAttribute == .leading || constraint.secondAttribute == .left),
-                      (constraint.firstItem === contentView || constraint.firstItem === contentView.layoutMarginsGuide),
-                      constraint.constant <= 0 && constraint.constant > -42 {
-                constraint.constant = (constraint.firstItem === contentView.layoutMarginsGuide) ? -38 : -minIconPadding
-            }
-        }
-    }
-
-    // Bóc tách lớp nền của InsetGroupTableViewCell để ép nhận diện CSS Card + Icon
+    // Bóc tách lớp nền của InsetGroupTableViewCell để ép nhận diện 1 khung Card duy nhất + Icon
     private func styleInnerCardOfCell(_ cell: UITableViewCell, at indexPath: IndexPath, totalRows: Int) {
         cell.selectionStyle = .none
         cell.selectedBackgroundView = UIView()
@@ -1386,47 +1359,56 @@ private extension SettingsViewController {
         
         targetCardView.backgroundColor = CSSTheme.white
         
+        let section = Section.allCases[indexPath.section]
+
+        // Trong mục Tài khoản: Chỉ 1 khung Card duy nhất chứa Họ tên (0), Email (1) và Loại tài khoản (2)
+        let effectiveTotalRows = (section == .account) ? 3 : totalRows
+
         var corners: CACornerMask = []
-        if totalRows == 1 {
+        if effectiveTotalRows == 1 {
             corners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
         } else if indexPath.row == 0 {
             corners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-        } else if indexPath.row == totalRows - 1 {
+        } else if indexPath.row == effectiveTotalRows - 1 {
             corners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
         }
         
         targetCardView.layer.cornerRadius = corners.isEmpty ? 0 : CSSTheme.cornerRadius
         targetCardView.layer.maskedCorners = corners
+        targetCardView.layer.masksToBounds = true
         
+        // Không đổ bóng chồng lên nhau giữa các dòng trong cùng 1 khung Tài khoản
         cell.layer.masksToBounds = false
-        cell.layer.shadowColor = CSSTheme.blue.cgColor
-        cell.layer.shadowOffset = CGSize(width: 0, height: 5)
-        cell.layer.shadowRadius = 10
-        cell.layer.shadowOpacity = 0.07
+        if section == .account && indexPath.row < effectiveTotalRows - 1 {
+            cell.layer.shadowOpacity = 0.0
+        } else {
+            cell.layer.shadowColor = CSSTheme.blue.cgColor
+            cell.layer.shadowOffset = CGSize(width: 0, height: 5)
+            cell.layer.shadowRadius = 10
+            cell.layer.shadowOpacity = 0.07
+        }
         
-        let section = Section.allCases[indexPath.section]
-
-        // Gắn Icon SF Symbols chuẩn đẹp cho dòng hiện tại
-        self.attachModernIconBadge(to: cell, section: section, row: indexPath.row)
+        // Gắn nút > nằm gọn bên trong khung trắng (cách viền phải khung 18pt)
+        self.attachChevronInsideCard(cell: cell, targetCardView: targetCardView, section: section, row: indexPath.row)
         
-        // Đường kẻ phân cách tinh tế bắt đầu từ sau Icon (lề trái 54pt)
+        // Đường kẻ phân cách nằm gọn bên trong khung trắng (từ sau Icon đến cách viền phải khung 16pt)
         let sepTag = 8888
         cell.contentView.viewWithTag(sepTag)?.removeFromSuperview()
-        if indexPath.row < totalRows - 1 {
+        if indexPath.row < effectiveTotalRows - 1 {
             let sep = UIView()
             sep.tag = sepTag
             sep.backgroundColor = CSSTheme.border
             sep.translatesAutoresizingMaskIntoConstraints = false
             cell.contentView.addSubview(sep)
             NSLayoutConstraint.activate([
-                sep.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 54),
-                sep.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -16),
+                sep.leadingAnchor.constraint(equalTo: targetCardView.leadingAnchor, constant: 52),
+                sep.trailingAnchor.constraint(equalTo: targetCardView.trailingAnchor, constant: -16),
                 sep.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor),
                 sep.heightAnchor.constraint(equalToConstant: 1.0)
             ])
         }
         
-        // Việt hóa và làm đẹp toàn bộ chữ bên trong Cell
+        // Việt hóa và nhúng Icon trực tiếp vào Label bên trong Cell
         translateAndStyleLabelsInside(view: cell.contentView, section: section, row: indexPath.row)
     }
 
@@ -1445,7 +1427,10 @@ private extension SettingsViewController {
 
     // Bộ từ điển dịch tự động 100% các chuỗi tĩnh từ Storyboard & Hệ thống sang Tiếng Việt
     private func translateStaticText(_ text: String) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleaned = text
+            .replacingOccurrences(of: "\u{FFFC}", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
         let dictionary: [String: String] = [
             // Tài khoản & Đăng nhập
             "Sign in with Apple ID": "Đăng nhập bằng ID Apple",
@@ -1454,10 +1439,12 @@ private extension SettingsViewController {
             "Name": "Họ tên",
             "Email": "Email",
             "Type": "Loại tài khoản",
-            "Free Developer Account": "Tài khoản Nhà phát triển Miễn phí",
+            "Free Developer Account": "Nhà phát triển Miễn phí",
+            "Tài khoản Nhà phát triển Miễn phí": "Nhà phát triển Miễn phí",
             "Regular Account": "Tài khoản Miễn phí",
-            "Developer Account": "Tài khoản Nhà phát triển",
-            "Paid Developer Account": "Tài khoản Nhà phát triển Trả phí",
+            "Developer Account": "Nhà phát triển",
+            "Paid Developer Account": "Nhà phát triển Trả phí",
+            "Tài khoản Nhà phát triển Trả phí": "Nhà phát triển Trả phí",
             "Individual": "Cá nhân",
             "Organization": "Tổ chức",
             "Unknown": "Không xác định",
@@ -1479,12 +1466,13 @@ private extension SettingsViewController {
             "User Customizations": "Tùy chỉnh giao diện & người dùng"
         ]
         
-        return dictionary[trimmed] ?? text
+        return dictionary[cleaned] ?? cleaned
     }
 
     private func translateAndStyleLabelsInside(view: UIView, section: Section, row: Int) {
         let activeItems = UnifiedSettingsItem.activeItems
         let isClearCacheRow = (section == .advancedSettings && activeItems.indices.contains(row) && activeItems[row] == .clearCache)
+        let rowIconSpec = iconSpecForRow(section: section, row: row)
 
         for subview in view.subviews {
             if let label = subview as? UILabel {
@@ -1492,30 +1480,63 @@ private extension SettingsViewController {
                     continue
                 }
                 
-                if let currentText = label.text, !currentText.isEmpty {
-                    label.text = translateStaticText(currentText)
-                }
-                
+                // 1. Nhóm Label giá trị bên phải của khung Tài khoản (Tên, Email, Nhà phát triển Miễn phí)
                 if label == self.accountNameLabel || label == self.accountEmailLabel || label == self.accountTypeLabel {
                     if label == self.accountTypeLabel, let typeText = label.text {
                         label.text = translateStaticText(typeText)
                     }
                     label.textColor = (label == self.accountNameLabel) ? CSSTheme.blue : CSSTheme.purple
                     label.font = UIFont.systemFont(ofSize: 14.5, weight: .bold)
-                } else if section == .signIn {
-                    label.textColor = CSSTheme.blue
-                    label.font = UIFont.systemFont(ofSize: 16, weight: .bold)
-                    label.textAlignment = .left
-                } else if isClearCacheRow {
-                    label.textColor = CSSTheme.magenta
-                    label.font = UIFont.systemFont(ofSize: 15.5, weight: .bold)
-                    label.textAlignment = .left
-                } else if label.textColor == .systemRed {
-                    label.textColor = CSSTheme.magenta
+                    label.textAlignment = .right
+                    label.adjustsFontSizeToFitWidth = true
+                    label.minimumScaleFactor = 0.8
                 } else {
-                    label.textColor = CSSTheme.dark
-                    label.font = UIFont.systemFont(ofSize: 15.5, weight: .semibold)
+                    // 2. Nhóm Label tiêu đề bên trái (Họ tên, Email, Loại tài khoản & các mục Cài đặt)
+                    let rawText = label.attributedText?.string ?? label.text ?? ""
+                    let cleanText = translateStaticText(rawText)
+                    guard !cleanText.isEmpty else { continue }
+
+                    let font: UIFont
+                    let textColor: UIColor
+
+                    if section == .signIn {
+                        textColor = CSSTheme.blue
+                        font = UIFont.systemFont(ofSize: 16, weight: .bold)
+                    } else if isClearCacheRow {
+                        textColor = CSSTheme.magenta
+                        font = UIFont.systemFont(ofSize: 15.5, weight: .bold)
+                    } else if label.textColor == .systemRed {
+                        textColor = CSSTheme.magenta
+                        font = UIFont.systemFont(ofSize: 15.5, weight: .semibold)
+                    } else {
+                        textColor = CSSTheme.dark
+                        font = UIFont.systemFont(ofSize: 15.5, weight: .semibold)
+                    }
+
                     label.textAlignment = .left
+
+                    // Gắn Icon 28x28 trực tiếp vào đầu Label bằng NSTextAttachment để nằm gọn trong khung và tự đẩy chữ sang phải
+                    if let spec = rowIconSpec {
+                        let badgeImg = renderInlineBadgeImage(symbol: spec.symbol, color: spec.color)
+                        let attachment = NSTextAttachment()
+                        attachment.image = badgeImg
+                        let yOffset = (font.capHeight - 28.0) / 2.0
+                        attachment.bounds = CGRect(x: 0, y: yOffset, width: 28, height: 28)
+
+                        let fullAttr = NSMutableAttributedString(attachment: attachment)
+                        fullAttr.append(NSAttributedString(
+                            string: "   " + cleanText,
+                            attributes: [
+                                .font: font,
+                                .foregroundColor: textColor
+                            ]
+                        ))
+                        label.attributedText = fullAttr
+                    } else {
+                        label.text = cleanText
+                        label.font = font
+                        label.textColor = textColor
+                    }
                 }
             }
             translateAndStyleLabelsInside(view: subview, section: section, row: row)
@@ -1685,7 +1706,8 @@ private extension SettingsViewController
         guard self.isViewLoaded else { return }
         let typeIndexPath = IndexPath(row: 2, section: Section.account.rawValue)
         if let typeCell = self.tableView.cellForRow(at: typeIndexPath) as? InsetGroupTableViewCell {
-            typeCell.style = (self.accountStatus == .completed) ? .bottom : .middle
+            // Luôn bo góc dưới cho dòng Loại tài khoản để 3 dòng (Họ tên, Email, Loại tài khoản) nằm gọn trong 1 khung duy nhất
+            typeCell.style = .bottom
         }
     }
 
@@ -1761,7 +1783,6 @@ private extension SettingsViewController
         case .account:
             setSectionHeaderTitle(settingsHeaderFooterView.primaryLabel, iconName: "person.text.rectangle.fill", title: "TÀI KHOẢN")
             
-            // 1. Nút "Tài Khoản" nhỏ gọn có Icon con mắt để bấm Ẩn/Hiện thông tin nhạy cảm
             let toggleBtn = UIButton(type: .system)
             toggleBtn.tag = toggleAccountTag
             toggleBtn.translatesAutoresizingMaskIntoConstraints = false
@@ -1784,7 +1805,6 @@ private extension SettingsViewController
             
             settingsHeaderFooterView.contentView.addSubview(toggleBtn)
             
-            // 2. Nút "ĐĂNG XUẤT" nhỏ gọn nằm bên phải
             let signOutBtn = settingsHeaderFooterView.button!
             signOutBtn.removeTarget(nil, action: nil, for: .allEvents)
             signOutBtn.setTitle("  ĐĂNG XUẤT  ", for: .normal)
@@ -1973,10 +1993,11 @@ private extension SettingsViewController
         UserDefaults.standard.responseCachingDisabled = sender.isOn
     }
 
+    // Đã xóa câu "Bạn có chắc chắn muốn xóa bộ nhớ đệm của SideStore không?" theo yêu cầu
     private func clearCache()
     {
         let makeCacheTitle: (String) -> String = { sizeString in
-            String(format: "Bạn có chắc chắn muốn xóa bộ nhớ đệm của SideStore không?\n\nDung lượng đệm: %@", sizeString)
+            String(format: "Dung lượng đệm: %@", sizeString)
         }
         let alertController = UIAlertController(title: makeCacheTitle("Đang tính toán…"),
                                                 message: "Thao tác này sẽ xóa toàn bộ tệp tạm thời cũng như bản sao lưu của các ứng dụng đã gỡ cài đặt.",
@@ -2112,6 +2133,9 @@ extension SettingsViewController
             if indexPath.row < 3 && !self.isAccountDetailsExpanded {
                 return 0.0
             }
+            if indexPath.row < 3 {
+                return 48.0
+            }
             if indexPath.row == 3 {
                 return AccountVerificationRow.preferredHeight
             }
@@ -2124,10 +2148,10 @@ extension SettingsViewController
             return max(baseHeight, 50.0)
         }
         
-        return super.tableView(tableView, heightForRowAt: indexPath)
+        return max(super.tableView(tableView, heightForRowAt: indexPath), 50.0)
     }
 
-    // ✨ CAN THIỆP SÂU VÀO TỪNG CELL ĐỂ ÁP DỤNG CARD THEME, ICON & ẨN/HIỆN TÀI KHOẢN ✨
+    // ✨ CAN THIỆP SÂU VÀO TỪNG CELL ĐỂ ÁP DỤNG 1 KHUNG DUY NHẤT, ICON & ẨN/HIỆN TÀI KHOẢN ✨
     override func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath)
     {
         let section = Section.allCases[indexPath.section]
@@ -2140,10 +2164,17 @@ extension SettingsViewController
                 cell.alpha = self.isAccountDetailsExpanded ? 1.0 : 0.0
             }
             
-            if indexPath.row == 2, let insetCell = cell as? InsetGroupTableViewCell {
-                insetCell.style = (self.accountStatus == .completed) ? .bottom : .middle
+            // Luôn gom 3 dòng Họ tên (0), Email (1), Loại tài khoản (2) thành 1 khung Card duy nhất (.top -> .middle -> .bottom)
+            if let insetCell = cell as? InsetGroupTableViewCell {
+                if indexPath.row == 0 {
+                    insetCell.style = .top
+                } else if indexPath.row == 1 {
+                    insetCell.style = .middle
+                } else if indexPath.row == 2 {
+                    insetCell.style = .bottom
+                }
             } else if indexPath.row == 3, let actionCell = cell as? AccountVerificationRow {
-                actionCell.style = self.isAccountDetailsExpanded ? .bottom : .single
+                actionCell.style = .single
                 actionCell.backgroundColor = .clear
                 actionCell.contentView.backgroundColor = .clear
                 if #available(iOS 14.0, tvOS 14.0, *) {
@@ -2190,7 +2221,7 @@ extension SettingsViewController
             let cell = tableView.dequeueReusableCell(withIdentifier: AccountVerificationRow.reuseIdentifier) as? AccountVerificationRow
                 ?? AccountVerificationRow()
             cell.configure(with: self.accountStatus)
-            cell.style = self.isAccountDetailsExpanded ? .bottom : .single
+            cell.style = .single
             return cell
         }
         
@@ -2205,9 +2236,13 @@ extension SettingsViewController
         let cell = super.tableView(tableView, cellForRowAt: effectiveIndexPath)
         cell.selectionStyle = .none
         
-        if section == .account && indexPath.row == 2 {
-            if let insetCell = cell as? InsetGroupTableViewCell {
-                insetCell.style = (self.accountStatus == .completed) ? .bottom : .middle
+        if section == .account, let insetCell = cell as? InsetGroupTableViewCell {
+            if indexPath.row == 0 {
+                insetCell.style = .top
+            } else if indexPath.row == 1 {
+                insetCell.style = .middle
+            } else if indexPath.row == 2 {
+                insetCell.style = .bottom
             }
         }
         

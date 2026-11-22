@@ -1,5 +1,4 @@
 
-
 //
 //  SettingsViewController.swift
 //  AltStore
@@ -22,30 +21,31 @@ import SemanticVersion
 import SideSign
 import UniformTypeIdentifiers
 
-// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (Độc lập, không cần CSSThemeManager ngoài)
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% TOÀN HỆ THỐNG & CHỮ ĐEN TUYỀN)
 private struct CSSTheme {
     static let white = UIColor.white
-    static let light = UIColor(red: 248/255, green: 249/255, blue: 250/255, alpha: 1.0) // #f8f9fa
-    static let border = UIColor(red: 233/255, green: 236/255, blue: 239/255, alpha: 1.0) // #e9ecef
-    static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0) // #007bff
-    static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0) // #6f42c1
-    static let indigo = UIColor(red: 88/255, green: 86/255, blue: 214/255, alpha: 1.0) // #5856d6
-    static let teal = UIColor(red: 23/255, green: 162/255, blue: 184/255, alpha: 1.0) // #17a2b8
-    static let orange = UIColor(red: 253/255, green: 126/255, blue: 20/255, alpha: 1.0) // #fd7e14
-    static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0) // #28a745
-    static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0) // #dc3545
-    static let magenta = UIColor(red: 232/255, green: 30/255, blue: 99/255, alpha: 1.0) // #e91e63
-    static let dark = UIColor(red: 52/255, green: 58/255, blue: 64/255, alpha: 1.0) // #343a40
+    static let pureBlack = UIColor.black                                                 // #000000 (Chữ đen tuyền độ tương phản tuyệt đối)
+    static let light = UIColor(red: 245/255, green: 248/255, blue: 255/255, alpha: 1.0)   // #f5f8ff
+    static let border = UIColor(red: 220/255, green: 226/255, blue: 236/255, alpha: 1.0)  // #dce2ec
+    static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0)      // #007bff
+    static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0)   // #6f42c1
+    static let indigo = UIColor(red: 88/255, green: 86/255, blue: 214/255, alpha: 1.0)    // #5856d6
+    static let teal = UIColor(red: 23/255, green: 162/255, blue: 184/255, alpha: 1.0)     // #17a2b8
+    static let orange = UIColor(red: 253/255, green: 126/255, blue: 20/255, alpha: 1.0)   // #fd7e14
+    static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0)     // #28a745
+    static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0)       // #dc3545
+    static let magenta = UIColor(red: 232/255, green: 30/255, blue: 99/255, alpha: 1.0)   // #e91e63
+    static let dark = UIColor.black                                                      // #000000
 
     // Gradient Background (#f3e0ff -> #e0f7ff)
     static let bgGradientStart = UIColor(red: 243/255, green: 224/255, blue: 255/255, alpha: 1.0).cgColor
     static let bgGradientEnd = UIColor(red: 224/255, green: 247/255, blue: 255/255, alpha: 1.0).cgColor
 
-    // Hero Gradient (rgba(0,123,255,.94) -> rgba(111,66,193,.90))
-    static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.94).cgColor
-    static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.90).cgColor
+    // Hero Gradient (rgba(0,123,255,.95) -> rgba(111,66,193,.92))
+    static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.95).cgColor
+    static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.92).cgColor
 
-    static let cornerRadius: CGFloat = 16.0
+    static let cornerRadius: CGFloat = 18.0
 
     // SwiftUI Colors (Phục vụ bảng Máy chủ Anisette)
     static let suiPrimary = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255)
@@ -54,9 +54,9 @@ private struct CSSTheme {
     static let suiRed = SwiftUI.Color(red: 220/255, green: 53/255, blue: 69/255)
     static let suiPureBlack = SwiftUI.Color.black
     static let suiCardBackground = SwiftUI.Color.white
-    static let suiInnerRowBackground = SwiftUI.Color(red: 246/255, green: 248/255, blue: 251/255)
-    static let suiBorder = SwiftUI.Color(red: 218/255, green: 224/255, blue: 233/255)
-    static let suiInnerBorder = SwiftUI.Color(red: 222/255, green: 228/255, blue: 236/255)
+    static let suiInnerRowBackground = SwiftUI.Color(red: 245/255, green: 248/255, blue: 255/255)
+    static let suiBorder = SwiftUI.Color(red: 220/255, green: 226/255, blue: 236/255)
+    static let suiInnerBorder = SwiftUI.Color(red: 222/255, green: 229/255, blue: 240/255)
     static var suiPageGradient: LinearGradient {
         LinearGradient(
             colors: [
@@ -147,14 +147,19 @@ private struct SettingsSkySectionCard<Content: SwiftUI.View>: SwiftUI.View {
 
     var body: some SwiftUI.View {
         VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
-                    SwiftUI.Image(systemName: icon)
-                        .font(.system(size: 14, weight: .heavy))
-                        .foregroundColor(CSSTheme.suiPrimary)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                            .fill(CSSTheme.suiPrimary.opacity(0.14))
+                            .frame(width: 22, height: 22)
+                        SwiftUI.Image(systemName: icon)
+                            .font(.system(size: 11.5, weight: .heavy))
+                            .foregroundColor(CSSTheme.suiPrimary)
+                    }
 
                     SwiftUI.Text(title.uppercased())
-                        .font(.system(size: 15, weight: .heavy))
+                        .font(.system(size: 14, weight: .heavy, design: .rounded))
                         .foregroundColor(CSSTheme.suiPrimary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
@@ -166,9 +171,15 @@ private struct SettingsSkySectionCard<Content: SwiftUI.View>: SwiftUI.View {
                     }
                 }
 
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(CSSTheme.suiPrimary)
-                    .frame(width: 38, height: 3)
+                RoundedRectangle(cornerRadius: 1.75)
+                    .fill(
+                        LinearGradient(
+                            colors: [CSSTheme.suiPrimary, CSSTheme.suiSecondary],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: 38, height: 3.5)
             }
             .padding(.horizontal, 4)
 
@@ -181,9 +192,9 @@ private struct SettingsSkySectionCard<Content: SwiftUI.View>: SwiftUI.View {
             .clipShape(RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                    .stroke(CSSTheme.suiBorder, lineWidth: 1.0)
+                    .stroke(CSSTheme.suiBorder, lineWidth: 1.1)
             )
-            .shadow(color: CSSTheme.suiPrimary.opacity(0.08), radius: 10, x: 0, y: 5)
+            .shadow(color: CSSTheme.suiPrimary.opacity(0.09), radius: 14, x: 0, y: 6)
         }
     }
 }
@@ -327,10 +338,10 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                     }
                     .padding(14)
                     .background(CSSTheme.suiCardBackground)
-                    .cornerRadius(CSSTheme.cornerRadius)
+                    .clipShape(RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                            .stroke(CSSTheme.suiBorder, lineWidth: 1.0)
+                            .stroke(CSSTheme.suiBorder, lineWidth: 1.1)
                     )
                     .shadow(color: CSSTheme.suiPrimary.opacity(0.08), radius: 10, x: 0, y: 5)
 
@@ -363,9 +374,9 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                         .tint(CSSTheme.suiPrimary)
                         .padding(12)
                         .background(CSSTheme.suiInnerRowBackground)
-                        .cornerRadius(12)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12)
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 .stroke(CSSTheme.suiInnerBorder, lineWidth: 1)
                         )
 
@@ -393,9 +404,9 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                         .tint(CSSTheme.suiPrimary)
                         .padding(12)
                         .background(CSSTheme.suiInnerRowBackground)
-                        .cornerRadius(12)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12)
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 .stroke(CSSTheme.suiInnerBorder, lineWidth: 1)
                         )
 
@@ -412,7 +423,7 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
                                 .background(CSSTheme.suiPrimary)
-                                .cornerRadius(12)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                 .shadow(color: CSSTheme.suiPrimary.opacity(0.35), radius: 5, x: 0, y: 3)
                             }
                             .buttonStyle(SettingsBounceButtonStyle())
@@ -473,9 +484,9 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                     }
                                     .padding(12)
                                     .background(CSSTheme.suiInnerRowBackground)
-                                    .cornerRadius(12)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                     .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                                             .stroke(
                                                 isSelected
                                                 ? CSSTheme.suiPrimary.opacity(0.65)
@@ -509,9 +520,9 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                     .disableAutocorrection(true)
                                     .padding(10)
                                     .background(CSSTheme.suiInnerRowBackground)
-                                    .cornerRadius(10)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                     .overlay(
-                                        RoundedRectangle(cornerRadius: 10)
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
                                             .stroke(CSSTheme.suiInnerBorder, lineWidth: 1)
                                     )
 
@@ -532,7 +543,7 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 10)
                                     .background(CSSTheme.suiPrimary)
-                                    .cornerRadius(10)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                     .shadow(color: CSSTheme.suiPrimary.opacity(0.35), radius: 5, x: 0, y: 3)
                                 }
                                 .buttonStyle(SettingsBounceButtonStyle())
@@ -571,6 +582,7 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
             }
         }
         .preferredColorScheme(.light)
+        .environment(\.colorScheme, .light)
         .onDisappear {
             onDismiss?()
         }
@@ -821,6 +833,10 @@ final class SettingsViewController: UITableViewController
     {
         super.viewDidLoad()
         
+        // Khóa cứng chế độ Sáng (Light Mode) để không bao giờ bị hệ thống đổi màu nền cell/chữ
+        self.overrideUserInterfaceStyle = .light
+        self.tableView.overrideUserInterfaceStyle = .light
+        
         self.forceDisableRemovedSettings()
         
         self.title = nil
@@ -862,6 +878,8 @@ final class SettingsViewController: UITableViewController
            let heroCard = heroHeader.subviews.first {
             self.heroGradientLayer?.frame = heroCard.bounds
         }
+        // Đảm bảo sau khi InsetGroupTableViewCell.layoutSubviews() chạy xong, nền trắng #FFFFFF của cả 3 dòng Tài khoản luôn đồng nhất 100%
+        self.enforceUniformWhiteBackgroundOnAccountRows()
     }
 
     override func viewWillAppear(_ animated: Bool)
@@ -929,10 +947,10 @@ extension SettingsViewController: UINavigationControllerDelegate {
             let config = UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)
             btn.setImage(UIImage(systemName: "chevron.left", withConfiguration: config), for: .normal)
             btn.tintColor = CSSTheme.blue
-            btn.backgroundColor = CSSTheme.white.withAlphaComponent(0.92)
+            btn.backgroundColor = CSSTheme.white.withAlphaComponent(0.95)
             
             btn.layer.cornerRadius = 17
-            btn.layer.borderWidth = 1.0
+            btn.layer.borderWidth = 1.1
             btn.layer.borderColor = CSSTheme.border.cgColor
             btn.layer.shadowColor = UIColor.black.cgColor
             btn.layer.shadowOffset = CGSize(width: 0, height: 2)
@@ -1031,7 +1049,7 @@ private extension SettingsViewController {
         
         let heroCard = UIView()
         heroCard.translatesAutoresizingMaskIntoConstraints = false
-        heroCard.layer.cornerRadius = CSSTheme.cornerRadius + 2
+        heroCard.layer.cornerRadius = CSSTheme.cornerRadius
         heroCard.layer.masksToBounds = false
         heroCard.layer.shadowColor = CSSTheme.blue.cgColor
         heroCard.layer.shadowOffset = CGSize(width: 0, height: 7)
@@ -1042,9 +1060,9 @@ private extension SettingsViewController {
         gradient.colors = [CSSTheme.heroStart, CSSTheme.heroEnd]
         gradient.startPoint = CGPoint(x: 0, y: 0)
         gradient.endPoint = CGPoint(x: 1, y: 1)
-        gradient.cornerRadius = CSSTheme.cornerRadius + 2
-        gradient.borderWidth = 1.0
-        gradient.borderColor = UIColor.white.withAlphaComponent(0.28).cgColor
+        gradient.cornerRadius = CSSTheme.cornerRadius
+        gradient.borderWidth = 1.2
+        gradient.borderColor = UIColor.white.withAlphaComponent(0.32).cgColor
         heroCard.layer.insertSublayer(gradient, at: 0)
         self.heroGradientLayer = gradient
         
@@ -1095,7 +1113,7 @@ private extension SettingsViewController {
         subLabel.translatesAutoresizingMaskIntoConstraints = false
         subLabel.text = "✨ Tùy chỉnh & quản lý trải nghiệm cài đặt ứng dụng của bạn"
         subLabel.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
-        subLabel.textColor = CSSTheme.white.withAlphaComponent(0.95)
+        subLabel.textColor = CSSTheme.white.withAlphaComponent(0.96)
         subLabel.textAlignment = .center
         subLabel.numberOfLines = 2
         
@@ -1165,14 +1183,14 @@ private extension SettingsViewController {
 
         let thanksCard = UIView()
         thanksCard.translatesAutoresizingMaskIntoConstraints = false
-        thanksCard.backgroundColor = CSSTheme.white.withAlphaComponent(0.94)
+        thanksCard.backgroundColor = CSSTheme.white
         thanksCard.layer.cornerRadius = CSSTheme.cornerRadius
-        thanksCard.layer.borderWidth = 1.0
+        thanksCard.layer.borderWidth = 1.1
         thanksCard.layer.borderColor = CSSTheme.border.cgColor
         thanksCard.layer.shadowColor = CSSTheme.blue.cgColor
         thanksCard.layer.shadowOffset = CGSize(width: 0, height: 4)
         thanksCard.layer.shadowRadius = 10
-        thanksCard.layer.shadowOpacity = 0.07
+        thanksCard.layer.shadowOpacity = 0.08
 
         let titleLabel = UILabel()
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -1198,15 +1216,15 @@ private extension SettingsViewController {
         bodyLabel.attributedText = NSAttributedString(
             string: bodyText,
             attributes: [
-                .font: UIFont.systemFont(ofSize: 11.5, weight: .medium),
-                .foregroundColor: UIColor.black.withAlphaComponent(0.82),
+                .font: UIFont.systemFont(ofSize: 11.5, weight: .semibold),
+                .foregroundColor: CSSTheme.pureBlack,
                 .paragraphStyle: paragraph
             ]
         )
 
         let btnSideStore = createCompactCreditChip(title: "@sidestoreio", iconName: "sparkles", color: CSSTheme.blue, action: #selector(openSideStoreTwitterChip))
         let btnLitRitt = createCompactCreditChip(title: "@lit_ritt", iconName: "paintbrush.fill", color: CSSTheme.purple, action: #selector(openLitRittTwitterChip))
-        let btnGitHub = createCompactCreditChip(title: "GitHub", iconName: "chevron.left.forwardslash.chevron.right", color: CSSTheme.dark, action: #selector(followAltStoreGitHub))
+        let btnGitHub = createCompactCreditChip(title: "GitHub", iconName: "chevron.left.forwardslash.chevron.right", color: CSSTheme.pureBlack, action: #selector(followAltStoreGitHub))
 
         let chipStack = UIStackView(arrangedSubviews: [btnSideStore, btnLitRitt, btnGitHub])
         chipStack.translatesAutoresizingMaskIntoConstraints = false
@@ -1335,7 +1353,7 @@ private extension SettingsViewController {
         chevronView.translatesAutoresizingMaskIntoConstraints = false
         let chevConfig = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
         chevronView.image = UIImage(systemName: "chevron.right", withConfiguration: chevConfig)
-        chevronView.tintColor = spec.color.withAlphaComponent(0.65)
+        chevronView.tintColor = spec.color.withAlphaComponent(0.75)
         cell.contentView.addSubview(chevronView)
 
         NSLayoutConstraint.activate([
@@ -1344,20 +1362,73 @@ private extension SettingsViewController {
         ])
     }
 
+    // Tìm chính xác khung Card bên trong InsetGroupTableViewCell mà không phụ thuộc vào frame.width (tránh lỗi khi cell đang ẩn height = 0)
+    private func resolveTargetCardView(for cell: UITableViewCell) -> UIView {
+        if let insetCell = cell as? InsetGroupTableViewCell {
+            return insetCell.insetContentView
+        }
+        return cell.subviews.first(where: {
+            $0 !== cell.contentView && $0 !== cell.selectedBackgroundView && $0 !== cell.backgroundView && !($0 is UIButton)
+        }) ?? cell.contentView
+    }
+
+    // Xóa sạch mọi màu nền xám/khác màu của các view trung gian trong Storyboard (đặc biệt ở dòng Loại tài khoản - Row 2)
+    private func clearIntermediateBackgrounds(in view: UIView, keeping targetCardView: UIView) {
+        for sub in view.subviews {
+            if sub === targetCardView || sub is UIButton || sub is UISwitch || sub.tag == 8888 || sub.tag == 8889 || sub.tag == 8890 {
+                continue
+            }
+            sub.backgroundColor = .clear
+            clearIntermediateBackgrounds(in: sub, keeping: targetCardView)
+        }
+    }
+
+    // Ép đồng bộ nền trắng tinh #FFFFFF tuyệt đối cho cả 3 dòng Họ tên (0), Email (1), Loại tài khoản (2)
+    private func enforceUniformWhiteBackgroundOnAccountRows() {
+        guard self.isViewLoaded else { return }
+        for row in 0..<3 {
+            let indexPath = IndexPath(row: row, section: Section.account.rawValue)
+            guard let cell = self.tableView.cellForRow(at: indexPath) else { continue }
+            cell.overrideUserInterfaceStyle = .light
+            cell.backgroundColor = .clear
+            cell.contentView.backgroundColor = .clear
+            cell.backgroundView = nil
+            if #available(iOS 14.0, tvOS 14.0, *) {
+                var bgConfig = UIBackgroundConfiguration.clear()
+                bgConfig.backgroundColor = .clear
+                cell.backgroundConfiguration = bgConfig
+            }
+            let targetCardView = resolveTargetCardView(for: cell)
+            targetCardView.overrideUserInterfaceStyle = .light
+            targetCardView.backgroundColor = CSSTheme.white
+            targetCardView.layer.backgroundColor = CSSTheme.white.cgColor
+            clearIntermediateBackgrounds(in: cell.contentView, keeping: targetCardView)
+        }
+    }
+
     // Bóc tách lớp nền của InsetGroupTableViewCell để ép nhận diện 1 khung Card duy nhất + Icon
     private func styleInnerCardOfCell(_ cell: UITableViewCell, at indexPath: IndexPath, totalRows: Int) {
+        cell.overrideUserInterfaceStyle = .light
         cell.selectionStyle = .none
+        cell.backgroundView = nil
         cell.selectedBackgroundView = UIView()
         cell.selectedBackgroundView?.backgroundColor = .clear
+        if #available(iOS 14.0, tvOS 14.0, *) {
+            var bgConfig = UIBackgroundConfiguration.clear()
+            bgConfig.backgroundColor = .clear
+            cell.backgroundConfiguration = bgConfig
+        }
         
         cell.backgroundColor = .clear
         cell.contentView.backgroundColor = .clear
         
-        let targetCardView: UIView = cell.subviews.first(where: {
-            $0 !== cell.contentView && $0 !== cell.selectedBackgroundView && $0.frame.width > 100 && !($0 is UIButton)
-        }) ?? cell.contentView
-        
+        let targetCardView = resolveTargetCardView(for: cell)
+        targetCardView.overrideUserInterfaceStyle = .light
         targetCardView.backgroundColor = CSSTheme.white
+        targetCardView.layer.backgroundColor = CSSTheme.white.cgColor
+        
+        // Xóa bỏ toàn bộ màu nền phụ từ Storyboard bên trong contentView để dòng Loại tài khoản giống hệt Họ tên & Email
+        clearIntermediateBackgrounds(in: cell.contentView, keeping: targetCardView)
         
         let section = Section.allCases[indexPath.section]
 
@@ -1377,9 +1448,9 @@ private extension SettingsViewController {
         targetCardView.layer.maskedCorners = corners
         targetCardView.layer.masksToBounds = true
         
-        // Không đổ bóng chồng lên nhau giữa các dòng trong cùng 1 khung Tài khoản
-        cell.layer.masksToBounds = false
-        if section == .account && indexPath.row < effectiveTotalRows - 1 {
+        // Tắt đổ bóng trực tiếp trên từng cell riêng lẻ khi gộp nhiều dòng để dòng cuối (Loại tài khoản) không bị bóng xanh ám tối nền
+        cell.layer.masksToBounds = (section == .account && indexPath.row < 3)
+        if effectiveTotalRows > 1 {
             cell.layer.shadowOpacity = 0.0
         } else {
             cell.layer.shadowColor = CSSTheme.blue.cgColor
@@ -1423,6 +1494,7 @@ private extension SettingsViewController {
             cell.setSelected(false, animated: false)
             self.styleInnerCardOfCell(cell, at: indexPath, totalRows: totalRows)
         }
+        self.enforceUniformWhiteBackgroundOnAccountRows()
     }
 
     // Bộ từ điển dịch tự động 100% các chuỗi tĩnh từ Storyboard & Hệ thống sang Tiếng Việt
@@ -1439,6 +1511,7 @@ private extension SettingsViewController {
             "Name": "Họ tên",
             "Email": "Email",
             "Type": "Loại tài khoản",
+            "Account Type": "Loại tài khoản",
             "Free Developer Account": "Nhà phát triển Miễn phí",
             "Tài khoản Nhà phát triển Miễn phí": "Nhà phát triển Miễn phí",
             "Regular Account": "Tài khoản Miễn phí",
@@ -1479,6 +1552,7 @@ private extension SettingsViewController {
                 if subview.superview is UIButton {
                     continue
                 }
+                label.backgroundColor = .clear
                 
                 // 1. Nhóm Label giá trị bên phải của khung Tài khoản (Tên, Email, Nhà phát triển Miễn phí)
                 if label == self.accountNameLabel || label == self.accountEmailLabel || label == self.accountTypeLabel {
@@ -1509,8 +1583,8 @@ private extension SettingsViewController {
                         textColor = CSSTheme.magenta
                         font = UIFont.systemFont(ofSize: 15.5, weight: .semibold)
                     } else {
-                        textColor = CSSTheme.dark
-                        font = UIFont.systemFont(ofSize: 15.5, weight: .semibold)
+                        textColor = CSSTheme.pureBlack
+                        font = UIFont.systemFont(ofSize: 15.5, weight: .bold)
                     }
 
                     label.textAlignment = .left
@@ -1556,11 +1630,16 @@ private extension SettingsViewController {
             }
             
             for row in 0..<3 {
-                if let cell = self.tableView.cellForRow(at: IndexPath(row: row, section: Section.account.rawValue)) {
+                let idx = IndexPath(row: row, section: Section.account.rawValue)
+                if let cell = self.tableView.cellForRow(at: idx) {
                     cell.alpha = self.isAccountDetailsExpanded ? 1.0 : 0.0
                     cell.isHidden = !self.isAccountDetailsExpanded
+                    self.styleInnerCardOfCell(cell, at: idx, totalRows: 3)
                 }
             }
+            self.enforceUniformWhiteBackgroundOnAccountRows()
+        } completion: { [weak self] _ in
+            self?.restoreVisibleCellsWhiteBackground()
         }
     }
 }
@@ -1591,7 +1670,7 @@ private extension SettingsViewController
             string: "\n" + iosVersion,
             attributes: [
                 .font: UIFont.systemFont(ofSize: 11.5, weight: .semibold),
-                .foregroundColor: CSSTheme.purple.withAlphaComponent(0.85),
+                .foregroundColor: CSSTheme.purple,
                 .paragraphStyle: paragraphStyle
             ]
         )
@@ -1665,6 +1744,7 @@ private extension SettingsViewController
                 self.updateAccountCardRowStyles()
             }
             self.tableView.reloadData()
+            self.restoreVisibleCellsWhiteBackground()
         }
         
         self.forceDisableRemovedSettings()
@@ -1679,6 +1759,7 @@ private extension SettingsViewController
         if self.isViewLoaded
         {
             self.tableView.reloadData()
+            self.restoreVisibleCellsWhiteBackground()
         }
     }
 
@@ -1704,11 +1785,21 @@ private extension SettingsViewController
     private func updateAccountCardRowStyles()
     {
         guard self.isViewLoaded else { return }
-        let typeIndexPath = IndexPath(row: 2, section: Section.account.rawValue)
-        if let typeCell = self.tableView.cellForRow(at: typeIndexPath) as? InsetGroupTableViewCell {
-            // Luôn bo góc dưới cho dòng Loại tài khoản để 3 dòng (Họ tên, Email, Loại tài khoản) nằm gọn trong 1 khung duy nhất
-            typeCell.style = .bottom
+        for row in 0..<3 {
+            let indexPath = IndexPath(row: row, section: Section.account.rawValue)
+            if let cell = self.tableView.cellForRow(at: indexPath) as? InsetGroupTableViewCell {
+                if row == 0 {
+                    cell.style = .top
+                } else if row == 1 {
+                    cell.style = .middle
+                } else if row == 2 {
+                    // Luôn bo góc dưới cho dòng Loại tài khoản để 3 dòng nằm chung 1 khung trắng đồng nhất
+                    cell.style = .bottom
+                }
+                self.styleInnerCardOfCell(cell, at: indexPath, totalRows: 3)
+            }
         }
+        self.enforceUniformWhiteBackgroundOnAccountRows()
     }
 
     private func resolvePendingAccountActions()
@@ -1746,8 +1837,8 @@ private extension SettingsViewController
         
         settingsHeaderFooterView.primaryLabel.textColor = CSSTheme.blue
         settingsHeaderFooterView.primaryLabel.font = UIFont.systemFont(ofSize: 14.5, weight: .heavy)
-        settingsHeaderFooterView.secondaryLabel.textColor = CSSTheme.dark.withAlphaComponent(0.78)
-        settingsHeaderFooterView.secondaryLabel.font = UIFont.systemFont(ofSize: 13, weight: .regular)
+        settingsHeaderFooterView.secondaryLabel.textColor = CSSTheme.pureBlack
+        settingsHeaderFooterView.secondaryLabel.font = UIFont.systemFont(ofSize: 13, weight: .medium)
         
         let toggleAccountTag = 9992
         settingsHeaderFooterView.contentView.viewWithTag(toggleAccountTag)?.removeFromSuperview()
@@ -1758,14 +1849,14 @@ private extension SettingsViewController
             let underline = UIView()
             underline.tag = underlineTag
             underline.backgroundColor = CSSTheme.blue
-            underline.layer.cornerRadius = 1.5
+            underline.layer.cornerRadius = 1.75
             underline.translatesAutoresizingMaskIntoConstraints = false
             settingsHeaderFooterView.contentView.addSubview(underline)
             NSLayoutConstraint.activate([
                 underline.leadingAnchor.constraint(equalTo: settingsHeaderFooterView.primaryLabel.leadingAnchor),
                 underline.topAnchor.constraint(equalTo: settingsHeaderFooterView.primaryLabel.bottomAnchor, constant: 2),
                 underline.widthAnchor.constraint(equalToConstant: 38),
-                underline.heightAnchor.constraint(equalToConstant: 3)
+                underline.heightAnchor.constraint(equalToConstant: 3.5)
             ])
         }
         
@@ -1993,7 +2084,6 @@ private extension SettingsViewController
         UserDefaults.standard.responseCachingDisabled = sender.isOn
     }
 
-    // Đã xóa câu "Bạn có chắc chắn muốn xóa bộ nhớ đệm của SideStore không?" theo yêu cầu
     private func clearCache()
     {
         let makeCacheTitle: (String) -> String = { sizeString in
@@ -2185,6 +2275,14 @@ extension SettingsViewController
         }
         
         self.styleInnerCardOfCell(cell, at: indexPath, totalRows: totalRows)
+        
+        // Ép lại màu trắng tinh #FFFFFF ở chu kỳ RunLoop tiếp theo để thắng tuyệt đối hàm layoutSubviews() của InsetGroupTableViewCell
+        if section == .account && indexPath.row < 3 {
+            DispatchQueue.main.async { [weak self, weak cell] in
+                guard let self = self, let cell = cell else { return }
+                self.styleInnerCardOfCell(cell, at: indexPath, totalRows: 3)
+            }
+        }
     }
 
     override func tableView(_ tableView: UITableView, indentationLevelForRowAt indexPath: IndexPath) -> Int
@@ -2234,6 +2332,7 @@ extension SettingsViewController
         }
         
         let cell = super.tableView(tableView, cellForRowAt: effectiveIndexPath)
+        cell.overrideUserInterfaceStyle = .light
         cell.selectionStyle = .none
         
         if section == .account, let insetCell = cell as? InsetGroupTableViewCell {
@@ -2244,6 +2343,7 @@ extension SettingsViewController
             } else if indexPath.row == 2 {
                 insetCell.style = .bottom
             }
+            insetCell.insetContentView.backgroundColor = CSSTheme.white
         }
         
         if section == .advancedSettings,
@@ -2258,6 +2358,7 @@ extension SettingsViewController
             } else {
                 insetCell.style = .middle
             }
+            insetCell.insetContentView.backgroundColor = CSSTheme.white
         }
         
         return cell

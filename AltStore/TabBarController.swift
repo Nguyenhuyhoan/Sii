@@ -43,6 +43,10 @@ final class TabBarController: UITabBarController
         super.viewDidLoad()
         debugLog("[TabBarController] viewDidLoad()")
         
+        // 0. CỐ ĐỊNH GIAO DIỆN SÁNG (Light Mode)
+        // Thuộc tính này sẽ áp dụng cho cả TabBarController và toàn bộ các NavigationController con bên trong.
+        self.overrideUserInterfaceStyle = .light
+        
         // 1. Xóa tab Browse (nằm ở vị trí index 2 trên Storyboard gốc)
         if var viewControllers = self.viewControllers, viewControllers.count == 5 {
             viewControllers.remove(at: 2)
@@ -87,6 +91,9 @@ final class TabBarController: UITabBarController
     {
         super.viewDidAppear(animated)
         debugLog("[TabBarController] viewDidAppear() — TabBarController is now visible")
+        
+        // Đảm bảo toàn bộ cửa sổ ứng dụng (bao gồm cả các Alert, Toast, Popup...) cũng luôn ở giao diện sáng
+        self.view.window?.overrideUserInterfaceStyle = .light
         
         _viewDidAppear = true
         

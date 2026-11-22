@@ -12,28 +12,48 @@ import SwiftUI
 import UIKit
 #endif
 
-// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI SETTINGSVIEWCONTROLLER)
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI TOÀN BỘ ỨNG DỤNG & CHỮ ĐEN TUYỀN)
 private enum SideJITCSSTheme {
     static let white = Color.white
-    static let light = Color(red: 248/255, green: 249/255, blue: 250/255) // #f8f9fa
-    static let border = Color(red: 233/255, green: 236/255, blue: 239/255) // #e9ecef
-    static let blue = Color(red: 0/255, green: 123/255, blue: 255/255) // #007bff
-    static let purple = Color(red: 111/255, green: 66/255, blue: 193/255) // #6f42c1
-    static let green = Color(red: 40/255, green: 167/255, blue: 69/255) // #28a745
-    static let orange = Color(red: 253/255, green: 126/255, blue: 20/255) // #fd7e14
-    static let red = Color(red: 220/255, green: 53/255, blue: 69/255) // #dc3545
-    static let magenta = Color(red: 255/255, green: 0/255, blue: 255/255) // #ff00ff
-    static let dark = Color(red: 52/255, green: 58/255, blue: 64/255) // #343a40
+    static let pureBlack = Color.black                                               // #000000 (Chữ đen tuyền độ tương phản tuyệt đối)
+    static let light = Color(red: 245/255, green: 248/255, blue: 255/255)            // #f5f8ff (Đồng bộ innerRowBackground)
+    static let border = Color(red: 220/255, green: 226/255, blue: 236/255)           // #dce2ec (Viền chuẩn toàn hệ thống)
+    static let innerBorder = Color(red: 222/255, green: 229/255, blue: 240/255)      // #dee5f0
+    static let blue = Color(red: 0/255, green: 123/255, blue: 255/255)               // #007bff
+    static let purple = Color(red: 111/255, green: 66/255, blue: 193/255)            // #6f42c1
+    static let green = Color(red: 40/255, green: 167/255, blue: 69/255)              // #28a745
+    static let orange = Color(red: 253/255, green: 126/255, blue: 20/255)            // #fd7e14
+    static let red = Color(red: 220/255, green: 53/255, blue: 69/255)                // #dc3545
+    static let magenta = Color(red: 255/255, green: 0/255, blue: 255/255)            // #ff00ff
+    static let dark = Color.black                                                    // #000000
 
     // Gradient Background (#f3e0ff -> #e0f7ff)
     static let bgGradientStart = Color(red: 243/255, green: 224/255, blue: 255/255)
     static let bgGradientEnd = Color(red: 224/255, green: 247/255, blue: 255/255)
 
-    // Hero Gradient (rgba(0,123,255,.92) -> rgba(111,66,193,.88))
-    static let heroStart = Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.92)
-    static let heroEnd = Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.88)
+    // Hero Gradient (rgba(0,123,255,.95) -> rgba(111,66,193,.92))
+    static let heroStart = Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.95)
+    static let heroEnd = Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.92)
 
-    static let cornerRadius: CGFloat = 15.0
+    static var accentUnderlineGradient: LinearGradient {
+        LinearGradient(
+            colors: [blue, purple],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    static let cornerRadius: CGFloat = 18.0
+    static let innerCornerRadius: CGFloat = 14.0
+}
+
+private struct SideJITBounceButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .offset(x: configuration.isPressed ? 3 : 0, y: configuration.isPressed ? -1 : 0)
+            .animation(.spring(response: 0.28, dampingFraction: 0.62), value: configuration.isPressed)
+    }
 }
 
 enum SideJITConnectionStatus: Equatable {
@@ -45,7 +65,7 @@ enum SideJITConnectionStatus: Equatable {
     
     var color: Color {
         switch self {
-        case .disabled: return SideJITCSSTheme.dark.opacity(0.45)
+        case .disabled: return SideJITCSSTheme.pureBlack
         case .ready: return SideJITCSSTheme.green
         case .discovering, .checking: return SideJITCSSTheme.orange
         case .disconnected: return SideJITCSSTheme.red
@@ -145,6 +165,7 @@ struct SideJITServerConfigView: View {
                     .zIndex(10)
             }
         }
+        .preferredColorScheme(.light)
         .navigationTitle("")
         #if !os(tvOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -158,24 +179,42 @@ struct SideJITServerConfigView: View {
         }
     }
     
-    // MARK: - 🌟 KHỐI HERO BANNER CHUẨN CSS
+    // MARK: - 🌟 KHỐI HERO BANNER CHUẨN CSS (ĐỒNG BỘ KÍNH MỜ & VÒNG TRÒN TRANG TRÍ)
     private var heroBannerSection: some View {
-        VStack(spacing: 5) {
-            Text("SideJITServer")
-                .font(.system(size: 24, weight: .heavy))
-                .foregroundColor(SideJITCSSTheme.white)
-                .shadow(color: Color.black.opacity(0.35), radius: 4, x: 1, y: 2)
-                .multilineTextAlignment(.center)
-            
-            Text("Kích hoạt biên dịch JIT tốc độ cao cho ứng dụng trên iOS 17+")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(SideJITCSSTheme.white.opacity(0.95))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
+        ZStack(alignment: .topTrailing) {
+            Circle()
+                .fill(Color.white.opacity(0.12))
+                .frame(width: 110, height: 110)
+                .offset(x: 32, y: -42)
+
+            VStack(spacing: 6) {
+                HStack(spacing: 8) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.22))
+                            .frame(width: 30, height: 30)
+                        Image(systemName: "bolt.shield.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+
+                    Text("SideJITServer")
+                        .font(.system(size: 22, weight: .heavy, design: .rounded))
+                        .foregroundColor(SideJITCSSTheme.white)
+                        .shadow(color: Color.black.opacity(0.28), radius: 4, x: 0, y: 2)
+                        .multilineTextAlignment(.center)
+                }
+                
+                Text("Kích hoạt biên dịch JIT tốc độ cao cho ứng dụng trên iOS 17+")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(SideJITCSSTheme.white.opacity(0.96))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 12)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .padding(.horizontal, 28) // Tránh va chạm với nút Back nổi ở góc trái
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .padding(.horizontal, 36) // Tránh va chạm với nút Back nổi ở góc trái
         .background(
             LinearGradient(
                 gradient: Gradient(colors: [SideJITCSSTheme.heroStart, SideJITCSSTheme.heroEnd]),
@@ -183,8 +222,12 @@ struct SideJITServerConfigView: View {
                 endPoint: .bottomTrailing
             )
         )
-        .cornerRadius(SideJITCSSTheme.cornerRadius)
-        .shadow(color: SideJITCSSTheme.blue.opacity(0.25), radius: 16, x: 0, y: 6)
+        .clipShape(RoundedRectangle(cornerRadius: SideJITCSSTheme.cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: SideJITCSSTheme.cornerRadius, style: .continuous)
+                .stroke(Color.white.opacity(0.32), lineWidth: 1.2)
+        )
+        .shadow(color: SideJITCSSTheme.blue.opacity(0.26), radius: 14, x: 0, y: 7)
         .opacity(animateHero ? 1.0 : 0.0)
         .offset(y: animateHero ? 0 : -10)
     }
@@ -192,7 +235,7 @@ struct SideJITServerConfigView: View {
     // MARK: - ⚡ BẬT / TẮT MÁY CHỦ SIDEJITSERVER
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            cssSectionHeader("KÍCH HOẠT DỊCH VỤ")
+            cssSectionHeader("KÍCH HOẠT DỊCH VỤ", icon: "power.circle.fill")
             
             cssCard {
                 Toggle(isOn: $isServerEnabled) {
@@ -206,20 +249,20 @@ struct SideJITServerConfigView: View {
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .frame(width: 36, height: 36)
+                                .frame(width: 38, height: 38)
                             
                             Image(systemName: "bolt.fill")
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundColor(SideJITCSSTheme.blue)
                         }
                         
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: 2.5) {
                             Text("Bật máy chủ SideJITServer")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.black)
+                                .font(.system(size: 15.5, weight: .bold))
+                                .foregroundColor(SideJITCSSTheme.pureBlack)
                             Text("Bắt buộc để kích hoạt JIT trên iOS 17 trở lên")
-                                .font(.system(size: 12, weight: .regular))
-                                .foregroundColor(SideJITCSSTheme.dark.opacity(0.75))
+                                .font(.system(size: 12.2, weight: .medium))
+                                .foregroundColor(SideJITCSSTheme.pureBlack)
                         }
                     }
                 }
@@ -242,15 +285,15 @@ struct SideJITServerConfigView: View {
     // MARK: - 📡 TRẠNG THÁI KẾT NỐI
     private var statusSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            cssSectionHeader("TRẠNG THÁI KẾT NỐI")
+            cssSectionHeader("TRẠNG THÁI KẾT NỐI", icon: "antenna.radiowaves.left.and.right")
             
             cssCard {
                 VStack(spacing: 0) {
                     // Dòng 1: Trạng thái
                     HStack {
                         Text("Trạng thái")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.black)
+                            .font(.system(size: 15.5, weight: .bold))
+                            .foregroundColor(SideJITCSSTheme.pureBlack)
                         Spacer()
                         HStack(spacing: 6) {
                             Circle()
@@ -258,13 +301,13 @@ struct SideJITServerConfigView: View {
                                 .frame(width: 9, height: 9)
                                 .shadow(color: connectionStatus.color.opacity(0.5), radius: 3, x: 0, y: 1)
                             Text(connectionStatus.title)
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(connectionStatus == .disabled ? SideJITCSSTheme.dark.opacity(0.6) : connectionStatus.color)
+                                .font(.system(size: 13.5, weight: .bold))
+                                .foregroundColor(connectionStatus.color)
                         }
                         .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(connectionStatus.color.opacity(0.1))
-                        .cornerRadius(10)
+                        .padding(.vertical, 5)
+                        .background(connectionStatus.color.opacity(0.12))
+                        .clipShape(Capsule())
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 13)
@@ -274,13 +317,13 @@ struct SideJITServerConfigView: View {
                     // Dòng 2: Địa chỉ máy chủ đã phân giải
                     HStack {
                         Text("Địa chỉ phân giải")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.black)
+                            .font(.system(size: 15.5, weight: .bold))
+                            .foregroundColor(SideJITCSSTheme.pureBlack)
                             .layoutPriority(1)
                         Spacer()
                         Text(!isServerEnabled ? "Đã tắt" : (resolvedAddress.isEmpty ? "Đang phân giải…" : resolvedAddress))
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                            .foregroundColor((!isServerEnabled || resolvedAddress.isEmpty) ? SideJITCSSTheme.dark.opacity(0.55) : SideJITCSSTheme.blue)
+                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                            .foregroundColor((!isServerEnabled || resolvedAddress.isEmpty) ? SideJITCSSTheme.pureBlack : SideJITCSSTheme.blue)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                     }
@@ -305,12 +348,16 @@ struct SideJITServerConfigView: View {
                     // Dòng 3: Chế độ phân giải
                     HStack {
                         Text("Chế độ phân giải")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.black)
+                            .font(.system(size: 15.5, weight: .bold))
+                            .foregroundColor(SideJITCSSTheme.pureBlack)
                         Spacer()
                         Text(customAddress.isEmpty ? "Tự động (Bonjour mDNS)" : "Thủ công (Tùy chỉnh)")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: 13.5, weight: .bold))
                             .foregroundColor(SideJITCSSTheme.purple)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(SideJITCSSTheme.purple.opacity(0.1))
+                            .clipShape(Capsule())
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 13)
@@ -322,17 +369,22 @@ struct SideJITServerConfigView: View {
     // MARK: - 🌐 ĐỊA CHỈ MÁY CHỦ TÙY CHỈNH
     private var configurationSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            cssSectionHeader("ĐỊA CHỈ MÁY CHỦ")
+            cssSectionHeader("ĐỊA CHỈ MÁY CHỦ", icon: "globe")
             
             cssCard {
                 HStack(spacing: 10) {
-                    Image(systemName: "link")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(SideJITCSSTheme.blue)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(SideJITCSSTheme.blue.opacity(0.14))
+                            .frame(width: 30, height: 30)
+                        Image(systemName: "link")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(SideJITCSSTheme.blue)
+                    }
                     
                     TextField(AppConstants.SideJIT.defaultServerURL, text: $customAddress)
-                        .font(.system(size: 13.5, weight: .medium, design: .monospaced))
-                        .foregroundColor(.black)
+                        .font(.system(size: 13.8, weight: .semibold, design: .monospaced))
+                        .foregroundColor(SideJITCSSTheme.pureBlack)
                         .minimumScaleFactor(0.7)
                         .lineLimit(1)
                         .autocapitalization(.none)
@@ -353,14 +405,14 @@ struct SideJITServerConfigView: View {
                             refreshServerState()
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 16))
-                                .foregroundColor(SideJITCSSTheme.dark.opacity(0.45))
+                                .font(.system(size: 17, weight: .bold))
+                                .foregroundColor(SideJITCSSTheme.red)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(SideJITBounceButtonStyle())
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 13)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
             }
             
             cssSectionFooter("Để trống ô này nếu bạn muốn tự động tìm kiếm máy chủ SideJITServer trong mạng nội bộ thông qua giao thức Bonjour.")
@@ -370,7 +422,7 @@ struct SideJITServerConfigView: View {
     // MARK: - 🛠️ CHẨN ĐOÁN & CÔNG CỤ KIỂM TRA
     private var diagnosticActionsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            cssSectionHeader("CHẨN ĐOÁN & CÔNG CỤ")
+            cssSectionHeader("CHẨN ĐOÁN & CÔNG CỤ", icon: "wrench.and.screwdriver.fill")
             
             cssCard {
                 VStack(spacing: 0) {
@@ -381,8 +433,8 @@ struct SideJITServerConfigView: View {
                         HStack(spacing: 12) {
                             diagnosticIcon("network", color: SideJITCSSTheme.blue)
                             Text("Kiểm tra kết nối (Ping)")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.black)
+                                .font(.system(size: 15.5, weight: .bold))
+                                .foregroundColor(SideJITCSSTheme.pureBlack)
                             Spacer()
                             if activeAction == .ping {
                                 ProgressView()
@@ -390,14 +442,14 @@ struct SideJITServerConfigView: View {
                             } else {
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 13, weight: .bold))
-                                    .foregroundColor(SideJITCSSTheme.dark.opacity(0.35))
+                                    .foregroundColor(SideJITCSSTheme.blue)
                             }
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 13)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SideJITBounceButtonStyle())
                     .disabled(activeAction != nil)
                     
                     cssDivider
@@ -409,8 +461,8 @@ struct SideJITServerConfigView: View {
                         HStack(spacing: 12) {
                             diagnosticIcon("arrow.clockwise", color: SideJITCSSTheme.purple)
                             Text("Làm mới bộ nhớ đệm thiết bị (/re/)")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.black)
+                                .font(.system(size: 15.5, weight: .bold))
+                                .foregroundColor(SideJITCSSTheme.pureBlack)
                             Spacer()
                             if activeAction == .refresh {
                                 ProgressView()
@@ -418,14 +470,14 @@ struct SideJITServerConfigView: View {
                             } else {
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 13, weight: .bold))
-                                    .foregroundColor(SideJITCSSTheme.dark.opacity(0.35))
+                                    .foregroundColor(SideJITCSSTheme.blue)
                             }
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 13)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SideJITBounceButtonStyle())
                     .disabled(activeAction != nil)
                     
                     cssDivider
@@ -437,8 +489,8 @@ struct SideJITServerConfigView: View {
                         HStack(spacing: 12) {
                             diagnosticIcon("info.circle.fill", color: SideJITCSSTheme.green)
                             Text("Kiểm tra thông tin phiên bản (/ver/)")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.black)
+                                .font(.system(size: 15.5, weight: .bold))
+                                .foregroundColor(SideJITCSSTheme.pureBlack)
                             Spacer()
                             if activeAction == .version {
                                 ProgressView()
@@ -446,14 +498,14 @@ struct SideJITServerConfigView: View {
                             } else {
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 13, weight: .bold))
-                                    .foregroundColor(SideJITCSSTheme.dark.opacity(0.35))
+                                    .foregroundColor(SideJITCSSTheme.blue)
                             }
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 13)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SideJITBounceButtonStyle())
                     .disabled(activeAction != nil)
                 }
             }
@@ -463,21 +515,21 @@ struct SideJITServerConfigView: View {
     // MARK: - 📄 PHẢN HỒI MỚI NHẤT TỪ MÁY CHỦ
     private func responseInspectorSection(log: SideJITResponseLog) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            cssSectionHeader("PHẢN HỒI MỚI NHẤT TỪ MÁY CHỦ")
+            cssSectionHeader("PHẢN HỒI MỚI NHẤT TỪ MÁY CHỦ", icon: "terminal.fill")
             
             cssCard {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
                         Text(log.httpMethod)
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .font(.system(size: 11.5, weight: .bold, design: .monospaced))
                             .foregroundColor(SideJITCSSTheme.white)
                             .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
+                            .padding(.vertical, 3.5)
                             .background(SideJITCSSTheme.blue)
-                            .cornerRadius(6)
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                         
                         Text(log.endpoint)
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 13.5, weight: .bold, design: .monospaced))
                             .foregroundColor(SideJITCSSTheme.purple)
                             .lineLimit(1)
                         
@@ -486,21 +538,21 @@ struct SideJITServerConfigView: View {
                         Text(log.statusCode == 0 ? "LỖI" : "HTTP \(log.statusCode)")
                             .font(.system(size: 12, weight: .bold, design: .monospaced))
                             .foregroundColor(log.isSuccess ? SideJITCSSTheme.green : SideJITCSSTheme.red)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2)
-                            .background((log.isSuccess ? SideJITCSSTheme.green : SideJITCSSTheme.red).opacity(0.12))
-                            .cornerRadius(6)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background((log.isSuccess ? SideJITCSSTheme.green : SideJITCSSTheme.red).opacity(0.14))
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                         
                         Text("\(log.latencyMs) ms")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(SideJITCSSTheme.dark.opacity(0.65))
+                            .font(.system(size: 11.5, weight: .bold))
+                            .foregroundColor(SideJITCSSTheme.pureBlack)
                     }
                     
                     ScrollView(.vertical, showsIndicators: true) {
                         ScrollView(.horizontal, showsIndicators: false) {
                             Text(log.prettyPayload)
-                                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                                .foregroundColor(.black)
+                                .font(.system(size: 12.2, weight: .semibold, design: .monospaced))
+                                .foregroundColor(SideJITCSSTheme.pureBlack)
                                 .multilineTextAlignment(.leading)
                                 .padding(12)
                         }
@@ -509,10 +561,10 @@ struct SideJITServerConfigView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(maxHeight: 200)
                     .background(SideJITCSSTheme.light)
-                    .cornerRadius(10)
+                    .clipShape(RoundedRectangle(cornerRadius: SideJITCSSTheme.innerCornerRadius, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(SideJITCSSTheme.border, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: SideJITCSSTheme.innerCornerRadius, style: .continuous)
+                            .stroke(SideJITCSSTheme.innerBorder, lineWidth: 1.1)
                     )
                     
                     HStack {
@@ -523,19 +575,19 @@ struct SideJITServerConfigView: View {
                             showCopied()
                             #endif
                         } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "doc.on.doc")
-                                    .font(.system(size: 11, weight: .bold))
+                            HStack(spacing: 5) {
+                                Image(systemName: "doc.on.doc.fill")
+                                    .font(.system(size: 11.5, weight: .bold))
                                 Text("Sao chép phản hồi")
-                                    .font(.system(size: 12, weight: .semibold))
+                                    .font(.system(size: 12.5, weight: .bold))
                             }
                             .foregroundColor(SideJITCSSTheme.blue)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(SideJITCSSTheme.blue.opacity(0.1))
-                            .cornerRadius(8)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6.5)
+                            .background(SideJITCSSTheme.blue.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(SideJITBounceButtonStyle())
                     }
                 }
                 .padding(16)
@@ -556,27 +608,32 @@ struct SideJITServerConfigView: View {
     // MARK: - ℹ️ GIỚI THIỆU VỀ SIDEJITSERVER
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            cssSectionHeader("THÔNG TIN GIỚI THIỆU")
+            cssSectionHeader("THÔNG TIN GIỚI THIỆU", icon: "sparkles")
             
             cssCard {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(SideJITCSSTheme.purple)
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(SideJITCSSTheme.purple.opacity(0.14))
+                                .frame(width: 26, height: 26)
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(SideJITCSSTheme.purple)
+                        }
                         Text("Cơ chế hoạt động của SideJITServer")
-                            .font(.system(size: 14, weight: .bold))
+                            .font(.system(size: 14.5, weight: .bold))
                             .foregroundColor(SideJITCSSTheme.purple)
                     }
                     
                     Text("SideJITServer giúp gắn dịch vụ debugserver của Apple từ máy tính vào các ứng dụng đang chạy trên iOS 17+ thông qua mạng Wi-Fi nội bộ hoặc cáp USB.")
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundColor(SideJITCSSTheme.dark.opacity(0.85))
+                        .font(.system(size: 13.5, weight: .medium))
+                        .foregroundColor(SideJITCSSTheme.pureBlack)
                         .fixedSize(horizontal: false, vertical: true)
                     
                     Text("Khi SideStore yêu cầu bật JIT, SideJITServer sẽ gửi tín hiệu gỡ lỗi và kích hoạt thực thi Just-In-Time (JIT) ngay lập tức.")
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundColor(SideJITCSSTheme.dark.opacity(0.85))
+                        .font(.system(size: 13.5, weight: .medium))
+                        .foregroundColor(SideJITCSSTheme.pureBlack)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(16)
@@ -585,16 +642,27 @@ struct SideJITServerConfigView: View {
         }
     }
     
-    // MARK: - 🎨 CÁC THÀNH PHẦN UI CHUẨN CSS HELPER
-    private func cssSectionHeader(_ title: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.system(size: 14, weight: .heavy))
-                .foregroundColor(SideJITCSSTheme.blue)
+    // MARK: - 🎨 CÁC THÀNH PHẦN UI CHUẨN CSS HELPER (ĐỒNG BỘ ICON BOX & GẠCH CHÂN GRADIENT 38x3.5PT)
+    private func cssSectionHeader(_ title: String, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 7) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+                        .fill(SideJITCSSTheme.blue.opacity(0.14))
+                        .frame(width: 22, height: 22)
+                    Image(systemName: icon)
+                        .font(.system(size: 11.5, weight: .heavy))
+                        .foregroundColor(SideJITCSSTheme.blue)
+                }
+
+                Text(title)
+                    .font(.system(size: 14, weight: .heavy, design: .rounded))
+                    .foregroundColor(SideJITCSSTheme.blue)
+            }
             
-            RoundedRectangle(cornerRadius: 1.5)
-                .fill(SideJITCSSTheme.blue)
-                .frame(width: 38, height: 3)
+            RoundedRectangle(cornerRadius: 1.75)
+                .fill(SideJITCSSTheme.accentUnderlineGradient)
+                .frame(width: 38, height: 3.5)
         }
         .padding(.leading, 4)
         .padding(.top, 2)
@@ -602,8 +670,8 @@ struct SideJITServerConfigView: View {
     
     private func cssSectionFooter(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 12.5, weight: .regular))
-            .foregroundColor(SideJITCSSTheme.dark.opacity(0.78))
+            .font(.system(size: 12.5, weight: .semibold))
+            .foregroundColor(SideJITCSSTheme.pureBlack)
             .padding(.horizontal, 6)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -611,12 +679,12 @@ struct SideJITServerConfigView: View {
     private func cssCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
             .background(SideJITCSSTheme.white)
-            .cornerRadius(SideJITCSSTheme.cornerRadius)
+            .clipShape(RoundedRectangle(cornerRadius: SideJITCSSTheme.cornerRadius, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: SideJITCSSTheme.cornerRadius)
-                    .stroke(SideJITCSSTheme.border, lineWidth: 1)
+                RoundedRectangle(cornerRadius: SideJITCSSTheme.cornerRadius, style: .continuous)
+                    .stroke(SideJITCSSTheme.border, lineWidth: 1.1)
             )
-            .shadow(color: SideJITCSSTheme.blue.opacity(0.07), radius: 10, x: 0, y: 5)
+            .shadow(color: SideJITCSSTheme.blue.opacity(0.09), radius: 14, x: 0, y: 6)
     }
     
     private var cssDivider: some View {
@@ -629,10 +697,10 @@ struct SideJITServerConfigView: View {
     private func diagnosticIcon(_ systemName: String, color: Color) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(color.opacity(0.12))
-                .frame(width: 30, height: 30)
+                .fill(color.opacity(0.14))
+                .frame(width: 32, height: 32)
             Image(systemName: systemName)
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: 14.5, weight: .bold))
                 .foregroundColor(color)
         }
     }

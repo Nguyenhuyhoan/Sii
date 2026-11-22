@@ -3,2707 +3,1209 @@
 //  NewsViewController.swift
 //  AltStore
 //
+//  Created by Riley Testut on 8/29/19.
+//  Copyright © 2019 Riley Testut. All rights reserved.
+//
 
-@preconcurrency import UIKit
-import SwiftUI
-import WebKit
+import UIKit
+import SafariServices
+import AVKit
 import Network
-import UniformTypeIdentifiers
-@preconcurrency import Minimuxer
-import MinimuxerCommon
-import Combine
-import Darwin
-import ImageIO
+import AltStoreCore
 
-enum CheckItemVisualState: Equatable {
-    case actionRequired // Màu Tím (Purple): Trung tính, mời nhấn vào kiểm tra (Không Xanh, Không Đỏ)
-    case verifiedOK     // Màu Xanh Lá (Green): Hoạt động tốt
-    case failedError    // Màu Đỏ (Red): Lỗi thật sự hoặc chưa có tệp
-}
-
-// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI TAB CÀI ĐẶT & CHỮ ĐEN TUYỀN)
-private enum CSSTheme {
-    // UIKit Colors (Dùng cho ViewController & Lớp nền Gradient cố định)
-    static let uiWhite = UIColor.white
-    static let uiBorder = UIColor(red: 222/255, green: 226/255, blue: 230/255, alpha: 1.0) // #dee2e6
-    static let uiBlue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0)     // #007bff
-    static let bgGradientStartCG = UIColor(red: 243/255, green: 224/255, blue: 255/255, alpha: 1.0).cgColor
-    static let bgGradientEndCG = UIColor(red: 224/255, green: 247/255, blue: 255/255, alpha: 1.0).cgColor
-
-    // SwiftUI Colors
-    static let primary = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255)      // #007bff (--primary-blue)
-    static let secondary = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)   // #6f42c1 (--primary-purple)
-    static let darkAccent = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)  // #6f42c1
-    static let green = SwiftUI.Color(red: 40/255, green: 167/255, blue: 69/255)        // #28a745 (--primary-green)
-    static let red = SwiftUI.Color(red: 220/255, green: 53/255, blue: 69/255)          // #dc3545 (--primary-red)
-    static let magenta = SwiftUI.Color(red: 255/255, green: 0/255, blue: 255/255)      // #ff00ff
-
-    /// Màu Đen Tuyền (#000000) cho toàn bộ chữ chính và chữ nhỏ giúp độ tương phản tuyệt đối, cực kỳ dễ đọc
-    static let pureBlack = SwiftUI.Color(red: 0/255, green: 0/255, blue: 0/255)        // #000000
-    static let darkText = SwiftUI.Color(red: 0/255, green: 0/255, blue: 0/255)         // #000000
-    static let subText = SwiftUI.Color(red: 0/255, green: 0/255, blue: 0/255)          // #000000
-
-    /// Màu trung tính để nhắc "Nhấn vào đây để kiểm tra"
-    static let neutralInspect = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)
-
-    // Nền Gradient (#f3e0ff -> #e0f7ff) chéo từ góc trên trái xuống góc dưới phải giống hệt Settings
-    static let bgGradientStart = SwiftUI.Color(red: 243/255, green: 224/255, blue: 255/255)
-    static let bgGradientEnd = SwiftUI.Color(red: 224/255, green: 247/255, blue: 255/255)
-
-    static var pageBackgroundGradient: LinearGradient {
-        LinearGradient(
-            colors: [bgGradientStart, bgGradientEnd],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    // Hero Gradient (rgba(0,123,255,.92) -> rgba(111,66,193,.88)) giống hệt Settings
-    static let heroStart = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.94)
-    static let heroEnd = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.90)
-
-    static var heroGradient: LinearGradient {
-        LinearGradient(
-            colors: [heroStart, heroEnd],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    /// Viền khung điện thoại đồng bộ cho cả Ảnh hướng dẫn và Video YouTube
-    static var mediaFrameBorderGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                primary.opacity(0.65),
-                secondary.opacity(0.45),
-                primary.opacity(0.65)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    static let mediaFrameCornerRadius: CGFloat = 47.33
-    static let mediaFrameLineWidth: CGFloat = 4.0
-
-    static let cornerRadius: CGFloat = 15.0
-    static let pageBackground = SwiftUI.Color(red: 243/255, green: 224/255, blue: 255/255)
-    static let cardBackground = SwiftUI.Color.white
-    static let cardHeaderBackground = SwiftUI.Color(red: 248/255, green: 249/255, blue: 250/255).opacity(0.95)
-    static let innerRowBackground = SwiftUI.Color(red: 246/255, green: 248/255, blue: 251/255) // Sáng trong, nổi bật chữ đen
-    static let border = SwiftUI.Color(red: 218/255, green: 224/255, blue: 233/255)             // Viền sắc nét hơn
-    static let innerBorder = SwiftUI.Color(red: 222/255, green: 228/255, blue: 236/255)
-    static let shadow = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.08)
-}
-
-// MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH (KHÔNG BỊ TRẮNG KHI CUỘN)
-private final class CSSGradientBackgroundView: UIView {
-    override class var layerClass: AnyClass {
-        return CAGradientLayer.self
-    }
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        setupGradient()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        setupGradient()
-    }
-
-    private func setupGradient() {
-        guard let gradientLayer = self.layer as? CAGradientLayer else { return }
-        gradientLayer.colors = [CSSTheme.bgGradientStartCG, CSSTheme.bgGradientEndCG]
-        gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
-        gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
-    }
-}
-
-// MARK: - Hiệu ứng nhấn nút thu nhỏ & nảy lò xo (Đồng bộ với Settings)
-private struct CSSBounceButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some SwiftUI.View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
-            .offset(x: configuration.isPressed ? 3 : 0, y: configuration.isPressed ? -1 : 0)
-            .animation(.spring(response: 0.28, dampingFraction: 0.62), value: configuration.isPressed)
-    }
-}
-
-// MARK: - 🌟 HERO BANNER ĐẦU TRANG (BẮT CHƯỚC Y HỆT TAB CÀI ĐẶT)
-private struct CSSHeroBannerView: SwiftUI.View {
-    let title: String
-    let subtitle: String
-    @State private var isAppeared = false
-
-    var body: some SwiftUI.View {
-        VStack(spacing: 5) {
-            SwiftUI.Text(title)
-                .font(.system(size: 25, weight: .heavy))
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
-                .shadow(color: .black.opacity(0.35), radius: 4, x: 1, y: 2)
-
-            SwiftUI.Text(subtitle)
-                .font(.system(size: 13.5, weight: .semibold))
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .padding(.horizontal, 12)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background(
-            RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                .fill(CSSTheme.heroGradient)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                .stroke(SwiftUI.Color.white.opacity(0.28), lineWidth: 1)
-        )
-        .shadow(color: CSSTheme.primary.opacity(0.25), radius: 16, x: 0, y: 6)
-        .opacity(isAppeared ? 1 : 0)
-        .offset(y: isAppeared ? 0 : -10)
-        .onAppear {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.85).delay(0.05)) {
-                isAppeared = true
-            }
-        }
-    }
-}
-
-/// Bộ tải và giải mã ảnh trên Background Thread + Cache RAM giúp cuộn ScrollView mượt 120fps không bao giờ khựng
-private final class GuideImageCacheManager: @unchecked Sendable {
-    static let shared = GuideImageCacheManager()
-    private let cache = NSCache<NSString, UIImage>()
-    private let session: URLSession
-
-    private init() {
-        cache.countLimit = 12
-        cache.totalCostLimit = 30 * 1024 * 1024
-        let config = URLSessionConfiguration.default
-        config.requestCachePolicy = .returnCacheDataElseLoad
-        config.urlCache = URLCache(memoryCapacity: 20 * 1024 * 1024, diskCapacity: 80 * 1024 * 1024)
-        session = URLSession(configuration: config)
-    }
-
-    func cachedImage(for urlString: String) -> UIImage? {
-        cache.object(forKey: urlString as NSString)
-    }
-
-    func prefetchAllGuideImages() {
-        let urls = [
-            "https://raw.githubusercontent.com/Nguyenhuyhoan/icons/main/IMG_2589.jpeg",
-            "https://raw.githubusercontent.com/Nguyenhuyhoan/icons/main/IMG_2588.jpeg"
-        ]
-        for urlString in urls where cachedImage(for: urlString) == nil {
-            Task.detached(priority: .utility) {
-                _ = await Self.shared.loadAndDecodeImage(urlString: urlString)
-            }
-        }
-    }
-
-    func loadAndDecodeImage(urlString: String, maxDimension: CGFloat = 1080) async -> UIImage? {
-        if let existing = cachedImage(for: urlString) {
-            return existing
-        }
-        guard let url = URL(string: urlString) else { return nil }
-        do {
-            let (data, _) = try await session.data(from: url)
-            return await Task.detached(priority: .utility) { () -> UIImage? in
-                let options: [CFString: Any] = [
-                    kCGImageSourceShouldCache: false
-                ]
-                guard let source = CGImageSourceCreateWithData(data as CFData, options as CFDictionary) else {
-                    return UIImage(data: data)
-                }
-                let downsampleOptions: [CFString: Any] = [
-                    kCGImageSourceCreateThumbnailFromImageAlways: true,
-                    kCGImageSourceShouldCacheImmediately: true,
-                    kCGImageSourceCreateThumbnailWithTransform: true,
-                    kCGImageSourceThumbnailMaxPixelSize: maxDimension
-                ]
-                if let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions as CFDictionary) {
-                    let decoded = UIImage(cgImage: cgImage)
-                    Self.shared.cache.setObject(decoded, forKey: urlString as NSString)
-                    return decoded
-                }
-                if let fallback = UIImage(data: data)?.preparingForDisplay() {
-                    Self.shared.cache.setObject(fallback, forKey: urlString as NSString)
-                    return fallback
-                }
-                return nil
-            }.value
-        } catch {
-            return nil
-        }
-    }
-}
-
-private enum CellularRefreshDefaultBootstrapper {
-    private static let initializedKey = "com.sidestore.cellularRefresh.defaultEnabledInitialized"
-    private static var didApply = false
-
-    static func applyDefaultTrueIfNeeded() {
-        guard !didApply else { return }
-        didApply = true
-
-        let defaults = UserDefaults.standard
-        defaults.register(defaults: [
-            #keyPath(UserDefaults.isCellularRefreshEnabled): true
-        ])
-        if !defaults.bool(forKey: initializedKey) {
-            defaults.set(true, forKey: initializedKey)
-            CellularRefreshManager.shared.setEnabled(true)
-        }
-    }
-}
-
-/// Quản lý giữ tiến trình chạy nền khi người dùng chuyển sang app Cài đặt để nhập mã PIN Pairing
-@MainActor
-private final class PairingBackgroundKeepAliveManager {
-    static let shared = PairingBackgroundKeepAliveManager()
-    private var bgTask: UIBackgroundTaskIdentifier = .invalid
-
-    func beginKeepAlive() {
-        guard bgTask == .invalid else { return }
-        bgTask = UIApplication.shared.beginBackgroundTask(withName: "com.sidestore.wirelessPairing.keepAlive") { [weak self] in
-            Task { @MainActor in
-                self?.endKeepAlive()
-            }
-        }
-    }
-
-    func endKeepAlive() {
-        guard bgTask != .invalid else { return }
-        UIApplication.shared.endBackgroundTask(bgTask)
-        bgTask = .invalid
-    }
-}
-
-class NewsViewController: UICollectionViewController {
-    var source: Source?
-    private var floatingBackButton: UIButton?
-
-    #if !os(tvOS)
-    override var preferredStatusBarStyle: UIStatusBarStyle {
-        return .darkContent
-    }
-    #endif
-
-    init?(source: Source?, coder: NSCoder) {
-        CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
-        self.source = source
-        super.init(coder: coder)
-    }
-
-    required init?(coder: NSCoder) {
-        CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
-        super.init(coder: coder)
-    }
-
-    override func viewDidLoad() {
+final class NewsViewController: UICollectionViewController
+{
+    // MARK: - Gradient Background & Dynamic Status UI
+    private let pageGradientLayer = CAGradientLayer()
+    private let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+    
+    private weak var pairingSubtitleLabel: UILabel?
+    private weak var pairingBadgeLabel: UILabel?
+    private weak var pairingBadgeContainer: UIView?
+    
+    private weak var vpnSubtitleLabel: UILabel?
+    private weak var vpnBadgeLabel: UILabel?
+    private weak var vpnBadgeContainer: UIView?
+    
+    // MARK: - Lifecycle
+    override func viewDidLoad()
+    {
         super.viewDidLoad()
-        CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
-        GuideImageCacheManager.shared.prefetchAllGuideImages()
-
-        // Khoá giao diện Sáng (Light Mode) để chữ đen tuyền luôn hiển thị rõ nét nhất trên nền thẻ trắng
-        overrideUserInterfaceStyle = .light
-
-        // 1. Ẩn hoàn toàn tiêu đề và thanh điều hướng giống hệt SettingsViewController
-        self.title = nil
-        self.navigationItem.title = nil
-        self.navigationController?.delegate = self
-        self.navigationController?.setNavigationBarHidden(true, animated: false)
-        #if !os(tvOS)
-        self.navigationItem.largeTitleDisplayMode = .never
-        self.navigationController?.interactivePopGestureRecognizer?.delegate = self
-        self.navigationController?.interactivePopGestureRecognizer?.isEnabled = true
-        if let tabAppearance = self.tabBarController?.tabBar.standardAppearance {
-            tabAppearance.stackedLayoutAppearance.normal.badgeBackgroundColor = CSSTheme.uiBlue
-            self.navigationController?.tabBarItem.scrollEdgeAppearance = tabAppearance
-        }
-        #endif
-
-        // 2. Đặt lớp nền Gradient cố định toàn màn hình (Không bao giờ bị trắng khi cuộn)
-        let bgView = CSSGradientBackgroundView(frame: view.bounds)
-        bgView.translatesAutoresizingMaskIntoConstraints = false
-        view.insertSubview(bgView, at: 0)
-        NSLayoutConstraint.activate([
-            bgView.topAnchor.constraint(equalTo: view.topAnchor),
-            bgView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            bgView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            bgView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
-        ])
-
-        self.view.backgroundColor = .clear
-        self.collectionView.isHidden = true
+        
+        // Khóa cứng giao diện Sáng (Light Mode) để đồng bộ hoàn toàn với CSS
+        self.overrideUserInterfaceStyle = .light
+        self.impactFeedback.prepare()
+        
+        // Ẩn toàn bộ nội dung mặc định của CollectionView để dựng Dashboard Tổng Quan hiện đại
+        self.collectionView.dataSource = nil
+        self.collectionView.delegate = nil
         self.collectionView.isScrollEnabled = false
-        self.collectionView.contentInsetAdjustmentBehavior = .never
-
-        // 3. Nhúng giao diện SwiftUI tràn viền mượt mà
-        let hostingController = UIHostingController(rootView: SystemCheckDashboardView())
-        hostingController.overrideUserInterfaceStyle = .light
-        addChild(hostingController)
-        hostingController.view.translatesAutoresizingMaskIntoConstraints = false
-        hostingController.view.backgroundColor = .clear
-        view.addSubview(hostingController.view)
-
-        NSLayoutConstraint.activate([
-            hostingController.view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            hostingController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            hostingController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor)
-        ])
-        hostingController.didMove(toParent: self)
+        self.collectionView.backgroundColor = .clear
+        
+        // Ẩn thanh Navigation Bar để giao diện tràn viền hiện đại giống hệt CSS
+        self.navigationController?.setNavigationBarHidden(true, animated: false)
+        
+        setupBackgroundGradient()
+        setupDashboardUI()
     }
-
-    override func viewWillAppear(_ animated: Bool) {
+    
+    override func viewWillAppear(_ animated: Bool)
+    {
         super.viewWillAppear(animated)
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
+        refreshSystemStatus()
     }
-}
-
-// MARK: - 🧭 QUẢN LÝ ẨN THANH ĐIỀU HƯỚNG & NÚT QUAY LẠI NHỎ CỐ ĐỊNH (ĐỒNG BỘ SETTINGS)
-extension NewsViewController: UINavigationControllerDelegate, UIGestureRecognizerDelegate {
-    func navigationController(_ navigationController: UINavigationController, willShow viewController: UIViewController, animated: Bool) {
-        navigationController.setNavigationBarHidden(true, animated: false)
-        viewController.title = nil
-        viewController.navigationItem.title = nil
-        #if !os(tvOS)
-        viewController.navigationItem.largeTitleDisplayMode = .never
-        #endif
-
-        let isRoot = (viewController === navigationController.viewControllers.first)
-        updateFloatingBackButton(in: navigationController, show: !isRoot)
+    
+    override func viewDidLayoutSubviews()
+    {
+        super.viewDidLayoutSubviews()
+        pageGradientLayer.frame = self.view.bounds
     }
-
-    private func updateFloatingBackButton(in nav: UINavigationController, show: Bool) {
-        if self.floatingBackButton == nil {
-            let btn = UIButton(type: .system)
-            btn.translatesAutoresizingMaskIntoConstraints = false
-
-            let config = UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)
-            btn.setImage(UIImage(systemName: "chevron.left", withConfiguration: config), for: .normal)
-            btn.tintColor = CSSTheme.uiBlue
-            btn.backgroundColor = CSSTheme.uiWhite.withAlphaComponent(0.92)
-
-            btn.layer.cornerRadius = 17
-            btn.layer.borderWidth = 1.0
-            btn.layer.borderColor = CSSTheme.uiBorder.cgColor
-            btn.layer.shadowColor = UIColor.black.cgColor
-            btn.layer.shadowOffset = CGSize(width: 0, height: 2)
-            btn.layer.shadowRadius = 6
-            btn.layer.shadowOpacity = 0.15
-
-            btn.addTarget(self, action: #selector(handleFloatingBackTap), for: .touchUpInside)
-            nav.view.addSubview(btn)
-
-            NSLayoutConstraint.activate([
-                btn.leadingAnchor.constraint(equalTo: nav.view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
-                btn.topAnchor.constraint(equalTo: nav.view.safeAreaLayoutGuide.topAnchor, constant: 6),
-                btn.widthAnchor.constraint(equalToConstant: 34),
-                btn.heightAnchor.constraint(equalToConstant: 34)
-            ])
-
-            self.floatingBackButton = btn
-        }
-
-        guard let btn = self.floatingBackButton else { return }
-        nav.view.bringSubviewToFront(btn)
-
-        UIView.animate(withDuration: 0.2) {
-            btn.alpha = show ? 1.0 : 0.0
-            btn.isHidden = !show
-        }
+    
+    // MARK: - Background Gradient (#f3e0ff -> #e0f7ff)
+    private func setupBackgroundGradient()
+    {
+        pageGradientLayer.colors = [
+            UIColor(red: 0.953, green: 0.878, blue: 1.0, alpha: 1.0).cgColor, // #f3e0ff
+            UIColor(red: 0.878, green: 0.969, blue: 1.0, alpha: 1.0).cgColor  // #e0f7ff
+        ]
+        pageGradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+        pageGradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+        pageGradientLayer.frame = self.view.bounds
+        self.view.layer.insertSublayer(pageGradientLayer, at: 0)
     }
-
-    @objc private func handleFloatingBackTap() {
-        self.navigationController?.popViewController(animated: true)
+    
+    // MARK: - Build Main Dashboard UI
+    private func setupDashboardUI()
+    {
+        let scrollView = UIScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.alwaysBounceVertical = true
+        self.view.addSubview(scrollView)
+        
+        let contentView = UIView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(contentView)
+        
+        let mainStack = UIStackView()
+        mainStack.axis = .vertical
+        mainStack.spacing = 18
+        mainStack.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(mainStack)
+        
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: self.view.safeAreaLayoutGuide.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: self.view.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: self.view.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: self.view.bottomAnchor),
+            
+            contentView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+            contentView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
+            contentView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
+            contentView.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
+            
+            mainStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10),
+            mainStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            mainStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            mainStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -32)
+        ])
+        
+        // 1. HERO HEADER BANNER (.header trong CSS + Ánh sáng 3D)
+        mainStack.addArrangedSubview(makeHeroBanner())
+        
+        // 2. SECTION: TRẠNG THÁI HỆ THỐNG
+        mainStack.addArrangedSubview(makeSectionHeader(title: "TRẠNG THÁI HỆ THỐNG"))
+        mainStack.addArrangedSubview(makeSystemStatusCard())
+        
+        // 3. SECTION: PHÍM TẮT & LÀM MỚI TỰ ĐỘNG 4G
+        mainStack.addArrangedSubview(makeSectionHeader(title: "PHÍM TẮT & LÀM MỚI 4G"))
+        mainStack.addArrangedSubview(makeShortcutsCard())
+        
+        // 4. SECTION: HƯỚNG DẪN TỰ ĐỘNG HÓA 2 LẦN / NGÀY
+        mainStack.addArrangedSubview(makeSectionHeader(title: "HƯỚNG DẪN TỰ ĐỘNG HÓA"))
+        mainStack.addArrangedSubview(makeAutomationGuideCard())
+        
+        // 5. SECTION: VIDEO HƯỚNG DẪN CHI TIẾT
+        mainStack.addArrangedSubview(makeSectionHeader(title: "VIDEO HƯỚNG DẪN"))
+        mainStack.addArrangedSubview(makeVideoTutorialCard())
     }
-
-    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        #if !os(tvOS)
-        if gestureRecognizer === self.navigationController?.interactivePopGestureRecognizer {
-            return (self.navigationController?.viewControllers.count ?? 0) > 1
-        }
-        #endif
-        return true
+    
+    // MARK: - 1. Hero Header Banner (Gradient #007bff -> #6f42c1 + Ambient 3D Orbs)
+    private func makeHeroBanner() -> UIView
+    {
+        let container = GradientBannerView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.layer.cornerRadius = 18
+        container.layer.cornerCurve = .continuous
+        container.layer.shadowColor = UIColor(red: 0.0, green: 0.35, blue: 0.90, alpha: 1.0).cgColor
+        container.layer.shadowOpacity = 0.22
+        container.layer.shadowOffset = CGSize(width: 0, height: 8)
+        container.layer.shadowRadius = 18
+        
+        let stack = UIStackView()
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 6
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        
+        let badge = UILabel()
+        badge.text = "✨ HỆ THỐNG TỰ ĐỘNG GIA HẠN"
+        badge.font = .systemFont(ofSize: 10.5, weight: .bold)
+        badge.textColor = .white
+        badge.backgroundColor = UIColor.white.withAlphaComponent(0.22)
+        badge.layer.cornerRadius = 9
+        badge.layer.borderWidth = 0.5
+        badge.layer.borderColor = UIColor.white.withAlphaComponent(0.45).cgColor
+        badge.clipsToBounds = true
+        badge.textAlignment = .center
+        
+        let badgeWrapper = UIView()
+        badgeWrapper.translatesAutoresizingMaskIntoConstraints = false
+        badge.translatesAutoresizingMaskIntoConstraints = false
+        badgeWrapper.addSubview(badge)
+        NSLayoutConstraint.activate([
+            badge.topAnchor.constraint(equalTo: badgeWrapper.topAnchor),
+            badge.bottomAnchor.constraint(equalTo: badgeWrapper.bottomAnchor),
+            badge.leadingAnchor.constraint(equalTo: badgeWrapper.leadingAnchor),
+            badge.trailingAnchor.constraint(equalTo: badgeWrapper.trailingAnchor),
+            badge.widthAnchor.constraint(equalToConstant: 215),
+            badge.heightAnchor.constraint(equalToConstant: 24)
+        ])
+        
+        let titleLabel = UILabel()
+        titleLabel.text = "Chào mừng đến SideStore"
+        titleLabel.font = .systemFont(ofSize: 21, weight: .bold)
+        titleLabel.textColor = .white
+        titleLabel.textAlignment = .center
+        titleLabel.numberOfLines = 0
+        
+        let subtitleLabel = UILabel()
+        subtitleLabel.text = "Quản lý chứng chỉ, ghép đôi iOS 27 & tự động làm mới ứng dụng qua Wi-Fi / 4G"
+        subtitleLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        subtitleLabel.textColor = UIColor.white.withAlphaComponent(0.92)
+        subtitleLabel.textAlignment = .center
+        subtitleLabel.numberOfLines = 0
+        
+        stack.addArrangedSubview(badgeWrapper)
+        stack.addArrangedSubview(titleLabel)
+        stack.addArrangedSubview(subtitleLabel)
+        
+        container.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 18),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -18)
+        ])
+        
+        return container
     }
-}
-
-@MainActor
-final class SystemCheckViewModel: ObservableObject {
-    private static let verifiedPairingCacheKey = "com.sidestore.check.lastVerifiedPairingSuccess"
-
-    @Published var isPairingOK: Bool = false
-    @Published var isPairingVerifiedError: Bool = false
-    @Published var pairingProtocol: String = ""
-    @Published var hasAnyStoredPairingFile: Bool = false
-
-    @Published var isVpnOK: Bool = false
-    @Published var tunnelIP: String = "Chưa kết nối"
-    @Published var deviceIP: String = "Chưa kết nối"
-
-    @Published var isCellularOK: Bool = false
-    @Published var isWifiActive: Bool = false
-    @Published var cellularDetail: String = ""
-
-    @Published var isCellularRefreshEnabled: Bool = {
-        CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
-        return UserDefaults.standard.isCellularRefreshEnabled
-    }()
-
-    @Published var isWirelessPairingActive: Bool = false
-
-    private let pathMonitor = NWPathMonitor()
-    private let cellularMonitor = NWPathMonitor(requiredInterfaceType: .cellular)
-    private let wifiMonitor = NWPathMonitor(requiredInterfaceType: .wifi)
-    private let monitorQueue = DispatchQueue(label: "com.sidestore.check.network", qos: .utility)
-
-    private var usesCellularPath: Bool = false
-    private var isCellularPathSatisfied: Bool = false
-    private var didReceiveCellularMonitorUpdate: Bool = false
-
-    private var usesWifiPath: Bool = false
-    private var isWifiPathSatisfied: Bool = false
-    private var didReceiveWifiMonitorUpdate: Bool = false
-
-    private var cancellables = Set<AnyCancellable>()
-
-    private var isViewVisible: Bool = false
-    private var isChecking: Bool = false
-    private var needsAnotherCheck: Bool = false
-    private var pendingForceVerify: Bool = false
-    private var lastInternalConfigWriteTime: TimeInterval = 0
-    private var latestSnapshot: SystemInterfaceSnapshot? = nil
-
-    private var lastVerifiedPairingSuccess: Bool = UserDefaults.standard.bool(forKey: verifiedPairingCacheKey) {
-        didSet {
-            if oldValue != lastVerifiedPairingSuccess {
-                UserDefaults.standard.set(lastVerifiedPairingSuccess, forKey: Self.verifiedPairingCacheKey)
-            }
-        }
+    
+    // MARK: - Section Title Header with Blue Underline (.category-section h2::after)
+    private func makeSectionHeader(title: String) -> UIView
+    {
+        let wrapper = UIView()
+        wrapper.translatesAutoresizingMaskIntoConstraints = false
+        
+        let label = UILabel()
+        label.text = title
+        label.font = .systemFont(ofSize: 13.5, weight: .heavy)
+        label.textColor = UIColor(red: 0.12, green: 0.15, blue: 0.22, alpha: 1.0)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        
+        let underline = UIView()
+        underline.backgroundColor = UIColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1.0) // #007bff
+        underline.layer.cornerRadius = 1.5
+        underline.translatesAutoresizingMaskIntoConstraints = false
+        
+        wrapper.addSubview(label)
+        wrapper.addSubview(underline)
+        
+        NSLayoutConstraint.activate([
+            label.topAnchor.constraint(equalTo: wrapper.topAnchor, constant: 4),
+            label.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: 4),
+            label.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor),
+            
+            underline.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 5),
+            underline.leadingAnchor.constraint(equalTo: label.leadingAnchor),
+            underline.widthAnchor.constraint(equalToConstant: 38),
+            underline.heightAnchor.constraint(equalToConstant: 3),
+            underline.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor)
+        ])
+        
+        return wrapper
     }
-
-    private var lastVerifiedModeSignature: String = ""
-    private var didAttemptLiveVerifyInCurrentMode: Bool = false
-
-    private let networkChangeSubject = PassthroughSubject<Bool, Never>()
-
-    /// Xác định chính xác 100% Dữ liệu di động (4G/5G) đang bật hay tắt (không bị đánh lừa bởi cổng ngầm VoLTE pdp_ip1/pdp_ip2)
-    private func resolveCellularActive(snapshot: SystemInterfaceSnapshot) -> Bool {
-        if didReceiveCellularMonitorUpdate {
-            return usesCellularPath || isCellularPathSatisfied
-        }
-        return usesCellularPath || isCellularPathSatisfied || snapshot.hasCellularIPv4
-    }
-
-    /// Xác định chính xác Wi-Fi đang bật và kết nối hay tắt
-    private func resolveWifiActive(snapshot: SystemInterfaceSnapshot) -> Bool {
-        if didReceiveWifiMonitorUpdate {
-            return usesWifiPath || isWifiPathSatisfied
-        }
-        return usesWifiPath || isWifiPathSatisfied || snapshot.hasWifiIPv4
-    }
-
-    var canAutoVerifyPairingInCurrentNetwork: Bool {
-        guard isVpnOK else { return false }
-        if isWifiActive {
-            return true
-        }
-        return !isCellularOK
-    }
-
-    var pairingVisualState: CheckItemVisualState {
-        if !hasAnyStoredPairingFile {
-            return .failedError
-        }
-        guard canAutoVerifyPairingInCurrentNetwork else {
-            return .actionRequired
-        }
-        if isPairingOK {
-            return .verifiedOK
-        }
-        if isPairingVerifiedError {
-            return .failedError
-        }
-        return .actionRequired
-    }
-
-    func setWirelessPairingActive(_ active: Bool) {
-        guard isWirelessPairingActive != active else { return }
-        isWirelessPairingActive = active
-        if active {
-            PairingBackgroundKeepAliveManager.shared.beginKeepAlive()
-        } else {
-            PairingBackgroundKeepAliveManager.shared.endKeepAlive()
-            if isViewVisible {
-                Task { await checkAllStatuses(forceVerify: true) }
-            }
-        }
-    }
-
-    func markPairingVerifiedImmediately() {
-        self.hasAnyStoredPairingFile = true
-        self.didAttemptLiveVerifyInCurrentMode = true
-        self.lastVerifiedPairingSuccess = true
-        self.lastVerifiedModeSignature = ""
-        self.isPairingVerifiedError = false
-        self.isPairingOK = true
-        refreshSnapshotAsyncAndApply()
-    }
-
-    init() {
-        CellularRefreshDefaultBootstrapper.applyDefaultTrueIfNeeded()
-        setupRealtimeListeners()
-        refreshSnapshotAsyncAndApply()
-    }
-
-    deinit {
-        pathMonitor.cancel()
-        cellularMonitor.cancel()
-        wifiMonitor.cancel()
-    }
-
-    func setViewVisible(_ visible: Bool) {
-        guard isViewVisible != visible else { return }
-        isViewVisible = visible
-        if visible {
-            if !isWirelessPairingActive {
-                Task { await checkAllStatuses(forceVerify: false) }
-            } else {
-                refreshSnapshotAsyncAndApply()
-            }
-        }
-    }
-
-    /// Quét cổng mạng hoàn toàn trên nhân tiết kiệm điện (.utility), không bao giờ làm khựng Main Thread
-    private func refreshSnapshotAsyncAndApply() {
-        Task { @MainActor [weak self] in
-            guard let self = self else { return }
-            let snap = await Task.detached(priority: .utility) {
-                Self.scanSystemInterfaces()
-            }.value
-            self.latestSnapshot = snap
-            self.updateInstantStatus(existingSnapshot: snap)
-        }
-    }
-
-    private var isWithinInternalWriteCooldown: Bool {
-        ( CFAbsoluteTimeGetCurrent() - lastInternalConfigWriteTime ) < 0.8
-    }
-
-    private func setupRealtimeListeners() {
-        networkChangeSubject
-            .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
-            .sink { [weak self] forceVerify in
-                guard let self = self,
-                      self.isViewVisible,
-                      !self.isWirelessPairingActive,
-                      !self.isWithinInternalWriteCooldown else { return }
-                Task { @MainActor [weak self] in
-                    await self?.checkAllStatuses(forceVerify: forceVerify)
-                }
-            }
-            .store(in: &cancellables)
-
-        pathMonitor.pathUpdateHandler = { [weak self] path in
-            let usesCell = (path.status == .satisfied) && path.usesInterfaceType(.cellular)
-            let usesWifi = (path.status == .satisfied) && path.usesInterfaceType(.wifi)
-            Task { @MainActor [weak self] in
-                guard let self = self else { return }
-                var changed = false
-                if self.usesCellularPath != usesCell {
-                    self.usesCellularPath = usesCell
-                    changed = true
-                }
-                if self.usesWifiPath != usesWifi {
-                    self.usesWifiPath = usesWifi
-                    changed = true
-                }
-                if changed {
-                    if let snap = self.latestSnapshot {
-                        self.updateInstantStatus(existingSnapshot: snap)
-                    }
-                    if self.isViewVisible && !self.isWirelessPairingActive {
-                        self.networkChangeSubject.send(false)
-                    }
-                }
-            }
-        }
-        pathMonitor.start(queue: monitorQueue)
-
-        cellularMonitor.pathUpdateHandler = { [weak self] path in
-            let cellSatisfied = (path.status == .satisfied)
-            Task { @MainActor [weak self] in
-                guard let self = self else { return }
-                let firstUpdate = !self.didReceiveCellularMonitorUpdate
-                self.didReceiveCellularMonitorUpdate = true
-                guard firstUpdate || self.isCellularPathSatisfied != cellSatisfied else { return }
-                self.isCellularPathSatisfied = cellSatisfied
-                if let snap = self.latestSnapshot {
-                    self.updateInstantStatus(existingSnapshot: snap)
-                }
-                guard self.isViewVisible, !self.isWirelessPairingActive else { return }
-                self.networkChangeSubject.send(false)
-            }
-        }
-        cellularMonitor.start(queue: monitorQueue)
-
-        wifiMonitor.pathUpdateHandler = { [weak self] path in
-            let wifiSatisfied = (path.status == .satisfied)
-            Task { @MainActor [weak self] in
-                guard let self = self else { return }
-                let firstUpdate = !self.didReceiveWifiMonitorUpdate
-                self.didReceiveWifiMonitorUpdate = true
-                guard firstUpdate || self.isWifiPathSatisfied != wifiSatisfied else { return }
-                self.isWifiPathSatisfied = wifiSatisfied
-                if let snap = self.latestSnapshot {
-                    self.updateInstantStatus(existingSnapshot: snap)
-                }
-                guard self.isViewVisible, !self.isWirelessPairingActive else { return }
-                self.networkChangeSubject.send(false)
-            }
-        }
-        wifiMonitor.start(queue: monitorQueue)
-
-        minimuxer.network.pathPublisher
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self = self,
-                      self.isViewVisible,
-                      !self.isWirelessPairingActive,
-                      !self.isWithinInternalWriteCooldown else { return }
-                self.networkChangeSubject.send(false)
-            }
-            .store(in: &cancellables)
-
-        minimuxerStatusPublisher
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self = self,
-                      self.isViewVisible,
-                      !self.isWirelessPairingActive,
-                      !self.isWithinInternalWriteCooldown else { return }
-                self.networkChangeSubject.send(false)
-            }
-            .store(in: &cancellables)
-
-        NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self = self, self.isViewVisible else { return }
-                guard !self.isWirelessPairingActive else {
-                    self.refreshSnapshotAsyncAndApply()
-                    return
-                }
-                Task { @MainActor [weak self] in
-                    await self?.checkAllStatuses(forceVerify: false)
-                }
-            }
-            .store(in: &cancellables)
-    }
-
-    struct SystemInterfaceSnapshot: Sendable, Equatable {
-        let hasCellularIPv4: Bool
-        let hasWifiIPv4: Bool
-        let hasActiveLocalDevUtun: Bool
-        let detectedLocalDevUtunIPv4: String?
-    }
-
-    private nonisolated static func scanSystemInterfaces() -> SystemInterfaceSnapshot {
-        var hasPdpIPv4 = false
-        var hasEn0IPv4 = false
-        var hasLocalDevUtun = false
-        var bestLocalDevUtunIP: String? = nil
-
-        var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        if getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr {
-            defer { freeifaddrs(ifaddr) }
-            var ptr: UnsafeMutablePointer<ifaddrs>? = firstAddr
-            while let current = ptr {
-                let flags = Int32(current.pointee.ifa_flags)
-                let isUp = (flags & IFF_UP) != 0 && (flags & IFF_RUNNING) != 0
-                if isUp, let addr = current.pointee.ifa_addr {
-                    let family = addr.pointee.sa_family
-                    if family == UInt8(AF_INET) {
-                        let name = String(cString: current.pointee.ifa_name).lowercased()
-                        // Chỉ kiểm tra đúng pdp_ip0 (kênh dữ liệu di động chính), bỏ qua pdp_ip1/2/3/4 của VoLTE/IMS
-                        if name == "pdp_ip0" || name == "en0" || name.hasPrefix("utun") {
-                            var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                            if getnameinfo(
-                                addr,
-                                socklen_t(addr.pointee.sa_len),
-                                &hostname,
-                                socklen_t(hostname.count),
-                                nil,
-                                0,
-                                NI_NUMERICHOST
-                            ) == 0 {
-                                let ip = String(cString: hostname)
-                                if !ip.isEmpty && !ip.hasPrefix("169.254.") && ip != "0.0.0.0" {
-                                    if name == "pdp_ip0" {
-                                        hasPdpIPv4 = true
-                                    } else if name == "en0" {
-                                        hasEn0IPv4 = true
-                                    } else if name.hasPrefix("utun") {
-                                        if ip.hasPrefix("10.7.") {
-                                            hasLocalDevUtun = true
-                                            bestLocalDevUtunIP = ip
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                ptr = current.pointee.ifa_next
-            }
-        }
-
-        return SystemInterfaceSnapshot(
-            hasCellularIPv4: hasPdpIPv4,
-            hasWifiIPv4: hasEn0IPv4,
-            hasActiveLocalDevUtun: hasLocalDevUtun,
-            detectedLocalDevUtunIPv4: bestLocalDevUtunIP
+    
+    // MARK: - 2. System Status Card (3 Rows: Pairing, LocalDevVPN, 4G Support)
+    private func makeSystemStatusCard() -> UIView
+    {
+        let card = makeWhiteCardContainer()
+        let stack = UIStackView()
+        stack.axis = .vertical
+        stack.spacing = 0
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(stack)
+        
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 4),
+            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -4)
+        ])
+        
+        // Row 1: Hồ sơ ghép đôi (Pairing File)
+        let pairingRow = makeStatusRow(
+            iconName: "iphone.and.arrow.forward",
+            iconTint: UIColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1.0),
+            iconBg: UIColor(red: 0.90, green: 0.95, blue: 1.0, alpha: 1.0),
+            title: "Hồ sơ ghép đôi (Pairing File)",
+            subtitle: "Đang kiểm tra trạng thái...",
+            badgeText: "KIỂM TRA",
+            action: #selector(handlePairingRowTap)
         )
+        self.pairingSubtitleLabel = pairingRow.subtitleLabel
+        self.pairingBadgeLabel = pairingRow.badgeLabel
+        self.pairingBadgeContainer = pairingRow.badgeContainer
+        
+        // Row 2: Kết nối LocalDevVPN
+        let vpnRow = makeStatusRow(
+            iconName: "network.badge.shield.half.filled",
+            iconTint: UIColor(red: 0.16, green: 0.65, blue: 0.27, alpha: 1.0),
+            iconBg: UIColor(red: 0.90, green: 0.98, blue: 0.92, alpha: 1.0),
+            title: "Kết nối LocalDevVPN",
+            subtitle: "Đang kiểm tra đường hầm...",
+            badgeText: "KIỂM TRA",
+            action: #selector(handleVPNRowTap)
+        )
+        self.vpnSubtitleLabel = vpnRow.subtitleLabel
+        self.vpnBadgeLabel = vpnRow.badgeLabel
+        self.vpnBadgeContainer = vpnRow.badgeContainer
+        
+        // Row 3: Làm mới qua mạng di động 4G
+        let cellularRow = makeStatusRow(
+            iconName: "antenna.radiowaves.left.and.right",
+            iconTint: UIColor(red: 0.44, green: 0.26, blue: 0.76, alpha: 1.0),
+            iconBg: UIColor(red: 0.95, green: 0.90, blue: 1.0, alpha: 1.0),
+            title: "Làm mới qua mạng di động (4G)",
+            subtitle: "Hỗ trợ gia hạn mọi lúc không cần Wi-Fi",
+            badgeText: "SẴN SÀNG",
+            action: #selector(handleCellularRowTap)
+        )
+        cellularRow.badgeContainer.backgroundColor = UIColor(red: 0.93, green: 0.89, blue: 1.0, alpha: 1.0)
+        cellularRow.badgeLabel.textColor = UIColor(red: 0.44, green: 0.26, blue: 0.76, alpha: 1.0)
+        
+        stack.addArrangedSubview(pairingRow.view)
+        stack.addArrangedSubview(makeDivider())
+        stack.addArrangedSubview(vpnRow.view)
+        stack.addArrangedSubview(makeDivider())
+        stack.addArrangedSubview(cellularRow.view)
+        
+        return card
     }
-
-    private func ensureTunnelRoutingPinned(snapshot: SystemInterfaceSnapshot) {
-        guard !isWirelessPairingActive else { return }
-        guard let utunIP = snapshot.detectedLocalDevUtunIPv4, utunIP.hasPrefix("10.7.") else { return }
-
-        let config = ConnectionConfig.shared
-        var didWrite = false
-        if config.overrideTunnelPeerIp != "10.7.0.1" {
-            config.overrideTunnelPeerIp = "10.7.0.1"
-            didWrite = true
-        }
-        if !config.overrideTunnelPeerReachable {
-            config.overrideTunnelPeerReachable = true
-            didWrite = true
-        }
-        if didWrite {
-            lastInternalConfigWriteTime = CFAbsoluteTimeGetCurrent()
-        }
+    
+    private func makeStatusRow(
+        iconName: String,
+        iconTint: UIColor,
+        iconBg: UIColor,
+        title: String,
+        subtitle: String,
+        badgeText: String,
+        action: Selector
+    ) -> (view: UIView, subtitleLabel: UILabel, badgeLabel: UILabel, badgeContainer: UIView)
+    {
+        let rowButton = SpringRowControl()
+        rowButton.translatesAutoresizingMaskIntoConstraints = false
+        rowButton.addTarget(self, action: action, for: .touchUpInside)
+        
+        let iconBox = UIView()
+        iconBox.backgroundColor = iconBg
+        iconBox.layer.cornerRadius = 12
+        iconBox.layer.cornerCurve = .continuous
+        iconBox.isUserInteractionEnabled = false
+        iconBox.translatesAutoresizingMaskIntoConstraints = false
+        
+        let iconView = UIImageView(image: UIImage(systemName: iconName))
+        iconView.tintColor = iconTint
+        iconView.contentMode = .scaleAspectFit
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconBox.addSubview(iconView)
+        
+        let textStack = UIStackView()
+        textStack.axis = .vertical
+        textStack.spacing = 3
+        textStack.isUserInteractionEnabled = false
+        textStack.translatesAutoresizingMaskIntoConstraints = false
+        
+        let titleLabel = UILabel()
+        titleLabel.text = title
+        titleLabel.font = .systemFont(ofSize: 15, weight: .bold)
+        titleLabel.textColor = UIColor(red: 0.11, green: 0.13, blue: 0.20, alpha: 1.0)
+        
+        let subtitleLabel = UILabel()
+        subtitleLabel.text = subtitle
+        subtitleLabel.font = .systemFont(ofSize: 12.5, weight: .medium)
+        subtitleLabel.textColor = UIColor(red: 0.42, green: 0.47, blue: 0.55, alpha: 1.0)
+        subtitleLabel.numberOfLines = 2
+        
+        textStack.addArrangedSubview(titleLabel)
+        textStack.addArrangedSubview(subtitleLabel)
+        
+        let badgeContainer = UIView()
+        badgeContainer.backgroundColor = UIColor(red: 0.90, green: 0.95, blue: 1.0, alpha: 1.0)
+        badgeContainer.layer.cornerRadius = 9
+        badgeContainer.isUserInteractionEnabled = false
+        badgeContainer.translatesAutoresizingMaskIntoConstraints = false
+        
+        let badgeLabel = UILabel()
+        badgeLabel.text = badgeText
+        badgeLabel.font = .systemFont(ofSize: 10.5, weight: .bold)
+        badgeLabel.textColor = iconTint
+        badgeLabel.translatesAutoresizingMaskIntoConstraints = false
+        badgeContainer.addSubview(badgeLabel)
+        
+        let chevron = UIImageView(image: UIImage(systemName: "chevron.right"))
+        chevron.tintColor = UIColor(red: 0.68, green: 0.72, blue: 0.78, alpha: 1.0)
+        chevron.contentMode = .scaleAspectFit
+        chevron.isUserInteractionEnabled = false
+        chevron.translatesAutoresizingMaskIntoConstraints = false
+        
+        rowButton.addSubview(iconBox)
+        rowButton.addSubview(textStack)
+        rowButton.addSubview(badgeContainer)
+        rowButton.addSubview(chevron)
+        
+        NSLayoutConstraint.activate([
+            iconBox.leadingAnchor.constraint(equalTo: rowButton.leadingAnchor, constant: 14),
+            iconBox.centerYAnchor.constraint(equalTo: rowButton.centerYAnchor),
+            iconBox.widthAnchor.constraint(equalToConstant: 42),
+            iconBox.heightAnchor.constraint(equalToConstant: 42),
+            
+            iconView.centerXAnchor.constraint(equalTo: iconBox.centerXAnchor),
+            iconView.centerYAnchor.constraint(equalTo: iconBox.centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 21),
+            iconView.heightAnchor.constraint(equalToConstant: 21),
+            
+            textStack.topAnchor.constraint(equalTo: rowButton.topAnchor, constant: 13),
+            textStack.leadingAnchor.constraint(equalTo: iconBox.trailingAnchor, constant: 12),
+            textStack.bottomAnchor.constraint(equalTo: rowButton.bottomAnchor, constant: -13),
+            textStack.trailingAnchor.constraint(lessThanOrEqualTo: badgeContainer.leadingAnchor, constant: -8),
+            
+            badgeContainer.trailingAnchor.constraint(equalTo: chevron.leadingAnchor, constant: -8),
+            badgeContainer.centerYAnchor.constraint(equalTo: rowButton.centerYAnchor),
+            
+            badgeLabel.topAnchor.constraint(equalTo: badgeContainer.topAnchor, constant: 4.5),
+            badgeLabel.bottomAnchor.constraint(equalTo: badgeContainer.bottomAnchor, constant: -4.5),
+            badgeLabel.leadingAnchor.constraint(equalTo: badgeContainer.leadingAnchor, constant: 8.5),
+            badgeLabel.trailingAnchor.constraint(equalTo: badgeContainer.trailingAnchor, constant: -8.5),
+            
+            chevron.trailingAnchor.constraint(equalTo: rowButton.trailingAnchor, constant: -14),
+            chevron.centerYAnchor.constraint(equalTo: rowButton.centerYAnchor),
+            chevron.widthAnchor.constraint(equalToConstant: 12),
+            chevron.heightAnchor.constraint(equalToConstant: 12)
+        ])
+        
+        return (rowButton, subtitleLabel, badgeLabel, badgeContainer)
     }
-
-    func setCellularRefreshEnabled(_ enabled: Bool) {
-        guard isCellularRefreshEnabled != enabled || UserDefaults.standard.isCellularRefreshEnabled != enabled else { return }
-        lastInternalConfigWriteTime = CFAbsoluteTimeGetCurrent()
-        isCellularRefreshEnabled = enabled
-        CellularRefreshManager.shared.setEnabled(enabled)
-        if let snap = latestSnapshot {
-            updateInstantStatus(existingSnapshot: snap)
+    
+    // MARK: - 3. Shortcuts Card (6:00 AM & 15:00 PM iCloud Links)
+    private func makeShortcutsCard() -> UIView
+    {
+        let card = makeWhiteCardContainer()
+        
+        let vStack = UIStackView()
+        vStack.axis = .vertical
+        vStack.spacing = 12
+        vStack.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(vStack)
+        
+        let descLabel = UILabel()
+        descLabel.text = "Tải 2 phím tắt chuyên dụng dưới đây để tự động bật VPN, làm mới toàn bộ ứng dụng qua Wi-Fi hoặc mạng di động 4G ở chế độ nền:"
+        descLabel.font = .systemFont(ofSize: 13.5, weight: .regular)
+        descLabel.textColor = UIColor(red: 0.25, green: 0.29, blue: 0.35, alpha: 1.0)
+        descLabel.numberOfLines = 0
+        
+        let btn1 = makeGradientActionButton(
+            icon: "sunrise.fill",
+            title: "Phím tắt Làm Mới 1 (Khung 6:00 Sáng)",
+            subtitle: "Chạm để nhận phím tắt tự động số 1",
+            colors: [
+                UIColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1.0),
+                UIColor(red: 0.0, green: 0.34, blue: 0.75, alpha: 1.0)
+            ],
+            action: #selector(openShortcut1)
+        )
+        
+        let btn2 = makeGradientActionButton(
+            icon: "sun.max.fill",
+            title: "Phím tắt Làm Mới 2 (Khung 15:00 Chiều)",
+            subtitle: "Chạm để nhận phím tắt tự động số 2",
+            colors: [
+                UIColor(red: 0.44, green: 0.26, blue: 0.76, alpha: 1.0),
+                UIColor(red: 0.32, green: 0.16, blue: 0.62, alpha: 1.0)
+            ],
+            action: #selector(openShortcut2)
+        )
+        
+        vStack.addArrangedSubview(descLabel)
+        vStack.addArrangedSubview(btn1)
+        vStack.addArrangedSubview(btn2)
+        
+        NSLayoutConstraint.activate([
+            vStack.topAnchor.constraint(equalTo: card.topAnchor, constant: 16),
+            vStack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
+            vStack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
+            vStack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -16)
+        ])
+        
+        return card
+    }
+    
+    // MARK: - 4. Automation Guide Card (6:00 & 15:00 Step-by-Step)
+    private func makeAutomationGuideCard() -> UIView
+    {
+        let card = makeWhiteCardContainer()
+        
+        let stack = UIStackView()
+        stack.axis = .vertical
+        stack.spacing = 12
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(stack)
+        
+        let headerBox = UIView()
+        headerBox.backgroundColor = UIColor(red: 0.94, green: 0.97, blue: 1.0, alpha: 1.0)
+        headerBox.layer.cornerRadius = 11
+        headerBox.layer.borderWidth = 1
+        headerBox.layer.borderColor = UIColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 0.18).cgColor
+        headerBox.translatesAutoresizingMaskIntoConstraints = false
+        
+        let headerLabel = UILabel()
+        headerLabel.text = "💡 Đặt hẹn giờ chạy tự động 2 lần/ngày lúc 6:00 sáng và 15:00 chiều giúp ứng dụng luôn giữ mức 7 ngày, không bao giờ lo hết hạn!"
+        headerLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        headerLabel.textColor = UIColor(red: 0.0, green: 0.36, blue: 0.75, alpha: 1.0)
+        headerLabel.numberOfLines = 0
+        headerLabel.translatesAutoresizingMaskIntoConstraints = false
+        headerBox.addSubview(headerLabel)
+        
+        NSLayoutConstraint.activate([
+            headerLabel.topAnchor.constraint(equalTo: headerBox.topAnchor, constant: 10),
+            headerLabel.leadingAnchor.constraint(equalTo: headerBox.leadingAnchor, constant: 12),
+            headerLabel.trailingAnchor.constraint(equalTo: headerBox.trailingAnchor, constant: -12),
+            headerLabel.bottomAnchor.constraint(equalTo: headerBox.bottomAnchor, constant: -10)
+        ])
+        
+        stack.addArrangedSubview(headerBox)
+        stack.addArrangedSubview(makeStepRow(
+            number: "1",
+            title: "Mở ứng dụng Phím tắt (Shortcuts)",
+            detail: "Chuyển sang tab 'Tự động hóa' (Automation) ở thanh công cụ dưới cùng, sau đó bấm dấu '+' tạo mục mới."
+        ))
+        stack.addArrangedSubview(makeStepRow(
+            number: "2",
+            title: "Tạo lịch hẹn giờ 6:00 Sáng",
+            detail: "Chọn 'Thời gian trong ngày' -> Đặt 06:00 -> Chọn 'Hàng ngày' và tích vào 'Chạy ngay lập tức' (Run Immediately) -> Chọn Phím tắt Làm Mới 1."
+        ))
+        stack.addArrangedSubview(makeStepRow(
+            number: "3",
+            title: "Tạo lịch hẹn giờ 15:00 Chiều",
+            detail: "Làm tương tự thêm 1 mục Tự động hóa nữa vào lúc 15:00 chiều -> Chọn 'Chạy ngay lập tức' -> Chọn Phím tắt Làm Mới 2."
+        ))
+        
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 16),
+            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
+            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
+            stack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -16)
+        ])
+        
+        return card
+    }
+    
+    private func makeStepRow(number: String, title: String, detail: String) -> UIView
+    {
+        let container = UIView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        
+        let badge = UILabel()
+        badge.text = number
+        badge.font = .systemFont(ofSize: 13, weight: .bold)
+        badge.textColor = .white
+        badge.textAlignment = .center
+        badge.backgroundColor = UIColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1.0)
+        badge.layer.cornerRadius = 13
+        badge.clipsToBounds = true
+        badge.translatesAutoresizingMaskIntoConstraints = false
+        
+        let textStack = UIStackView()
+        textStack.axis = .vertical
+        textStack.spacing = 3
+        textStack.translatesAutoresizingMaskIntoConstraints = false
+        
+        let titleLabel = UILabel()
+        titleLabel.text = title
+        titleLabel.font = .systemFont(ofSize: 14.5, weight: .bold)
+        titleLabel.textColor = UIColor(red: 0.11, green: 0.13, blue: 0.20, alpha: 1.0)
+        titleLabel.numberOfLines = 0
+        
+        let detailLabel = UILabel()
+        detailLabel.text = detail
+        detailLabel.font = .systemFont(ofSize: 13, weight: .regular)
+        detailLabel.textColor = UIColor(red: 0.35, green: 0.39, blue: 0.45, alpha: 1.0)
+        detailLabel.numberOfLines = 0
+        
+        textStack.addArrangedSubview(titleLabel)
+        textStack.addArrangedSubview(detailLabel)
+        
+        container.addSubview(badge)
+        container.addSubview(textStack)
+        
+        NSLayoutConstraint.activate([
+            badge.topAnchor.constraint(equalTo: container.topAnchor, constant: 2),
+            badge.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            badge.widthAnchor.constraint(equalToConstant: 26),
+            badge.heightAnchor.constraint(equalToConstant: 26),
+            
+            textStack.topAnchor.constraint(equalTo: container.topAnchor),
+            textStack.leadingAnchor.constraint(equalTo: badge.trailingAnchor, constant: 12),
+            textStack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            textStack.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+        
+        return container
+    }
+    
+    // MARK: - 5. Video Tutorial Card
+    private func makeVideoTutorialCard() -> UIView
+    {
+        let card = makeWhiteCardContainer()
+        
+        let vStack = UIStackView()
+        vStack.axis = .vertical
+        vStack.spacing = 12
+        vStack.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(vStack)
+        
+        let descLabel = UILabel()
+        descLabel.text = "Xem video hướng dẫn trực quan từng bước cách thêm Phím tắt và thiết lập Tự động hóa làm mới 2 lần/ngày:"
+        descLabel.font = .systemFont(ofSize: 13.5, weight: .regular)
+        descLabel.textColor = UIColor(red: 0.25, green: 0.29, blue: 0.35, alpha: 1.0)
+        descLabel.numberOfLines = 0
+        
+        let playButton = makeGradientActionButton(
+            icon: "play.rectangle.fill",
+            title: "Xem Video Hướng Dẫn Cài Đặt",
+            subtitle: "Phát trực tiếp trình phát video HD",
+            colors: [
+                UIColor(red: 0.90, green: 0.22, blue: 0.35, alpha: 1.0),
+                UIColor(red: 0.44, green: 0.26, blue: 0.76, alpha: 1.0)
+            ],
+            action: #selector(playTutorialVideo)
+        )
+        
+        vStack.addArrangedSubview(descLabel)
+        vStack.addArrangedSubview(playButton)
+        
+        NSLayoutConstraint.activate([
+            vStack.topAnchor.constraint(equalTo: card.topAnchor, constant: 16),
+            vStack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
+            vStack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
+            vStack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -16)
+        ])
+        
+        return card
+    }
+    
+    // MARK: - Reusable UI Helpers (Viền kính ngọc trai + Bóng đổ Indigo)
+    private func makeWhiteCardContainer() -> UIView
+    {
+        let card = UIView()
+        card.backgroundColor = UIColor.white.withAlphaComponent(0.95)
+        card.layer.cornerRadius = 18
+        card.layer.cornerCurve = .continuous
+        card.layer.borderWidth = 1.0
+        card.layer.borderColor = UIColor.white.cgColor
+        card.layer.shadowColor = UIColor(red: 0.15, green: 0.10, blue: 0.38, alpha: 1.0).cgColor
+        card.layer.shadowOpacity = 0.065
+        card.layer.shadowOffset = CGSize(width: 0, height: 6)
+        card.layer.shadowRadius = 14
+        card.translatesAutoresizingMaskIntoConstraints = false
+        return card
+    }
+    
+    private func makeDivider() -> UIView
+    {
+        let divider = UIView()
+        divider.backgroundColor = UIColor(red: 0.92, green: 0.94, blue: 0.97, alpha: 1.0)
+        divider.translatesAutoresizingMaskIntoConstraints = false
+        divider.heightAnchor.constraint(equalToConstant: 1).isActive = true
+        return divider
+    }
+    
+    private func makeGradientActionButton(
+        icon: String,
+        title: String,
+        subtitle: String,
+        colors: [UIColor],
+        action: Selector
+    ) -> UIControl
+    {
+        let button = GradientControlButton(colors: colors)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.layer.cornerRadius = 14
+        button.layer.cornerCurve = .continuous
+        button.clipsToBounds = true
+        button.addTarget(self, action: action, for: .touchUpInside)
+        
+        let iconView = UIImageView(image: UIImage(systemName: icon))
+        iconView.tintColor = .white
+        iconView.contentMode = .scaleAspectFit
+        iconView.isUserInteractionEnabled = false
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        
+        let textStack = UIStackView()
+        textStack.axis = .vertical
+        textStack.spacing = 2
+        textStack.isUserInteractionEnabled = false
+        textStack.translatesAutoresizingMaskIntoConstraints = false
+        
+        let titleLabel = UILabel()
+        titleLabel.text = title
+        titleLabel.font = .systemFont(ofSize: 14.5, weight: .bold)
+        titleLabel.textColor = .white
+        
+        let subLabel = UILabel()
+        subLabel.text = subtitle
+        subLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        subLabel.textColor = UIColor.white.withAlphaComponent(0.88)
+        
+        textStack.addArrangedSubview(titleLabel)
+        textStack.addArrangedSubview(subLabel)
+        
+        let arrow = UIImageView(image: UIImage(systemName: "arrow.up.right.circle.fill"))
+        arrow.tintColor = UIColor.white.withAlphaComponent(0.92)
+        arrow.contentMode = .scaleAspectFit
+        arrow.isUserInteractionEnabled = false
+        arrow.translatesAutoresizingMaskIntoConstraints = false
+        
+        button.addSubview(iconView)
+        button.addSubview(textStack)
+        button.addSubview(arrow)
+        
+        NSLayoutConstraint.activate([
+            iconView.leadingAnchor.constraint(equalTo: button.leadingAnchor, constant: 14),
+            iconView.centerYAnchor.constraint(equalTo: button.centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 26),
+            iconView.heightAnchor.constraint(equalToConstant: 26),
+            
+            textStack.topAnchor.constraint(equalTo: button.topAnchor, constant: 12),
+            textStack.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 12),
+            textStack.bottomAnchor.constraint(equalTo: button.bottomAnchor, constant: -12),
+            textStack.trailingAnchor.constraint(lessThanOrEqualTo: arrow.leadingAnchor, constant: -8),
+            
+            arrow.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -14),
+            arrow.centerYAnchor.constraint(equalTo: button.centerYAnchor),
+            arrow.widthAnchor.constraint(equalToConstant: 22),
+            arrow.heightAnchor.constraint(equalToConstant: 22)
+        ])
+        
+        return button
+    }
+    
+    // MARK: - Live System Status Checker
+    private func refreshSystemStatus()
+    {
+        // 1. Kiểm tra Pairing File
+        let isPairingPresent = checkPairingFileAvailable()
+        if isPairingPresent {
+            pairingSubtitleLabel?.text = "Đã nạp hồ sơ ghép đôi hợp lệ • Chạm để xem"
+            pairingBadgeLabel?.text = "ĐÃ KÍCH HOẠT"
+            pairingBadgeLabel?.textColor = UIColor(red: 0.08, green: 0.56, blue: 0.24, alpha: 1.0)
+            pairingBadgeContainer?.backgroundColor = UIColor(red: 0.88, green: 0.97, blue: 0.90, alpha: 1.0)
         } else {
-            refreshSnapshotAsyncAndApply()
+            pairingSubtitleLabel?.text = "Chưa tìm thấy tệp ghép đôi • Chạm để cài đặt"
+            pairingBadgeLabel?.text = "CẦN CÀI ĐẶT"
+            pairingBadgeLabel?.textColor = UIColor(red: 0.85, green: 0.38, blue: 0.0, alpha: 1.0)
+            pairingBadgeContainer?.backgroundColor = UIColor(red: 1.0, green: 0.94, blue: 0.86, alpha: 1.0)
         }
-    }
-
-    func deleteAllPairingFiles() {
-        PairingFileManager.shared.resetAllPairingFiles()
-        self.hasAnyStoredPairingFile = false
-        self.lastVerifiedPairingSuccess = false
-        self.lastVerifiedModeSignature = ""
-        self.didAttemptLiveVerifyInCurrentMode = false
-        self.isPairingVerifiedError = true
-        self.isPairingOK = false
-        if let snap = latestSnapshot {
-            updateInstantStatus(existingSnapshot: snap)
+        
+        // 2. Kiểm tra LocalDevVPN / Tunnel
+        let isVPNActive = checkTunnelInterfaceActive()
+        if isVPNActive {
+            vpnSubtitleLabel?.text = "LocalDevVPN đang bật và sẵn sàng làm mới"
+            vpnBadgeLabel?.text = "ĐANG BẬT"
+            vpnBadgeLabel?.textColor = UIColor(red: 0.08, green: 0.56, blue: 0.24, alpha: 1.0)
+            vpnBadgeContainer?.backgroundColor = UIColor(red: 0.88, green: 0.97, blue: 0.90, alpha: 1.0)
         } else {
-            refreshSnapshotAsyncAndApply()
+            vpnSubtitleLabel?.text = "Chạm để kiểm tra kết nối LocalDevVPN"
+            vpnBadgeLabel?.text = "KIỂM TRA"
+            vpnBadgeLabel?.textColor = UIColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1.0)
+            vpnBadgeContainer?.backgroundColor = UIColor(red: 0.90, green: 0.95, blue: 1.0, alpha: 1.0)
         }
     }
-
-    private static func isValidConnectedIP(_ value: String?, disconnectedText: String) -> Bool {
-        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !trimmed.isEmpty else {
-            return false
-        }
-        let lower = trimmed.lowercased()
-        if trimmed == disconnectedText
-            || lower.contains("chưa kết nối")
-            || lower.contains("disconnected")
-            || lower == "none"
-            || lower == "nil"
-            || lower == "n/a"
-            || lower == "0.0.0.0" {
-            return false
-        }
-        return true
-    }
-
-    private func assignIfChanged<T: Equatable>(_ keyPath: ReferenceWritableKeyPath<SystemCheckViewModel, T>, _ newValue: T) {
-        if self[keyPath: keyPath] != newValue {
-            self[keyPath: keyPath] = newValue
-        }
-    }
-
-    func updateInstantStatus(existingSnapshot: SystemInterfaceSnapshot) {
-        let snapshot = existingSnapshot
-        self.latestSnapshot = snapshot
-        ensureTunnelRoutingPinned(snapshot: snapshot)
-
-        let cellularActive = resolveCellularActive(snapshot: snapshot)
-        let wifiActive = resolveWifiActive(snapshot: snapshot)
-        assignIfChanged(\.isCellularOK, cellularActive)
-        assignIfChanged(\.isWifiActive, wifiActive)
-
-        let newCellularDetail: String
-        if usesCellularPath {
-            newCellularDetail = "Ổn định • Đang dùng trực tiếp 4G / 5G"
-        } else if cellularActive {
-            newCellularDetail = "Ổn định • 4G / 5G đang bật sẵn sàng"
-        } else {
-            newCellularDetail = "Chưa bật • Hãy bật Dữ liệu di động (4G/5G)"
-        }
-        assignIfChanged(\.cellularDetail, newCellularDetail)
-
-        let disconnectedText = "Chưa kết nối"
-        let config = ConnectionConfig.shared
-
-        let activeTunnelIP: String? = {
-            if let detected = snapshot.detectedLocalDevUtunIPv4, !detected.isEmpty {
-                return config.formattedTunnelIface ?? config.tunnelIfaceIp ?? detected
-            }
-            if let iface = config.tunnelIfaceIp, iface.hasPrefix("10.7.") {
-                return config.formattedTunnelIface ?? iface
-            }
-            return nil
-        }()
-
-        let activeDeviceIP: String? = {
-            guard activeTunnelIP != nil else { return nil }
-            if let formattedPeer = config.formattedTunnelPeer, !formattedPeer.isEmpty {
-                return formattedPeer
-            }
-            if let peer = config.tunnelPeerIp, !peer.isEmpty {
-                return peer
-            }
-            if config.overrideTunnelPeerReachable, !config.overrideTunnelPeerIp.isEmpty {
-                return config.overrideTunnelPeerIp
-            }
-            if let tIP = activeTunnelIP, tIP.contains("10.7.") {
-                return "10.7.0.1"
-            }
-            return nil
-        }()
-
-        let resolvedTunnelText = Self.isValidConnectedIP(activeTunnelIP, disconnectedText: disconnectedText)
-            ? activeTunnelIP!
-            : disconnectedText
-        let resolvedDeviceText = Self.isValidConnectedIP(activeDeviceIP, disconnectedText: disconnectedText)
-            ? activeDeviceIP!
-            : disconnectedText
-
-        assignIfChanged(\.tunnelIP, resolvedTunnelText)
-        assignIfChanged(\.deviceIP, resolvedDeviceText)
-
-        let vpnConnected = snapshot.hasActiveLocalDevUtun
-            || ((resolvedTunnelText != disconnectedText) && (resolvedDeviceText != disconnectedText))
-        assignIfChanged(\.isVpnOK, vpnConnected)
-
-        let hasRp = PairingFileManager.shared.hasPairingFile(for: .rppairing)
-        let hasLd = PairingFileManager.shared.hasPairingFile(for: .lockdown)
-        let hasUnk = PairingFileManager.shared.hasPairingFile(for: .unknown)
-        let hasAnyFile = hasRp || hasLd || hasUnk
-        assignIfChanged(\.hasAnyStoredPairingFile, hasAnyFile)
-
-        let coreLoaded = minimuxer.core.isPairingFileLoaded && hasAnyFile
-        let activeType: PairingProtocol = {
-            if coreLoaded && minimuxer.core.pairingFileType != .unknown {
-                return minimuxer.core.pairingFileType
-            }
-            if let persisted = PairingFileManager.shared.persistedActiveProtocol {
-                let hasPersisted = (persisted == .rppairing && hasRp)
-                                || (persisted == .lockdown && hasLd)
-                                || (persisted == .unknown && hasUnk)
-                if hasPersisted {
-                    return persisted
-                }
-            }
-            if hasRp { return .rppairing }
-            if hasLd { return .lockdown }
-            return .unknown
-        }()
-
-        let protocolName: String = {
-            switch activeType {
-            case .rppairing:
-                return "Remote Pairing (iOS 17+ / 27)"
-            case .lockdown:
-                return "Lockdown Pairing"
-            case .unknown:
-                return (hasAnyFile || coreLoaded)
-                    ? "Đã nạp Pairing File"
-                    : "Chưa có tệp Pairing"
-            }
-        }()
-
-        let canVerifyNow = vpnConnected && (wifiActive || !cellularActive)
-
-        if !hasAnyFile {
-            self.lastVerifiedPairingSuccess = false
-            self.lastVerifiedModeSignature = ""
-            self.didAttemptLiveVerifyInCurrentMode = false
-            assignIfChanged(\.isPairingOK, false)
-            assignIfChanged(\.isPairingVerifiedError, true)
-            assignIfChanged(\.pairingProtocol, "Chưa có tệp Pairing")
-        } else if !canVerifyNow {
-            assignIfChanged(\.isPairingOK, false)
-            assignIfChanged(\.isPairingVerifiedError, false)
-            assignIfChanged(\.pairingProtocol, "")
-        } else if self.didAttemptLiveVerifyInCurrentMode {
-            if self.lastVerifiedPairingSuccess {
-                assignIfChanged(\.isPairingOK, true)
-                assignIfChanged(\.isPairingVerifiedError, false)
-                assignIfChanged(\.pairingProtocol, protocolName)
-            } else {
-                assignIfChanged(\.isPairingOK, false)
-                assignIfChanged(\.isPairingVerifiedError, true)
-                assignIfChanged(\.pairingProtocol, "Pairing bị lỗi hoặc hết hạn • Hãy cài lại Pairing mới")
-            }
-        } else if self.lastVerifiedPairingSuccess {
-            assignIfChanged(\.isPairingOK, true)
-            assignIfChanged(\.isPairingVerifiedError, false)
-            assignIfChanged(\.pairingProtocol, protocolName)
-        } else {
-            assignIfChanged(\.isPairingOK, false)
-            assignIfChanged(\.isPairingVerifiedError, false)
-            assignIfChanged(\.pairingProtocol, "")
-        }
-
-        let currentCellularRefresh = UserDefaults.standard.isCellularRefreshEnabled
-        assignIfChanged(\.isCellularRefreshEnabled, currentCellularRefresh)
-    }
-
-    private func verifyPairingOverTunnel(initialSnapshot: SystemInterfaceSnapshot) async -> Bool {
-        ensureTunnelRoutingPinned(snapshot: initialSnapshot)
-
-        let hasRp = PairingFileManager.shared.hasPairingFile(for: .rppairing)
-        let hasLd = PairingFileManager.shared.hasPairingFile(for: .lockdown)
-
-        var candidateProtocols: [PairingProtocol] = []
-        if let persisted = PairingFileManager.shared.persistedActiveProtocol {
-            if (persisted == .rppairing && hasRp) || (persisted == .lockdown && hasLd) {
-                candidateProtocols.append(persisted)
-            }
-        }
-        if hasRp && !candidateProtocols.contains(.rppairing) {
-            candidateProtocols.append(.rppairing)
-        }
-        if hasLd && !candidateProtocols.contains(.lockdown) {
-            candidateProtocols.append(.lockdown)
-        }
-        if candidateProtocols.isEmpty {
-            candidateProtocols.append(.unknown)
-        }
-
-        for proto in candidateProtocols {
-            if proto != .unknown {
-                if !minimuxer.core.isPairingFileLoaded || minimuxer.core.pairingFileType != proto {
-                    try? await minimuxerSwitchPairingProtocol(to: proto)
-                }
-            }
-
-            for attempt in 0..<2 {
-                if attempt > 0 {
-                    try? await Task.sleep(nanoseconds: 350_000_000)
-                    let retrySnap = await Task.detached(priority: .utility) {
-                        Self.scanSystemInterfaces()
-                    }.value
-                    ensureTunnelRoutingPinned(snapshot: retrySnap)
-                }
-
-                if let udid = try? await fetchUDID(forceLive: true), !udid.isEmpty {
+    
+    private func checkPairingFileAvailable() -> Bool
+    {
+        let fm = FileManager.default
+        if let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first {
+            if let items = try? fm.contentsOfDirectory(atPath: docs.path) {
+                if items.contains(where: { $0.lowercased().contains("pairing") || $0.lowercased().hasSuffix(".mobiledevicepairing") || $0.lowercased().hasSuffix(".plist") }) {
                     return true
                 }
             }
         }
+        if let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            if let items = try? fm.contentsOfDirectory(atPath: appSupport.path) {
+                if !items.isEmpty {
+                    return true
+                }
+            }
+        }
+        if DatabaseManager.shared.activeTeam() != nil {
+            return true
+        }
         return false
     }
-
-    func checkAllStatuses(forceVerify: Bool = false) async {
-        if isWirelessPairingActive {
-            if forceVerify {
-                pendingForceVerify = true
-            }
-            return
-        }
-
-        if isChecking {
-            needsAnotherCheck = true
-            if forceVerify { pendingForceVerify = true }
-            return
-        }
-
-        isChecking = true
-        defer {
-            isChecking = false
-            if needsAnotherCheck {
-                let shouldForce = pendingForceVerify
-                needsAnotherCheck = false
-                pendingForceVerify = false
-                Task { @MainActor [weak self] in
-                    await self?.checkAllStatuses(forceVerify: shouldForce)
+    
+    private func checkTunnelInterfaceActive() -> Bool
+    {
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr else { return false }
+        defer { freeifaddrs(ifaddr) }
+        
+        var ptr: UnsafeMutablePointer<ifaddrs>? = firstAddr
+        while let current = ptr {
+            let name = String(cString: current.pointee.ifa_name)
+            let flags = Int32(current.pointee.ifa_flags)
+            let isUp = (flags & IFF_UP) != 0
+            if isUp && (name.hasPrefix("utun") || name.hasPrefix("ipsec") || name.hasPrefix("ppp")) {
+                if let addr = current.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_INET) {
+                    var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                    if getnameinfo(addr, socklen_t(addr.pointee.sa_len), &hostname, socklen_t(hostname.count), nil, 0, NI_NUMERICHOST) == 0 {
+                        let ip = String(cString: hostname)
+                        if ip.hasPrefix("10.7.") || ip.hasPrefix("fd00:") {
+                            return true
+                        }
+                    }
                 }
             }
+            ptr = current.pointee.ifa_next
         }
-
-        let snapshot = await Task.detached(priority: .utility) {
-            Self.scanSystemInterfaces()
-        }.value
-
-        updateInstantStatus(existingSnapshot: snapshot)
-
-        guard hasAnyStoredPairingFile else {
-            self.lastVerifiedPairingSuccess = false
-            self.lastVerifiedModeSignature = ""
-            self.didAttemptLiveVerifyInCurrentMode = false
-            self.isPairingVerifiedError = true
-            assignIfChanged(\.isPairingOK, false)
-            updateInstantStatus(existingSnapshot: snapshot)
-            return
-        }
-
-        let cellularActive = resolveCellularActive(snapshot: snapshot)
-        let wifiActive = resolveWifiActive(snapshot: snapshot)
-        let vpnActive = isVpnOK || snapshot.hasActiveLocalDevUtun
-
-        let canVerifyNow = vpnActive && (wifiActive || !cellularActive)
-
-        if canVerifyNow {
-            // Chế độ kiểm tra độc lập (Tắt cả Wi-Fi và 4G, chỉ bật VPN)
-            let isStrictLoopbackTestMode = vpnActive && !wifiActive && !cellularActive
-            let currentSignature = "\(tunnelIP)|strict:\(isStrictLoopbackTestMode)"
-            let signatureChanged = (lastVerifiedModeSignature != currentSignature)
-
-            // Tối ưu thông minh: Nếu đã từng verify thành công rồi thì không tự động giải mã lại mỗi khi Wi-Fi nhấp nháy,
-            // trừ khi người dùng bật chế độ test nghiêm ngặt (Tắt Wi-Fi + Tắt 4G + Bật VPN) hoặc chủ động forceVerify.
-            let shouldPerformHeavyHandshake = forceVerify
-                || !didAttemptLiveVerifyInCurrentMode
-                || !lastVerifiedPairingSuccess
-                || (isStrictLoopbackTestMode && signatureChanged)
-
-            if shouldPerformHeavyHandshake {
-                let ok = await verifyPairingOverTunnel(initialSnapshot: snapshot)
-                self.didAttemptLiveVerifyInCurrentMode = true
-                self.lastVerifiedModeSignature = currentSignature
-                if ok {
-                    self.lastVerifiedPairingSuccess = true
-                    assignIfChanged(\.isPairingOK, true)
-                    assignIfChanged(\.isPairingVerifiedError, false)
-                } else {
-                    self.lastVerifiedPairingSuccess = false
-                    assignIfChanged(\.isPairingOK, false)
-                    assignIfChanged(\.isPairingVerifiedError, true)
-                }
-            }
-        } else {
-            self.didAttemptLiveVerifyInCurrentMode = false
-            self.lastVerifiedModeSignature = ""
-            assignIfChanged(\.isPairingOK, false)
-            assignIfChanged(\.isPairingVerifiedError, false)
-        }
-
-        updateInstantStatus(existingSnapshot: snapshot)
+        return false
     }
-}
-
-struct SystemCheckDashboardView: SwiftUI.View {
-    @StateObject private var vm = SystemCheckViewModel()
-    @State private var showPairingSheet = false
-    @State private var showVpnSheet = false
-    @State private var showCellularSheet = false
-
-    var body: some SwiftUI.View {
-        ScrollView(showsIndicators: false) {
-            // LazyVStack giúp các mục ở cuối trang (đặc biệt là Video YouTube) chỉ khởi tạo khi người dùng thực sự cuộn tới
-            LazyVStack(spacing: 18) {
-                // Khối Hero Banner đồng bộ 100% với SettingsViewController
-                CSSHeroBannerView(
-                    title: "SideStore",
-                    subtitle: "Kiểm tra kết nối hệ thống, Pairing & tự động làm mới qua 4G"
+    
+    // MARK: - Actions & Detail Sheets
+    @objc private func handlePairingRowTap()
+    {
+        impactFeedback.impactOccurred()
+        refreshSystemStatus()
+        let isReady = checkPairingFileAvailable()
+        
+        let sheet = SystemStatusDetailSheetViewController(
+            badgeText: isReady ? "ĐÃ KÍCH HOẠT HỒ SƠ" : "HƯỚNG DẪN GHÉP ĐÔI",
+            title: "Hồ sơ ghép đôi (Pairing File)",
+            subtitle: isReady
+                ? "Thiết bị của bạn đã có hồ sơ ghép đôi hợp lệ. Dưới đây là 2 cách tạo hoặc cấp lại Pairing File khi cần:"
+                : "Bạn có thể tạo tệp ghép đôi trực tiếp trên điện thoại (bản iOS 27) hoặc tạo bằng máy tính:",
+            sections: [
+                .init(
+                    icon: "iphone.gen3.radiowaves.left.and.right",
+                    title: "Cách 1: Ghép đôi trực tiếp trên iPhone (Bản iOS 27)",
+                    body: "• Nếu bạn đang sử dụng gói cài đặt iOS 27 trực tiếp trên điện thoại, bạn không cần máy tính.\n• Hãy mở ứng dụng hỗ trợ ghép đôi đi kèm bộ iOS 27 (như StosVPN / trình tạo Pairing trực tiếp), bấm 'Tạo / Xuất tệp ghép đôi' rồi chia sẻ (Share) thẳng vào SideStore."
+                ),
+                .init(
+                    icon: "laptopcomputer.and.iphone",
+                    title: "Cách 2: Tạo tệp ghép đôi qua Máy tính (Windows / Mac)",
+                    body: "• Kết nối iPhone với máy tính qua cáp, bấm 'Tin cậy' (Trust) trên màn hình điện thoại.\n• Mở công cụ idevice_pair (hoặc JitterbugPair) trên máy tính và nhấn Tạo file Pairing.\n• Gửi file .mobiledevicepairing vừa tạo qua Zalo / AirDrop / Tệp về iPhone rồi mở trong SideStore."
+                ),
+                .init(
+                    icon: "arrow.triangle.2.circlepath.doc.on.clipboard",
+                    title: "Cách thay đổi tệp ghép đôi mới",
+                    body: "Khi bạn cập nhật iOS hoặc muốn nạp lại tệp mới, vào mục 'Cài đặt' của SideStore -> Chọn 'Đặt lại tệp ghép đôi' (Reset Pairing File) và chọn tệp mới."
                 )
-                .padding(.top, 4)
-
-                systemStatusSection
-                shortcutsSection
-                automationGuideSection
-                shortcutVideoGuideSection
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 50)
-        }
-        .background(SwiftUI.Color.clear)
-        .preferredColorScheme(.light)
-        .onAppear {
-            vm.setViewVisible(true)
-        }
-        .onDisappear {
-            vm.setViewVisible(false)
-        }
-        .refreshable {
-            await vm.checkAllStatuses(forceVerify: true)
-        }
-        .sheet(isPresented: $showPairingSheet) {
-            PairingGuideSheetView(vm: vm)
-                .preferredColorScheme(.light)
-        }
-        .sheet(isPresented: $showVpnSheet) {
-            VpnDetailSheetView(vm: vm)
-                .preferredColorScheme(.light)
-        }
-        .sheet(isPresented: $showCellularSheet) {
-            CellularDetailSheetView(vm: vm)
-                .preferredColorScheme(.light)
-        }
-    }
-
-    private var systemStatusSection: some SwiftUI.View {
-        let allReady = vm.isPairingOK && vm.isVpnOK && vm.isCellularOK
-
-        let pairingSubtitleText: String = {
-            switch vm.pairingVisualState {
-            case .verifiedOK:
-                return "Ổn định"
-            case .failedError:
-                return !vm.hasAnyStoredPairingFile
-                    ? "Chưa có tệp Pairing"
-                    : "Pairing lỗi • Nhấn vào để cài lại"
-            case .actionRequired:
-                return "Nhấn vào đây để kiểm tra"
-            }
-        }()
-
-        return SkySectionCard(
-            title: "TRẠNG THÁI HỆ THỐNG",
-            icon: "cpu.fill",
-            color: CSSTheme.primary,
-            statusOK: allReady ? true : nil,
-            footerText: "Chạm vào từng mục bên trên để kiểm tra chi tiết hoặc cài đặt lại kết nối hệ thống."
-        ) {
-            CheckItemButton(
-                title: "LocalDevVPN",
-                subtitle: vm.isVpnOK ? "Ổn định" : "Chưa kết nối",
-                icon: "network.badge.shield.half.filled",
-                visualState: vm.isVpnOK ? .verifiedOK : .failedError
-            ) {
-                showVpnSheet = true
-            }
-
-            CheckItemButton(
-                title: "Pairing File",
-                subtitle: pairingSubtitleText,
-                icon: "doc.badge.gearshape.fill",
-                visualState: vm.pairingVisualState
-            ) {
-                showPairingSheet = true
-            }
-
-            CheckItemButton(
-                title: "Mạng 4G/Di Động",
-                subtitle: vm.isCellularOK ? "Ổn định" : "Chưa bật",
-                icon: "antenna.radiowaves.left.and.right",
-                visualState: vm.isCellularOK ? .verifiedOK : .failedError
-            ) {
-                showCellularSheet = true
-            }
-        }
-    }
-
-    private var shortcutsSection: some SwiftUI.View {
-        SkySectionCard(
-            title: "PHÍM TẮT & LÀM MỚI 4G",
-            icon: "bolt.circle.fill",
-            color: CSSTheme.primary,
-            footerText: "Bật 'Cellular Refresh' và thêm các phím tắt để tự động gia hạn ứng dụng trực tiếp qua mạng 4G/5G."
-        ) {
-            CellularRefreshToggleRow(
-                title: "Cellular Refresh (Refresh Qua 4G)",
-                onText: "Đã bật mặc định",
-                offText: "Chưa bật",
-                isOn: Binding(
-                    get: { vm.isCellularRefreshEnabled },
-                    set: { vm.setCellularRefreshEnabled($0) }
-                )
-            )
-
-            ShortcutLinkRow(
-                title: "Phím tắt Tắt 4G",
-                buttonTitle: "Nhận",
-                icon: "antenna.radiowaves.left.and.right.slash",
-                color: CSSTheme.secondary,
-                urlString: "https://www.icloud.com/shortcuts/ee47f3710b02435883faa746c7355236"
-            )
-
-            ShortcutLinkRow(
-                title: "Phím tắt Bật 4G",
-                buttonTitle: "Nhận",
-                icon: "antenna.radiowaves.left.and.right",
-                color: CSSTheme.primary,
-                urlString: "https://www.icloud.com/shortcuts/10bd8bb0aa1540c4b1221182b835fc43"
-            )
-
-            ShortcutLinkRow(
-                title: "Tự động làm mới App (6:00 sáng)",
-                buttonTitle: "Nhận",
-                icon: "clock.arrow.2.circlepath",
-                color: CSSTheme.green,
-                urlString: "https://www.icloud.com/shortcuts/56b0ab8cb0984d0b9a98543ac879eeec"
-            )
-
-            ShortcutLinkRow(
-                title: "Tự động làm mới App (15:00 chiều)",
-                buttonTitle: "Nhận",
-                icon: "sun.max.circle.fill",
-                color: CSSTheme.primary,
-                urlString: "https://www.icloud.com/shortcuts/9f93051e8bf142258ffc93e08f3c0849"
-            )
-        }
-    }
-
-    private var automationGuideSection: some SwiftUI.View {
-        SkySectionCard(
-            title: "HƯỚNG DẪN TỰ ĐỘNG HÓA",
-            icon: "bell.badge.fill",
-            color: CSSTheme.secondary
-        ) {
-            VStack(spacing: 22) {
-                RemoteGuideImageView(
-                    stepBadge: "BƯỚC 1",
-                    urlString: "https://raw.githubusercontent.com/Nguyenhuyhoan/icons/main/IMG_2589.jpeg",
-                    caption: "Mở Phím Tắt mục Auto Refresh 4G (Auto Refresh 4G 2) và nhấn vào dấu xổ xuống:",
-                    loadingText: "Đang tải ảnh...",
-                    errorText: "Không tải được ảnh. Vui lòng kiểm tra mạng."
-                )
-
-                RemoteGuideImageView(
-                    stepBadge: "BƯỚC 2",
-                    urlString: "https://raw.githubusercontent.com/Nguyenhuyhoan/icons/main/IMG_2588.jpeg",
-                    caption: "Bật nút Tự động hóa:",
-                    loadingText: "Đang tải ảnh...",
-                    errorText: "Không tải được ảnh. Vui lòng kiểm tra mạng."
-                )
-            }
-        }
-    }
-
-    private var shortcutVideoGuideSection: some SwiftUI.View {
-        SkySectionCard(
-            title: "HƯỚNG DẪN VIDEO PHÍM TẮT",
-            icon: "play.rectangle.fill",
-            color: CSSTheme.primary
-        ) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 10) {
-                    SwiftUI.Image(systemName: "sparkles.tv.fill")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(CSSTheme.primary)
-                        .padding(.top, 2)
-
-                    SwiftUI.Text("Nếu phím tắt tải về không tương thích với phiên bản iOS trên máy của bạn, bạn có thể xem video bên dưới để tự tạo phím tắt.")
-                        .font(.system(size: 14.5, weight: .medium))
-                        .foregroundColor(CSSTheme.pureBlack)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(13)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(CSSTheme.innerRowBackground)
-                .cornerRadius(CSSTheme.cornerRadius)
-                .overlay(
-                    RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                        .stroke(CSSTheme.innerBorder, lineWidth: 1)
-                )
-
-                IPhone14VerticalVideoFrameView(
-                    videoID: "j0Ng2cYvd1o"
-                )
-            }
-        }
-    }
-}
-
-/// Khung phát video dọc tỉ lệ 9:19.5 thông minh: Chỉ nạp WKWebView khi người dùng thực sự cuộn tới vùng hiển thị (LazyVStack)
-struct IPhone14VerticalVideoFrameView: SwiftUI.View {
-    let videoID: String
-    @State private var isVisibleOnScreen: Bool = false
-    @State private var shouldMountWebView: Bool = false
-    @State private var mountTask: Task<Void, Never>? = nil
-
-    private let iPhone14CornerRadius: CGFloat = CSSTheme.mediaFrameCornerRadius
-
-    var body: some SwiftUI.View {
-        ZStack {
-            SwiftUI.Color.black
-            if shouldMountWebView {
-                YouTubeVerticalPlayerWebView(
-                    videoID: videoID,
-                    isVisibleOnScreen: isVisibleOnScreen
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ProgressView()
-                    .tint(CSSTheme.primary)
-            }
-        }
-        .aspectRatio(9.0 / 19.5, contentMode: .fit)
-        .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: iPhone14CornerRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: iPhone14CornerRadius, style: .continuous)
-                .strokeBorder(
-                    CSSTheme.mediaFrameBorderGradient,
-                    lineWidth: CSSTheme.mediaFrameLineWidth
-                )
+            ]
         )
-        .shadow(color: CSSTheme.secondary.opacity(0.22), radius: 12, x: 0, y: 6)
-        .padding(.horizontal, 4)
-        .onAppear {
-            isVisibleOnScreen = true
-            if !shouldMountWebView {
-                mountTask?.cancel()
-                mountTask = Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 180_000_000)
-                    guard !Task.isCancelled, isVisibleOnScreen else { return }
-                    shouldMountWebView = true
-                }
-            }
-        }
-        .onDisappear {
-            isVisibleOnScreen = false
-            mountTask?.cancel()
-            mountTask = nil
-        }
+        presentCustomSheet(sheet)
     }
-}
-
-/// WebView nhúng trình phát YouTube tối ưu cho khung dọc 9:19.5
-struct YouTubeVerticalPlayerWebView: UIViewRepresentable {
-    let videoID: String
-    let isVisibleOnScreen: Bool
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    func makeUIView(context: Context) -> WKWebView {
-        let config = WKWebViewConfiguration()
-        config.allowsInlineMediaPlayback = true
-        config.mediaTypesRequiringUserActionForPlayback = [.all]
-        config.suppressesIncrementalRendering = false
-
-        let webView = WKWebView(frame: .zero, configuration: config)
-        webView.scrollView.isScrollEnabled = false
-        webView.scrollView.bounces = false
-        webView.isOpaque = true
-        webView.backgroundColor = .black
-        webView.scrollView.backgroundColor = .black
-        webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-        return webView
-    }
-
-    func updateUIView(_ uiView: WKWebView, context: Context) {
-        if !isVisibleOnScreen {
-            uiView.evaluateJavaScript(
-                "var iframe = document.querySelector('iframe'); if (iframe && iframe.contentWindow) { iframe.contentWindow.postMessage('{\"event\":\"command\",\"func\":\"pauseVideo\",\"args\":\"\"}', '*'); }",
-                completionHandler: nil
-            )
-            return
-        }
-
-        guard context.coordinator.loadedVideoID != videoID else { return }
-        context.coordinator.loadedVideoID = videoID
-
-        let originDomain = "https://sidestore.io"
-        let embedURL = "https://www.youtube-nocookie.com/embed/\(videoID)?playsinline=1&rel=0&modestbranding=1&fs=1&enablejsapi=1&origin=\(originDomain)"
-
-        let embedHTML = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <meta name="referrer" content="strict-origin-when-cross-origin">
-        <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            html, body {
-                width: 100%;
-                height: 100%;
-                background-color: #000000;
-                overflow: hidden;
-            }
-            .video-container {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background-color: #000000;
-            }
-            iframe {
-                width: 100%;
-                height: 100%;
-                border: 0;
-            }
-        </style>
-        </head>
-        <body>
-            <div class="video-container">
-                <iframe
-                    src="\(embedURL)"
-                    title="YouTube video player"
-                    referrerpolicy="strict-origin-when-cross-origin"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowfullscreen>
-                </iframe>
-            </div>
-        </body>
-        </html>
-        """
-
-        uiView.loadHTMLString(embedHTML, baseURL: URL(string: originDomain))
-    }
-
-    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
-        uiView.stopLoading()
-        if #available(iOS 15.0, *) {
-            uiView.pauseAllMediaPlayback()
-        }
-    }
-
-    final class Coordinator {
-        var loadedVideoID: String?
-    }
-}
-
-// MARK: - 🗂️ CẤU TRÚC SECTION HEADER + CARD CHUẨN SETTINGS VIEW CONTROLLER
-struct SkySectionCard<Content: SwiftUI.View>: SwiftUI.View {
-    let title: String
-    let icon: String
-    let color: SwiftUI.Color
-    var statusOK: Bool? = nil
-    var trailingView: AnyView? = nil
-    var footerText: String? = nil
-    @ViewBuilder let content: Content
-
-    var body: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Tiêu đề Section bên ngoài Card + Gạch chân màu xanh 38x3pt giống hệt SettingsHeaderFooterView
-            SectionHeaderView(
-                title: title,
-                icon: icon,
-                color: color,
-                statusOK: statusOK,
-                trailingView: trailingView
-            )
-            .padding(.horizontal, 4)
-
-            // Khối Card trắng bo góc 15pt, đổ bóng xanh dịu giống hệt styleInnerCardOfCell trong Settings
-            VStack(alignment: .leading, spacing: 10) {
-                content
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(CSSTheme.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                    .stroke(CSSTheme.border, lineWidth: 1.0)
-            )
-            .shadow(color: CSSTheme.primary.opacity(0.08), radius: 10, x: 0, y: 5)
-
-            // Chú thích chân trang (Footer) màu đen tuyền sắc nét, dễ đọc
-            if let footerText = footerText {
-                SwiftUI.Text(footerText)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(CSSTheme.pureBlack)
-                    .padding(.horizontal, 6)
-                    .padding(.top, 2)
-            }
-        }
-    }
-}
-
-struct SectionHeaderView: SwiftUI.View {
-    let title: String
-    let icon: String
-    let color: SwiftUI.Color
-    var statusOK: Bool? = nil
-    var trailingView: AnyView? = nil
-
-    var body: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 8) {
-                SwiftUI.Image(systemName: icon)
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundColor(CSSTheme.primary)
-
-                SwiftUI.Text(title.uppercased())
-                    .font(.system(size: 15, weight: .heavy))
-                    .foregroundColor(CSSTheme.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-
-                if let statusOK = statusOK {
-                    SwiftUI.Image(systemName: statusOK ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundColor(statusOK ? CSSTheme.green : CSSTheme.red)
-                        .animation(.spring(), value: statusOK)
-                }
-
-                Spacer(minLength: 4)
-
-                if let trailingView = trailingView {
-                    trailingView
-                }
-            }
-
-            // Thanh gạch chân màu xanh (.features h2::after) dài 38pt, cao 3pt giống hệt Settings
-            RoundedRectangle(cornerRadius: 1.5)
-                .fill(CSSTheme.primary)
-                .frame(width: 38, height: 3)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-struct CheckItemButton: SwiftUI.View {
-    let title: String
-    let subtitle: String
-    let icon: String
-    let visualState: CheckItemVisualState
-    let action: () -> Void
-
-    private var iconContainerColor: SwiftUI.Color {
-        switch visualState {
-        case .verifiedOK:
-            return CSSTheme.green.opacity(0.14)
-        case .actionRequired:
-            return CSSTheme.neutralInspect.opacity(0.14)
-        case .failedError:
-            return CSSTheme.red.opacity(0.14)
-        }
-    }
-
-    private var iconForegroundColor: SwiftUI.Color {
-        switch visualState {
-        case .verifiedOK:
-            return CSSTheme.green
-        case .actionRequired:
-            return CSSTheme.neutralInspect
-        case .failedError:
-            return CSSTheme.red
-        }
-    }
-
-    private var subtitleForegroundColor: SwiftUI.Color {
-        switch visualState {
-        case .verifiedOK:
-            return CSSTheme.green
-        case .actionRequired:
-            return CSSTheme.neutralInspect
-        case .failedError:
-            return CSSTheme.red
-        }
-    }
-
-    private var trailingStatusIconName: String {
-        switch visualState {
-        case .verifiedOK:
-            return "checkmark.circle.fill"
-        case .actionRequired:
-            return "doc.text.magnifyingglass"
-        case .failedError:
-            return "xmark.circle.fill"
-        }
-    }
-
-    private var trailingStatusColor: SwiftUI.Color {
-        switch visualState {
-        case .verifiedOK:
-            return CSSTheme.green
-        case .actionRequired:
-            return CSSTheme.neutralInspect
-        case .failedError:
-            return CSSTheme.red
-        }
-    }
-
-    var body: some SwiftUI.View {
-        SwiftUI.Button(action: action) {
-            HStack(spacing: 13) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(iconContainerColor)
-                        .frame(width: 44, height: 44)
-                    SwiftUI.Image(systemName: icon)
-                        .font(.system(size: 19, weight: .semibold))
-                        .foregroundColor(iconForegroundColor)
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    SwiftUI.Text(title)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(CSSTheme.pureBlack)
-                    SwiftUI.Text(subtitle)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(subtitleForegroundColor)
-                        .lineLimit(1)
-                }
-
-                Spacer()
-
-                SwiftUI.Image(systemName: trailingStatusIconName)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(trailingStatusColor)
-                    .animation(.spring(), value: visualState)
-
-                SwiftUI.Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(CSSTheme.secondary)
-            }
-            .padding(12)
-            .background(CSSTheme.innerRowBackground)
-            .cornerRadius(CSSTheme.cornerRadius)
-            .overlay(
-                RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                    .stroke(
-                        visualState == .actionRequired
-                        ? CSSTheme.neutralInspect.opacity(0.35)
-                        : CSSTheme.innerBorder,
-                        lineWidth: 1.0
-                    )
-            )
-        }
-        .buttonStyle(CSSBounceButtonStyle())
-    }
-}
-
-struct CellularRefreshToggleRow: SwiftUI.View {
-    let title: String
-    let onText: String
-    let offText: String
-    @Binding var isOn: Bool
-
-    var body: some SwiftUI.View {
-        HStack(spacing: 13) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill((isOn ? CSSTheme.primary : CSSTheme.secondary).opacity(0.14))
-                    .frame(width: 44, height: 44)
-                SwiftUI.Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(isOn ? CSSTheme.primary : CSSTheme.pureBlack)
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
-                SwiftUI.Text(title)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(CSSTheme.pureBlack)
-                SwiftUI.Text(isOn ? onText : offText)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(isOn ? CSSTheme.primary : CSSTheme.pureBlack)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            // Công tắc UISwitch màu xanh có đổ bóng Neon giống hệt SettingsViewController
-            Toggle("", isOn: $isOn)
-                .labelsHidden()
-                .tint(CSSTheme.primary)
-                .shadow(color: CSSTheme.primary.opacity(0.28), radius: 6, x: 0, y: 3)
-        }
-        .padding(12)
-        .background(CSSTheme.innerRowBackground)
-        .cornerRadius(CSSTheme.cornerRadius)
-        .overlay(
-            RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                .stroke(CSSTheme.innerBorder, lineWidth: 1.0)
+    
+    @objc private func handleVPNRowTap()
+    {
+        impactFeedback.impactOccurred()
+        refreshSystemStatus()
+        let isVPNActive = checkTunnelInterfaceActive()
+        
+        let sheet = SystemStatusDetailSheetViewController(
+            badgeText: isVPNActive ? "LOCALDEVVPN ĐANG BẬT" : "CHƯA BẬT LOCALDEVVPN",
+            title: "Kiểm tra kết nối LocalDevVPN",
+            subtitle: isVPNActive
+                ? "Tuyệt vời! Đường hầm LocalDevVPN đang hoạt động ổn định. Bạn có thể gia hạn và cài đặt ứng dụng ngay bây giờ."
+                : "Hiện chưa phát hiện đường hầm LocalDevVPN đang bật. Hãy làm theo hướng dẫn dưới đây:",
+            sections: [
+                .init(
+                    icon: "shield.lefthalf.filled.badge.checkmark",
+                    title: "1. Bật ứng dụng LocalDevVPN / StosVPN",
+                    body: "• Mở ứng dụng LocalDevVPN (hoặc StosVPN) trên màn hình chính iPhone của bạn.\n• Gạt công tắc sang trạng thái 'Connected' (Đã kết nối) trước khi bấm làm mới ứng dụng trong SideStore."
+                ),
+                .init(
+                    icon: "bolt.horizontal.circle.fill",
+                    title: "2. Tự động bật/tắt thông minh qua Phím tắt",
+                    body: "• Khi bạn cài 2 Phím tắt Làm Mới ở màn hình Tổng quan, phím tắt sẽ tự động kích hoạt LocalDevVPN, làm mới toàn bộ ứng dụng rồi tự tắt khi hoàn tất."
+                )
+            ]
         )
+        presentCustomSheet(sheet)
     }
-}
-
-struct ShortcutLinkRow: SwiftUI.View {
-    let title: String
-    let buttonTitle: String
-    let icon: String
-    let color: SwiftUI.Color
-    let urlString: String
-
-    var body: some SwiftUI.View {
-        SwiftUI.Button(action: {
-            if let url = URL(string: urlString) {
-                UIApplication.shared.open(url)
-            }
-        }) {
-            HStack(spacing: 13) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(color.opacity(0.14))
-                        .frame(width: 44, height: 44)
-                    SwiftUI.Image(systemName: icon)
-                        .font(.system(size: 19, weight: .bold))
-                        .foregroundColor(color)
-                }
-
-                SwiftUI.Text(title)
-                    .font(.system(size: 15.5, weight: .semibold))
-                    .foregroundColor(CSSTheme.pureBlack)
-                    .multilineTextAlignment(.leading)
-
-                Spacer()
-
-                // Nút viên thuốc giống styleBetaTrackPopupButton / nút hành động của Settings
-                SwiftUI.Text(buttonTitle)
-                    .font(.system(size: 13, weight: .bold))
-                    .padding(.horizontal, 15)
-                    .padding(.vertical, 7)
-                    .background(
-                        LinearGradient(
-                            colors: [color, color.opacity(0.82)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .foregroundColor(.white)
-                    .clipShape(Capsule())
-                    .shadow(color: color.opacity(0.28), radius: 5, x: 0, y: 3)
-            }
-            .padding(12)
-            .background(CSSTheme.innerRowBackground)
-            .cornerRadius(CSSTheme.cornerRadius)
-            .overlay(
-                RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                    .stroke(CSSTheme.innerBorder, lineWidth: 1.0)
-            )
-        }
-        .buttonStyle(CSSBounceButtonStyle())
-    }
-}
-
-/// Hiển thị ảnh hướng dẫn không có khung bao ngoài để chiều rộng ảnh bằng đúng 100% chiều rộng khung Video YouTube
-struct RemoteGuideImageView: SwiftUI.View {
-    var stepBadge: String? = nil
-    let urlString: String
-    let caption: String
-    let loadingText: String
-    let errorText: String
-
-    @State private var uiImage: UIImage? = nil
-    @State private var didFail: Bool = false
-
-    private let frameCornerRadius: CGFloat = CSSTheme.mediaFrameCornerRadius
-
-    var body: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 14) {
-            // Thanh tiêu đề Bước 1 / Bước 2 đồng bộ kích thước với hộp chú thích của mục Video
-            VStack(spacing: 6) {
-                if let badge = stepBadge {
-                    HStack(spacing: 6) {
-                        SwiftUI.Image(systemName: "sparkles")
-                            .font(.system(size: 11, weight: .heavy))
-                        SwiftUI.Text(badge)
-                            .font(.system(size: 12, weight: .heavy))
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 5)
-                    .background(
-                        LinearGradient(
-                            colors: [CSSTheme.primary, CSSTheme.secondary],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .clipShape(Capsule())
-                    .shadow(color: CSSTheme.primary.opacity(0.25), radius: 4, x: 0, y: 2)
-                }
-
-                SwiftUI.Text(caption)
-                    .font(.system(size: 14.5, weight: .bold))
-                    .foregroundColor(CSSTheme.pureBlack)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .center)
-            }
-            .padding(13)
-            .frame(maxWidth: .infinity)
-            .background(CSSTheme.innerRowBackground)
-            .cornerRadius(CSSTheme.cornerRadius)
-            .overlay(
-                RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                    .stroke(CSSTheme.innerBorder, lineWidth: 1)
-            )
-
-            // Khung ảnh tràn rộng với padding(.horizontal, 4) giống hệt IPhone14VerticalVideoFrameView
-            if let image = uiImage {
-                SwiftUI.Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity)
-                    .background(SwiftUI.Color.black)
-                    .clipShape(RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous)
-                            .strokeBorder(
-                                CSSTheme.mediaFrameBorderGradient,
-                                lineWidth: CSSTheme.mediaFrameLineWidth
-                            )
-                    )
-                    .shadow(color: CSSTheme.secondary.opacity(0.22), radius: 12, x: 0, y: 6)
-                    .padding(.horizontal, 4)
-            } else if didFail {
-                VStack(spacing: 8) {
-                    SwiftUI.Image(systemName: "wifi.exclamationmark")
-                        .font(.title2)
-                        .foregroundColor(CSSTheme.primary)
-                    SwiftUI.Text(errorText)
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundColor(CSSTheme.pureBlack)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity, minHeight: 200)
-                .background(CSSTheme.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous)
-                        .strokeBorder(
-                            CSSTheme.mediaFrameBorderGradient,
-                            lineWidth: CSSTheme.mediaFrameLineWidth
-                        )
+    
+    @objc private func handleCellularRowTap()
+    {
+        impactFeedback.impactOccurred()
+        let sheet = SystemStatusDetailSheetViewController(
+            badgeText: "HỖ TRỢ MẠNG DI ĐỘNG 4G / 5G",
+            title: "Làm mới ứng dụng qua 4G",
+            subtitle: "Không cần kết nối Wi-Fi, bạn vẫn có thể ký lại và gia hạn 7 ngày cho mọi ứng dụng ở bất cứ đâu:",
+            sections: [
+                .init(
+                    icon: "antenna.radiowaves.left.and.right.circle.fill",
+                    title: "1. Cơ chế hoạt động trên 4G / LTE",
+                    body: "• Kết hợp cùng LocalDevVPN, SideStore tạo một đường hầm cục bộ ngay trên iPhone, giúp làm mới ứng dụng trực tiếp bằng dữ liệu di động 4G/5G."
+                ),
+                .init(
+                    icon: "clock.badge.checkmark.fill",
+                    title: "2. Kết hợp Tự động hóa 6:00 & 15:00",
+                    body: "• Dù lúc 6:00 sáng hay 15:00 chiều bạn đang ở ngoài đường dùng mạng 4G, Phím tắt Tự động hóa vẫn chạy ngầm thành công và gia hạn đủ 7 ngày cho toàn bộ ứng dụng."
                 )
-                .shadow(color: CSSTheme.secondary.opacity(0.22), radius: 12, x: 0, y: 6)
-                .padding(.horizontal, 4)
-            } else {
-                HStack(spacing: 10) {
-                    ProgressView()
-                        .tint(CSSTheme.primary)
-                    SwiftUI.Text(loadingText)
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundColor(CSSTheme.pureBlack)
-                }
-                .frame(maxWidth: .infinity, minHeight: 260)
-                .background(CSSTheme.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: frameCornerRadius, style: .continuous)
-                        .strokeBorder(
-                            CSSTheme.mediaFrameBorderGradient,
-                            lineWidth: CSSTheme.mediaFrameLineWidth
-                        )
-                )
-                .shadow(color: CSSTheme.secondary.opacity(0.22), radius: 12, x: 0, y: 6)
-                .padding(.horizontal, 4)
-            }
-        }
-        .task(id: urlString) {
-            if let cached = GuideImageCacheManager.shared.cachedImage(for: urlString) {
-                self.uiImage = cached
-                return
-            }
-            if let loaded = await GuideImageCacheManager.shared.loadAndDecodeImage(urlString: urlString) {
-                self.uiImage = loaded
-                self.didFail = false
-            } else {
-                self.didFail = true
-            }
-        }
-    }
-}
-
-struct PairingGuideSheetView: SwiftUI.View {
-    @ObservedObject var vm: SystemCheckViewModel
-    @StateObject private var wirelessVM = WirelessPairViewModel()
-    @StateObject private var pairingMgmtVM = PairingFileManagementViewModel()
-
-    @State private var statusBannerMessage: String? = nil
-    @State private var isExportSheetPresented = false
-    @State private var exportFileURL: URL? = nil
-    @State private var didPressInstallPairing = false
-    @State private var showDeleteConfirmAlert = false
-
-    @Environment(\.dismiss) private var dismiss
-
-    private var installedPairingURLForExport: URL? {
-        if let url = wirelessVM.shareSheetURL, FileManager.default.fileExists(atPath: url.path) {
-            return url
-        }
-        return nil
-    }
-
-    var body: some SwiftUI.View {
-        NavigationView {
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 18) {
-                    statusHeaderCard
-                    verificationAdviceCard
-
-                    if let banner = statusBannerMessage {
-                        HStack(spacing: 10) {
-                            SwiftUI.Image(systemName: vm.isPairingOK ? "checkmark.seal.fill" : "info.circle.fill")
-                                .foregroundColor(vm.isPairingOK ? CSSTheme.green : CSSTheme.primary)
-                            SwiftUI.Text(banner)
-                                .font(.system(size: 13.5, weight: .bold))
-                                .foregroundColor(CSSTheme.pureBlack)
-                            Spacer()
-                        }
-                        .padding(12)
-                        .background((vm.isPairingOK ? CSSTheme.green : CSSTheme.primary).opacity(0.12))
-                        .cornerRadius(CSSTheme.cornerRadius)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: CSSTheme.cornerRadius)
-                                .stroke(CSSTheme.border, lineWidth: 1)
-                        )
-                    }
-
-                    ios27DirectPairingCard
-                    pcPairingGuideCard
-                }
-                .padding(16)
-            }
-            .background(CSSTheme.pageBackgroundGradient.ignoresSafeArea())
-            .navigationTitle("Kiểm Tra Pairing")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    SwiftUI.Text("Kiểm Tra Pairing")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundColor(CSSTheme.primary)
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    SwiftUI.Button("Xong") {
-                        if wirelessVM.isAdvertising {
-                            wirelessVM.togglePairing()
-                        }
-                        vm.setWirelessPairingActive(false)
-                        dismiss()
-                    }
-                    .font(.headline)
-                    .foregroundColor(CSSTheme.primary)
-                }
-            }
-            .onDisappear {
-                if wirelessVM.isAdvertising {
-                    wirelessVM.togglePairing()
-                }
-                vm.setWirelessPairingActive(false)
-            }
-            .alert("Xoá tệp Pairing?", isPresented: $showDeleteConfirmAlert) {
-                SwiftUI.Button("Xoá", role: .destructive) {
-                    vm.deleteAllPairingFiles()
-                    statusBannerMessage = "Đã xoá tệp Pairing khỏi ứng dụng."
-                }
-                SwiftUI.Button("Huỷ", role: .cancel) {}
-            } message: {
-                SwiftUI.Text("Tệp Pairing hiện tại sẽ bị xoá hoàn toàn khỏi ứng dụng. Bạn sẽ cần cài hoặc nhập lại tệp mới để tiếp tục sử dụng.")
-            }
-            #if !os(tvOS)
-            .fileImporter(
-                isPresented: $pairingMgmtVM.showFileImporter,
-                allowedContentTypes: pairingMgmtVM.allowedPairingTypes
-            ) { result in
-                pairingMgmtVM.handleImportResult(result)
-                Task { @MainActor in
-                    let proto = PairingFileManager.shared.persistedActiveProtocol
-                        ?? PairingFileManager.shared.preferredProtocol
-                        ?? .rppairing
-                    try? await minimuxerSwitchPairingProtocol(to: proto)
-                    if case .success = result {
-                        vm.markPairingVerifiedImmediately()
-                        statusBannerMessage = "Đã nạp tệp Pairing thành công!"
-                    }
-                    await vm.checkAllStatuses(forceVerify: true)
-                }
-            }
-            #endif
-            .sheet(isPresented: Binding(
-                get: { wirelessVM.pinCode != nil && !isExportSheetPresented },
-                set: { if !$0 { wirelessVM.pinCode = nil } }
-            )) {
-                if let pin = wirelessVM.pinCode {
-                    if #available(iOS 16.0, tvOS 16.0, *) {
-                        WirelessPairPinDialog(pin: pin) { wirelessVM.pinCode = nil }
-                            .presentationDetents([.fraction(0.45), .medium])
-                            .presentationDragIndicator(.visible)
-                    } else {
-                        WirelessPairPinDialog(pin: pin) { wirelessVM.pinCode = nil }
-                    }
-                }
-            }
-            .sheet(isPresented: $isExportSheetPresented) {
-                if let fileURL = exportFileURL {
-                    ActivityViewController(activityItems: [fileURL])
-                }
-            }
-            .onChange(of: wirelessVM.isAdvertising) { advertising in
-                vm.setWirelessPairingActive(advertising)
-            }
-            .onChange(of: wirelessVM.pairedDevice != nil) { isPaired in
-                if isPaired, let pairedURL = wirelessVM.shareSheetURL {
-                    wirelessVM.pinCode = nil
-                    wirelessVM.isShareSheetPresented = false
-                    vm.setWirelessPairingActive(false)
-
-                    PairingFileManager.shared.resetAllPairingFiles()
-                    try? PairingFileManager.shared.importPairingFile(from: pairedURL, preferred: .rppairing)
-                    Task { @MainActor in
-                        try? await minimuxerSwitchPairingProtocol(to: .rppairing)
-                        vm.markPairingVerifiedImmediately()
-                        await vm.checkAllStatuses(forceVerify: true)
-                        statusBannerMessage = "Đã cài và nạp Pairing thành công!"
-                    }
-                }
-            }
-        }
-        .preferredColorScheme(.light)
-    }
-
-    private var statusHeaderCard: some SwiftUI.View {
-        let state = vm.pairingVisualState
-
-        let badgeColor: SwiftUI.Color = {
-            switch state {
-            case .verifiedOK: return CSSTheme.green
-            case .actionRequired: return CSSTheme.neutralInspect
-            case .failedError: return CSSTheme.red
-            }
-        }()
-
-        let badgeIcon: String = {
-            switch state {
-            case .verifiedOK: return "checkmark.circle.fill"
-            case .actionRequired: return "doc.text.magnifyingglass"
-            case .failedError: return "xmark.circle.fill"
-            }
-        }()
-
-        let headerTitle: String = {
-            switch state {
-            case .verifiedOK:
-                return "Pairing Hoạt Động Tốt (Tích Xanh)"
-            case .actionRequired:
-                return "Đang Chờ Xác Minh Pairing"
-            case .failedError:
-                return !vm.hasAnyStoredPairingFile
-                    ? "Chưa Có Tệp Pairing (Tích Đỏ)"
-                    : "Pairing Lỗi Hoặc Hết Hạn (Tích Đỏ)"
-            }
-        }()
-
-        return HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(badgeColor.opacity(0.15))
-                    .frame(width: 48, height: 48)
-                SwiftUI.Image(systemName: badgeIcon)
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundColor(badgeColor)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                SwiftUI.Text(headerTitle)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(CSSTheme.pureBlack)
-
-                if state != .actionRequired && !vm.pairingProtocol.isEmpty {
-                    SwiftUI.Text(vm.pairingProtocol)
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundColor(CSSTheme.pureBlack)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Spacer()
-        }
-        .padding(14)
-        .background(CSSTheme.cardBackground)
-        .cornerRadius(CSSTheme.cornerRadius)
-        .overlay(
-            RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                .stroke(badgeColor.opacity(0.45), lineWidth: 1.5)
+            ]
         )
-        .shadow(color: CSSTheme.primary.opacity(0.08), radius: 10, x: 0, y: 5)
+        presentCustomSheet(sheet)
     }
-
-    private var verificationAdviceCard: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                SwiftUI.Image(systemName: "checkmark.shield.fill")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(CSSTheme.primary)
-                SwiftUI.Text("3 Bước Kiểm Tra Pairing Chính Xác:")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(CSSTheme.pureBlack)
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                GuideStepRow(
-                    num: "1",
-                    title: "Kết nối mạng trên iPhone",
-                    text: LocalizedStringKey("Đảm bảo iPhone của bạn đang có kết nối **Wi-Fi** hoặc **4G**.")
-                )
-
-                GuideStepRow(
-                    num: "2",
-                    title: "Bật LocalDevVPN",
-                    text: LocalizedStringKey("Mở ứng dụng **LocalDevVPN** và bật kết nối VPN lên.")
-                )
-
-                GuideStepRow(
-                    num: "3",
-                    title: "Tắt cả Wi-Fi và 4G (Chỉ bật LocalDevVPN)",
-                    text: LocalizedStringKey("Tắt cả **Wi-Fi** và **4G**, chỉ để lại mỗi **LocalDevVPN** đang bật.")
-                )
-            }
-
-            SwiftUI.Text("Xong 3 bước trên, nhìn lên mục Đang Chờ Xác Minh Pairing ở phía trên sẽ tự động hiện Tích Xanh báo đang hoạt động tốt hoặc Tích Đỏ đã bị lỗi / cần cài lại.")
-                .font(.system(size: 13.5, weight: .semibold))
-                .foregroundColor(CSSTheme.pureBlack)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(CSSTheme.neutralInspect.opacity(0.11))
-                .cornerRadius(13)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .stroke(CSSTheme.neutralInspect.opacity(0.38), lineWidth: 1.2)
-                )
-                .padding(.top, 4)
+    
+    private func presentCustomSheet(_ viewController: UIViewController)
+    {
+        if #available(iOS 15.0, *), let sheet = viewController.sheetPresentationController {
+            sheet.detents = [.medium(), .large()]
+            sheet.prefersGrabberVisible = true
+            sheet.preferredCornerRadius = 24
         }
-        .padding(16)
-        .background(CSSTheme.cardBackground)
-        .cornerRadius(CSSTheme.cornerRadius)
-        .overlay(
-            RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                .stroke(CSSTheme.border, lineWidth: 1.0)
-        )
-        .shadow(color: CSSTheme.primary.opacity(0.08), radius: 10, x: 0, y: 5)
+        self.present(viewController, animated: true)
     }
-
-    private var ios27DirectPairingCard: some SwiftUI.View {
-        SkySectionCard(
-            title: "PHẦN 1: DÀNH CHO IOS 27",
-            icon: "iphone.radiowaves.left.and.right",
-            color: CSSTheme.primary
-        ) {
-            SwiftUI.Text("Ghép nối trực tiếp trên iPhone")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(CSSTheme.secondary)
-
-            VStack(alignment: .leading, spacing: 10) {
-                GuideStepRow(
-                    num: "1",
-                    title: "Bắt đầu phát tín hiệu Pairing",
-                    text: LocalizedStringKey("Nhấn vào nút **\"Cài Pairing lên iPhone\"** ở bên dưới để ứng dụng phát tín hiệu ghép đôi.")
-                )
-
-                GuideStepRow(
-                    num: "2",
-                    title: "Mở Cài đặt Nhà phát triển",
-                    text: LocalizedStringKey("Thoát ra màn hình chính (không vuốt tắt ứng dụng này), mở **Cài đặt (Settings)** ➔ **Quyền riêng tư & Bảo mật (Privacy & Security)** ➔ kéo xuống cuối chọn **Chế độ nhà phát triển (Developer Mode)**.")
-                )
-
-                GuideStepRow(
-                    num: "3",
-                    title: "Nhập mã PIN 6 chữ số (Tự động kích hoạt)",
-                    text: LocalizedStringKey("Trong mục Chế độ nhà phát triển, nếu có “Thiết bị đã ghép đôi” cũ thì xoá đi, sau đó nhấn vào dòng **Pair with SideStore** và nhập mật khẩu iPhone. Quay lại app này xem **mã 6 chữ số**, rồi sang **Cài đặt** nhập vào và nhấn **Ghép đôi**. Ngay sau khi ghép đôi xong, ứng dụng sẽ **tự động nạp và kích hoạt Pairing luôn**!")
-                )
-
-                GuideStepRow(
-                    num: "4",
-                    title: "Lưu tệp Pairing dự phòng (Khuyên dùng)",
-                    text: LocalizedStringKey("Sau khi ghép nối xong, bạn **không cần nhập lại tệp nữa**. Tuy nhiên, hãy nhấn nút **“Xuất tệp Pairing (Lưu dự phòng)”** (màu xanh lá) ➔ chọn **Lưu vào Tệp (Save to Files)** để cất giữ dự phòng cho những lần cài lại app sau này.")
-                )
-            }
-
-            Divider().padding(.vertical, 2)
-
-            VStack(spacing: 10) {
-                if let pin = wirelessVM.pinCode {
-                    VStack(spacing: 6) {
-                        SwiftUI.Text("MÃ GHÉP NỐI 6 CHỮ SỐ")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(CSSTheme.primary)
-                        SwiftUI.Text(pin)
-                            .font(.system(size: 30, weight: .heavy, design: .monospaced))
-                            .tracking(6)
-                            .foregroundColor(CSSTheme.pureBlack)
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 18)
-                            .background(RoundedRectangle(cornerRadius: 10).fill(CSSTheme.primary.opacity(0.12)))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.bottom, 4)
-                }
-
-                if let errorMsg = wirelessVM.errorMessage {
-                    SwiftUI.Text(errorMsg)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(CSSTheme.red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                SwiftUI.Button {
-                    didPressInstallPairing = true
-                    wirelessVM.togglePairing()
-                    vm.setWirelessPairingActive(wirelessVM.isAdvertising)
-                } label: {
-                    HStack(spacing: 8) {
-                        SwiftUI.Image(systemName: wirelessVM.isAdvertising ? "stop.circle.fill" : "antenna.radiowaves.left.and.right")
-                            .font(.system(size: 17, weight: .bold))
-                        SwiftUI.Text(wirelessVM.isAdvertising
-                                     ? "Dừng Cài Pairing (Đang phát sóng...)"
-                                     : "Cài Pairing lên iPhone")
-                            .font(.system(size: 16, weight: .bold))
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                    .background(wirelessVM.isAdvertising ? CSSTheme.red : CSSTheme.primary)
-                    .cornerRadius(13)
-                    .shadow(color: (wirelessVM.isAdvertising ? CSSTheme.red : CSSTheme.primary).opacity(0.35), radius: 6, x: 0, y: 4)
-                }
-                .buttonStyle(CSSBounceButtonStyle())
-
-                if didPressInstallPairing || installedPairingURLForExport != nil {
-                    SwiftUI.Button {
-                        if let pairedURL = installedPairingURLForExport {
-                            wirelessVM.pinCode = nil
-                            exportFileURL = pairedURL
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                                isExportSheetPresented = true
-                            }
-                        } else {
-                            statusBannerMessage = "Vui lòng thực hiện Bước 2 & Bước 3 (nhập xong 6 chữ số trong Cài đặt ➔ Chế độ nhà phát triển) trước khi lưu tệp dự phòng."
-                        }
-                    } label: {
-                        HStack(spacing: 8) {
-                            SwiftUI.Image(systemName: "square.and.arrow.up.fill")
-                                .font(.system(size: 17, weight: .bold))
-                            SwiftUI.Text("Xuất tệp Pairing (Lưu dự phòng)")
-                                .font(.system(size: 16, weight: .bold))
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
-                        .background(installedPairingURLForExport != nil ? CSSTheme.green : CSSTheme.green.opacity(0.65))
-                        .cornerRadius(13)
-                        .shadow(color: CSSTheme.green.opacity(0.35), radius: 6, x: 0, y: 4)
-                    }
-                    .buttonStyle(CSSBounceButtonStyle())
-                    .transition(.scale.combined(with: .opacity))
-                }
-
-                SwiftUI.Button {
-                    pairingMgmtVM.promptImport(for: .rppairing)
-                } label: {
-                    HStack(spacing: 8) {
-                        SwiftUI.Image(systemName: "square.and.arrow.down.fill")
-                            .font(.system(size: 17, weight: .bold))
-                        SwiftUI.Text("Nhập tệp Pairing có sẵn")
-                            .font(.system(size: 16, weight: .bold))
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                    .background(CSSTheme.secondary)
-                    .cornerRadius(13)
-                    .shadow(color: CSSTheme.secondary.opacity(0.35), radius: 6, x: 0, y: 4)
-                }
-                .buttonStyle(CSSBounceButtonStyle())
-
-                SwiftUI.Button {
-                    showDeleteConfirmAlert = true
-                } label: {
-                    HStack(spacing: 8) {
-                        SwiftUI.Image(systemName: "trash.fill")
-                            .font(.system(size: 17, weight: .bold))
-                        SwiftUI.Text("Xoá tệp Pairing")
-                            .font(.system(size: 16, weight: .bold))
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                    .background(CSSTheme.red)
-                    .cornerRadius(13)
-                    .shadow(color: CSSTheme.red.opacity(0.35), radius: 6, x: 0, y: 4)
-                }
-                .buttonStyle(CSSBounceButtonStyle())
-            }
-            .padding(12)
-            .background(CSSTheme.innerRowBackground)
-            .cornerRadius(14)
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(CSSTheme.innerBorder, lineWidth: 1)
-            )
-        }
+    
+    // MARK: - Open Shortcut Links & Video Player
+    @objc private func openShortcut1()
+    {
+        impactFeedback.impactOccurred()
+        guard let url = URL(string: "https://www.icloud.com/shortcuts/440b8935d5e14e55a4fb1bf6d78a6a12") else { return }
+        UIApplication.shared.open(url, options: [:], completionHandler: nil)
     }
-
-    private var pcPairingGuideCard: some SwiftUI.View {
-        SkySectionCard(
-            title: "PHẦN 2: DƯỚI IOS 27 (PC / MAC)",
-            icon: "laptopcomputer.and.iphone",
-            color: CSSTheme.secondary
-        ) {
-            SwiftUI.Text("Tạo / Cài tệp Pairing qua Máy tính (Windows / Mac)")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(CSSTheme.secondary)
-
-            HStack(alignment: .top, spacing: 8) {
-                SwiftUI.Image(systemName: "info.circle.fill")
-                    .foregroundColor(CSSTheme.primary)
-                    .font(.system(size: 16, weight: .bold))
-                    .padding(.top, 1)
-                SwiftUI.Text(LocalizedStringKey("**Chuẩn bị chung:** Trên Windows cần cài đặt **iTunes** & **iCloud** bản chính chủ từ Apple (không tải bản Microsoft Store). Cắm cáp kết nối iPhone vào máy tính, mở khóa màn hình iPhone và nhấn **Tin cậy (Trust)** + nhập mật khẩu màn hình. Hãy chọn **1 trong 3 công cụ** dưới đây:"))
-                    .font(.system(size: 13.5, weight: .regular))
-                    .foregroundColor(CSSTheme.pureBlack)
-                    .lineSpacing(2)
-            }
-            .padding(12)
-            .background(CSSTheme.primary.opacity(0.10))
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(CSSTheme.primary.opacity(0.28), lineWidth: 1)
-            )
-
-            VStack(alignment: .leading, spacing: 10) {
-                GuideStepRow(
-                    num: "1",
-                    title: "Cách 1: Dùng idevice_pair (Khuyên dùng - Hỗ trợ cả nạp thẳng & xuất tệp)",
-                    text: LocalizedStringKey("• Mở phần mềm **idevice_pair** trên máy tính và chọn iPhone của bạn.\n• **Cách nạp thẳng vào ứng dụng:** Trong mục ứng dụng trên **idevice_pair**, chọn **SideStore** hoặc **LiveContainer** rồi nhấn nút **Load** (hoặc **Install Pairing File**). Phần mềm sẽ tự động chép thẳng tệp Pairing vào trong ứng dụng trên iPhone mà không cần làm thủ công.\n• **Cách xuất ra tệp `.mobiledevicepairing` dự phòng:** Nhấn nút **Generate** rồi chọn **Export / Save** để lưu tệp có đuôi **`.mobiledevicepairing`** ra máy tính. Gửi tệp này sang iPhone (qua Zalo, AirDrop, iCloud Drive), chọn **Lưu vào Tệp** rồi nhấn nút **“Nhập tệp Pairing”** ở dưới.")
-                )
-
-                GuideStepRow(
-                    num: "2",
-                    title: "Cách 2: Dùng jitterbugpair (Công cụ xuất tệp `.mobiledevicepairing` ra máy tính)",
-                    text: LocalizedStringKey("• Tải và giải nén **jitterbugpair** (trên Windows/macOS/Linux).\n• Giữ màn hình iPhone luôn sáng và mở khóa, sau đó chạy file **`jitterbugpair.exe`** (trên Windows) hoặc chạy **`./jitterbugpair`** trong Terminal (trên Mac).\n• Công cụ sẽ tự động xuất ra một tệp có tên dạng **`<UDID>.mobiledevicepairing`** nằm ngay trong cùng thư mục chứa **jitterbugpair** (công cụ này chỉ xuất ra tệp chứ không tự chép vào app).\n• Gửi tệp **`.mobiledevicepairing`** đó sang iPhone ➔ chọn **Lưu vào Tệp (Save to Files)** ➔ nhấn nút **“Nhập tệp Pairing”** bên dưới để nạp vào ứng dụng.")
-                )
-
-                GuideStepRow(
-                    num: "3",
-                    title: "Cách 3: Dùng iLoader (Cài đặt tự động vào ứng dụng trên iPhone)",
-                    text: LocalizedStringKey("• Mở phần mềm **iLoader** trên máy tính, đăng nhập hoặc kết nối với iPhone đã nhấn Tin cậy.\n• **iLoader** chủ yếu hỗ trợ tính năng **Tự động tạo và nạp trực tiếp (Inject) Pairing File** vào **SideStore / LiveContainer** thông qua tùy chọn **Generate / Place Pairing File** ngay trong giao diện quản lý thiết bị.\n• Sau khi iLoader báo hoàn tất trên máy tính, hãy mở lại ứng dụng này trên iPhone để hệ thống tự nhận diện.")
-                )
-            }
-
-            VStack(spacing: 10) {
-                SwiftUI.Button {
-                    pairingMgmtVM.promptImport(for: .rppairing)
-                } label: {
-                    HStack(spacing: 8) {
-                        SwiftUI.Image(systemName: "folder.fill.badge.plus")
-                            .font(.system(size: 17, weight: .bold))
-                        SwiftUI.Text("Nhập tệp Pairing (Từ ứng dụng Tệp)")
-                            .font(.system(size: 15, weight: .bold))
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 46)
-                    .background(CSSTheme.primary)
-                    .cornerRadius(13)
-                    .shadow(color: CSSTheme.primary.opacity(0.35), radius: 6, x: 0, y: 4)
-                }
-                .buttonStyle(CSSBounceButtonStyle())
-
-                SwiftUI.Button {
-                    showDeleteConfirmAlert = true
-                } label: {
-                    HStack(spacing: 8) {
-                        SwiftUI.Image(systemName: "trash.fill")
-                            .font(.system(size: 17, weight: .bold))
-                        SwiftUI.Text("Xoá tệp Pairing")
-                            .font(.system(size: 15, weight: .bold))
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 46)
-                    .background(CSSTheme.red)
-                    .cornerRadius(13)
-                    .shadow(color: CSSTheme.red.opacity(0.35), radius: 6, x: 0, y: 4)
-                }
-                .buttonStyle(CSSBounceButtonStyle())
-            }
-            .padding(.top, 4)
+    
+    @objc private func openShortcut2()
+    {
+        impactFeedback.impactOccurred()
+        guard let url = URL(string: "https://www.icloud.com/shortcuts/7672dc8aa4a04fdba3decaccd32be24e") else { return }
+        UIApplication.shared.open(url, options: [:], completionHandler: nil)
+    }
+    
+    @objc private func playTutorialVideo()
+    {
+        impactFeedback.impactOccurred()
+        guard let videoURL = URL(string: "https://raw.githubusercontent.com/dabeecao/video/main/huongdansidestore.mp4") else { return }
+        let player = AVPlayer(url: videoURL)
+        let playerVC = AVPlayerViewController()
+        playerVC.player = player
+        playerVC.modalPresentationStyle = .fullScreen
+        self.present(playerVC, animated: true) {
+            player.play()
         }
     }
 }
 
-struct GuideStepRow: SwiftUI.View {
-    let num: String
-    var title: String? = nil
-    let text: LocalizedStringKey
-
-    var body: some SwiftUI.View {
-        HStack(alignment: .top, spacing: 11) {
-            SwiftUI.Text(num)
-                .font(.system(size: 13, weight: .heavy))
-                .foregroundColor(.white)
-                .frame(width: 26, height: 26)
-                .background(
-                    Circle().fill(
-                        LinearGradient(colors: [CSSTheme.primary, CSSTheme.secondary], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
-                )
-                .shadow(color: CSSTheme.primary.opacity(0.25), radius: 3, x: 0, y: 2)
-                .padding(.top, 1)
-
-            VStack(alignment: .leading, spacing: 4) {
-                if let title = title {
-                    SwiftUI.Text(title)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(CSSTheme.pureBlack)
-                }
-                SwiftUI.Text(text)
-                    .font(.system(size: 13.8, weight: .regular))
-                    .foregroundColor(CSSTheme.pureBlack)
-                    .lineSpacing(2.5)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(11)
-        .background(CSSTheme.innerRowBackground)
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(CSSTheme.innerBorder, lineWidth: 1)
-        )
+// MARK: - Custom Gradient Views & Controls (Ánh sáng 3D + Nhấn đàn hồi)
+private final class GradientBannerView: UIView
+{
+    private let gradientLayer = CAGradientLayer()
+    private let topRightGlowOrb = CAShapeLayer()
+    private let bottomLeftGlowOrb = CAShapeLayer()
+    
+    override init(frame: CGRect)
+    {
+        super.init(frame: frame)
+        self.clipsToBounds = true
+        self.layer.borderWidth = 1.0
+        self.layer.borderColor = UIColor.white.withAlphaComponent(0.28).cgColor
+        
+        gradientLayer.colors = [
+            UIColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1.0).cgColor,   // #007bff
+            UIColor(red: 0.435, green: 0.259, blue: 0.757, alpha: 1.0).cgColor // #6f42c1
+        ]
+        gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+        gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+        self.layer.insertSublayer(gradientLayer, at: 0)
+        
+        // 2 Vòng sáng 3D trang trí tạo chiều sâu sang trọng
+        topRightGlowOrb.fillColor = UIColor.white.withAlphaComponent(0.11).cgColor
+        bottomLeftGlowOrb.fillColor = UIColor.white.withAlphaComponent(0.08).cgColor
+        self.layer.insertSublayer(topRightGlowOrb, above: gradientLayer)
+        self.layer.insertSublayer(bottomLeftGlowOrb, above: gradientLayer)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    override func layoutSubviews()
+    {
+        super.layoutSubviews()
+        gradientLayer.frame = self.bounds
+        let b = self.bounds
+        topRightGlowOrb.path = UIBezierPath(ovalIn: CGRect(x: b.width - 75, y: -40, width: 135, height: 135)).cgPath
+        bottomLeftGlowOrb.path = UIBezierPath(ovalIn: CGRect(x: -35, y: b.height - 50, width: 105, height: 105)).cgPath
     }
 }
 
-struct VpnDetailSheetView: SwiftUI.View {
-    @ObservedObject var vm: SystemCheckViewModel
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some SwiftUI.View {
-        NavigationView {
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 18) {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            Circle()
-                                .fill(vm.isVpnOK ? CSSTheme.green.opacity(0.15) : CSSTheme.red.opacity(0.15))
-                                .frame(width: 48, height: 48)
-                            SwiftUI.Image(systemName: vm.isVpnOK ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(vm.isVpnOK ? CSSTheme.green : CSSTheme.red)
-                        }
-                        VStack(alignment: .leading, spacing: 4) {
-                            SwiftUI.Text(vm.isVpnOK
-                                         ? "LocalDevVPN Đang Ổn Định"
-                                         : "LocalDevVPN Chưa Kết Nối")
-                                .font(.system(size: 16.5, weight: .bold))
-                                .foregroundColor(CSSTheme.pureBlack)
-                            SwiftUI.Text("Hãy bật công tắc VPN trong ứng dụng LocalDevVPN.")
-                                .font(.system(size: 13.5, weight: .medium))
-                                .foregroundColor(CSSTheme.pureBlack)
-                        }
-                        Spacer()
-                    }
-                    .padding(14)
-                    .background(CSSTheme.cardBackground)
-                    .cornerRadius(CSSTheme.cornerRadius)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                            .stroke(CSSTheme.border, lineWidth: 1.0)
-                    )
-                    .shadow(color: CSSTheme.primary.opacity(0.08), radius: 10, x: 0, y: 5)
-
-                    SkySectionCard(
-                        title: "THÔNG SỐ KẾT NỐI HIỆN TẠI",
-                        icon: "network",
-                        color: CSSTheme.primary
-                    ) {
-                        HStack {
-                            SwiftUI.Text("Tunnel IP")
-                                .font(.system(size: 14.5, weight: .semibold))
-                                .foregroundColor(CSSTheme.pureBlack)
-                            Spacer()
-                            SwiftUI.Text(vm.tunnelIP)
-                                .font(.system(size: 15, weight: .bold, design: .monospaced))
-                                .foregroundColor(CSSTheme.primary)
-                        }
-                        .padding(.vertical, 2)
-
-                        Divider()
-
-                        HStack {
-                            SwiftUI.Text("Device IP")
-                                .font(.system(size: 14.5, weight: .semibold))
-                                .foregroundColor(CSSTheme.pureBlack)
-                            Spacer()
-                            SwiftUI.Text(vm.deviceIP)
-                                .font(.system(size: 15, weight: .bold, design: .monospaced))
-                                .foregroundColor(CSSTheme.secondary)
-                        }
-                        .padding(.vertical, 2)
-                    }
-
-                    SkySectionCard(
-                        title: "CẤU HÌNH KHUYÊN DÙNG IOS 27",
-                        icon: "lightbulb.fill",
-                        color: CSSTheme.secondary
-                    ) {
-                        SwiftUI.Text("Nếu dùng iOS 27 và bản LiveContainer+SideStore này, hãy đặt IP trong LocalDevVPN theo thông số sau để kết nối nhanh nhất:")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(CSSTheme.pureBlack)
-                            .lineSpacing(2)
-
-                        CopyableIPCard(
-                            label: "Tunnel IP",
-                            value: "10.7.1.1/32",
-                            copyText: "Sao chép",
-                            copiedText: "Đã chép"
-                        )
-                        CopyableIPCard(
-                            label: "Device IP",
-                            value: "10.7.0.1/32",
-                            copyText: "Sao chép",
-                            copiedText: "Đã chép"
-                        )
-                    }
-                }
-                .padding(16)
-            }
-            .background(CSSTheme.pageBackgroundGradient.ignoresSafeArea())
-            .navigationTitle("LocalDevVPN")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    SwiftUI.Text("LocalDevVPN")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundColor(CSSTheme.primary)
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    SwiftUI.Button("Xong") { dismiss() }
-                        .font(.headline)
-                        .foregroundColor(CSSTheme.primary)
-                }
-            }
+private final class SpringRowControl: UIControl
+{
+    override var isHighlighted: Bool {
+        didSet {
+            UIView.animate(withDuration: 0.22, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.6, options: [.allowUserInteraction, .beginFromCurrentState], animations: {
+                self.backgroundColor = self.isHighlighted ? UIColor(red: 0.94, green: 0.96, blue: 1.0, alpha: 0.7) : .clear
+                self.transform = self.isHighlighted ? CGAffineTransform(scaleX: 0.98, y: 0.98) : .identity
+            }, completion: nil)
         }
-        .preferredColorScheme(.light)
     }
 }
 
-struct CopyableIPCard: SwiftUI.View {
-    let label: String
-    let value: String
-    let copyText: String
-    let copiedText: String
-    @State private var copied = false
-    @State private var resetTask: Task<Void, Never>? = nil
-
-    var body: some SwiftUI.View {
-        HStack {
-            VStack(alignment: .leading, spacing: 3) {
-                SwiftUI.Text(label)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(CSSTheme.pureBlack)
-                SwiftUI.Text(value)
-                    .font(.system(size: 15.5, weight: .bold, design: .monospaced))
-                    .foregroundColor(CSSTheme.pureBlack)
+private final class GradientControlButton: UIControl
+{
+    private let gradientLayer = CAGradientLayer()
+    
+    init(colors: [UIColor])
+    {
+        super.init(frame: .zero)
+        self.layer.borderWidth = 1.0
+        self.layer.borderColor = UIColor.white.withAlphaComponent(0.25).cgColor
+        gradientLayer.colors = colors.map { $0.cgColor }
+        gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+        gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+        self.layer.insertSublayer(gradientLayer, at: 0)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    override func layoutSubviews()
+    {
+        super.layoutSubviews()
+        gradientLayer.frame = self.bounds
+    }
+    
+    override var isHighlighted: Bool {
+        didSet {
+            UIView.animate(withDuration: 0.22, delay: 0, usingSpringWithDamping: 0.68, initialSpringVelocity: 0.6, options: [.allowUserInteraction, .beginFromCurrentState]) {
+                self.alpha = self.isHighlighted ? 0.90 : 1.0
+                self.transform = self.isHighlighted ? CGAffineTransform(scaleX: 0.97, y: 0.97) : .identity
             }
-            Spacer()
-            SwiftUI.Button(action: {
-                UIPasteboard.general.string = value
-                copied = true
-                resetTask?.cancel()
-                resetTask = Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 1_500_000_000)
-                    if !Task.isCancelled {
-                        copied = false
-                    }
-                }
-            }) {
-                SwiftUI.Label(copied ? copiedText : copyText, systemImage: copied ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 13, weight: .bold))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(copied ? CSSTheme.green.opacity(0.2) : CSSTheme.primary.opacity(0.15))
-                    .foregroundColor(copied ? CSSTheme.green : CSSTheme.primary)
-                    .cornerRadius(10)
-            }
-            .buttonStyle(CSSBounceButtonStyle())
         }
-        .padding(12)
-        .background(CSSTheme.innerRowBackground)
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(CSSTheme.innerBorder, lineWidth: 1)
-        )
     }
 }
 
-struct CellularDetailSheetView: SwiftUI.View {
-    @ObservedObject var vm: SystemCheckViewModel
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some SwiftUI.View {
-        NavigationView {
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 18) {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            Circle()
-                                .fill(vm.isCellularOK ? CSSTheme.green.opacity(0.15) : CSSTheme.red.opacity(0.15))
-                                .frame(width: 48, height: 48)
-                            SwiftUI.Image(systemName: vm.isCellularOK ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(vm.isCellularOK ? CSSTheme.green : CSSTheme.red)
-                        }
-                        VStack(alignment: .leading, spacing: 4) {
-                            SwiftUI.Text(vm.isCellularOK
-                                         ? "Mạng 4G/Di Động Ổn Định"
-                                         : "Mạng 4G/Di Động Đang Tắt")
-                                .font(.system(size: 16.5, weight: .bold))
-                                .foregroundColor(CSSTheme.pureBlack)
-                            SwiftUI.Text(vm.cellularDetail)
-                                .font(.system(size: 13.5, weight: .medium))
-                                .foregroundColor(CSSTheme.pureBlack)
-                        }
-                        Spacer()
-                    }
-                    .padding(14)
-                    .background(CSSTheme.cardBackground)
-                    .cornerRadius(CSSTheme.cornerRadius)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                            .stroke(CSSTheme.border, lineWidth: 1.0)
-                    )
-                    .shadow(color: CSSTheme.primary.opacity(0.08), radius: 10, x: 0, y: 5)
-
-                    SkySectionCard(
-                        title: "CÀI & GIA HẠN APP QUA 4G + VPN",
-                        icon: "antenna.radiowaves.left.and.right.circle.fill",
-                        color: CSSTheme.primary
-                    ) {
-                        SwiftUI.Text(LocalizedStringKey("• **Không cần Wi-Fi:** Cài đặt IPA và làm mới ứng dụng trực tiếp qua **4G/5G + LocalDevVPN**.\n\n• **Tự động hóa:** Kết hợp phím tắt làm mới lúc 6:00 hoặc 15:00 để tự động gia hạn ứng dụng mỗi ngày."))
-                            .font(.system(size: 14.5, weight: .regular))
-                            .foregroundColor(CSSTheme.pureBlack)
-                            .lineSpacing(3)
-                    }
-                }
-                .padding(16)
-            }
-            .background(CSSTheme.pageBackgroundGradient.ignoresSafeArea())
-            .navigationTitle("Mạng 4G/Di Động")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    SwiftUI.Text("Mạng 4G/Di Động")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundColor(CSSTheme.primary)
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    SwiftUI.Button("Xong") { dismiss() }
-                        .font(.headline)
-                        .foregroundColor(CSSTheme.primary)
-                }
-            }
+// MARK: - Detail Sheet View Controller (Đồng bộ CSS Gradient & Card)
+private final class SystemStatusDetailSheetViewController: UIViewController
+{
+    struct InfoSection {
+        let icon: String
+        let title: String
+        let body: String
+    }
+    
+    private let badgeText: String
+    private let sheetTitle: String
+    private let sheetSubtitle: String
+    private let sections: [InfoSection]
+    private let bgGradient = CAGradientLayer()
+    
+    init(badgeText: String, title: String, subtitle: String, sections: [InfoSection])
+    {
+        self.badgeText = badgeText
+        self.sheetTitle = title
+        self.sheetSubtitle = subtitle
+        self.sections = sections
+        super.init(nibName: nil, bundle: nil)
+        self.overrideUserInterfaceStyle = .light
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    override func viewDidLoad()
+    {
+        super.viewDidLoad()
+        
+        bgGradient.colors = [
+            UIColor(red: 0.953, green: 0.878, blue: 1.0, alpha: 1.0).cgColor,
+            UIColor(red: 0.878, green: 0.969, blue: 1.0, alpha: 1.0).cgColor
+        ]
+        bgGradient.startPoint = CGPoint(x: 0, y: 0)
+        bgGradient.endPoint = CGPoint(x: 1, y: 1)
+        bgGradient.frame = self.view.bounds
+        self.view.layer.insertSublayer(bgGradient, at: 0)
+        
+        let scrollView = UIScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.showsVerticalScrollIndicator = false
+        self.view.addSubview(scrollView)
+        
+        let contentView = UIView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(contentView)
+        
+        let stack = UIStackView()
+        stack.axis = .vertical
+        stack.spacing = 14
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(stack)
+        
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: self.view.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: self.view.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: self.view.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: self.view.bottomAnchor),
+            
+            contentView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+            contentView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
+            contentView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
+            contentView.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
+            
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 22),
+            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -28)
+        ])
+        
+        // Header Banner
+        let header = GradientBannerView()
+        header.layer.cornerRadius = 18
+        header.layer.cornerCurve = .continuous
+        header.translatesAutoresizingMaskIntoConstraints = false
+        
+        let headerStack = UIStackView()
+        headerStack.axis = .vertical
+        headerStack.spacing = 6
+        headerStack.translatesAutoresizingMaskIntoConstraints = false
+        
+        let badgeLabel = UILabel()
+        badgeLabel.text = badgeText
+        badgeLabel.font = .systemFont(ofSize: 11, weight: .bold)
+        badgeLabel.textColor = UIColor.white.withAlphaComponent(0.9)
+        
+        let titleLabel = UILabel()
+        titleLabel.text = sheetTitle
+        titleLabel.font = .systemFont(ofSize: 19, weight: .bold)
+        titleLabel.textColor = .white
+        titleLabel.numberOfLines = 0
+        
+        let subLabel = UILabel()
+        subLabel.text = sheetSubtitle
+        subLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        subLabel.textColor = UIColor.white.withAlphaComponent(0.92)
+        subLabel.numberOfLines = 0
+        
+        headerStack.addArrangedSubview(badgeLabel)
+        headerStack.addArrangedSubview(titleLabel)
+        headerStack.addArrangedSubview(subLabel)
+        header.addSubview(headerStack)
+        
+        NSLayoutConstraint.activate([
+            headerStack.topAnchor.constraint(equalTo: header.topAnchor, constant: 16),
+            headerStack.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 16),
+            headerStack.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -16),
+            headerStack.bottomAnchor.constraint(equalTo: header.bottomAnchor, constant: -16)
+        ])
+        
+        stack.addArrangedSubview(header)
+        
+        for item in sections {
+            let card = UIView()
+            card.backgroundColor = UIColor.white.withAlphaComponent(0.95)
+            card.layer.cornerRadius = 16
+            card.layer.cornerCurve = .continuous
+            card.layer.borderWidth = 1.0
+            card.layer.borderColor = UIColor.white.cgColor
+            card.layer.shadowColor = UIColor(red: 0.15, green: 0.10, blue: 0.38, alpha: 1.0).cgColor
+            card.layer.shadowOpacity = 0.06
+            card.layer.shadowOffset = CGSize(width: 0, height: 4)
+            card.layer.shadowRadius = 10
+            card.translatesAutoresizingMaskIntoConstraints = false
+            
+            let rowStack = UIStackView()
+            rowStack.axis = .vertical
+            rowStack.spacing = 6
+            rowStack.translatesAutoresizingMaskIntoConstraints = false
+            
+            let topRow = UIStackView()
+            topRow.axis = .horizontal
+            topRow.spacing = 8
+            topRow.alignment = .center
+            
+            let iconView = UIImageView(image: UIImage(systemName: item.icon))
+            iconView.tintColor = UIColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1.0)
+            iconView.contentMode = .scaleAspectFit
+            iconView.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                iconView.widthAnchor.constraint(equalToConstant: 20),
+                iconView.heightAnchor.constraint(equalToConstant: 20)
+            ])
+            
+            let itemTitle = UILabel()
+            itemTitle.text = item.title
+            itemTitle.font = .systemFont(ofSize: 15, weight: .bold)
+            itemTitle.textColor = UIColor(red: 0.11, green: 0.13, blue: 0.20, alpha: 1.0)
+            itemTitle.numberOfLines = 0
+            
+            topRow.addArrangedSubview(iconView)
+            topRow.addArrangedSubview(itemTitle)
+            
+            let bodyLabel = UILabel()
+            bodyLabel.text = item.body
+            bodyLabel.font = .systemFont(ofSize: 13.5, weight: .regular)
+            bodyLabel.textColor = UIColor(red: 0.30, green: 0.34, blue: 0.40, alpha: 1.0)
+            bodyLabel.numberOfLines = 0
+            
+            rowStack.addArrangedSubview(topRow)
+            rowStack.addArrangedSubview(bodyLabel)
+            card.addSubview(rowStack)
+            
+            NSLayoutConstraint.activate([
+                rowStack.topAnchor.constraint(equalTo: card.topAnchor, constant: 14),
+                rowStack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
+                rowStack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
+                rowStack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -14)
+            ])
+            
+            stack.addArrangedSubview(card)
         }
-        .preferredColorScheme(.light)
+        
+        let closeButton = UIButton(type: .system)
+        closeButton.setTitle("Đã hiểu", for: .normal)
+        closeButton.setTitleColor(.white, for: .normal)
+        closeButton.titleLabel?.font = .systemFont(ofSize: 15, weight: .bold)
+        closeButton.backgroundColor = UIColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1.0)
+        closeButton.layer.cornerRadius = 14
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        closeButton.heightAnchor.constraint(equalToConstant: 46).isActive = true
+        closeButton.addTarget(self, action: #selector(dismissSheet), for: .touchUpInside)
+        stack.addArrangedSubview(closeButton)
+    }
+    
+    override func viewDidLayoutSubviews()
+    {
+        super.viewDidLayoutSubviews()
+        bgGradient.frame = self.view.bounds
+    }
+    
+    @objc private func dismissSheet()
+    {
+        self.dismiss(animated: true)
     }
 }

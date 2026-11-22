@@ -1,3 +1,4 @@
+
 //
 //  PipelineHandler.swift
 //  SideStore
@@ -10,29 +11,30 @@ import UIKit
 import SwiftUI
 import SideSign
 
-// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (Đồng bộ 100% với SettingsViewController)
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI TOÀN BỘ ỨNG DỤNG & CHỮ ĐEN TUYỀN)
 private struct PipelineCSSTheme {
     static let white = UIColor.white
-    static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0) // #007bff
-    static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0) // #6f42c1
-    static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0) // #28a745
-    static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0) // #dc3545
-    static let magenta = UIColor(red: 255/255, green: 0/255, blue: 255/255, alpha: 1.0) // #ff00ff
+    static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0)      // #007bff
+    static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0)   // #6f42c1
+    static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0)     // #28a745
+    static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0)       // #dc3545
+    static let magenta = UIColor(red: 255/255, green: 0/255, blue: 255/255, alpha: 1.0)   // #ff00ff
 
-    static let cornerRadius: CGFloat = 15.0
+    static let cornerRadius: CGFloat = 18.0
+    static let innerCornerRadius: CGFloat = 14.0
 
-    // SwiftUI Colors (Đồng bộ với SettingsViewController)
+    // SwiftUI Colors (Đồng bộ 100% với toàn bộ hệ thống & Chữ Đen Tuyền #000000)
     static let suiPrimary = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255)
     static let suiSecondary = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)
     static let suiGreen = SwiftUI.Color(red: 40/255, green: 167/255, blue: 69/255)
     static let suiOrange = SwiftUI.Color(red: 253/255, green: 126/255, blue: 20/255)
     static let suiRed = SwiftUI.Color(red: 220/255, green: 53/255, blue: 69/255)
     static let suiMagenta = SwiftUI.Color(red: 255/255, green: 0/255, blue: 255/255)
-    static let suiPureBlack = SwiftUI.Color.black
+    static let suiPureBlack = SwiftUI.Color.black                                         // #000000
     static let suiCardBackground = SwiftUI.Color.white
-    static let suiInnerRowBackground = SwiftUI.Color(red: 246/255, green: 248/255, blue: 251/255)
-    static let suiBorder = SwiftUI.Color(red: 218/255, green: 224/255, blue: 233/255)
-    static let suiInnerBorder = SwiftUI.Color(red: 222/255, green: 228/255, blue: 236/255)
+    static let suiInnerRowBackground = SwiftUI.Color(red: 245/255, green: 248/255, blue: 255/255) // #f5f8ff
+    static let suiBorder = SwiftUI.Color(red: 220/255, green: 226/255, blue: 236/255)             // #dce2ec
+    static let suiInnerBorder = SwiftUI.Color(red: 222/255, green: 229/255, blue: 240/255)        // #dee5f0
 
     static var suiPageGradient: LinearGradient {
         LinearGradient(
@@ -48,11 +50,19 @@ private struct PipelineCSSTheme {
     static var suiHeroGradient: LinearGradient {
         LinearGradient(
             colors: [
-                SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.92),
-                SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.88)
+                SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.95),
+                SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.92)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
+        )
+    }
+
+    static var suiAccentUnderlineGradient: LinearGradient {
+        LinearGradient(
+            colors: [suiPrimary, suiSecondary],
+            startPoint: .leading,
+            endPoint: .trailing
         )
     }
 }
@@ -124,29 +134,46 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                 .ignoresSafeArea()
 
             VStack(spacing: 11) {
-                // Banner tiêu đề chuẩn Hero Tab Cài đặt
-                VStack(spacing: 4) {
-                    HStack(spacing: 7) {
-                        SwiftUI.Image(systemName: "shield.lefthalf.filled.badge.checkmark")
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundColor(.white)
-                        SwiftUI.Text(appName.isEmpty ? "Chọn Định Danh (App ID)" : "Cài đặt: \(appName)")
-                            .font(.system(size: 16.5, weight: .heavy))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                    }
+                // Banner tiêu đề chuẩn Hero (Đồng bộ 100% với vòng tròn kính mờ & viền sáng)
+                ZStack(alignment: .topTrailing) {
+                    Circle()
+                        .fill(SwiftUI.Color.white.opacity(0.12))
+                        .frame(width: 95, height: 95)
+                        .offset(x: 28, y: -35)
 
-                    SwiftUI.Text("Tự động gộp mọi tiện ích mở rộng vào 1 ID chính duy nhất")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(SwiftUI.Color.white.opacity(0.94))
-                        .multilineTextAlignment(.center)
+                    VStack(spacing: 4) {
+                        HStack(spacing: 7) {
+                            ZStack {
+                                Circle()
+                                    .fill(SwiftUI.Color.white.opacity(0.22))
+                                    .frame(width: 28, height: 28)
+                                SwiftUI.Image(systemName: "shield.lefthalf.filled.badge.checkmark")
+                                    .font(.system(size: 13.5, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                            SwiftUI.Text(appName.isEmpty ? "Chọn Định Danh (App ID)" : "Cài đặt: \(appName)")
+                                .font(.system(size: 17, weight: .heavy, design: .rounded))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                                .shadow(color: SwiftUI.Color.black.opacity(0.25), radius: 3, x: 0, y: 2)
+                        }
+
+                        SwiftUI.Text("Tự động gộp mọi tiện ích mở rộng vào 1 ID chính duy nhất")
+                            .font(.system(size: 12.2, weight: .semibold))
+                            .foregroundColor(SwiftUI.Color.white.opacity(0.96))
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity)
                 }
-                .padding(.vertical, 11)
-                .padding(.horizontal, 10)
-                .frame(maxWidth: .infinity)
                 .background(PipelineCSSTheme.suiHeroGradient)
                 .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous))
-                .shadow(color: PipelineCSSTheme.suiPrimary.opacity(0.22), radius: 10, x: 0, y: 4)
+                .overlay(
+                    RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous)
+                        .stroke(SwiftUI.Color.white.opacity(0.32), lineWidth: 1.2)
+                )
+                .shadow(color: PipelineCSSTheme.suiPrimary.opacity(0.24), radius: 12, x: 0, y: 5)
 
                 // Khối thẻ trắng chính chứa các lựa chọn ID
                 VStack(spacing: 10) {
@@ -170,8 +197,8 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                                     .foregroundColor(PipelineCSSTheme.suiPureBlack)
 
                                 SwiftUI.Text(displayCleanBundleID(initialBundleID))
-                                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                                    .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.72))
+                                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(PipelineCSSTheme.suiPureBlack)
                                     .lineLimit(2)
                                     .minimumScaleFactor(0.75)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -181,14 +208,14 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
 
                             SwiftUI.Image(systemName: "chevron.right")
                                 .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(PipelineCSSTheme.suiPrimary.opacity(0.75))
+                                .foregroundColor(PipelineCSSTheme.suiPrimary)
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 10)
                         .background(PipelineCSSTheme.suiInnerRowBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.innerCornerRadius, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            RoundedRectangle(cornerRadius: PipelineCSSTheme.innerCornerRadius, style: .continuous)
                                 .stroke(PipelineCSSTheme.suiPrimary.opacity(0.55), lineWidth: 1.2)
                         )
                     }
@@ -196,12 +223,17 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
 
                     // Lựa chọn 2: Dùng lại ID cũ (10 ID từ Apple trừ đi app còn sống & mở rộng, trừ luôn SideStore và LC+SS & mở rộng)
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 5) {
-                            SwiftUI.Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                                .font(.system(size: 13.5, weight: .bold))
-                                .foregroundColor(PipelineCSSTheme.suiGreen)
+                        HStack(spacing: 6) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(PipelineCSSTheme.suiGreen.opacity(0.15))
+                                    .frame(width: 21, height: 21)
+                                SwiftUI.Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(PipelineCSSTheme.suiGreen)
+                            }
                             SwiftUI.Text("Dùng lại ID cũ")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(.system(size: 13.5, weight: .heavy, design: .rounded))
                                 .foregroundColor(PipelineCSSTheme.suiGreen)
                             Spacer()
                         }
@@ -210,18 +242,18 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                             HStack(spacing: 8) {
                                 SwiftUI.Image(systemName: "info.circle.fill")
                                     .font(.system(size: 14))
-                                    .foregroundColor(PipelineCSSTheme.suiSecondary.opacity(0.75))
+                                    .foregroundColor(PipelineCSSTheme.suiSecondary)
                                 SwiftUI.Text("Hiện không có ID cũ nào rảnh rỗi ngoài các ứng dụng đang hoạt động.")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.68))
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(PipelineCSSTheme.suiPureBlack)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(10)
                             .background(PipelineCSSTheme.suiCardBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                RoundedRectangle(cornerRadius: 11, style: .continuous)
                                     .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
                             )
                         } else {
@@ -248,8 +280,8 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                                                         .lineLimit(1)
 
                                                     SwiftUI.Text(displayCleanBundleID(candidate.fullBundleIdentifier))
-                                                        .font(.system(size: 11.5, weight: .medium, design: .monospaced))
-                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.70))
+                                                        .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack)
                                                         .lineLimit(2)
                                                         .minimumScaleFactor(0.72)
                                                         .fixedSize(horizontal: false, vertical: true)
@@ -270,17 +302,17 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
 
                                                     SwiftUI.Text(remainingDaysText(for: candidate.expirationDate))
                                                         .font(.system(size: 10.5, weight: .bold))
-                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.65))
+                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack)
                                                 }
                                                 .fixedSize()
                                             }
                                             .padding(.horizontal, 8)
                                             .padding(.vertical, 8)
                                             .background(PipelineCSSTheme.suiCardBackground)
-                                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                                             .overlay(
-                                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                                    .stroke(PipelineCSSTheme.suiGreen.opacity(0.38), lineWidth: 1.1)
+                                                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                                    .stroke(PipelineCSSTheme.suiGreen.opacity(0.42), lineWidth: 1.1)
                                             )
                                         }
                                         .buttonStyle(PipelineBounceButtonStyle())
@@ -293,20 +325,25 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                     }
                     .padding(9)
                     .background(PipelineCSSTheme.suiInnerRowBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.innerCornerRadius, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: PipelineCSSTheme.innerCornerRadius, style: .continuous)
                             .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1.1)
                     )
 
                     // Lựa chọn 3: Cài đè lên App (nằm ngay dưới "Dùng lại ID cũ", hiển thị các app có thể cài đè trừ SideStore và LC+SS)
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 5) {
-                            SwiftUI.Image(systemName: "arrow.down.doc.fill")
-                                .font(.system(size: 13.5, weight: .bold))
-                                .foregroundColor(PipelineCSSTheme.suiOrange)
+                        HStack(spacing: 6) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(PipelineCSSTheme.suiOrange.opacity(0.16))
+                                    .frame(width: 21, height: 21)
+                                SwiftUI.Image(systemName: "arrow.down.doc.fill")
+                                    .font(.system(size: 11.5, weight: .bold))
+                                    .foregroundColor(PipelineCSSTheme.suiOrange)
+                            }
                             SwiftUI.Text("Cài đè lên App")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(.system(size: 13.5, weight: .heavy, design: .rounded))
                                 .foregroundColor(PipelineCSSTheme.suiOrange)
                             Spacer()
                         }
@@ -315,18 +352,18 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                             HStack(spacing: 8) {
                                 SwiftUI.Image(systemName: "info.circle.fill")
                                     .font(.system(size: 14))
-                                    .foregroundColor(PipelineCSSTheme.suiSecondary.opacity(0.75))
+                                    .foregroundColor(PipelineCSSTheme.suiSecondary)
                                 SwiftUI.Text("Chưa có ứng dụng nào trên máy có thể cài đè.")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.68))
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(PipelineCSSTheme.suiPureBlack)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(10)
                             .background(PipelineCSSTheme.suiCardBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                RoundedRectangle(cornerRadius: 11, style: .continuous)
                                     .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
                             )
                         } else {
@@ -357,15 +394,15 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
 
                                                         if let ver = appCandidate.version, !ver.isEmpty {
                                                             SwiftUI.Text("v\(ver)")
-                                                                .font(.system(size: 10.5, weight: .semibold))
-                                                                .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.55))
+                                                                .font(.system(size: 10.5, weight: .bold))
+                                                                .foregroundColor(PipelineCSSTheme.suiSecondary)
                                                                 .lineLimit(1)
                                                         }
                                                     }
 
                                                     SwiftUI.Text(displayCleanBundleID(appCandidate.fullBundleIdentifier))
-                                                        .font(.system(size: 11.5, weight: .medium, design: .monospaced))
-                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.70))
+                                                        .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack)
                                                         .lineLimit(2)
                                                         .minimumScaleFactor(0.72)
                                                         .fixedSize(horizontal: false, vertical: true)
@@ -386,17 +423,17 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
 
                                                     SwiftUI.Text(remainingDaysText(for: appCandidate.expirationDate))
                                                         .font(.system(size: 10.5, weight: .bold))
-                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.65))
+                                                        .foregroundColor(PipelineCSSTheme.suiPureBlack)
                                                 }
                                                 .fixedSize()
                                             }
                                             .padding(.horizontal, 8)
                                             .padding(.vertical, 8)
                                             .background(PipelineCSSTheme.suiCardBackground)
-                                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                                             .overlay(
-                                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                                    .stroke(PipelineCSSTheme.suiOrange.opacity(0.42), lineWidth: 1.1)
+                                                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                                    .stroke(PipelineCSSTheme.suiOrange.opacity(0.45), lineWidth: 1.1)
                                             )
                                         }
                                         .buttonStyle(PipelineBounceButtonStyle())
@@ -409,9 +446,9 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                     }
                     .padding(9)
                     .background(PipelineCSSTheme.suiInnerRowBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.innerCornerRadius, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: PipelineCSSTheme.innerCornerRadius, style: .continuous)
                             .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1.1)
                     )
 
@@ -437,9 +474,9 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                             .padding(.horizontal, 10)
                             .padding(.vertical, 9)
                             .background(PipelineCSSTheme.suiInnerRowBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.innerCornerRadius, style: .continuous))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                RoundedRectangle(cornerRadius: PipelineCSSTheme.innerCornerRadius, style: .continuous)
                                     .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
                             )
                         }
@@ -450,15 +487,15 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                                 TextField("com.example.app", text: $customBundleIDText)
                                     .textInputAutocapitalization(.never)
                                     .disableAutocorrection(true)
-                                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
                                     .foregroundColor(PipelineCSSTheme.suiPureBlack)
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 8.5)
                                     .background(PipelineCSSTheme.suiCardBackground)
-                                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                     .overlay(
-                                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                            .stroke(PipelineCSSTheme.suiPrimary.opacity(0.4), lineWidth: 1)
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .stroke(PipelineCSSTheme.suiPrimary.opacity(0.45), lineWidth: 1)
                                     )
 
                                 SwiftUI.Button {
@@ -473,28 +510,28 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 9.5)
                                         .background(PipelineCSSTheme.suiPrimary)
-                                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                 }
                                 .buttonStyle(PipelineBounceButtonStyle())
                             }
                             .padding(9)
                             .background(PipelineCSSTheme.suiInnerRowBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.innerCornerRadius, style: .continuous))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                RoundedRectangle(cornerRadius: PipelineCSSTheme.innerCornerRadius, style: .continuous)
                                     .stroke(PipelineCSSTheme.suiInnerBorder, lineWidth: 1)
                             )
                         }
                     }
                 }
-                .padding(10)
+                .padding(11)
                 .background(PipelineCSSTheme.suiCardBackground)
                 .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous)
-                        .stroke(PipelineCSSTheme.suiBorder, lineWidth: 1.0)
+                        .stroke(PipelineCSSTheme.suiBorder, lineWidth: 1.1)
                 )
-                .shadow(color: PipelineCSSTheme.suiPrimary.opacity(0.08), radius: 10, x: 0, y: 5)
+                .shadow(color: PipelineCSSTheme.suiPrimary.opacity(0.09), radius: 14, x: 0, y: 6)
 
                 // Nút Hủy cài đặt
                 SwiftUI.Button {
@@ -516,19 +553,19 @@ private struct SmartBundleIDCenterModalView: SwiftUI.View {
                             endPoint: .trailing
                         )
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.innerCornerRadius, style: .continuous))
                     .shadow(color: PipelineCSSTheme.suiRed.opacity(0.32), radius: 6, x: 0, y: 3)
                 }
                 .buttonStyle(PipelineBounceButtonStyle())
             }
-            .padding(11)
+            .padding(12)
             .background(PipelineCSSTheme.suiPageGradient)
-            .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius + 3, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius + 4, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius + 3, style: .continuous)
-                    .stroke(SwiftUI.Color.white.opacity(0.85), lineWidth: 1.5)
+                RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius + 4, style: .continuous)
+                    .stroke(SwiftUI.Color.white.opacity(0.88), lineWidth: 1.5)
             )
-            .shadow(color: SwiftUI.Color.black.opacity(0.22), radius: 22, x: 0, y: 10)
+            .shadow(color: SwiftUI.Color.black.opacity(0.24), radius: 22, x: 0, y: 10)
             .frame(maxWidth: 420)
             .padding(.horizontal, 10)
         }
@@ -554,6 +591,45 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
                 .ignoresSafeArea()
 
             VStack(spacing: 12) {
+                // Hero Banner đồng bộ cho khung lựa chọn Tiện ích mở rộng
+                ZStack(alignment: .topTrailing) {
+                    Circle()
+                        .fill(SwiftUI.Color.white.opacity(0.12))
+                        .frame(width: 85, height: 85)
+                        .offset(x: 25, y: -30)
+
+                    VStack(spacing: 3) {
+                        HStack(spacing: 7) {
+                            ZStack {
+                                Circle()
+                                    .fill(SwiftUI.Color.white.opacity(0.22))
+                                    .frame(width: 26, height: 26)
+                                SwiftUI.Image(systemName: "puzzlepiece.extension.fill")
+                                    .font(.system(size: 12.5, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                            SwiftUI.Text("Tiện Ích Mở Rộng (Extensions)")
+                                .font(.system(size: 16.5, weight: .heavy, design: .rounded))
+                                .foregroundColor(.white)
+                                .shadow(color: SwiftUI.Color.black.opacity(0.25), radius: 3, x: 0, y: 2)
+                        }
+                        SwiftUI.Text("Chọn phương thức xử lý App ID cho các tiện ích đi kèm")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(SwiftUI.Color.white.opacity(0.95))
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.vertical, 11)
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity)
+                }
+                .background(PipelineCSSTheme.suiHeroGradient)
+                .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous)
+                        .stroke(SwiftUI.Color.white.opacity(0.32), lineWidth: 1.2)
+                )
+                .shadow(color: PipelineCSSTheme.suiPrimary.opacity(0.22), radius: 10, x: 0, y: 4)
+
                 VStack(spacing: 9) {
                     optionButton(
                         icon: "shield.lefthalf.filled.badge.checkmark",
@@ -600,9 +676,9 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
                 .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius, style: .continuous)
-                        .stroke(PipelineCSSTheme.suiBorder, lineWidth: 1.0)
+                        .stroke(PipelineCSSTheme.suiBorder, lineWidth: 1.1)
                 )
-                .shadow(color: PipelineCSSTheme.suiPrimary.opacity(0.08), radius: 10, x: 0, y: 5)
+                .shadow(color: PipelineCSSTheme.suiPrimary.opacity(0.09), radius: 14, x: 0, y: 6)
 
                 SwiftUI.Button {
                     onSelect(.cancel)
@@ -623,19 +699,19 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
                             endPoint: .trailing
                         )
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.innerCornerRadius, style: .continuous))
                     .shadow(color: PipelineCSSTheme.suiRed.opacity(0.32), radius: 6, x: 0, y: 3)
                 }
                 .buttonStyle(PipelineBounceButtonStyle())
             }
             .padding(14)
             .background(PipelineCSSTheme.suiPageGradient)
-            .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius + 3, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius + 4, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius + 3, style: .continuous)
-                    .stroke(SwiftUI.Color.white.opacity(0.85), lineWidth: 1.5)
+                RoundedRectangle(cornerRadius: PipelineCSSTheme.cornerRadius + 4, style: .continuous)
+                    .stroke(SwiftUI.Color.white.opacity(0.88), lineWidth: 1.5)
             )
-            .shadow(color: SwiftUI.Color.black.opacity(0.22), radius: 22, x: 0, y: 10)
+            .shadow(color: SwiftUI.Color.black.opacity(0.24), radius: 22, x: 0, y: 10)
             .frame(maxWidth: 380)
             .padding(.horizontal, 20)
         }
@@ -670,8 +746,8 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
                         .minimumScaleFactor(0.82)
 
                     SwiftUI.Text(subtitle)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(PipelineCSSTheme.suiPureBlack.opacity(0.72))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(PipelineCSSTheme.suiPureBlack)
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)
                 }
@@ -680,13 +756,13 @@ private struct ExtensionDecisionCenterModalView: SwiftUI.View {
 
                 SwiftUI.Image(systemName: "chevron.right")
                     .font(.system(size: 12.5, weight: .bold))
-                    .foregroundColor(PipelineCSSTheme.suiPrimary.opacity(0.75))
+                    .foregroundColor(PipelineCSSTheme.suiPrimary)
             }
             .padding(11)
             .background(PipelineCSSTheme.suiInnerRowBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: PipelineCSSTheme.innerCornerRadius, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: PipelineCSSTheme.innerCornerRadius, style: .continuous)
                     .stroke(borderColor, lineWidth: 1.2)
             )
         }

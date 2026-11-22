@@ -1160,12 +1160,11 @@ private extension SettingsViewController {
         let config = UIImage.SymbolConfiguration(pointSize: 10.5, weight: .bold)
         let icon = UIImage(systemName: iconName, withConfiguration: config)
         btn.setImage(icon, for: .normal)
-        btn.setTitle(" \(title)", for: .normal)
+        btn.setTitle("  \(title)  ", for: .normal)
         btn.tintColor = color
         btn.setTitleColor(color, for: .normal)
         btn.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
         btn.backgroundColor = color.withAlphaComponent(0.10)
-        btn.contentEdgeInsets = UIEdgeInsets(top: 0, left: 10, bottom: 0, right: 10)
         btn.layer.cornerRadius = 12
         btn.layer.borderWidth = 1.0
         btn.layer.borderColor = color.withAlphaComponent(0.28).cgColor
@@ -1362,14 +1361,17 @@ private extension SettingsViewController {
         ])
     }
 
-    // Tìm chính xác khung Card bên trong InsetGroupTableViewCell mà không phụ thuộc vào frame.width (tránh lỗi khi cell đang ẩn height = 0)
+    // Tìm chính xác khung Card bên trong InsetGroupTableViewCell mà không phụ thuộc vào frame.width hay private property
     private func resolveTargetCardView(for cell: UITableViewCell) -> UIView {
-        if let insetCell = cell as? InsetGroupTableViewCell {
-            return insetCell.insetContentView
+        if let cardView = cell.subviews.first(where: {
+            $0 !== cell.contentView &&
+            $0 !== cell.selectedBackgroundView &&
+            $0 !== cell.backgroundView &&
+            !($0 is UIControl)
+        }) {
+            return cardView
         }
-        return cell.subviews.first(where: {
-            $0 !== cell.contentView && $0 !== cell.selectedBackgroundView && $0 !== cell.backgroundView && !($0 is UIButton)
-        }) ?? cell.contentView
+        return cell.contentView
     }
 
     // Xóa sạch mọi màu nền xám/khác màu của các view trung gian trong Storyboard (đặc biệt ở dòng Loại tài khoản - Row 2)
@@ -1880,12 +1882,11 @@ private extension SettingsViewController
             let eyeSymbol = self.isAccountDetailsExpanded ? "eye.slash.fill" : "eye.fill"
             let eyeConfig = UIImage.SymbolConfiguration(pointSize: 10.5, weight: .bold)
             toggleBtn.setImage(UIImage(systemName: eyeSymbol, withConfiguration: eyeConfig), for: .normal)
-            let toggleTitle = self.isAccountDetailsExpanded ? " Ẩn ▲" : " Hiện ▼"
+            let toggleTitle = self.isAccountDetailsExpanded ? "  Ẩn ▲  " : "  Hiện ▼  "
             toggleBtn.setTitle(toggleTitle, for: .normal)
             toggleBtn.tintColor = CSSTheme.white
             toggleBtn.setTitleColor(CSSTheme.white, for: .normal)
             toggleBtn.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
-            toggleBtn.contentEdgeInsets = UIEdgeInsets(top: 0, left: 10, bottom: 0, right: 10)
             toggleBtn.backgroundColor = self.isAccountDetailsExpanded ? CSSTheme.purple : CSSTheme.blue
             toggleBtn.layer.cornerRadius = 12
             toggleBtn.layer.shadowColor = CSSTheme.blue.cgColor
@@ -1997,16 +1998,14 @@ private extension SettingsViewController
             let keepAnisette = contentVC.isKeepAnisetteChecked
             let keepAnisetteHeaders = contentVC.isKeepAnisetteHeadersChecked
             let keepSideSignHeaders = contentVC.isKeepSideSignHeadersChecked
-            Task.detached { [weak self] in
+            Task { @MainActor [weak self] in
                 await AuthManager.shared.signOut(
                     keepCertificate: keepCert,
                     keepAnisetteData: keepAnisette,
                     keepAnisetteHeaders: keepAnisetteHeaders,
                     keepSideSignHeaders: keepSideSignHeaders
                 )
-                await MainActor.run {
-                    self?.update()
-                }
+                self?.update()
             }
         }
         
@@ -2343,7 +2342,8 @@ extension SettingsViewController
             } else if indexPath.row == 2 {
                 insetCell.style = .bottom
             }
-            insetCell.insetContentView.backgroundColor = CSSTheme.white
+            let targetCardView = self.resolveTargetCardView(for: insetCell)
+            targetCardView.backgroundColor = CSSTheme.white
         }
         
         if section == .advancedSettings,
@@ -2358,7 +2358,8 @@ extension SettingsViewController
             } else {
                 insetCell.style = .middle
             }
-            insetCell.insetContentView.backgroundColor = CSSTheme.white
+            let targetCardView = self.resolveTargetCardView(for: insetCell)
+            targetCardView.backgroundColor = CSSTheme.white
         }
         
         return cell

@@ -871,30 +871,57 @@ private extension MyAppsViewController {
         return cleanSignedBundleID(from: installedApp.bundleIdentifier)
     }
     
-    // ✨ HIỂN THỊ BUNDLE ID ĐÃ KÝ (ĐÃ BỎ HẬU TỐ TEAM ID) NGAY DƯỚI TÊN ỨNG DỤNG ĐÃ CÀI (ĐẸP, GỌN & ĐỒNG BỘ CSS THEME) ✨
+    // ✨ HIỂN THỊ BUNDLE ID ĐÃ KÝ (ĐÃ BỎ HẬU TỐ TEAM ID) NGAY DƯỚI TÊN ỨNG DỤNG ĐÃ CÀI (MỞ KHOÁ ẨN & FIX LAYOUT 100%) ✨
     func applyAppSubtitleWithBundleID(on banner: AppBannerView, bundleID: String, primarySubtitle: String? = nil) {
         let displayBundleID = cleanSignedBundleID(from: bundleID)
         guard !displayBundleID.isEmpty else { return }
         
+        let subtitleLabel = banner.subtitleLabel
+        
+        // Lưu hoặc lấy lại dòng phụ đề thứ nhất (Tên nhà phát triển / Phiên bản) một cách an toàn qua các lần tái sử dụng cell
         let rawFirstLine: String
         if let primarySubtitle = primarySubtitle {
-            rawFirstLine = primarySubtitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        } else {
-            let existing = (banner.subtitleLabel.text ?? "")
+            let cleanedPrimary = primarySubtitle
                 .components(separatedBy: .newlines)
                 .first?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            rawFirstLine = existing
+            rawFirstLine = cleanedPrimary
+            subtitleLabel.accessibilityValue = cleanedPrimary
+        } else if let savedPrimary = subtitleLabel.accessibilityValue {
+            rawFirstLine = savedPrimary.trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            let existingText = subtitleLabel.attributedText?.string ?? subtitleLabel.text ?? ""
+            let firstLine = existingText
+                .components(separatedBy: .newlines)
+                .first?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if firstLine.caseInsensitiveCompare(displayBundleID) == .orderedSame {
+                rawFirstLine = ""
+            } else {
+                rawFirstLine = firstLine
+            }
+            subtitleLabel.accessibilityValue = rawFirstLine
         }
+        
+        // QUAN TRỌNG 1: Mở khóa chiều cao cứng (nếu XIB/Storyboard khóa height <= 20pt cho 1 dòng) và tăng độ ưu tiên hiển thị
+        for constraint in subtitleLabel.constraints where constraint.firstAttribute == .height {
+            if constraint.relation == .equal && constraint.constant < 36 {
+                constraint.isActive = false
+            }
+        }
+        subtitleLabel.setContentCompressionResistancePriority(.required, for: .vertical)
+        subtitleLabel.setContentHuggingPriority(.defaultHigh, for: .vertical)
+        banner.titleLabel.setContentCompressionResistancePriority(.defaultHigh, for: .vertical)
         
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.lineSpacing = 1.5
         paragraphStyle.lineBreakMode = .byTruncatingMiddle
         
         let attributed = NSMutableAttributedString()
+        let hasFirstLine = !rawFirstLine.isEmpty && rawFirstLine.caseInsensitiveCompare(displayBundleID) != .orderedSame
         
-        // Nếu dòng 1 (Nhà phát triển / Phiên bản) khác với Bundle ID thì giữ ở dòng trên, dòng dưới là Bundle ID thực tế đã loại bỏ hậu tố Team ID
-        if !rawFirstLine.isEmpty && rawFirstLine.caseInsensitiveCompare(displayBundleID) != .orderedSame {
+        // Nếu có dòng 1 (Nhà phát triển / Phiên bản) khác với Bundle ID thì giữ ở dòng trên, dòng dưới là Bundle ID đã cắt Team ID
+        if hasFirstLine {
             attributed.append(NSAttributedString(string: rawFirstLine, attributes: [
                 .font: UIFont.systemFont(ofSize: 12.0, weight: .medium),
                 .foregroundColor: CSSTheme.textSecondary,
@@ -915,15 +942,36 @@ private extension MyAppsViewController {
         
         attributed.append(NSAttributedString(string: displayBundleID, attributes: [
             .font: bundleFont,
-            .foregroundColor: CSSTheme.blue.withAlphaComponent(0.88),
+            .foregroundColor: CSSTheme.blue.withAlphaComponent(0.92),
             .paragraphStyle: paragraphStyle
         ]))
         
-        banner.subtitleLabel.numberOfLines = 2
-        banner.subtitleLabel.adjustsFontSizeToFitWidth = true
-        banner.subtitleLabel.minimumScaleFactor = 0.78
-        banner.subtitleLabel.lineBreakMode = .byTruncatingMiddle
-        banner.subtitleLabel.attributedText = attributed
+        // QUAN TRỌNG 2: Bắt buộc bật isHidden = false vì AppBannerView.configure(for:) tự động ẩn subtitleLabel khi cài IPA ngoài (không có developerName)
+        if subtitleLabel.isHidden {
+            subtitleLabel.isHidden = false
+        }
+        subtitleLabel.alpha = 1.0
+        
+        // QUAN TRỌNG 3: Không bật adjustsFontSizeToFitWidth khi có 2 dòng (\n) để tránh lỗi UIKit nuốt mất dòng thứ 2
+        if hasFirstLine {
+            subtitleLabel.numberOfLines = 2
+            subtitleLabel.adjustsFontSizeToFitWidth = false
+            subtitleLabel.lineBreakMode = .byTruncatingMiddle
+        } else {
+            subtitleLabel.numberOfLines = 1
+            subtitleLabel.adjustsFontSizeToFitWidth = true
+            subtitleLabel.minimumScaleFactor = 0.75
+            subtitleLabel.lineBreakMode = .byTruncatingMiddle
+        }
+        
+        subtitleLabel.attributedText = attributed
+        subtitleLabel.invalidateIntrinsicContentSize()
+        
+        // Yêu cầu UIStackView chứa titleLabel & subtitleLabel tính toán lại bố cục ngay lập tức
+        if let stackView = subtitleLabel.superview as? UIStackView {
+            stackView.isHidden = false
+            stackView.setNeedsLayout()
+        }
     }
     
     // Triệt tiêu hoàn toàn mọi lớp nền tối/blur của hệ thống hoặc của AppBannerView và cố định nền sáng trắng
@@ -1352,7 +1400,7 @@ private extension MyAppsViewController
             }
             
             // Gắn Bundle ID thực tế (đã loại bỏ hậu tố Team ID) ngay dưới tên ứng dụng đã cài
-            let defaultDeveloperSubtitle = cell.bannerView.subtitleLabel.text
+            let defaultDeveloperSubtitle = installedApp.storeApp?.developerName ?? ""
             self.applyAppSubtitleWithBundleID(on: cell.bannerView, bundleID: signedCleanID, primarySubtitle: defaultDeveloperSubtitle)
             
             let currentDate = Date()
@@ -1445,7 +1493,7 @@ private extension MyAppsViewController
             cell.bannerView.configure(for: installedApp, action: .custom("KÍCH HOẠT"))
             
             // Gắn Bundle ID thực tế (đã loại bỏ hậu tố Team ID) ngay dưới tên ứng dụng không hoạt động
-            let defaultDeveloperSubtitle = cell.bannerView.subtitleLabel.text
+            let defaultDeveloperSubtitle = installedApp.storeApp?.developerName ?? ""
             self.applyAppSubtitleWithBundleID(on: cell.bannerView, bundleID: signedCleanID, primarySubtitle: defaultDeveloperSubtitle)
             
             cell.bannerView.button.tintColor = CSSTheme.blue

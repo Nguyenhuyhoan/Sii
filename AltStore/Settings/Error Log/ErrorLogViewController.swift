@@ -1,3 +1,4 @@
+
 //
 //  ErrorLogViewController.swift
 //  AltStore
@@ -11,27 +12,30 @@ import CoreData
 import Nuke
 import SwiftUI
 
-// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ SETTINGS)
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI TOÀN BỘ ỨNG DỤNG & CHỮ ĐEN TUYỀN)
 private struct ErrorLogCSSTheme {
     static let white = UIColor.white
-    static let light = UIColor(red: 248/255, green: 249/255, blue: 250/255, alpha: 1.0) // #f8f9fa
-    static let border = UIColor(red: 233/255, green: 236/255, blue: 239/255, alpha: 1.0) // #e9ecef
-    static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0) // #007bff
-    static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0) // #6f42c1
-    static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0) // #28a745
-    static let magenta = UIColor(red: 255/255, green: 0/255, blue: 255/255, alpha: 1.0) // #ff00ff
-    static let danger = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0) // #dc3545
-    static let dark = UIColor(red: 52/255, green: 58/255, blue: 64/255, alpha: 1.0) // #343a40
+    static let pureBlack = UIColor.black                                                      // #000000 (Chữ đen tuyền độ tương phản tuyệt đối)
+    static let light = UIColor(red: 245/255, green: 248/255, blue: 255/255, alpha: 1.0)       // #f5f8ff (Đồng bộ innerRowBackground)
+    static let border = UIColor(red: 220/255, green: 226/255, blue: 236/255, alpha: 1.0)      // #dce2ec (Viền chuẩn toàn hệ thống)
+    static let innerBorder = UIColor(red: 222/255, green: 229/255, blue: 240/255, alpha: 1.0) // #dee5f0
+    static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0)          // #007bff (--primary-blue)
+    static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0)       // #6f42c1 (--primary-purple)
+    static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0)         // #28a745 (--primary-green)
+    static let magenta = UIColor(red: 255/255, green: 0/255, blue: 255/255, alpha: 1.0)       // #ff00ff
+    static let danger = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0)       // #dc3545
+    static let dark = UIColor.black                                                           // #000000
 
     // Gradient Background (#f3e0ff -> #e0f7ff)
     static let bgGradientStart = UIColor(red: 243/255, green: 224/255, blue: 255/255, alpha: 1.0).cgColor
     static let bgGradientEnd = UIColor(red: 224/255, green: 247/255, blue: 255/255, alpha: 1.0).cgColor
 
-    // Hero Gradient (rgba(0,123,255,.92) -> rgba(111,66,193,.88))
-    static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.92).cgColor
-    static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.88).cgColor
+    // Hero Gradient (rgba(0,123,255,.95) -> rgba(111,66,193,.92))
+    static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.95).cgColor
+    static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.92).cgColor
 
-    static let cornerRadius: CGFloat = 15.0
+    static let cornerRadius: CGFloat = 18.0
+    static let innerCornerRadius: CGFloat = 14.0
     /// Khoảng cách lề ngang chuẩn từ mép màn hình vào khung Banner & khung Lỗi
     static let cardHorizontalInset: CGFloat = 16.0
     /// Khoảng cách đệm từ viền khung lỗi vào chữ bên trong
@@ -63,12 +67,39 @@ private final class ErrorLogGradientBackgroundView: UIView {
     }
 }
 
+// MARK: - ➖ THANH GẠCH CHÂN GRADIENT XANH - TÍM (38x3.5pt ĐỒNG BỘ TOÀN HỆ THỐNG)
+private final class ErrorLogAccentUnderlineView: UIView {
+    override class var layerClass: AnyClass {
+        return CAGradientLayer.self
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupGradient()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupGradient()
+    }
+
+    private func setupGradient() {
+        guard let gradientLayer = self.layer as? CAGradientLayer else { return }
+        gradientLayer.colors = [ErrorLogCSSTheme.blue.cgColor, ErrorLogCSSTheme.purple.cgColor]
+        gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.5)
+        gradientLayer.endPoint = CGPoint(x: 1.0, y: 0.5)
+        layer.cornerRadius = 1.75
+        clipsToBounds = true
+    }
+}
+
 final class ErrorLogViewController: UITableViewController
 {
     private lazy var dataSource = self.makeDataSource()
     private var expandedErrorIDs = Set<NSManagedObjectID>()
 
     private var heroGradientLayer: CAGradientLayer?
+    private weak var heroClipView: UIView?
     private var floatingClearAllButton: UIButton?
 
     private var isScrolling = false {
@@ -166,9 +197,8 @@ final class ErrorLogViewController: UITableViewController
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        if let heroHeader = self.tableView.tableHeaderView,
-           let heroCard = heroHeader.subviews.first {
-            self.heroGradientLayer?.frame = heroCard.bounds
+        if let clipView = self.heroClipView {
+            self.heroGradientLayer?.frame = clipView.bounds
         }
         self.enforceBrightGradientBackground()
         self.updateFloatingClearAllButtonState()
@@ -230,7 +260,7 @@ private extension ErrorLogViewController
         }
     }
 
-    /// Trang trí giao diện Placeholder (khi xóa hết nhật ký) hài hòa với nền sáng CSS
+    /// Trang trí giao diện Placeholder (khi xóa hết nhật ký) hài hòa với nền sáng CSS & chữ đen tuyền
     func styleBrightPlaceholderView(_ placeholderView: PlaceholderView) {
         placeholderView.overrideUserInterfaceStyle = .light
         placeholderView.backgroundColor = .clear
@@ -244,30 +274,37 @@ private extension ErrorLogViewController
             placeholderView.insertSubview(gradientBg, at: 0)
         }
         
-        // Chỉnh màu chữ và kiểu dáng nổi bật, sắc nét trên nền sáng
+        // Chỉnh màu chữ đen tuyền và xanh chủ đạo sắc nét trên nền sáng
         placeholderView.textLabel.text = "✓ Hệ Thống Hoạt Động Ổn Định"
         placeholderView.textLabel.textColor = ErrorLogCSSTheme.blue
-        placeholderView.textLabel.font = UIFont.systemFont(ofSize: 19, weight: .heavy)
+        if let roundedDesc = UIFont.systemFont(ofSize: 19, weight: .heavy).fontDescriptor.withDesign(.rounded) {
+            placeholderView.textLabel.font = UIFont(descriptor: roundedDesc, size: 19)
+        } else {
+            placeholderView.textLabel.font = UIFont.systemFont(ofSize: 19, weight: .heavy)
+        }
         
         placeholderView.detailTextLabel.text = "Nhật ký hiện đang trống.\nMọi sự cố phát sinh khi cài đặt IPA hoặc làm mới (Refresh) ứng dụng sẽ được ghi lại tại đây."
-        placeholderView.detailTextLabel.textColor = ErrorLogCSSTheme.dark.withAlphaComponent(0.85)
-        placeholderView.detailTextLabel.font = UIFont.systemFont(ofSize: 14, weight: .medium)
+        placeholderView.detailTextLabel.textColor = ErrorLogCSSTheme.pureBlack
+        placeholderView.detailTextLabel.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
         
-        // Tạo thẻ Card trắng bán trong suốt bao quanh cụm thông báo trống để chữ luôn rõ ràng, sang trọng
+        // Tạo thẻ Card trắng chuẩn CSS bao quanh cụm thông báo trống để chữ luôn rõ ràng, sang trọng
         if let stackView = placeholderView.textLabel.superview {
             let cardTag = 991133
             if placeholderView.viewWithTag(cardTag) == nil {
                 let cardBg = UIView()
                 cardBg.tag = cardTag
                 cardBg.translatesAutoresizingMaskIntoConstraints = false
-                cardBg.backgroundColor = ErrorLogCSSTheme.white.withAlphaComponent(0.88)
-                cardBg.layer.cornerRadius = ErrorLogCSSTheme.cornerRadius + 3
-                cardBg.layer.borderWidth = 1.0
-                cardBg.layer.borderColor = ErrorLogCSSTheme.white.cgColor
+                cardBg.backgroundColor = ErrorLogCSSTheme.white
+                cardBg.layer.cornerRadius = ErrorLogCSSTheme.cornerRadius
+                if #available(iOS 13.0, *) {
+                    cardBg.layer.cornerCurve = .continuous
+                }
+                cardBg.layer.borderWidth = 1.1
+                cardBg.layer.borderColor = ErrorLogCSSTheme.border.cgColor
                 cardBg.layer.shadowColor = ErrorLogCSSTheme.blue.cgColor
                 cardBg.layer.shadowOffset = CGSize(width: 0, height: 6)
-                cardBg.layer.shadowRadius = 16
-                cardBg.layer.shadowOpacity = 0.12
+                cardBg.layer.shadowRadius = 14
+                cardBg.layer.shadowOpacity = 0.09
                 cardBg.isUserInteractionEnabled = false
                 
                 placeholderView.insertSubview(cardBg, belowSubview: stackView)
@@ -282,63 +319,111 @@ private extension ErrorLogViewController
     }
 
     func setupCSSHeroBanner() {
-        let headerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 148))
+        let headerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 156))
         headerContainer.backgroundColor = .clear
         
         let heroCard = UIView()
         heroCard.translatesAutoresizingMaskIntoConstraints = false
         heroCard.layer.cornerRadius = ErrorLogCSSTheme.cornerRadius
+        if #available(iOS 13.0, *) {
+            heroCard.layer.cornerCurve = .continuous
+        }
         heroCard.layer.masksToBounds = false
         heroCard.layer.shadowColor = ErrorLogCSSTheme.blue.cgColor
-        heroCard.layer.shadowOffset = CGSize(width: 0, height: 6)
-        heroCard.layer.shadowRadius = 16
-        heroCard.layer.shadowOpacity = 0.25
+        heroCard.layer.shadowOffset = CGSize(width: 0, height: 7)
+        heroCard.layer.shadowRadius = 14
+        heroCard.layer.shadowOpacity = 0.26
+
+        let clipView = UIView()
+        clipView.translatesAutoresizingMaskIntoConstraints = false
+        clipView.layer.cornerRadius = ErrorLogCSSTheme.cornerRadius
+        if #available(iOS 13.0, *) {
+            clipView.layer.cornerCurve = .continuous
+        }
+        clipView.clipsToBounds = true
+        clipView.layer.borderWidth = 1.2
+        clipView.layer.borderColor = UIColor.white.withAlphaComponent(0.32).cgColor
+        self.heroClipView = clipView
         
         let gradient = CAGradientLayer()
         gradient.colors = [ErrorLogCSSTheme.heroStart, ErrorLogCSSTheme.heroEnd]
         gradient.startPoint = CGPoint(x: 0, y: 0)
         gradient.endPoint = CGPoint(x: 1, y: 1)
-        gradient.cornerRadius = ErrorLogCSSTheme.cornerRadius
-        heroCard.layer.insertSublayer(gradient, at: 0)
+        clipView.layer.insertSublayer(gradient, at: 0)
         self.heroGradientLayer = gradient
+
+        // Vòng tròn kính mờ trang trí góc trên bên phải đồng bộ
+        let decorCircle = UIView()
+        decorCircle.translatesAutoresizingMaskIntoConstraints = false
+        decorCircle.backgroundColor = UIColor.white.withAlphaComponent(0.12)
+        decorCircle.layer.cornerRadius = 60
+        decorCircle.isUserInteractionEnabled = false
+        clipView.addSubview(decorCircle)
+
+        // Hàng Tiêu đề + Icon kính mờ
+        let titleStack = UIStackView()
+        titleStack.translatesAutoresizingMaskIntoConstraints = false
+        titleStack.axis = .horizontal
+        titleStack.spacing = 8
+        titleStack.alignment = .center
+
+        let iconBadge = UIView()
+        iconBadge.translatesAutoresizingMaskIntoConstraints = false
+        iconBadge.backgroundColor = UIColor.white.withAlphaComponent(0.22)
+        iconBadge.layer.cornerRadius = 15
+
+        let iconView = UIImageView()
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        let iconSymConfig = UIImage.SymbolConfiguration(pointSize: 14, weight: .bold)
+        iconView.image = UIImage(systemName: "exclamationmark.shield.fill", withConfiguration: iconSymConfig)
+        iconView.tintColor = .white
+        iconBadge.addSubview(iconView)
         
         let titleLabel = UILabel()
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.text = "Nhật Ký Lỗi Hệ Thống"
-        titleLabel.font = UIFont.systemFont(ofSize: 22, weight: .heavy)
+        if let roundedDesc = UIFont.systemFont(ofSize: 22, weight: .heavy).fontDescriptor.withDesign(.rounded) {
+            titleLabel.font = UIFont(descriptor: roundedDesc, size: 22)
+        } else {
+            titleLabel.font = UIFont.systemFont(ofSize: 22, weight: .heavy)
+        }
         titleLabel.textColor = ErrorLogCSSTheme.white
         titleLabel.textAlignment = .center
         titleLabel.layer.shadowColor = UIColor.black.cgColor
-        titleLabel.layer.shadowOffset = CGSize(width: 1, height: 2)
+        titleLabel.layer.shadowOffset = CGSize(width: 0, height: 2)
         titleLabel.layer.shadowRadius = 4
-        titleLabel.layer.shadowOpacity = 0.35
+        titleLabel.layer.shadowOpacity = 0.28
+
+        titleStack.addArrangedSubview(iconBadge)
+        titleStack.addArrangedSubview(titleLabel)
         
         let subLabel = UILabel()
         subLabel.translatesAutoresizingMaskIntoConstraints = false
         subLabel.text = "Theo dõi và chẩn đoán chi tiết các sự cố phát sinh khi cài đặt IPA hoặc làm mới ứng dụng"
-        subLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .medium)
-        subLabel.textColor = ErrorLogCSSTheme.white.withAlphaComponent(0.95)
+        subLabel.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        subLabel.textColor = ErrorLogCSSTheme.white.withAlphaComponent(0.96)
         subLabel.textAlignment = .center
         subLabel.numberOfLines = 2
         
         // Nút mở nhanh Console Log ngay trên Banner
         let consoleBtn = UIButton(type: .system)
         consoleBtn.translatesAutoresizingMaskIntoConstraints = false
-        let termConfig = UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)
+        let termConfig = UIImage.SymbolConfiguration(pointSize: 11.5, weight: .bold)
         consoleBtn.setImage(UIImage(systemName: "terminal.fill", withConfiguration: termConfig), for: .normal)
         consoleBtn.setTitle("  Xem Nhật Ký Console Chi Tiết  ", for: .normal)
         consoleBtn.tintColor = ErrorLogCSSTheme.white
         consoleBtn.setTitleColor(ErrorLogCSSTheme.white, for: .normal)
-        consoleBtn.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
+        consoleBtn.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .bold)
         consoleBtn.backgroundColor = UIColor.black.withAlphaComponent(0.24)
-        consoleBtn.layer.cornerRadius = 13
+        consoleBtn.layer.cornerRadius = 14
         consoleBtn.layer.borderWidth = 1.0
-        consoleBtn.layer.borderColor = ErrorLogCSSTheme.white.withAlphaComponent(0.4).cgColor
+        consoleBtn.layer.borderColor = ErrorLogCSSTheme.white.withAlphaComponent(0.45).cgColor
         consoleBtn.addTarget(self, action: #selector(handleConsoleButtonTapped), for: .touchUpInside)
         
-        heroCard.addSubview(titleLabel)
-        heroCard.addSubview(subLabel)
-        heroCard.addSubview(consoleBtn)
+        clipView.addSubview(titleStack)
+        clipView.addSubview(subLabel)
+        clipView.addSubview(consoleBtn)
+        heroCard.addSubview(clipView)
         headerContainer.addSubview(heroCard)
         
         NSLayoutConstraint.activate([
@@ -346,17 +431,32 @@ private extension ErrorLogViewController
             heroCard.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -ErrorLogCSSTheme.cardHorizontalInset),
             heroCard.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 12),
             heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -6),
+
+            clipView.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor),
+            clipView.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor),
+            clipView.topAnchor.constraint(equalTo: heroCard.topAnchor),
+            clipView.bottomAnchor.constraint(equalTo: heroCard.bottomAnchor),
+
+            decorCircle.widthAnchor.constraint(equalToConstant: 120),
+            decorCircle.heightAnchor.constraint(equalToConstant: 120),
+            decorCircle.trailingAnchor.constraint(equalTo: clipView.trailingAnchor, constant: 35),
+            decorCircle.topAnchor.constraint(equalTo: clipView.topAnchor, constant: -45),
+
+            iconBadge.widthAnchor.constraint(equalToConstant: 30),
+            iconBadge.heightAnchor.constraint(equalToConstant: 30),
+            iconView.centerXAnchor.constraint(equalTo: iconBadge.centerXAnchor),
+            iconView.centerYAnchor.constraint(equalTo: iconBadge.centerYAnchor),
             
-            titleLabel.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
-            titleLabel.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 14),
+            titleStack.centerXAnchor.constraint(equalTo: clipView.centerXAnchor),
+            titleStack.topAnchor.constraint(equalTo: clipView.topAnchor, constant: 14),
             
-            subLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
-            subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 14),
-            subLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -14),
+            subLabel.topAnchor.constraint(equalTo: titleStack.bottomAnchor, constant: 5),
+            subLabel.leadingAnchor.constraint(equalTo: clipView.leadingAnchor, constant: 14),
+            subLabel.trailingAnchor.constraint(equalTo: clipView.trailingAnchor, constant: -14),
             
             consoleBtn.topAnchor.constraint(equalTo: subLabel.bottomAnchor, constant: 10),
-            consoleBtn.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
-            consoleBtn.heightAnchor.constraint(equalToConstant: 26)
+            consoleBtn.centerXAnchor.constraint(equalTo: clipView.centerXAnchor),
+            consoleBtn.heightAnchor.constraint(equalToConstant: 28)
         ])
         
         heroCard.alpha = 0
@@ -379,7 +479,7 @@ private extension ErrorLogViewController
             let config = UIImage.SymbolConfiguration(pointSize: 14, weight: .bold)
             btn.setImage(UIImage(systemName: "trash.fill", withConfiguration: config), for: .normal)
             btn.tintColor = ErrorLogCSSTheme.danger
-            btn.backgroundColor = ErrorLogCSSTheme.white.withAlphaComponent(0.94)
+            btn.backgroundColor = ErrorLogCSSTheme.white.withAlphaComponent(0.95)
             
             // Nút tròn nhỏ 34x34 cố định góc trên bên phải, đối xứng hoàn toàn với nút Back
             btn.layer.cornerRadius = 17
@@ -388,7 +488,7 @@ private extension ErrorLogViewController
             btn.layer.shadowColor = UIColor.black.cgColor
             btn.layer.shadowOffset = CGSize(width: 0, height: 2)
             btn.layer.shadowRadius = 6
-            btn.layer.shadowOpacity = 0.15
+            btn.layer.shadowOpacity = 0.14
             
             btn.addTarget(self, action: #selector(handleFloatingClearAllTapped(_:)), for: .touchUpInside)
             nav.view.addSubview(btn)
@@ -567,7 +667,7 @@ private extension ErrorLogViewController
         return result
     }
 
-    // MARK: - 🃏 BÓC TÁCH VÀ ÁP DỤNG CARD CSS CHO TỪNG DÒNG LỖI (RỘNG BẰNG BANNER + CĂN LỀ ĐẸP)
+    // MARK: - 🃏 BÓC TÁCH VÀ ÁP DỤNG CARD CSS CHO TỪNG DÒNG LỖI (RỘNG BẰNG BANNER + CHỮ ĐEN TUYỀN)
     func styleInnerCardOfErrorCell(_ cell: ErrorLogTableViewCell, at indexPath: IndexPath, totalRows: Int) {
         cell.backgroundColor = .clear
         cell.contentView.backgroundColor = .clear
@@ -623,6 +723,9 @@ private extension ErrorLogViewController
         }
         
         cardView.backgroundColor = ErrorLogCSSTheme.white
+        if #available(iOS 13.0, *) {
+            cardView.layer.cornerCurve = .continuous
+        }
         
         var corners: CACornerMask = []
         if totalRows == 1 {
@@ -635,12 +738,14 @@ private extension ErrorLogViewController
         
         cardView.layer.cornerRadius = corners.isEmpty ? 0 : ErrorLogCSSTheme.cornerRadius
         cardView.layer.maskedCorners = corners
+        cardView.layer.borderWidth = totalRows == 1 ? 1.1 : 0.6
+        cardView.layer.borderColor = ErrorLogCSSTheme.border.cgColor
         
         cell.layer.masksToBounds = false
         cell.layer.shadowColor = ErrorLogCSSTheme.blue.cgColor
-        cell.layer.shadowOffset = CGSize(width: 0, height: 4)
-        cell.layer.shadowRadius = 10
-        cell.layer.shadowOpacity = 0.07
+        cell.layer.shadowOffset = CGSize(width: 0, height: 6)
+        cell.layer.shadowRadius = 14
+        cell.layer.shadowOpacity = 0.08
         
         // 3. Đường kẻ phân cách tinh tế giữa các lỗi trong cùng một ngày (căn theo cardView)
         let sepTag = 8888
@@ -659,31 +764,34 @@ private extension ErrorLogViewController
             ])
         }
         
-        // 4. Làm đẹp và căn lề thoáng cho các chữ bên trong Cell
-        cell.errorFailureLabel.textColor = ErrorLogCSSTheme.dark
-        cell.errorFailureLabel.font = UIFont.systemFont(ofSize: 15.5, weight: .bold)
+        // 4. Làm đẹp và căn lề thoáng cho các chữ bên trong Cell (Chữ đen tuyền #000000)
+        cell.errorFailureLabel.textColor = ErrorLogCSSTheme.pureBlack
+        cell.errorFailureLabel.font = UIFont.systemFont(ofSize: 16, weight: .bold)
         
         cell.dateLabel.textColor = ErrorLogCSSTheme.blue
-        cell.dateLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .semibold)
+        cell.dateLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .bold)
         
         // Tạo hiệu ứng Badge cho Mã lỗi (Error Code)
         cell.errorCodeLabel.textColor = ErrorLogCSSTheme.purple
         cell.errorCodeLabel.font = UIFont.monospacedSystemFont(ofSize: 11.5, weight: .bold)
-        cell.errorCodeLabel.backgroundColor = ErrorLogCSSTheme.purple.withAlphaComponent(0.10)
-        cell.errorCodeLabel.layer.cornerRadius = 6
+        cell.errorCodeLabel.backgroundColor = ErrorLogCSSTheme.purple.withAlphaComponent(0.12)
+        cell.errorCodeLabel.layer.cornerRadius = 7
         cell.errorCodeLabel.layer.masksToBounds = true
         
-        // Căn lề chuẩn cho phần chữ mô tả lỗi để thẳng hàng với tiêu đề và cách đều lề khung
+        // Căn lề chuẩn cho phần chữ mô tả lỗi để thẳng hàng với tiêu đề và hiển thị đen tuyền rõ nét
         cell.errorDescriptionTextView.textContainer.lineFragmentPadding = 0
         cell.errorDescriptionTextView.textContainerInset = UIEdgeInsets(top: 4, left: 2, bottom: 4, right: 2)
-        cell.errorDescriptionTextView.textColor = ErrorLogCSSTheme.dark.withAlphaComponent(0.88)
-        cell.errorDescriptionTextView.font = UIFont.systemFont(ofSize: 13.5, weight: .regular)
+        cell.errorDescriptionTextView.textColor = ErrorLogCSSTheme.pureBlack
+        cell.errorDescriptionTextView.font = UIFont.systemFont(ofSize: 13.8, weight: .medium)
         cell.errorDescriptionTextView.moreButton.setTitle("Xem thêm", for: .normal)
         cell.errorDescriptionTextView.moreButton.setTitleColor(ErrorLogCSSTheme.blue, for: .normal)
         cell.errorDescriptionTextView.moreButton.tintColor = ErrorLogCSSTheme.blue
         
         // Bo góc chuẩn iOS cho Icon ứng dụng bị lỗi
-        cell.appIconImageView.layer.cornerRadius = 12
+        cell.appIconImageView.layer.cornerRadius = 13
+        if #available(iOS 13.0, *) {
+            cell.appIconImageView.layer.cornerCurve = .continuous
+        }
         cell.appIconImageView.layer.masksToBounds = true
         cell.appIconImageView.layer.borderColor = ErrorLogCSSTheme.border.cgColor
         cell.appIconImageView.layer.borderWidth = 1.0
@@ -900,7 +1008,7 @@ extension ErrorLogViewController
     }
 
     override func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
-        return 38.0
+        return 44.0
     }
 
     override func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
@@ -908,29 +1016,56 @@ extension ErrorLogViewController
         
         let container = UIView()
         container.backgroundColor = .clear
+
+        let iconBox = UIView()
+        iconBox.translatesAutoresizingMaskIntoConstraints = false
+        iconBox.backgroundColor = ErrorLogCSSTheme.blue.withAlphaComponent(0.14)
+        iconBox.layer.cornerRadius = 6.5
+        if #available(iOS 13.0, *) {
+            iconBox.layer.cornerCurve = .continuous
+        }
+
+        let iconView = UIImageView()
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        let iconConfig = UIImage.SymbolConfiguration(pointSize: 11.5, weight: .heavy)
+        iconView.image = UIImage(systemName: "calendar.badge.exclamationmark", withConfiguration: iconConfig)
+            ?? UIImage(systemName: "calendar", withConfiguration: iconConfig)
+        iconView.tintColor = ErrorLogCSSTheme.blue
+        iconBox.addSubview(iconView)
         
         let titleLabel = UILabel()
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.text = headerTitle.uppercased()
-        titleLabel.font = UIFont.systemFont(ofSize: 14, weight: .heavy)
+        if let roundedDesc = UIFont.systemFont(ofSize: 14, weight: .heavy).fontDescriptor.withDesign(.rounded) {
+            titleLabel.font = UIFont(descriptor: roundedDesc, size: 14)
+        } else {
+            titleLabel.font = UIFont.systemFont(ofSize: 14, weight: .heavy)
+        }
         titleLabel.textColor = ErrorLogCSSTheme.blue
         
-        let underline = UIView()
+        let underline = ErrorLogAccentUnderlineView()
         underline.translatesAutoresizingMaskIntoConstraints = false
-        underline.backgroundColor = ErrorLogCSSTheme.blue
-        underline.layer.cornerRadius = 1.5
         
+        container.addSubview(iconBox)
         container.addSubview(titleLabel)
         container.addSubview(underline)
         
         NSLayoutConstraint.activate([
-            titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: ErrorLogCSSTheme.cardHorizontalInset + 4),
-            titleLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor, constant: 2),
+            iconBox.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: ErrorLogCSSTheme.cardHorizontalInset + 4),
+            iconBox.centerYAnchor.constraint(equalTo: container.centerYAnchor, constant: 1),
+            iconBox.widthAnchor.constraint(equalToConstant: 22),
+            iconBox.heightAnchor.constraint(equalToConstant: 22),
+
+            iconView.centerXAnchor.constraint(equalTo: iconBox.centerXAnchor),
+            iconView.centerYAnchor.constraint(equalTo: iconBox.centerYAnchor),
+
+            titleLabel.leadingAnchor.constraint(equalTo: iconBox.trailingAnchor, constant: 7),
+            titleLabel.centerYAnchor.constraint(equalTo: iconBox.centerYAnchor),
             
-            underline.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            underline.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 2),
-            underline.widthAnchor.constraint(equalToConstant: 36),
-            underline.heightAnchor.constraint(equalToConstant: 3)
+            underline.leadingAnchor.constraint(equalTo: iconBox.leadingAnchor),
+            underline.topAnchor.constraint(equalTo: iconBox.bottomAnchor, constant: 4),
+            underline.widthAnchor.constraint(equalToConstant: 38),
+            underline.heightAnchor.constraint(equalToConstant: 3.5)
         ])
         
         return container
@@ -1076,7 +1211,3 @@ extension ErrorLogViewController
         }
     }
 }
-
-
-
-

@@ -28,19 +28,23 @@ private struct CSSTheme {
     static let border = UIColor(red: 233/255, green: 236/255, blue: 239/255, alpha: 1.0) // #e9ecef
     static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0) // #007bff
     static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0) // #6f42c1
+    static let indigo = UIColor(red: 88/255, green: 86/255, blue: 214/255, alpha: 1.0) // #5856d6
+    static let teal = UIColor(red: 23/255, green: 162/255, blue: 184/255, alpha: 1.0) // #17a2b8
+    static let orange = UIColor(red: 253/255, green: 126/255, blue: 20/255, alpha: 1.0) // #fd7e14
     static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0) // #28a745
-    static let magenta = UIColor(red: 255/255, green: 0/255, blue: 255/255, alpha: 1.0) // #ff00ff
+    static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0) // #dc3545
+    static let magenta = UIColor(red: 232/255, green: 30/255, blue: 99/255, alpha: 1.0) // #e91e63
     static let dark = UIColor(red: 52/255, green: 58/255, blue: 64/255, alpha: 1.0) // #343a40
 
     // Gradient Background (#f3e0ff -> #e0f7ff)
     static let bgGradientStart = UIColor(red: 243/255, green: 224/255, blue: 255/255, alpha: 1.0).cgColor
     static let bgGradientEnd = UIColor(red: 224/255, green: 247/255, blue: 255/255, alpha: 1.0).cgColor
 
-    // Hero Gradient (rgba(0,123,255,.9) -> rgba(111,66,193,.85))
-    static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.92).cgColor
-    static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.88).cgColor
+    // Hero Gradient (rgba(0,123,255,.94) -> rgba(111,66,193,.90))
+    static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.94).cgColor
+    static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.90).cgColor
 
-    static let cornerRadius: CGFloat = 15.0
+    static let cornerRadius: CGFloat = 16.0
 
     // SwiftUI Colors (Phục vụ bảng Máy chủ Anisette)
     static let suiPrimary = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255)
@@ -88,7 +92,7 @@ private final class CSSGradientBackgroundView: UIView {
     }
 }
 
-// MARK: - 🌐 BỘ QUẢN LÝ & GIAO DIỆN MÁY CHỦ ANISETTE (ĐƯỢC CHUYỂN TỪ NEWSVIEWCONTROLLER SANG)
+// MARK: - 🌐 BỘ QUẢN LÝ & GIAO DIỆN MÁY CHỦ ANISETTE
 private enum SettingsAnisetteDefaultsHelper {
     static var currentServerURL: String {
         let menuURL = UserDefaults.standard.menuAnisetteURL.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
@@ -304,8 +308,8 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                             Circle()
                                 .fill(vm.isAnisetteOK ? CSSTheme.suiGreen.opacity(0.15) : CSSTheme.suiRed.opacity(0.15))
                                 .frame(width: 48, height: 48)
-                            SwiftUI.Image(systemName: vm.isAnisetteOK ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .font(.system(size: 24, weight: .bold))
+                            SwiftUI.Image(systemName: vm.isAnisetteOK ? "checkmark.shield.fill" : "exclamationmark.triangle.fill")
+                                .font(.system(size: 23, weight: .bold))
                                 .foregroundColor(vm.isAnisetteOK ? CSSTheme.suiGreen : CSSTheme.suiRed)
                         }
                         VStack(alignment: .leading, spacing: 4) {
@@ -331,22 +335,28 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
 
                     SettingsSkySectionCard(
                         title: "CHẾ ĐỘ XÁC THỰC ANISETTE",
-                        icon: "switch.2",
+                        icon: "slider.horizontal.3",
                         color: CSSTheme.suiPrimary
                     ) {
                         Toggle(isOn: Binding(
                             get: { vm.useOnDeviceAnisette },
                             set: { vm.setUseOnDeviceAnisette($0) }
                         )) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                SwiftUI.Text("Use On-Device Anisette")
-                                    .font(.system(size: 15, weight: .bold))
-                                    .foregroundColor(CSSTheme.suiPureBlack)
-                                SwiftUI.Text(vm.useOnDeviceAnisette
-                                             ? "Đang BẬT (Khuyên tắt để ổn định hơn)"
-                                             : "(Nên Tắt Để Dễ Đăng Nhập)")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(vm.useOnDeviceAnisette ? CSSTheme.suiRed : CSSTheme.suiGreen)
+                            HStack(spacing: 10) {
+                                SwiftUI.Image(systemName: "iphone.gen3")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(CSSTheme.suiPrimary)
+                                    .frame(width: 28)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    SwiftUI.Text("Use On-Device Anisette")
+                                        .font(.system(size: 15, weight: .bold))
+                                        .foregroundColor(CSSTheme.suiPureBlack)
+                                    SwiftUI.Text(vm.useOnDeviceAnisette
+                                                 ? "Đang BẬT (Khuyên tắt để ổn định hơn)"
+                                                 : "(Nên Tắt Để Dễ Đăng Nhập)")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(vm.useOnDeviceAnisette ? CSSTheme.suiRed : CSSTheme.suiGreen)
+                                }
                             }
                         }
                         .tint(CSSTheme.suiPrimary)
@@ -362,15 +372,21 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                             get: { vm.isAnisetteAutoRotationEnabled },
                             set: { vm.setAnisetteAutoRotationEnabled($0) }
                         )) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                SwiftUI.Text("Enable Auto Rotation")
-                                    .font(.system(size: 15, weight: .bold))
-                                    .foregroundColor(CSSTheme.suiPureBlack)
-                                SwiftUI.Text(vm.isAnisetteAutoRotationEnabled
-                                             ? "(Tự Động Đổi Máy Chủ Khi Lỗi)"
-                                             : "Đang Tắt “Nên chọn SideStore (New)”")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(vm.isAnisetteAutoRotationEnabled ? CSSTheme.suiGreen : CSSTheme.suiRed)
+                            HStack(spacing: 10) {
+                                SwiftUI.Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(CSSTheme.suiSecondary)
+                                    .frame(width: 28)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    SwiftUI.Text("Enable Auto Rotation")
+                                        .font(.system(size: 15, weight: .bold))
+                                        .foregroundColor(CSSTheme.suiPureBlack)
+                                    SwiftUI.Text(vm.isAnisetteAutoRotationEnabled
+                                                 ? "(Tự Động Đổi Máy Chủ Khi Lỗi)"
+                                                 : "Đang Tắt “Nên chọn SideStore (New)”")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(vm.isAnisetteAutoRotationEnabled ? CSSTheme.suiGreen : CSSTheme.suiRed)
+                                }
                             }
                         }
                         .tint(CSSTheme.suiPrimary)
@@ -418,9 +434,9 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                     Task { await vm.reloadCurrentSelection(customPrefix: customServerPrefix) }
                                 } label: {
                                     HStack(spacing: 12) {
-                                        SwiftUI.Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                                        SwiftUI.Image(systemName: isSelected ? "checkmark.circle.fill" : "globe")
                                             .font(.system(size: 20, weight: .semibold))
-                                            .foregroundColor(isSelected ? CSSTheme.suiPrimary : CSSTheme.suiPureBlack)
+                                            .foregroundColor(isSelected ? CSSTheme.suiPrimary : CSSTheme.suiSecondary.opacity(0.75))
 
                                         VStack(alignment: .leading, spacing: 3) {
                                             HStack(spacing: 6) {
@@ -440,7 +456,7 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                             }
                                             SwiftUI.Text(server.address)
                                                 .font(.system(size: 12.5, weight: .medium))
-                                                .foregroundColor(CSSTheme.suiPureBlack)
+                                                .foregroundColor(CSSTheme.suiPureBlack.opacity(0.75))
                                                 .lineLimit(1)
                                         }
                                         Spacer()
@@ -474,9 +490,14 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                         Divider().padding(.vertical, 2)
 
                         VStack(alignment: .leading, spacing: 8) {
-                            SwiftUI.Text("Hoặc nhập URL máy chủ tùy chỉnh:")
-                                .font(.system(size: 13.5, weight: .bold))
-                                .foregroundColor(CSSTheme.suiPureBlack)
+                            HStack(spacing: 6) {
+                                SwiftUI.Image(systemName: "link.badge.plus")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundColor(CSSTheme.suiPrimary)
+                                SwiftUI.Text("Hoặc nhập URL máy chủ tùy chỉnh:")
+                                    .font(.system(size: 13.5, weight: .bold))
+                                    .foregroundColor(CSSTheme.suiPureBlack)
+                            }
 
                             HStack(spacing: 8) {
                                 TextField(AppConstants.Anisette.Servers.defaultServerURL, text: $customServerInput)
@@ -500,14 +521,18 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                     Task { await vm.reloadCurrentSelection(customPrefix: customServerPrefix) }
                                     customServerInput = ""
                                 } label: {
-                                    SwiftUI.Text("Lưu")
-                                        .font(.system(size: 14.5, weight: .bold))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 10)
-                                        .background(CSSTheme.suiPrimary)
-                                        .cornerRadius(10)
-                                        .shadow(color: CSSTheme.suiPrimary.opacity(0.35), radius: 5, x: 0, y: 3)
+                                    HStack(spacing: 4) {
+                                        SwiftUI.Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 13.5, weight: .bold))
+                                        SwiftUI.Text("Lưu")
+                                            .font(.system(size: 14.5, weight: .bold))
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(CSSTheme.suiPrimary)
+                                    .cornerRadius(10)
+                                    .shadow(color: CSSTheme.suiPrimary.opacity(0.35), radius: 5, x: 0, y: 3)
                                 }
                                 .buttonStyle(SettingsBounceButtonStyle())
                             }
@@ -521,9 +546,14 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    SwiftUI.Text("Máy Chủ Anisette")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundColor(CSSTheme.suiPrimary)
+                    HStack(spacing: 6) {
+                        SwiftUI.Image(systemName: "server.rack")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(CSSTheme.suiPrimary)
+                        SwiftUI.Text("Máy Chủ Anisette")
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundColor(CSSTheme.suiPrimary)
+                    }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     SwiftUI.Button("Xong") {
@@ -641,8 +671,6 @@ extension SettingsViewController
     }
 
     // MARK: - 📦 GỘP TẤT CẢ CÁC MỤC CÀI ĐẶT THÀNH 1 MỤC DUY NHẤT CHUẨN GỐC
-    // Đã xoá Beta Updates, Beta Track và Developer Options theo yêu cầu.
-    // Đưa Máy chủ Anisette lên vị trí đầu tiên (trên Lịch sử làm mới ứng dụng).
     fileprivate enum UnifiedSettingsItem: CaseIterable
     {
         case anisetteServers
@@ -663,6 +691,26 @@ extension SettingsViewController
                 .errorLog,
                 .clearCache
             ]
+        }
+
+        // Cấu hình Icon SF Symbols & Màu sắc riêng biệt cho từng mục
+        var iconSpec: (symbol: String, color: UIColor, showChevron: Bool) {
+            switch self {
+            case .anisetteServers:
+                return ("server.rack", CSSTheme.blue, true)
+            case .refreshAttempts:
+                return ("clock.arrow.circlepath", CSSTheme.green, true)
+            case .refreshSideJITServer:
+                return ("bolt.horizontal.circle.fill", CSSTheme.orange, true)
+            case .certificateManagement:
+                return ("checkmark.shield.fill", CSSTheme.purple, true)
+            case .userCustomizations:
+                return ("paintbrush.pointed.fill", CSSTheme.indigo, true)
+            case .errorLog:
+                return ("doc.text.magnifyingglass", CSSTheme.teal, true)
+            case .clearCache:
+                return ("trash.fill", CSSTheme.magenta, false)
+            }
         }
 
         // Ánh xạ chính xác về IndexPath gốc trên Storyboard để giữ nguyên UI và Segue
@@ -801,7 +849,7 @@ final class SettingsViewController: UITableViewController
             self.tableView.sectionHeaderTopPadding = 0
         }
         
-        // ✨ KÍCH HOẠT GIAO DIỆN WEB CSS & VIỆT HÓA ✨
+        // ✨ KÍCH HOẠT GIAO DIỆN WEB CSS, ICON & VIỆT HÓA ✨
         self.applySmartWebCSSTheme()
         
         self.update()
@@ -818,7 +866,6 @@ final class SettingsViewController: UITableViewController
     override func viewWillAppear(_ animated: Bool)
     {
         super.viewWillAppear(animated)
-        // Đảm bảo ẩn thanh màu trắng và chữ Cài đặt ở trên cùng để tràn viền toàn màn hình
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
         self.forceDisableRemovedSettings()
         self.update()
@@ -863,14 +910,13 @@ final class SettingsViewController: UITableViewController
 // MARK: - 🧭 QUẢN LÝ ẨN THANH ĐIỀU HƯỚNG & NÚT QUAY LẠI NHỎ CỐ ĐỊNH Ở MỤC CON
 extension SettingsViewController: UINavigationControllerDelegate {
     func navigationController(_ navigationController: UINavigationController, willShow viewController: UIViewController, animated: Bool) {
-        // Luôn ẩn thanh điều hướng và tiêu đề ở cả trang chính lẫn mọi mục con
         navigationController.setNavigationBarHidden(true, animated: false)
         viewController.title = nil
         viewController.navigationItem.title = nil
         #if !os(tvOS)
         viewController.navigationItem.largeTitleDisplayMode = .never
         #endif
-        
+
         let isRoot = (viewController === navigationController.viewControllers.first)
         updateFloatingBackButton(in: navigationController, show: !isRoot)
     }
@@ -885,7 +931,6 @@ extension SettingsViewController: UINavigationControllerDelegate {
             btn.tintColor = CSSTheme.blue
             btn.backgroundColor = CSSTheme.white.withAlphaComponent(0.92)
             
-            // Nút tròn nhỏ 34x34 cố định
             btn.layer.cornerRadius = 17
             btn.layer.borderWidth = 1.0
             btn.layer.borderColor = CSSTheme.border.cgColor
@@ -921,7 +966,7 @@ extension SettingsViewController: UINavigationControllerDelegate {
     }
 }
 
-// MARK: - ✨ HỆ THỐNG RENDER CSS THÔNG MINH & VIỆT HÓA TOÀN DIỆN
+// MARK: - ✨ HỆ THỐNG RENDER CSS, ICON BADGE & VIỆT HÓA TOÀN DIỆN
 private extension SettingsViewController {
 
     private func applySmartWebCSSTheme() {
@@ -932,7 +977,7 @@ private extension SettingsViewController {
         self.tableView.backgroundColor = .clear
         self.tableView.separatorStyle = .none
         
-        // 2. Tạo khối .hero Banner nằm sát phía trên
+        // 2. Tạo khối .hero Banner kèm Icon SideStore nổi bật
         setupCSSHeroBanner()
         
         // 3. Tạo Footer hiển thị Lời cảm ơn gọn gàng + Phiên bản
@@ -965,48 +1010,98 @@ private extension SettingsViewController {
         }
     }
 
-    // Tạo khối .hero nằm sát phía trên và đã Việt hóa
+    // Lấy App Icon chính thức của SideStore từ Bundle (hoặc SF Symbol dự phòng)
+    private func loadSideStoreAppIcon() -> UIImage? {
+        if let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+           let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+           let files = primary["CFBundleIconFiles"] as? [String],
+           let lastIcon = files.last,
+           let image = UIImage(named: lastIcon) {
+            return image
+        }
+        if let image = UIImage(named: "AppIcon60x60") ?? UIImage(named: "AppIcon") {
+            return image
+        }
+        return nil
+    }
+
+    // Tạo khối .hero Banner sang trọng có gắn Icon SideStore & Huy hiệu xác thực
     private func setupCSSHeroBanner() {
-        let headerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 104))
+        let headerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 112))
         headerContainer.backgroundColor = .clear
         
         let heroCard = UIView()
         heroCard.translatesAutoresizingMaskIntoConstraints = false
-        heroCard.layer.cornerRadius = CSSTheme.cornerRadius
+        heroCard.layer.cornerRadius = CSSTheme.cornerRadius + 2
         heroCard.layer.masksToBounds = false
         heroCard.layer.shadowColor = CSSTheme.blue.cgColor
-        heroCard.layer.shadowOffset = CGSize(width: 0, height: 6)
+        heroCard.layer.shadowOffset = CGSize(width: 0, height: 7)
         heroCard.layer.shadowRadius = 16
-        heroCard.layer.shadowOpacity = 0.25
+        heroCard.layer.shadowOpacity = 0.28
         
         let gradient = CAGradientLayer()
         gradient.colors = [CSSTheme.heroStart, CSSTheme.heroEnd]
         gradient.startPoint = CGPoint(x: 0, y: 0)
         gradient.endPoint = CGPoint(x: 1, y: 1)
-        gradient.cornerRadius = CSSTheme.cornerRadius
+        gradient.cornerRadius = CSSTheme.cornerRadius + 2
+        gradient.borderWidth = 1.0
+        gradient.borderColor = UIColor.white.withAlphaComponent(0.28).cgColor
         heroCard.layer.insertSublayer(gradient, at: 0)
         self.heroGradientLayer = gradient
+        
+        // Khung chứa Icon SideStore (Glassmorphism)
+        let iconBadge = UIView()
+        iconBadge.translatesAutoresizingMaskIntoConstraints = false
+        iconBadge.backgroundColor = UIColor.white.withAlphaComponent(0.20)
+        iconBadge.layer.cornerRadius = 11
+        iconBadge.layer.borderWidth = 1.0
+        iconBadge.layer.borderColor = UIColor.white.withAlphaComponent(0.45).cgColor
+        
+        let iconImageView = UIImageView()
+        iconImageView.translatesAutoresizingMaskIntoConstraints = false
+        iconImageView.contentMode = .scaleAspectFit
+        if let appIcon = loadSideStoreAppIcon() {
+            iconImageView.image = appIcon
+            iconImageView.layer.cornerRadius = 8
+            iconImageView.clipsToBounds = true
+        } else {
+            let symConfig = UIImage.SymbolConfiguration(pointSize: 18, weight: .bold)
+            iconImageView.image = UIImage(systemName: "cube.box.fill", withConfiguration: symConfig)
+            iconImageView.tintColor = .white
+        }
+        iconBadge.addSubview(iconImageView)
         
         let titleLabel = UILabel()
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.text = "SideStore"
         titleLabel.font = UIFont.systemFont(ofSize: 25, weight: .heavy)
         titleLabel.textColor = CSSTheme.white
-        titleLabel.textAlignment = .center
         titleLabel.layer.shadowColor = UIColor.black.cgColor
-        titleLabel.layer.shadowOffset = CGSize(width: 1, height: 2)
+        titleLabel.layer.shadowOffset = CGSize(width: 0, height: 2)
         titleLabel.layer.shadowRadius = 4
-        titleLabel.layer.shadowOpacity = 0.35
+        titleLabel.layer.shadowOpacity = 0.28
+
+        let verifiedIcon = UIImageView()
+        verifiedIcon.translatesAutoresizingMaskIntoConstraints = false
+        let verifiedConfig = UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)
+        verifiedIcon.image = UIImage(systemName: "checkmark.seal.fill", withConfiguration: verifiedConfig)
+        verifiedIcon.tintColor = UIColor(red: 140/255, green: 255/255, blue: 195/255, alpha: 1.0)
+        
+        let titleStack = UIStackView(arrangedSubviews: [iconBadge, titleLabel, verifiedIcon])
+        titleStack.translatesAutoresizingMaskIntoConstraints = false
+        titleStack.axis = .horizontal
+        titleStack.alignment = .center
+        titleStack.spacing = 9
         
         let subLabel = UILabel()
         subLabel.translatesAutoresizingMaskIntoConstraints = false
-        subLabel.text = "Tùy chỉnh & quản lý trải nghiệm cài đặt ứng dụng của bạn"
-        subLabel.font = UIFont.systemFont(ofSize: 13, weight: .medium)
+        subLabel.text = "✨ Tùy chỉnh & quản lý trải nghiệm cài đặt ứng dụng của bạn"
+        subLabel.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
         subLabel.textColor = CSSTheme.white.withAlphaComponent(0.95)
         subLabel.textAlignment = .center
         subLabel.numberOfLines = 2
         
-        heroCard.addSubview(titleLabel)
+        heroCard.addSubview(titleStack)
         heroCard.addSubview(subLabel)
         headerContainer.addSubview(heroCard)
         
@@ -1014,14 +1109,22 @@ private extension SettingsViewController {
             heroCard.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor, constant: 16),
             heroCard.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -16),
             heroCard.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 4),
-            heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -6),
+            heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -8),
             
-            titleLabel.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
-            titleLabel.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 14),
+            iconBadge.widthAnchor.constraint(equalToConstant: 34),
+            iconBadge.heightAnchor.constraint(equalToConstant: 34),
             
-            subLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
-            subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
-            subLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12)
+            iconImageView.centerXAnchor.constraint(equalTo: iconBadge.centerXAnchor),
+            iconImageView.centerYAnchor.constraint(equalTo: iconBadge.centerYAnchor),
+            iconImageView.widthAnchor.constraint(equalToConstant: 26),
+            iconImageView.heightAnchor.constraint(equalToConstant: 26),
+            
+            titleStack.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
+            titleStack.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 14),
+            
+            subLabel.topAnchor.constraint(equalTo: titleStack.bottomAnchor, constant: 6),
+            subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 14),
+            subLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -14)
         ])
         
         heroCard.alpha = 0
@@ -1034,43 +1137,48 @@ private extension SettingsViewController {
         self.tableView.tableHeaderView = headerContainer
     }
 
-    private func createCompactCreditChip(title: String, color: UIColor, action: Selector) -> UIButton {
+    private func createCompactCreditChip(title: String, iconName: String, color: UIColor, action: Selector) -> UIButton {
         let btn = UIButton(type: .system)
         btn.translatesAutoresizingMaskIntoConstraints = false
-        btn.setTitle("  \(title)  ", for: .normal)
+        
+        let config = UIImage.SymbolConfiguration(pointSize: 10.5, weight: .bold)
+        let icon = UIImage(systemName: iconName, withConfiguration: config)
+        btn.setImage(icon, for: .normal)
+        btn.setTitle(" \(title)", for: .normal)
+        btn.tintColor = color
         btn.setTitleColor(color, for: .normal)
         btn.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
         btn.backgroundColor = color.withAlphaComponent(0.10)
-        btn.layer.cornerRadius = 11
+        btn.contentEdgeInsets = UIEdgeInsets(top: 0, left: 10, bottom: 0, right: 10)
+        btn.layer.cornerRadius = 12
         btn.layer.borderWidth = 1.0
         btn.layer.borderColor = color.withAlphaComponent(0.28).cgColor
         btn.addTarget(self, action: action, for: .touchUpInside)
         NSLayoutConstraint.activate([
-            btn.heightAnchor.constraint(equalToConstant: 24)
+            btn.heightAnchor.constraint(equalToConstant: 25)
         ])
         return btn
     }
 
-    // Chân trang gọn đẹp: Thẻ Lời cảm ơn rút gọn + Phiên bản ứng dụng
+    // Chân trang gọn đẹp: Thẻ Lời cảm ơn rút gọn kèm Icon + Phiên bản ứng dụng
     private func setupVersionTableFooterView() {
-        let footerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 190))
+        let footerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 196))
         footerContainer.backgroundColor = .clear
 
-        // Khung Card Lời cảm ơn nhỏ gọn
         let thanksCard = UIView()
         thanksCard.translatesAutoresizingMaskIntoConstraints = false
-        thanksCard.backgroundColor = CSSTheme.white.withAlphaComponent(0.92)
+        thanksCard.backgroundColor = CSSTheme.white.withAlphaComponent(0.94)
         thanksCard.layer.cornerRadius = CSSTheme.cornerRadius
         thanksCard.layer.borderWidth = 1.0
         thanksCard.layer.borderColor = CSSTheme.border.cgColor
         thanksCard.layer.shadowColor = CSSTheme.blue.cgColor
         thanksCard.layer.shadowOffset = CGSize(width: 0, height: 4)
         thanksCard.layer.shadowRadius = 10
-        thanksCard.layer.shadowOpacity = 0.06
+        thanksCard.layer.shadowOpacity = 0.07
 
         let titleLabel = UILabel()
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.text = "❤️ LỜI CẢM ƠN"
+        titleLabel.text = "❤️ LỜI CẢM ƠN & TRI ÂN"
         titleLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .heavy)
         titleLabel.textColor = CSSTheme.blue
         titleLabel.textAlignment = .center
@@ -1098,9 +1206,9 @@ private extension SettingsViewController {
             ]
         )
 
-        let btnSideStore = createCompactCreditChip(title: "@sidestoreio", color: CSSTheme.blue, action: #selector(openSideStoreTwitterChip))
-        let btnLitRitt = createCompactCreditChip(title: "@lit_ritt", color: CSSTheme.purple, action: #selector(openLitRittTwitterChip))
-        let btnGitHub = createCompactCreditChip(title: "GitHub", color: CSSTheme.dark, action: #selector(followAltStoreGitHub))
+        let btnSideStore = createCompactCreditChip(title: "@sidestoreio", iconName: "sparkles", color: CSSTheme.blue, action: #selector(openSideStoreTwitterChip))
+        let btnLitRitt = createCompactCreditChip(title: "@lit_ritt", iconName: "paintbrush.fill", color: CSSTheme.purple, action: #selector(openLitRittTwitterChip))
+        let btnGitHub = createCompactCreditChip(title: "GitHub", iconName: "chevron.left.forwardslash.chevron.right", color: CSSTheme.dark, action: #selector(followAltStoreGitHub))
 
         let chipStack = UIStackView(arrangedSubviews: [btnSideStore, btnLitRitt, btnGitHub])
         chipStack.translatesAutoresizingMaskIntoConstraints = false
@@ -1130,7 +1238,7 @@ private extension SettingsViewController {
             thanksCard.leadingAnchor.constraint(equalTo: footerContainer.leadingAnchor, constant: 16),
             thanksCard.trailingAnchor.constraint(equalTo: footerContainer.trailingAnchor, constant: -16),
 
-            titleLabel.topAnchor.constraint(equalTo: thanksCard.topAnchor, constant: 10),
+            titleLabel.topAnchor.constraint(equalTo: thanksCard.topAnchor, constant: 11),
             titleLabel.leadingAnchor.constraint(equalTo: thanksCard.leadingAnchor, constant: 12),
             titleLabel.trailingAnchor.constraint(equalTo: thanksCard.trailingAnchor, constant: -12),
 
@@ -1138,9 +1246,9 @@ private extension SettingsViewController {
             bodyLabel.leadingAnchor.constraint(equalTo: thanksCard.leadingAnchor, constant: 12),
             bodyLabel.trailingAnchor.constraint(equalTo: thanksCard.trailingAnchor, constant: -12),
 
-            chipStack.topAnchor.constraint(equalTo: bodyLabel.bottomAnchor, constant: 8),
+            chipStack.topAnchor.constraint(equalTo: bodyLabel.bottomAnchor, constant: 9),
             chipStack.centerXAnchor.constraint(equalTo: thanksCard.centerXAnchor),
-            chipStack.bottomAnchor.constraint(equalTo: thanksCard.bottomAnchor, constant: -10),
+            chipStack.bottomAnchor.constraint(equalTo: thanksCard.bottomAnchor, constant: -11),
 
             vLabel.topAnchor.constraint(equalTo: thanksCard.bottomAnchor, constant: 12),
             vLabel.leadingAnchor.constraint(equalTo: footerContainer.leadingAnchor, constant: 16),
@@ -1158,9 +1266,113 @@ private extension SettingsViewController {
         self.openTwitter(username: "lit_ritt")
     }
 
-    // Bóc tách lớp nền của InsetGroupTableViewCell để ép nhận diện CSS Card
+    // Xác định cấu hình Icon (SF Symbol + Màu sắc + Chevron) cho từng dòng trong bảng
+    private func iconSpecForRow(section: Section, row: Int) -> (symbol: String, color: UIColor, showChevron: Bool)? {
+        switch section {
+        case .signIn:
+            return ("applelogo", CSSTheme.blue, true)
+        case .account:
+            switch row {
+            case 0: return ("person.fill", CSSTheme.blue, false)
+            case 1: return ("envelope.fill", CSSTheme.purple, false)
+            case 2: return ("checkmark.seal.fill", CSSTheme.green, false)
+            default: return nil
+            }
+        case .advancedSettings:
+            let items = UnifiedSettingsItem.activeItems
+            guard items.indices.contains(row) else { return nil }
+            return items[row].iconSpec
+        default:
+            return nil
+        }
+    }
+
+    // Gắn huy hiệu Icon vuông bo góc chuẩn iOS Settings + Đẩy lề chữ mượt mà
+    private func attachModernIconBadge(to cell: UITableViewCell, section: Section, row: Int) {
+        let badgeTag = 8889
+        let chevronTag = 8890
+        cell.contentView.viewWithTag(badgeTag)?.removeFromSuperview()
+        cell.contentView.viewWithTag(chevronTag)?.removeFromSuperview()
+
+        guard let spec = iconSpecForRow(section: section, row: row) else { return }
+
+        // 1. Tạo khung vuông bo góc 30x30 chứa SF Symbol
+        let badgeView = UIView()
+        badgeView.tag = badgeTag
+        badgeView.translatesAutoresizingMaskIntoConstraints = false
+        badgeView.backgroundColor = spec.color.withAlphaComponent(0.13)
+        badgeView.layer.cornerRadius = 8.5
+        badgeView.layer.borderWidth = 1.0
+        badgeView.layer.borderColor = spec.color.withAlphaComponent(0.26).cgColor
+
+        let iconImageView = UIImageView()
+        iconImageView.translatesAutoresizingMaskIntoConstraints = false
+        iconImageView.contentMode = .scaleAspectFit
+        iconImageView.tintColor = spec.color
+        let symConfig = UIImage.SymbolConfiguration(pointSize: 14.5, weight: .bold)
+        iconImageView.image = UIImage(systemName: spec.symbol, withConfiguration: symConfig)
+            ?? UIImage(systemName: "gearshape.fill", withConfiguration: symConfig)
+
+        badgeView.addSubview(iconImageView)
+        cell.contentView.addSubview(badgeView)
+
+        NSLayoutConstraint.activate([
+            badgeView.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 14),
+            badgeView.centerYAnchor.constraint(equalTo: cell.contentView.centerYAnchor),
+            badgeView.widthAnchor.constraint(equalToConstant: 30),
+            badgeView.heightAnchor.constraint(equalToConstant: 30),
+
+            iconImageView.centerXAnchor.constraint(equalTo: badgeView.centerXAnchor),
+            iconImageView.centerYAnchor.constraint(equalTo: badgeView.centerYAnchor)
+        ])
+
+        // 2. Tạo mũi tên điều hướng bên phải (nếu dòng mở ra màn hình con)
+        if spec.showChevron {
+            cell.accessoryType = .none
+            let chevronView = UIImageView()
+            chevronView.tag = chevronTag
+            chevronView.translatesAutoresizingMaskIntoConstraints = false
+            let chevConfig = UIImage.SymbolConfiguration(pointSize: 12.5, weight: .bold)
+            chevronView.image = UIImage(systemName: "chevron.right", withConfiguration: chevConfig)
+            chevronView.tintColor = spec.color.withAlphaComponent(0.55)
+            cell.contentView.addSubview(chevronView)
+
+            NSLayoutConstraint.activate([
+                chevronView.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -16),
+                chevronView.centerYAnchor.constraint(equalTo: cell.contentView.centerYAnchor)
+            ])
+        }
+
+        // 3. Tự động dời lề trái của Label chính để không đè lên Icon 30x30
+        shiftLeadingLabelConstraintForIcon(in: cell.contentView)
+    }
+
+    private func shiftLeadingLabelConstraintForIcon(in contentView: UIView) {
+        let minIconPadding: CGFloat = 54.0
+
+        for constraint in contentView.constraints {
+            if let label = constraint.firstItem as? UILabel,
+               label !== self.accountNameLabel,
+               label !== self.accountEmailLabel,
+               label !== self.accountTypeLabel,
+               (constraint.firstAttribute == .leading || constraint.firstAttribute == .left),
+               (constraint.secondItem === contentView || constraint.secondItem === contentView.layoutMarginsGuide),
+               constraint.constant >= 0 && constraint.constant < 42 {
+                constraint.constant = (constraint.secondItem === contentView.layoutMarginsGuide) ? 38 : minIconPadding
+            } else if let label = constraint.secondItem as? UILabel,
+                      label !== self.accountNameLabel,
+                      label !== self.accountEmailLabel,
+                      label !== self.accountTypeLabel,
+                      (constraint.secondAttribute == .leading || constraint.secondAttribute == .left),
+                      (constraint.firstItem === contentView || constraint.firstItem === contentView.layoutMarginsGuide),
+                      constraint.constant <= 0 && constraint.constant > -42 {
+                constraint.constant = (constraint.firstItem === contentView.layoutMarginsGuide) ? -38 : -minIconPadding
+            }
+        }
+    }
+
+    // Bóc tách lớp nền của InsetGroupTableViewCell để ép nhận diện CSS Card + Icon
     private func styleInnerCardOfCell(_ cell: UITableViewCell, at indexPath: IndexPath, totalRows: Int) {
-        // Khóa hiệu ứng tô xám mặc định của UITableViewCell để không bị kẹt màu khi mở/đóng Sheet
         cell.selectionStyle = .none
         cell.selectedBackgroundView = UIView()
         cell.selectedBackgroundView?.backgroundColor = .clear
@@ -1192,6 +1404,12 @@ private extension SettingsViewController {
         cell.layer.shadowRadius = 10
         cell.layer.shadowOpacity = 0.07
         
+        let section = Section.allCases[indexPath.section]
+
+        // Gắn Icon SF Symbols chuẩn đẹp cho dòng hiện tại
+        self.attachModernIconBadge(to: cell, section: section, row: indexPath.row)
+        
+        // Đường kẻ phân cách tinh tế bắt đầu từ sau Icon (lề trái 54pt)
         let sepTag = 8888
         cell.contentView.viewWithTag(sepTag)?.removeFromSuperview()
         if indexPath.row < totalRows - 1 {
@@ -1201,15 +1419,15 @@ private extension SettingsViewController {
             sep.translatesAutoresizingMaskIntoConstraints = false
             cell.contentView.addSubview(sep)
             NSLayoutConstraint.activate([
-                sep.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 20),
-                sep.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -20),
+                sep.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor, constant: 54),
+                sep.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor, constant: -16),
                 sep.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor),
                 sep.heightAnchor.constraint(equalToConstant: 1.0)
             ])
         }
         
         // Việt hóa và làm đẹp toàn bộ chữ bên trong Cell
-        translateAndStyleLabelsInside(view: cell.contentView, section: Section.allCases[indexPath.section], row: indexPath.row)
+        translateAndStyleLabelsInside(view: cell.contentView, section: section, row: indexPath.row)
     }
 
     // Khôi phục ngay lập tức nền trắng #FFFFFF cho tất cả các Cell đang hiển thị
@@ -1283,20 +1501,21 @@ private extension SettingsViewController {
                         label.text = translateStaticText(typeText)
                     }
                     label.textColor = (label == self.accountNameLabel) ? CSSTheme.blue : CSSTheme.purple
-                    label.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
+                    label.font = UIFont.systemFont(ofSize: 14.5, weight: .bold)
                 } else if section == .signIn {
                     label.textColor = CSSTheme.blue
-                    label.font = UIFont.systemFont(ofSize: 17, weight: .bold)
+                    label.font = UIFont.systemFont(ofSize: 16, weight: .bold)
+                    label.textAlignment = .left
                 } else if isClearCacheRow {
                     label.textColor = CSSTheme.magenta
-                    label.font = UIFont.systemFont(ofSize: 16, weight: .bold)
+                    label.font = UIFont.systemFont(ofSize: 15.5, weight: .bold)
+                    label.textAlignment = .left
                 } else if label.textColor == .systemRed {
                     label.textColor = CSSTheme.magenta
                 } else {
-                    label.textColor = .black
-                    if label.font.pointSize >= 16 {
-                        label.font = UIFont.systemFont(ofSize: 16, weight: .medium)
-                    }
+                    label.textColor = CSSTheme.dark
+                    label.font = UIFont.systemFont(ofSize: 15.5, weight: .semibold)
+                    label.textAlignment = .left
                 }
             }
             translateAndStyleLabelsInside(view: subview, section: section, row: row)
@@ -1311,12 +1530,10 @@ private extension SettingsViewController {
             self.tableView.beginUpdates()
             self.tableView.endUpdates()
             
-            // Cập nhật tiêu đề nút Tài Khoản ngay lập tức
             if let headerView = self.tableView.headerView(forSection: Section.account.rawValue) as? SettingsHeaderFooterView {
                 self.prepare(headerView, for: .account, isHeader: true)
             }
             
-            // Ẩn/hiện mượt các dòng tài khoản
             for row in 0..<3 {
                 if let cell = self.tableView.cellForRow(at: IndexPath(row: row, section: Section.account.rawValue)) {
                     cell.alpha = self.isAccountDetailsExpanded ? 1.0 : 0.0
@@ -1341,7 +1558,7 @@ private extension SettingsViewController
         let fullString = NSMutableAttributedString()
         
         let appVersionAttr = NSAttributedString(
-            string: appVersion,
+            string: "📦 " + appVersion,
             attributes: [
                 .font: UIFont.systemFont(ofSize: 13.5, weight: .bold),
                 .foregroundColor: CSSTheme.blue,
@@ -1429,7 +1646,6 @@ private extension SettingsViewController
             self.tableView.reloadData()
         }
         
-        // Đảm bảo Làm mới ứng dụng, Beta và Developer luôn tắt cứng
         self.forceDisableRemovedSettings()
         
         self.disableResponseCachingSwitch?.isOn = UserDefaults.standard.responseCachingDisabled
@@ -1483,6 +1699,23 @@ private extension SettingsViewController
         }
     }
 
+    // Tạo tiêu đề Section có gắn SF Symbol phía trước đẹp mắt
+    private func setSectionHeaderTitle(_ label: UILabel, iconName: String, title: String) {
+        let attachment = NSTextAttachment()
+        let config = UIImage.SymbolConfiguration(pointSize: 13.5, weight: .heavy)
+        attachment.image = UIImage(systemName: iconName, withConfiguration: config)?.withTintColor(CSSTheme.blue, renderingMode: .alwaysOriginal)
+        
+        let attr = NSMutableAttributedString(attachment: attachment)
+        attr.append(NSAttributedString(
+            string: "  " + title,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 14.5, weight: .heavy),
+                .foregroundColor: CSSTheme.blue
+            ]
+        ))
+        label.attributedText = attr
+    }
+
     private func prepare(_ settingsHeaderFooterView: SettingsHeaderFooterView, for section: Section, isHeader: Bool)
     {
         settingsHeaderFooterView.primaryLabel.isHidden = !isHeader
@@ -1490,15 +1723,13 @@ private extension SettingsViewController
         settingsHeaderFooterView.button.isHidden = true
         
         settingsHeaderFooterView.primaryLabel.textColor = CSSTheme.blue
-        settingsHeaderFooterView.primaryLabel.font = UIFont.systemFont(ofSize: 15, weight: .heavy)
+        settingsHeaderFooterView.primaryLabel.font = UIFont.systemFont(ofSize: 14.5, weight: .heavy)
         settingsHeaderFooterView.secondaryLabel.textColor = CSSTheme.dark.withAlphaComponent(0.78)
         settingsHeaderFooterView.secondaryLabel.font = UIFont.systemFont(ofSize: 13, weight: .regular)
         
-        // Xóa nút Tài Khoản cũ nếu được tái sử dụng cho section khác
         let toggleAccountTag = 9992
         settingsHeaderFooterView.contentView.viewWithTag(toggleAccountTag)?.removeFromSuperview()
         
-        // Vẽ thanh gạch chân màu xanh (.features h2::after) dưới mỗi tiêu đề
         let underlineTag = 9991
         settingsHeaderFooterView.contentView.viewWithTag(underlineTag)?.removeFromSuperview()
         if isHeader {
@@ -1522,22 +1753,27 @@ private extension SettingsViewController
         {
         case .signIn:
             if isHeader {
-                settingsHeaderFooterView.primaryLabel.text = "TÀI KHOẢN"
+                setSectionHeaderTitle(settingsHeaderFooterView.primaryLabel, iconName: "person.crop.circle.fill", title: "TÀI KHOẢN APPLE ID")
             } else {
                 settingsHeaderFooterView.secondaryLabel.text = "Đăng nhập bằng ID Apple của bạn để tải xuống và làm mới ứng dụng từ SideStore."
             }
             
         case .account:
-            settingsHeaderFooterView.primaryLabel.text = "TÀI KHOẢN"
+            setSectionHeaderTitle(settingsHeaderFooterView.primaryLabel, iconName: "person.text.rectangle.fill", title: "TÀI KHOẢN")
             
-            // 1. Nút "Tài Khoản" nhỏ gọn (vừa khít chiều cao chữ) để bấm Ẩn/Hiện thông tin nhạy cảm
+            // 1. Nút "Tài Khoản" nhỏ gọn có Icon con mắt để bấm Ẩn/Hiện thông tin nhạy cảm
             let toggleBtn = UIButton(type: .system)
             toggleBtn.tag = toggleAccountTag
             toggleBtn.translatesAutoresizingMaskIntoConstraints = false
-            let toggleTitle = self.isAccountDetailsExpanded ? "  Ẩn Tài Khoản ▲  " : "  Tài Khoản ▼  "
+            let eyeSymbol = self.isAccountDetailsExpanded ? "eye.slash.fill" : "eye.fill"
+            let eyeConfig = UIImage.SymbolConfiguration(pointSize: 10.5, weight: .bold)
+            toggleBtn.setImage(UIImage(systemName: eyeSymbol, withConfiguration: eyeConfig), for: .normal)
+            let toggleTitle = self.isAccountDetailsExpanded ? " Ẩn ▲" : " Hiện ▼"
             toggleBtn.setTitle(toggleTitle, for: .normal)
+            toggleBtn.tintColor = CSSTheme.white
             toggleBtn.setTitleColor(CSSTheme.white, for: .normal)
-            toggleBtn.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .bold)
+            toggleBtn.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
+            toggleBtn.contentEdgeInsets = UIEdgeInsets(top: 0, left: 10, bottom: 0, right: 10)
             toggleBtn.backgroundColor = self.isAccountDetailsExpanded ? CSSTheme.purple : CSSTheme.blue
             toggleBtn.layer.cornerRadius = 12
             toggleBtn.layer.shadowColor = CSSTheme.blue.cgColor
@@ -1571,7 +1807,7 @@ private extension SettingsViewController
             
         case .advancedSettings:
             if isHeader {
-                settingsHeaderFooterView.primaryLabel.text = "TRUNG TÂM CÀI ĐẶT & HỆ THỐNG"
+                setSectionHeaderTitle(settingsHeaderFooterView.primaryLabel, iconName: "slider.horizontal.below.square.filled.and.square", title: "TRUNG TÂM CÀI ĐẶT & HỆ THỐNG")
             } else {
                 settingsHeaderFooterView.secondaryLabel.text = "Quản lý máy chủ Anisette, cấu hình chứng chỉ, tùy chỉnh giao diện và dọn dẹp bộ nhớ đệm để tối ưu hóa hiệu suất hoạt động của SideStore."
             }
@@ -1596,7 +1832,6 @@ private extension SettingsViewController
         return size.height + (isHeader ? 4 : 0)
     }
 
-    // Chỉ giữ lại phần Đăng nhập/Tài khoản và 1 mục gộp chung duy nhất (.advancedSettings)
     private func isSectionHidden(_ section: Section) -> Bool
     {
         switch section {
@@ -1670,7 +1905,6 @@ private extension SettingsViewController
         self.present(alertController, animated: true, completion: nil)
     }
 
-    // Khóa cứng trạng thái tắt cho các IBAction đã loại bỏ (Giữ @IBAction để không crash Storyboard)
     @IBAction private func toggleDisableAppLimit(_ sender: UISwitch) {
         sender.setOn(false, animated: false)
         UserDefaults.standard.isAppLimitDisabled = false
@@ -1781,7 +2015,6 @@ private extension SettingsViewController
         }
     }
 
-    // Tắt hoàn toàn thao tác kích hoạt Developer Mode
     @IBAction private func handleDebugModeGesture(_ gestureRecognizer: UISwipeGestureRecognizer)
     {
         UserDefaults.standard.isDebugModeEnabled = false
@@ -1819,7 +2052,6 @@ private extension SettingsViewController
         UIApplication.shared.open(safariURL, options: [:])
     }
 
-    // Giữ nguyên các @IBAction kết nối với Storyboard để không bao giờ gây crash khi nạp Nib
     @IBAction private func followAltStoreMastodon() { self.openMastodon(username: "@sidestoreio@fosstodon.org") }
     @IBAction private func followAltStoreThreads() { self.openThreads(username: "sidestore.io") }
     @IBAction private func followAltStoreTwitter() { self.openTwitter(username: "sidestoreio") }
@@ -1877,7 +2109,6 @@ extension SettingsViewController
         }
         
         if section == .account {
-            // Nếu đang thu gọn khung Tài khoản, cho chiều cao 3 dòng Tên/Email/Loại về 0
             if indexPath.row < 3 && !self.isAccountDetailsExpanded {
                 return 0.0
             }
@@ -1889,13 +2120,14 @@ extension SettingsViewController
         if section == .advancedSettings {
             let activeItems = UnifiedSettingsItem.activeItems
             guard activeItems.indices.contains(indexPath.row) else { return 0.0 }
-            return super.tableView(tableView, heightForRowAt: activeItems[indexPath.row].originalIndexPath)
+            let baseHeight = super.tableView(tableView, heightForRowAt: activeItems[indexPath.row].originalIndexPath)
+            return max(baseHeight, 50.0)
         }
         
         return super.tableView(tableView, heightForRowAt: indexPath)
     }
 
-    // ✨ CAN THIỆP SÂU VÀO TỪNG CELL ĐỂ ÁP DỤNG CARD THEME & ẨN/HIỆN TÀI KHOẢN ✨
+    // ✨ CAN THIỆP SÂU VÀO TỪNG CELL ĐỂ ÁP DỤNG CARD THEME, ICON & ẨN/HIỆN TÀI KHOẢN ✨
     override func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath)
     {
         let section = Section.allCases[indexPath.section]
@@ -1921,7 +2153,6 @@ extension SettingsViewController
             }
         }
         
-        // Áp dụng cấu trúc Card CSS & Việt hóa cho tất cả các dòng
         self.styleInnerCardOfCell(cell, at: indexPath, totalRows: totalRows)
     }
 
@@ -1980,7 +2211,6 @@ extension SettingsViewController
             }
         }
         
-        // Cập nhật lại bo góc (top/middle/bottom) cho mục gộp chung duy nhất
         if section == .advancedSettings,
            let insetCell = cell as? InsetGroupTableViewCell {
             let total = self.tableView(tableView, numberOfRowsInSection: indexPath.section)
@@ -2130,7 +2360,6 @@ extension SettingsViewController
                 self.presentAnisetteSheet()
                 
             case .refreshAttempts, .errorLog:
-                // Được kích hoạt tự động qua Storyboard Segue gắn liền trên Cell gốc
                 break
                 
             case .refreshSideJITServer:

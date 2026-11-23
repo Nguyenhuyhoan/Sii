@@ -8,7 +8,7 @@
 //
 
 @preconcurrency import UIKit
-import WebKit
+@preconcurrency import WebKit
 import CoreData
 import Nuke
 
@@ -39,7 +39,7 @@ private struct SourcesCSSTheme {
     static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.95).cgColor
     static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.92).cgColor
 
-    // Pink Icon Gradient (Hồng phấn -> Hồng tím sang trọng, cực nổi bật)
+    // Pink Icon Gradient (Hồng phấn -> Hồng đào đậm sang trọng, cực nổi bật)
     static let pinkGradientStart = UIColor(red: 255/255, green: 90/255, blue: 165/255, alpha: 1.0).cgColor
     static let pinkGradientEnd = UIColor(red: 236/255, green: 38/255, blue: 143/255, alpha: 1.0).cgColor
 
@@ -53,7 +53,7 @@ private struct SourcesCSSTheme {
     static func applyCardStyle(to view: UIView, cornerRadius: CGFloat = SourcesCSSTheme.cornerRadius) {
         view.backgroundColor = SourcesCSSTheme.white
         view.layer.cornerRadius = cornerRadius
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             view.layer.cornerCurve = .continuous
         }
         view.layer.borderWidth = 1.1
@@ -340,7 +340,6 @@ private enum GuideParser {
             return nil
         }
 
-        // Chỉ giữ ký tự hợp lệ của YouTube Video ID
         let validPattern = #"^[A-Za-z0-9_-]{6,20}$"#
         if rawID.range(of: validPattern, options: .regularExpression) != nil {
             return rawID
@@ -365,9 +364,8 @@ private enum GuideParser {
             lower.hasSuffix($0) || lower.contains("\($0)?") || lower.contains("\($0)#") || lower.contains("\($0)&")
         }
 
-        // Hỗ trợ cả link ảnh貼 trực tiếp trên GitHub вида github.com/user-attachments/assets/...
+        // Hỗ trợ cả link ảnh đính kèm trực tiếp trên GitHub dạng github.com/user-attachments/assets/...
         let isGitHubAssetImage = lower.contains("github.com/user-attachments/assets/")
-            || (lower.contains("githubusercontent.com") && !lower.contains("/raw/") && !lower.hasSuffix(".txt") && !lower.hasSuffix(".md") && !lower.hasSuffix(".json") && !lower.hasSuffix(".ipa") && !lower.hasSuffix(".zip") && !lower.hasSuffix(".mobileconfig") && !lower.hasSuffix(".plist") && hasImageExtension)
 
         if hasImageExtension || isGitHubAssetImage {
             return convertToRawGitHubURL(cleaned)
@@ -583,7 +581,7 @@ private final class GuidesHeroHeaderView: UIView {
         // 1. Khối Hero Card đồng bộ 100% với CSSHeroBannerView của NewsViewController
         heroCard.translatesAutoresizingMaskIntoConstraints = false
         heroCard.layer.cornerRadius = SourcesCSSTheme.cornerRadius
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             heroCard.layer.cornerCurve = .continuous
         }
         heroCard.layer.masksToBounds = false
@@ -594,7 +592,7 @@ private final class GuidesHeroHeaderView: UIView {
 
         heroClipView.translatesAutoresizingMaskIntoConstraints = false
         heroClipView.layer.cornerRadius = SourcesCSSTheme.cornerRadius
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             heroClipView.layer.cornerCurve = .continuous
         }
         heroClipView.clipsToBounds = true
@@ -671,7 +669,7 @@ private final class GuidesHeroHeaderView: UIView {
         // 2. Tiêu đề Section + Hộp Icon Hồng Phấn + Gạch chân Gradient
         sectionIconBox.translatesAutoresizingMaskIntoConstraints = false
         sectionIconBox.layer.cornerRadius = 7.5
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             sectionIconBox.layer.cornerCurve = .continuous
         }
         sectionIconBox.layer.masksToBounds = true
@@ -847,7 +845,7 @@ private final class GuideTopicRowCell: UITableViewCell {
         // Badge bên trái (Huy hiệu Gradient Hồng Phấn nổi bật)
         badgeContainer.translatesAutoresizingMaskIntoConstraints = false
         badgeContainer.layer.cornerRadius = 14
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             badgeContainer.layer.cornerCurve = .continuous
         }
         badgeContainer.layer.masksToBounds = true
@@ -1057,7 +1055,7 @@ private final class GuideStyledImageView: UIView {
         let outerRadius = SourcesCSSTheme.iPhoneImageCornerRadius
         borderContainer.translatesAutoresizingMaskIntoConstraints = false
         borderContainer.layer.cornerRadius = outerRadius
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             borderContainer.layer.cornerCurve = .continuous
         }
         borderContainer.clipsToBounds = true
@@ -1066,7 +1064,7 @@ private final class GuideStyledImageView: UIView {
         innerClipContainer.translatesAutoresizingMaskIntoConstraints = false
         innerClipContainer.backgroundColor = SourcesCSSTheme.white
         innerClipContainer.layer.cornerRadius = innerRadius
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             innerClipContainer.layer.cornerCurve = .continuous
         }
         innerClipContainer.clipsToBounds = true
@@ -1220,7 +1218,7 @@ private final class GuideStyledImageView: UIView {
 }
 
 // MARK: - 🎬 KHUNG VIDEO YOUTUBE DỌC 9:19.5 CHUẨN IPHONE 14 (ĐỒNG BỘ 100% VỚI NEWSVIEWCONTROLLER)
-private final class GuideYouTubeVideoFrameView: UIView {
+private final class GuideYouTubeVideoFrameView: UIView, WKNavigationDelegate {
     private let videoID: String
     private let cardContainer = UIView()
     private let headerRow = UIView()
@@ -1250,6 +1248,7 @@ private final class GuideYouTubeVideoFrameView: UIView {
     }
 
     deinit {
+        webView?.navigationDelegate = nil
         webView?.stopLoading()
     }
 
@@ -1265,7 +1264,7 @@ private final class GuideYouTubeVideoFrameView: UIView {
         headerRow.translatesAutoresizingMaskIntoConstraints = false
         headerRow.backgroundColor = SourcesCSSTheme.light
         headerRow.layer.cornerRadius = SourcesCSSTheme.innerCornerRadius
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             headerRow.layer.cornerCurve = .continuous
         }
         headerRow.layer.borderWidth = 1.0
@@ -1273,7 +1272,7 @@ private final class GuideYouTubeVideoFrameView: UIView {
 
         iconBox.translatesAutoresizingMaskIntoConstraints = false
         iconBox.layer.cornerRadius = 10
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             iconBox.layer.cornerCurve = .continuous
         }
         iconBox.layer.masksToBounds = true
@@ -1309,7 +1308,7 @@ private final class GuideYouTubeVideoFrameView: UIView {
 
         borderContainer.translatesAutoresizingMaskIntoConstraints = false
         borderContainer.layer.cornerRadius = frameCornerRadius
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             borderContainer.layer.cornerCurve = .continuous
         }
         borderContainer.clipsToBounds = true
@@ -1318,7 +1317,7 @@ private final class GuideYouTubeVideoFrameView: UIView {
         innerClipContainer.translatesAutoresizingMaskIntoConstraints = false
         innerClipContainer.backgroundColor = .black
         innerClipContainer.layer.cornerRadius = innerRadius
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             innerClipContainer.layer.cornerCurve = .continuous
         }
         innerClipContainer.clipsToBounds = true
@@ -1392,14 +1391,15 @@ private final class GuideYouTubeVideoFrameView: UIView {
 
         let playerWebView = WKWebView(frame: .zero, configuration: config)
         playerWebView.translatesAutoresizingMaskIntoConstraints = false
+        playerWebView.navigationDelegate = self
         playerWebView.scrollView.isScrollEnabled = false
         playerWebView.scrollView.bounces = false
-        playerWebView.isOpaque = true
-        playerWebView.backgroundColor = .black
-        playerWebView.scrollView.backgroundColor = .black
+        playerWebView.isOpaque = false
+        playerWebView.backgroundColor = .clear
+        playerWebView.scrollView.backgroundColor = .clear
         playerWebView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
-        innerClipContainer.addSubview(playerWebView)
+        innerClipContainer.insertSubview(playerWebView, belowSubview: loadingIndicator)
         NSLayoutConstraint.activate([
             playerWebView.leadingAnchor.constraint(equalTo: innerClipContainer.leadingAnchor),
             playerWebView.trailingAnchor.constraint(equalTo: innerClipContainer.trailingAnchor),
@@ -1457,12 +1457,24 @@ private final class GuideYouTubeVideoFrameView: UIView {
         playerWebView.loadHTMLString(embedHTML, baseURL: URL(string: originDomain))
     }
 
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        loadingIndicator.stopAnimating()
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        loadingIndicator.stopAnimating()
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        loadingIndicator.stopAnimating()
+    }
+
     func pauseVideoPlayback() {
         webView?.evaluateJavaScript(
             "var iframe = document.querySelector('iframe'); if (iframe && iframe.contentWindow) { iframe.contentWindow.postMessage('{\"event\":\"command\",\"func\":\"pauseVideo\",\"args\":\"\"}', '*'); }",
             completionHandler: nil
         )
-        if #available(iOS 15.0, *) {
+        if #available(iOS 15.0, tvOS 15.0, *) {
             webView?.pauseAllMediaPlayback()
         }
     }
@@ -1527,7 +1539,7 @@ private final class GuideDownloadActionCardView: UIView {
         infoRow.translatesAutoresizingMaskIntoConstraints = false
         infoRow.backgroundColor = SourcesCSSTheme.light
         infoRow.layer.cornerRadius = SourcesCSSTheme.innerCornerRadius
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             infoRow.layer.cornerCurve = .continuous
         }
         infoRow.layer.borderWidth = 1.0
@@ -1535,7 +1547,7 @@ private final class GuideDownloadActionCardView: UIView {
 
         iconBox.translatesAutoresizingMaskIntoConstraints = false
         iconBox.layer.cornerRadius = 12
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             iconBox.layer.cornerCurve = .continuous
         }
         iconBox.layer.masksToBounds = true
@@ -1595,7 +1607,7 @@ private final class GuideDownloadActionCardView: UIView {
         downloadButton.tintColor = .white
         downloadButton.setTitleColor(.white, for: .normal)
         downloadButton.layer.cornerRadius = 14
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             downloadButton.layer.cornerCurve = .continuous
         }
         downloadButton.layer.masksToBounds = false
@@ -1620,7 +1632,7 @@ private final class GuideDownloadActionCardView: UIView {
         noticeBannerView.translatesAutoresizingMaskIntoConstraints = false
         noticeBannerView.backgroundColor = SourcesCSSTheme.softPinkBg
         noticeBannerView.layer.cornerRadius = 14
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             noticeBannerView.layer.cornerCurve = .continuous
         }
         noticeBannerView.layer.borderWidth = 1.5
@@ -1750,12 +1762,14 @@ private final class GuideDownloadActionCardView: UIView {
             noticeBannerView.isHidden = false
             UIView.animate(withDuration: 0.25) {
                 self.noticeBannerView.alpha = 1
-                self.superview?.layoutIfNeeded()
+                self.setNeedsLayout()
+                self.layoutIfNeeded()
+                self.hostViewController?.view.setNeedsLayout()
+                self.hostViewController?.view.layoutIfNeeded()
             }
         }
 
         let hostLower = (downloadURL.host ?? "").lowercased()
-        // Nếu là phím tắt iCloud hoặc liên kết trang web dịch vụ lưu trữ đám mây (Google Drive, Mega, Mediafire, OneDrive...) thì mở trực tiếp để Safari/Hệ thống xử lý tải
         let isCloudWebPortal = hostLower.contains("icloud.com")
             || hostLower.contains("drive.google.com")
             || hostLower.contains("mega.nz")
@@ -1838,6 +1852,7 @@ private final class GuideDownloadActionCardView: UIView {
     }
 
     private func presentSaveToFilesSheet(for fileURL: URL) {
+        #if !os(tvOS)
         guard let presenter = hostViewController ?? window?.rootViewController else {
             UIApplication.shared.open(downloadURL, options: [:], completionHandler: nil)
             return
@@ -1849,6 +1864,9 @@ private final class GuideDownloadActionCardView: UIView {
             popover.sourceRect = downloadButton.bounds
         }
         presenter.present(activityVC, animated: true)
+        #else
+        UIApplication.shared.open(downloadURL, options: [:], completionHandler: nil)
+        #endif
     }
 
     override func layoutSubviews() {
@@ -1972,7 +1990,9 @@ private final class GuideArticleDetailViewController: UIViewController {
     init(article: GuideArticle) {
         self.article = article
         super.init(nibName: nil, bundle: nil)
+        #if !os(tvOS)
         self.hidesBottomBarWhenPushed = false
+        #endif
     }
 
     required init?(coder: NSCoder) {
@@ -2058,7 +2078,7 @@ private final class GuideArticleDetailViewController: UIViewController {
     private func setupHeroHeader() {
         heroCard.translatesAutoresizingMaskIntoConstraints = false
         heroCard.layer.cornerRadius = SourcesCSSTheme.cornerRadius
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             heroCard.layer.cornerCurve = .continuous
         }
         heroCard.layer.masksToBounds = false
@@ -2069,7 +2089,7 @@ private final class GuideArticleDetailViewController: UIViewController {
 
         heroClipView.translatesAutoresizingMaskIntoConstraints = false
         heroClipView.layer.cornerRadius = SourcesCSSTheme.cornerRadius
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             heroClipView.layer.cornerCurve = .continuous
         }
         heroClipView.clipsToBounds = true
@@ -2160,7 +2180,7 @@ private final class GuideArticleDetailViewController: UIViewController {
 
         sectionIconBox.translatesAutoresizingMaskIntoConstraints = false
         sectionIconBox.layer.cornerRadius = 7.5
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             sectionIconBox.layer.cornerCurve = .continuous
         }
         sectionIconBox.layer.masksToBounds = true
@@ -2294,7 +2314,7 @@ private final class GuideArticleDetailViewController: UIViewController {
         row.translatesAutoresizingMaskIntoConstraints = false
         row.backgroundColor = SourcesCSSTheme.light
         row.layer.cornerRadius = SourcesCSSTheme.innerCornerRadius
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             row.layer.cornerCurve = .continuous
         }
         row.layer.borderWidth = 1.0
@@ -2421,7 +2441,9 @@ final class SourcesViewController: UICollectionViewController {
 
     private let guidesTableView = UITableView(frame: .zero, style: .plain)
     private let heroHeaderView = GuidesHeroHeaderView(frame: CGRect(x: 0, y: 0, width: 375, height: 158))
+    #if !os(tvOS)
     private let refreshControl = UIRefreshControl()
+    #endif
 
     // Khung trạng thái Đang tải / Lỗi mạng
     private let stateCardView = UIView()

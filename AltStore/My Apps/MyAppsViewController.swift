@@ -1,4 +1,5 @@
 
+
 //
 //  MyAppsViewController.swift
 //  AltStore
@@ -16,6 +17,9 @@ import Combine
 import CoreData
 import UniformTypeIdentifiers
 import SemanticVersion
+import Darwin
+import Minimuxer
+import MinimuxerCommon
 
 import Nuke
 
@@ -24,6 +28,7 @@ private let maximumCollapsedUpdatesCount = 2
 // MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ VỚI TAB CÀI ĐẶT & CỐ ĐỊNH NỀN SÁNG)
 private struct CSSTheme {
     static let white = UIColor.white
+    static let pureBlack = UIColor.black // #000000
     static let light = UIColor(red: 248/255, green: 249/255, blue: 250/255, alpha: 1.0) // #f8f9fa
     static let border = UIColor(red: 230/255, green: 235/255, blue: 242/255, alpha: 1.0) // #e6ebf2
     static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0) // #007bff
@@ -34,7 +39,7 @@ private struct CSSTheme {
     static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0) // #dc3545
     static let redBg = UIColor(red: 255/255, green: 240/255, blue: 242/255, alpha: 1.0)
     static let magenta = UIColor(red: 255/255, green: 0/255, blue: 255/255, alpha: 1.0) // #ff00ff
-    static let textPrimary = UIColor(red: 24/255, green: 28/255, blue: 36/255, alpha: 1.0) // #181c24
+    static let textPrimary = UIColor.black // #000000
     static let textSecondary = UIColor(red: 92/255, green: 102/255, blue: 117/255, alpha: 1.0) // #5c6675
     
     // Gradient Background (#f3e0ff -> #e0f7ff)
@@ -46,6 +51,40 @@ private struct CSSTheme {
     static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.88).cgColor
     
     static let cornerRadius: CGFloat = 16.0
+
+    // SwiftUI Colors (Đồng bộ 100% cho Bảng Kiểm Tra Tổng Quát)
+    static let suiPrimary = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255)
+    static let suiSecondary = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)
+    static let suiGreen = SwiftUI.Color(red: 40/255, green: 167/255, blue: 69/255)
+    static let suiRed = SwiftUI.Color(red: 220/255, green: 53/255, blue: 69/255)
+    static let suiOrange = SwiftUI.Color(red: 253/255, green: 126/255, blue: 20/255)
+    static let suiPureBlack = SwiftUI.Color.black
+    static let suiCardBg = SwiftUI.Color.white
+    static let suiInnerRowBg = SwiftUI.Color(red: 245/255, green: 248/255, blue: 255/255)
+    static let suiBorder = SwiftUI.Color(red: 220/255, green: 226/255, blue: 236/255)
+    static let suiInnerBorder = SwiftUI.Color(red: 222/255, green: 229/255, blue: 240/255)
+
+    static var suiPageGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                SwiftUI.Color(red: 243/255, green: 224/255, blue: 255/255),
+                SwiftUI.Color(red: 224/255, green: 247/255, blue: 255/255)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    static var suiHeroGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255).opacity(0.95),
+                SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255).opacity(0.92)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
 }
 
 // MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH (KHÔNG BỊ TRẮNG HOẶC ĐEN KHI CUỘN)
@@ -70,6 +109,776 @@ private final class MyAppsGradientBackgroundView: UIView {
         gradientLayer.colors = [CSSTheme.bgGradientStart, CSSTheme.bgGradientEnd]
         gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
         gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+    }
+}
+
+// MARK: - 🛡️ HỆ THỐNG KIỂM TRA TỔNG QUÁT 5 MỤC (CÓ HỖ TRỢ PHÍM TẮT TẮT/BẬT 4G)
+private enum ComprehensiveItemStatus: Equatable {
+    case pending
+    case checking
+    case passed(detail: String)
+    case failed(reason: String)
+
+    var isPassed: Bool {
+        if case .passed = self { return true }
+        return false
+    }
+
+    var isFailed: Bool {
+        if case .failed = self { return true }
+        return false
+    }
+}
+
+private struct ComprehensiveNetworkSnapshot: Sendable {
+    let hasWifiIPv4: Bool
+    let hasCellularIPv4: Bool
+    let hasLocalDevUtun: Bool
+    let utunIP: String?
+    let deviceIP: String?
+}
+
+@MainActor
+private final class ComprehensiveSystemCheckViewModel: ObservableObject {
+    @Published var vpnStatus: ComprehensiveItemStatus = .pending
+    @Published var pairingFileStatus: ComprehensiveItemStatus = .pending
+    @Published var pairedDeviceStatus: ComprehensiveItemStatus = .pending
+    @Published var anisetteStatus: ComprehensiveItemStatus = .pending
+    @Published var appleCertStatus: ComprehensiveItemStatus = .pending
+
+    @Published var isRunning: Bool = false
+    @Published var hasFinished: Bool = false
+    @Published var progressBannerText: String = "Đang chuẩn bị kiểm tra tổng quát hệ thống..."
+    @Published var usedCellularShortcutFlow: Bool = false
+
+    private var checkTask: Task<Void, Never>?
+
+    var passedCount: Int {
+        [vpnStatus, pairingFileStatus, pairedDeviceStatus, anisetteStatus, appleCertStatus]
+            .filter { $0.isPassed }
+            .count
+    }
+
+    var allPassed: Bool {
+        passedCount == 5
+    }
+
+    func cancelCheck() {
+        checkTask?.cancel()
+        checkTask = nil
+    }
+
+    func startComprehensiveCheck() {
+        guard !isRunning else { return }
+        isRunning = true
+        hasFinished = false
+        usedCellularShortcutFlow = false
+
+        vpnStatus = .pending
+        pairingFileStatus = .pending
+        pairedDeviceStatus = .pending
+        anisetteStatus = .pending
+        appleCertStatus = .pending
+
+        checkTask = Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            await self.runAllChecks()
+            self.isRunning = false
+            self.hasFinished = true
+        }
+    }
+
+    // Quét nhanh các cổng mạng hệ thống (en0, pdp_ip0, utun)
+    nonisolated static func scanNetworkInterfaces() -> ComprehensiveNetworkSnapshot {
+        var hasWifi = false
+        var hasCellular = false
+        var hasUtun = false
+        var detectedUtunIP: String? = nil
+
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        if getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr {
+            defer { freeifaddrs(ifaddr) }
+            var ptr: UnsafeMutablePointer<ifaddrs>? = firstAddr
+            while let current = ptr {
+                let flags = Int32(current.pointee.ifa_flags)
+                let isUp = (flags & IFF_UP) != 0 && (flags & IFF_RUNNING) != 0
+                if isUp, let addr = current.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_INET) {
+                    let name = String(cString: current.pointee.ifa_name).lowercased()
+                    if name == "en0" || name == "pdp_ip0" || name.hasPrefix("utun") {
+                        var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                        if getnameinfo(addr, socklen_t(addr.pointee.sa_len), &hostname, socklen_t(hostname.count), nil, 0, NI_NUMERICHOST) == 0 {
+                            let ip = String(cString: hostname)
+                            if !ip.isEmpty && !ip.hasPrefix("169.254.") && ip != "0.0.0.0" {
+                                if name == "en0" {
+                                    hasWifi = true
+                                } else if name == "pdp_ip0" {
+                                    hasCellular = true
+                                } else if name.hasPrefix("utun"), ip.hasPrefix("10.7.") {
+                                    hasUtun = true
+                                    detectedUtunIP = ip
+                                }
+                            }
+                        }
+                    }
+                }
+                ptr = current.pointee.ifa_next
+            }
+        }
+
+        let config = ConnectionConfig.shared
+        let finalTunnelIP: String? = {
+            if let detected = detectedUtunIP, !detected.isEmpty {
+                return config.formattedTunnelIface ?? config.tunnelIfaceIp ?? detected
+            }
+            if let iface = config.tunnelIfaceIp, iface.hasPrefix("10.7.") {
+                return config.formattedTunnelIface ?? iface
+            }
+            return nil
+        }()
+
+        let finalDeviceIP: String? = {
+            guard finalTunnelIP != nil else { return nil }
+            if let peer = config.formattedTunnelPeer, !peer.isEmpty { return peer }
+            if let peer = config.tunnelPeerIp, !peer.isEmpty { return peer }
+            return "10.7.0.1"
+        }()
+
+        let isVpnActive = hasUtun || (finalTunnelIP != nil && finalDeviceIP != nil)
+
+        return ComprehensiveNetworkSnapshot(
+            hasWifiIPv4: hasWifi,
+            hasCellularIPv4: hasCellular,
+            hasLocalDevUtun: isVpnActive,
+            utunIP: finalTunnelIP,
+            deviceIP: finalDeviceIP
+        )
+    }
+
+    private func runAllChecks() async {
+        await minimuxer.network.refreshEndpoint()
+        let initialNet = await Task.detached(priority: .userInitiated) {
+            Self.scanNetworkInterfaces()
+        }.value
+
+        let isWifiAvailable = minimuxer.network.isWifiSatisfied || initialNet.hasWifiIPv4
+        let isOnly4GNoWifi = !isWifiAvailable && initialNet.hasCellularIPv4
+        let canUse4GShortcuts = isOnly4GNoWifi && CellularRefreshManager.shared.isSupported && CellularRefreshManager.shared.isEnabled
+
+        if canUse4GShortcuts {
+            usedCellularShortcutFlow = true
+            let offName = CellularRefreshManager.shared.turnOffDataShortcutName
+            let onName = CellularRefreshManager.shared.turnOnDataShortcutName
+
+            // Bước A: Khi đang có 4G, kiểm tra trước Mục 4 (Máy chủ Anisette) & Mục 5 (Chứng chỉ Apple ID) cần Internet
+            progressBannerText = "Đang dùng 4G: Kiểm tra Máy chủ Anisette & Chứng chỉ Apple ID trước..."
+            anisetteStatus = .checking
+            anisetteStatus = await checkAnisetteServerStatus()
+            if Task.isCancelled { return }
+
+            appleCertStatus = .checking
+            appleCertStatus = await checkAppleIDCertificateStatus()
+            if Task.isCancelled { return }
+
+            // Bước B: Chạy phím tắt TurnOffData để tắt 4G và kiểm tra 3 mục đầu tiên qua LocalDevVPN
+            progressBannerText = "Đang chạy phím tắt '\(offName)' để tắt 4G và kiểm tra LocalDevVPN + Pairing..."
+            vpnStatus = .checking
+            pairingFileStatus = .checking
+            pairedDeviceStatus = .checking
+
+            let didTurnOffData = await CellularRefreshManager.shared.turnOffDataIfNeeded()
+            defer {
+                if didTurnOffData {
+                    Task {
+                        await CellularRefreshManager.shared.turnOnDataIfNeeded()
+                    }
+                }
+            }
+
+            // Kiểm tra 3 mục đầu tiên (LocalDevVPN, Pairing File, Thiết bị đã ghép nối)
+            await runFirstThreeChecks()
+
+            // Bước C: Bật lại 4G bằng phím tắt TurnOnData ngay sau khi kiểm tra xong 3 mục đầu
+            if didTurnOffData {
+                progressBannerText = "Đang chạy phím tắt '\(onName)' để bật lại mạng 4G..."
+                _ = await CellularRefreshManager.shared.turnOnDataIfNeeded()
+            }
+        } else {
+            // Chế độ có Wi-Fi (hoặc đã tắt 4G sẵn): Kiểm tra lần lượt từ Mục 1 -> Mục 5
+            await runFirstThreeChecks()
+            if Task.isCancelled { return }
+
+            progressBannerText = "Đang kiểm tra máy chủ Anisette (Mục 4/5)..."
+            anisetteStatus = .checking
+            anisetteStatus = await checkAnisetteServerStatus()
+            if Task.isCancelled { return }
+
+            progressBannerText = "Đang kiểm tra chứng chỉ Apple ID (Mục 5/5)..."
+            appleCertStatus = .checking
+            appleCertStatus = await checkAppleIDCertificateStatus()
+        }
+
+        if allPassed {
+            progressBannerText = "Hoàn tất! Tất cả 5/5 hạng mục đều hoạt động tốt (Xanh)."
+        } else {
+            progressBannerText = "Kiểm tra hoàn tất: \(passedCount)/5 mục đạt yêu cầu. Vui lòng xem mục báo Đỏ."
+        }
+    }
+
+    private func runFirstThreeChecks() async {
+        // 1. KIỂM TRA ĐƯỜNG HẦM MẠNG (LOCALDEVVPN)
+        progressBannerText = "Đang kiểm tra đường hầm mạng LocalDevVPN (Mục 1/5)..."
+        vpnStatus = .checking
+        let netSnap = await Task.detached(priority: .userInitiated) {
+            Self.scanNetworkInterfaces()
+        }.value
+
+        if netSnap.hasLocalDevUtun {
+            let config = ConnectionConfig.shared
+            if config.overrideTunnelPeerIp != "10.7.0.1" {
+                config.overrideTunnelPeerIp = "10.7.0.1"
+            }
+            if !config.overrideTunnelPeerReachable {
+                config.overrideTunnelPeerReachable = true
+            }
+            let tIP = netSnap.utunIP ?? "10.7.0.2"
+            let dIP = netSnap.deviceIP ?? "10.7.0.1"
+            vpnStatus = .passed(detail: "Đang bật ổn định • Tunnel: \(tIP) → Thiết bị: \(dIP)")
+        } else {
+            vpnStatus = .failed(reason: "Chưa kết nối LocalDevVPN • Hãy mở ứng dụng LocalDevVPN và bật công tắc VPN.")
+        }
+
+        if Task.isCancelled { return }
+
+        // 2. KIỂM TRA TỆP GHÉP ĐÔI (PAIRING FILE)
+        progressBannerText = "Đang kiểm tra tệp ghép đôi Pairing File (Mục 2/5)..."
+        pairingFileStatus = .checking
+        let pairingCheck = checkPairingFileValidity()
+        pairingFileStatus = pairingCheck.status
+
+        if Task.isCancelled { return }
+
+        // 3. KIỂM TRA THIẾT BỊ ĐÃ GHÉP NỐI (LIVE LOCKDOWN / RPPAIRING HANDSHAKE)
+        progressBannerText = "Đang kiểm tra kết nối tới thiết bị đã ghép nối (Mục 3/5)..."
+        pairedDeviceStatus = .checking
+        pairedDeviceStatus = await checkPairedDeviceConnection(
+            isVpnReady: netSnap.hasLocalDevUtun,
+            isPairingFileValid: pairingCheck.isValid,
+            hasWifi: netSnap.hasWifiIPv4,
+            hasCellular: netSnap.hasCellularIPv4
+        )
+    }
+
+    private func checkPairingFileValidity() -> (isValid: Bool, status: ComprehensiveItemStatus) {
+        let hasRp = PairingFileManager.shared.hasPairingFile(for: .rppairing)
+        let hasLd = PairingFileManager.shared.hasPairingFile(for: .lockdown)
+        let hasUnk = PairingFileManager.shared.hasPairingFile(for: .unknown)
+
+        guard hasRp || hasLd || hasUnk,
+              let pairingString = PairingFileManager.shared.fetchPairingFile(),
+              !pairingString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return (false, .failed(reason: "Chưa có tệp ghép đôi (Pairing File) • Vui lòng cài hoặc nhập tệp Pairing."))
+        }
+
+        guard let data = pairingString.data(using: .utf8),
+              let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+              !plist.isEmpty else {
+            return (false, .failed(reason: "Tệp ghép đôi bị hỏng cấu trúc Plist/XML • Hãy tạo và nhập lại tệp mới."))
+        }
+
+        let protoLabel: String = {
+            if hasRp { return "Remote Pairing (iOS 17+ / 27)" }
+            if hasLd { return "Lockdown Pairing" }
+            return "Đã nạp tệp Pairing"
+        }()
+
+        let udidText: String = {
+            for key in ["UDID", "UniqueDeviceID", "DeviceUDID", "udid"] {
+                if let val = plist[key] as? String, !val.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return " • UDID: \(val.prefix(8))..."
+                }
+            }
+            return ""
+        }()
+
+        return (true, .passed(detail: "Hợp lệ (\(protoLabel)\(udidText))"))
+    }
+
+    private func checkPairedDeviceConnection(
+        isVpnReady: Bool,
+        isPairingFileValid: Bool,
+        hasWifi: Bool,
+        hasCellular: Bool
+    ) async -> ComprehensiveItemStatus {
+        guard isVpnReady else {
+            return .failed(reason: "Không thể giao tiếp với thiết bị vì LocalDevVPN chưa bật.")
+        }
+        guard isPairingFileValid else {
+            return .failed(reason: "Không thể kết nối thiết bị vì chưa có tệp Pairing hợp lệ.")
+        }
+
+        // Khởi động lại phiên Minimuxer sạch và thử bắt tay thực tế (forceLive: true)
+        if let pf = PairingFileManager.shared.fetchPairingFile() {
+            try? await AppBootManager.shared.startMinimuxer(pairingFile: pf)
+        }
+        await minimuxer.network.refreshEndpoint()
+
+        for attempt in 0..<2 {
+            if attempt > 0 {
+                _ = await CellularRefreshManager.shared.resetAndPrepareMinimuxer(timeout: 5.0)
+            }
+            if let liveUDID = try? await fetchUDID(forceLive: true),
+               !liveUDID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let deviceName = UIDevice.current.name
+                return .passed(detail: "Đã kết nối thành công với '\(deviceName)' (UDID: \(liveUDID))")
+            }
+        }
+
+        if !hasWifi && hasCellular {
+            return .failed(reason: "Đang bật 4G không có Wi-Fi khiến kết nối nội bộ bị chặn • Hãy kiểm tra phím tắt TurnOffData/TurnOnData hoặc bật Wi-Fi.")
+        }
+        return .failed(reason: "Không phản hồi khi kết nối tới thiết bị • Tệp Pairing có thể đã hết hạn hoặc LocalDevVPN bị kẹt (Hãy tắt/bật lại VPN).")
+    }
+
+    private func checkAnisetteServerStatus() async -> ComprehensiveItemStatus {
+        if UserDefaults.standard.useOnDeviceAnisette {
+            let hasLocalProvisioning = OnDeviceAnisetteManager.shared.isProvisioned
+            if hasLocalProvisioning {
+                return .passed(detail: "Đang dùng On-Device Anisette (Đã cấp phép adi.pb trực tiếp trên máy • Không bị Rate-limit)")
+            } else {
+                // Vẫn kiểm tra thêm máy chủ từ xa để người dùng biết tình trạng Server
+            }
+        }
+
+        let serverURLString: String = {
+            let menuURL = UserDefaults.standard.menuAnisetteURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !menuURL.isEmpty { return menuURL }
+            if let textInput = UserDefaults.standard.textInputAnisetteURL?.trimmingCharacters(in: .whitespacesAndNewlines), !textInput.isEmpty {
+                return textInput
+            }
+            if let custom = UserDefaults.standard.customAnisetteURL?.trimmingCharacters(in: .whitespacesAndNewlines), !custom.isEmpty {
+                return custom
+            }
+            return AppConstants.Anisette.Servers.defaultServerURL
+        }()
+
+        guard let baseURL = URL(string: serverURLString) else {
+            return .failed(reason: "Địa chỉ URL máy chủ Anisette không hợp lệ: \(serverURLString)")
+        }
+
+        let hostName = baseURL.host ?? serverURLString
+        var request = URLRequest(url: baseURL)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 10.0
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+
+        let startTime = CFAbsoluteTimeGetCurrent()
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let latencyMs = Int((CFAbsoluteTimeGetCurrent() - startTime) * 1000)
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return .failed(reason: "Máy chủ Anisette (\(hostName)) phản hồi không hợp lệ.")
+            }
+
+            let statusCode = httpResponse.statusCode
+
+            // Kiểm tra Rate-limit / Cấm cửa từ Apple hoặc Server
+            if statusCode == 429 {
+                return .failed(reason: "Máy chủ (\(hostName)) đã bị Apple 'cấm cửa' tạm thời (Rate-limit HTTP 429) • Hãy đổi máy chủ Anisette khác.")
+            }
+            if statusCode == 403 {
+                return .failed(reason: "Máy chủ (\(hostName)) bị từ chối truy cập hoặc bị Apple chặn (HTTP 403) • Hãy đổi máy chủ khác.")
+            }
+            if statusCode != 200 {
+                return .failed(reason: "Máy chủ (\(hostName)) không trả về HTTP 200 OK (Mã lỗi: HTTP \(statusCode)) • Máy chủ đang bảo trì hoặc gặp sự cố.")
+            }
+
+            let bodyString = String(data: data, encoding: .utf8) ?? ""
+            let lowerBody = bodyString.lowercased()
+
+            if lowerBody.contains("rate limit") || lowerBody.contains("rate-limit") || lowerBody.contains("too many requests") || lowerBody.contains("-22411") {
+                return .failed(reason: "Máy chủ (\(hostName)) đang bị Apple giới hạn tần suất (Rate-limit) • Hãy chọn máy chủ khác trong Cài đặt.")
+            }
+
+            // Kiểm tra dữ liệu Anisette trả về có thực sự chứa trường OTP / Machine ID hợp lệ không
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                let hasAnisetteHeaders = json["X-Apple-I-MD"] != nil
+                    || json["X-Apple-I-MD-M"] != nil
+                    || json["machineID"] != nil
+                    || json["oneTimePassword"] != nil
+
+                if hasAnisetteHeaders {
+                    return .passed(detail: "Online (HTTP 200 OK • \(latencyMs)ms) • Chưa bị Apple Rate-limit • Máy chủ: \(hostName)")
+                }
+
+                if let errMessage = (json["error"] as? String) ?? (json["message"] as? String) {
+                    return .failed(reason: "Máy chủ (\(hostName)) báo lỗi: \(errMessage)")
+                }
+            }
+
+            // Nếu gốc `/` chỉ trả trang chào mừng nhưng là v3 server, kiểm tra thêm `/v3/client_info`
+            let v3URL = baseURL.appendingPathComponent("v3").appendingPathComponent("client_info")
+            var v3Request = URLRequest(url: v3URL)
+            v3Request.timeoutInterval = 7.0
+            if let (_, v3Resp) = try? await URLSession.shared.data(for: v3Request),
+               let v3Http = v3Resp as? HTTPURLResponse {
+                if v3Http.statusCode == 429 {
+                    return .failed(reason: "Máy chủ (\(hostName)) đã bị Apple Rate-limit (HTTP 429).")
+                } else if v3Http.statusCode == 200 {
+                    return .passed(detail: "Online (HTTP 200 OK • \(latencyMs)ms) • Chưa bị Apple Rate-limit • Máy chủ: \(hostName)")
+                }
+            }
+
+            return .passed(detail: "Online (HTTP 200 OK • \(latencyMs)ms) • Hoạt động tốt (\(hostName))")
+        } catch {
+            let nsErr = error as NSError
+            if nsErr.code == NSURLErrorNotConnectedToInternet {
+                return .failed(reason: "Không có kết nối Internet để kiểm tra máy chủ Anisette (\(hostName)).")
+            } else if nsErr.code == NSURLErrorTimedOut {
+                return .failed(reason: "Máy chủ Anisette (\(hostName)) phản hồi quá hạn (Timeout) • Có thể máy chủ đã sập.")
+            }
+            return .failed(reason: "Không thể kết nối máy chủ Anisette (\(hostName)): \(error.localizedDescription)")
+        }
+    }
+
+    private func checkAppleIDCertificateStatus() async -> ComprehensiveItemStatus {
+        guard AuthManager.shared.isAuthenticated else {
+            return .failed(reason: "Chưa đăng nhập tài khoản Apple ID • Vui lòng vào tab Cài đặt để đăng nhập.")
+        }
+
+        let appleID = AuthManager.shared.currentAppleID ?? "Apple ID"
+
+        do {
+            let team = try await AuthManager.shared.getAuthenticatedTeam()
+            let portalCerts = try await DeveloperPortalProxy.shared.fetchCertificates(for: team)
+
+            let localActiveCert = CertificateManager.shared.activeCertificate?.certificate
+                ?? CertificateManager.shared.getSigningCertificate(at: Bundle.Info.activeBundleURL)
+
+            guard let certToVerify = localActiveCert ?? portalCerts.first else {
+                return .failed(reason: "Tài khoản \(appleID) chưa có chứng chỉ ký nào • Hãy làm mới ứng dụng hoặc vào Quản lý chứng chỉ để tạo mới.")
+            }
+
+            let now = Date()
+            if let expirationDate = certToVerify.expirationDate {
+                if expirationDate <= now {
+                    return .failed(reason: "Chứng chỉ '\(certToVerify.name)' đã hết hạn • Vui lòng làm mới hoặc tạo chứng chỉ mới.")
+                }
+            }
+
+            // Kiểm tra xem chứng chỉ đang dùng trên máy còn tồn tại trên Apple Developer Portal hay đã bị xóa/thu hồi
+            let existsOnPortal = portalCerts.contains {
+                $0.serialNumber.caseInsensitiveCompare(certToVerify.serialNumber) == .orderedSame
+            }
+
+            // Kiểm tra trực tiếp trạng thái thu hồi qua OCSP của Apple
+            let ocspStatus = await OCSPValidator.shared.checkStatus(of: certToVerify)
+            switch ocspStatus {
+            case .revoked:
+                return .failed(reason: "Chứng chỉ '\(certToVerify.name)' (Sê-ri: \(certToVerify.serialNumber)) ĐÃ BỊ APPLE THU HỒI (Revoked)!")
+            case .good:
+                break
+            case .unknown:
+                if !existsOnPortal && !portalCerts.isEmpty {
+                    return .failed(reason: "Chứng chỉ đang dùng trên máy không còn tồn tại trên Apple Portal • Hãy ký lại ứng dụng.")
+                }
+            }
+
+            let remainingDaysText: String = {
+                guard let exp = certToVerify.expirationDate else { return "" }
+                let days = max(0, Int(ceil(exp.timeIntervalSinceNow / 86400.0)))
+                return " • Còn \(days) ngày"
+            }()
+
+            return .passed(detail: "Còn sống & dùng tốt • TK: \(appleID) (\(team.name)) • Sê-ri: \(certToVerify.serialNumber)\(remainingDaysText)")
+        } catch {
+            let nsErr = error as NSError
+            if nsErr.code == NSURLErrorNotConnectedToInternet {
+                // Nếu không có mạng lúc kiểm tra, kiểm tra chứng chỉ lưu cục bộ + OCSP
+                if let localCert = CertificateManager.shared.activeCertificate?.certificate
+                    ?? CertificateManager.shared.getSigningCertificate(at: Bundle.Info.activeBundleURL) {
+                    if let exp = localCert.expirationDate, exp <= Date() {
+                        return .failed(reason: "Chứng chỉ cục bộ '\(localCert.name)' đã hết hạn.")
+                    }
+                    return .passed(detail: "Chứng chỉ cục bộ '\(localCert.name)' còn hạn (Sê-ri: \(localCert.serialNumber))")
+                }
+                return .failed(reason: "Không có kết nối Internet để xác thực chứng chỉ Apple ID với máy chủ Apple.")
+            }
+            return .failed(reason: "Không thể xác minh chứng chỉ Apple ID (\(appleID)): \(error.localizedDescription)")
+        }
+    }
+}
+
+// MARK: - 🖥️ GIAO DIỆN BẢNG KIỂM TRA TỔNG QUÁT ĐỒNG BỘ CSS THEME
+private struct ComprehensiveSystemCheckModalView: SwiftUI.View {
+    @ObservedObject var vm: ComprehensiveSystemCheckViewModel
+    let onClose: () -> Void
+
+    var body: some SwiftUI.View {
+        ZStack {
+            SwiftUI.Color.black.opacity(0.45)
+                .ignoresSafeArea()
+
+            VStack(spacing: 12) {
+                // 1. Hero Banner tiêu đề
+                ZStack(alignment: .topTrailing) {
+                    Circle()
+                        .fill(SwiftUI.Color.white.opacity(0.12))
+                        .frame(width: 95, height: 95)
+                        .offset(x: 28, y: -35)
+
+                    VStack(spacing: 5) {
+                        HStack(spacing: 8) {
+                            ZStack {
+                                Circle()
+                                    .fill(SwiftUI.Color.white.opacity(0.22))
+                                    .frame(width: 28, height: 28)
+                                SwiftUI.Image(systemName: "shield.lefthalf.filled.badge.checkmark")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                            SwiftUI.Text("Kiểm Tra Tổng Quát Hệ Thống")
+                                .font(.system(size: 17.5, weight: .heavy, design: .rounded))
+                                .foregroundColor(.white)
+                                .shadow(color: SwiftUI.Color.black.opacity(0.25), radius: 3, x: 0, y: 2)
+                        }
+
+                        SwiftUI.Text(vm.progressBannerText)
+                            .font(.system(size: 12.2, weight: .semibold))
+                            .foregroundColor(SwiftUI.Color.white.opacity(0.96))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 8)
+                    }
+                    .padding(.vertical, 13)
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity)
+                }
+                .background(CSSTheme.suiHeroGradient)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(SwiftUI.Color.white.opacity(0.32), lineWidth: 1.2)
+                )
+                .shadow(color: CSSTheme.suiPrimary.opacity(0.24), radius: 10, x: 0, y: 4)
+
+                // 2. Danh sách 5 mục kiểm tra Xanh / Đỏ rõ ràng
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 9) {
+                        checkRowView(
+                            index: 1,
+                            title: "1. Đường hầm mạng (LocalDevVPN)",
+                            icon: "network.badge.shield.half.filled",
+                            status: vm.vpnStatus
+                        )
+
+                        checkRowView(
+                            index: 2,
+                            title: "2. Tệp ghép đôi (Pairing File)",
+                            icon: "doc.badge.gearshape.fill",
+                            status: vm.pairingFileStatus
+                        )
+
+                        checkRowView(
+                            index: 3,
+                            title: "3. Thiết bị đã ghép nối",
+                            icon: "iphone.radiowaves.left.and.right",
+                            status: vm.pairedDeviceStatus
+                        )
+
+                        checkRowView(
+                            index: 4,
+                            title: "4. Máy chủ Anisette (HTTP 200 & Rate-limit)",
+                            icon: "server.rack",
+                            status: vm.anisetteStatus
+                        )
+
+                        checkRowView(
+                            index: 5,
+                            title: "5. Chứng chỉ Apple ID (Còn sống & OCSP)",
+                            icon: "checkmark.seal.fill",
+                            status: vm.appleCertStatus
+                        )
+                    }
+                    .padding(11)
+                }
+                .frame(maxHeight: 390)
+                .background(CSSTheme.suiCardBg)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(CSSTheme.suiBorder, lineWidth: 1.1)
+                )
+                .shadow(color: CSSTheme.suiPrimary.opacity(0.08), radius: 12, x: 0, y: 5)
+
+                // 3. Thanh tổng kết Xanh / Đỏ khi kiểm tra xong
+                if vm.hasFinished {
+                    HStack(spacing: 8) {
+                        SwiftUI.Image(systemName: vm.allPassed ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundColor(vm.allPassed ? CSSTheme.suiGreen : CSSTheme.suiRed)
+
+                        SwiftUI.Text(
+                            vm.allPassed
+                            ? "Tuyệt vời! Cả 5/5 mục đều XANH — Bạn có thể cài IPA & làm mới ứng dụng ngay."
+                            : "Có \(5 - vm.passedCount)/5 mục báo ĐỎ — Vui lòng khắc phục mục báo đỏ ở trên."
+                        )
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundColor(CSSTheme.suiPureBlack)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer(minLength: 0)
+                    }
+                    .padding(10)
+                    .background((vm.allPassed ? CSSTheme.suiGreen : CSSTheme.suiRed).opacity(0.13))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke((vm.allPassed ? CSSTheme.suiGreen : CSSTheme.suiRed).opacity(0.42), lineWidth: 1.1)
+                    )
+                }
+
+                // 4. Hàng nút Kiểm tra lại & Đóng
+                HStack(spacing: 10) {
+                    if !vm.isRunning {
+                        SwiftUI.Button {
+                            vm.startComprehensiveCheck()
+                        } label: {
+                            HStack(spacing: 6) {
+                                SwiftUI.Image(systemName: "arrow.clockwise.circle.fill")
+                                    .font(.system(size: 15, weight: .bold))
+                                SwiftUI.Text("Kiểm tra lại")
+                                    .font(.system(size: 14.5, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(CSSTheme.suiPrimary)
+                            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                            .shadow(color: CSSTheme.suiPrimary.opacity(0.28), radius: 5, x: 0, y: 3)
+                        }
+                    }
+
+                    SwiftUI.Button {
+                        vm.cancelCheck()
+                        onClose()
+                    } label: {
+                        HStack(spacing: 6) {
+                            SwiftUI.Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 15, weight: .bold))
+                            SwiftUI.Text(vm.isRunning ? "Dừng & Đóng" : "Đóng")
+                                .font(.system(size: 14.5, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(vm.allPassed ? CSSTheme.suiGreen : CSSTheme.suiRed)
+                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .shadow(color: (vm.allPassed ? CSSTheme.suiGreen : CSSTheme.suiRed).opacity(0.28), radius: 5, x: 0, y: 3)
+                    }
+                }
+            }
+            .padding(13)
+            .background(CSSTheme.suiPageGradient)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(SwiftUI.Color.white.opacity(0.88), lineWidth: 1.5)
+            )
+            .shadow(color: SwiftUI.Color.black.opacity(0.24), radius: 22, x: 0, y: 10)
+            .frame(maxWidth: 420)
+            .padding(.horizontal, 14)
+        }
+        .preferredColorScheme(.light)
+    }
+
+    @ViewBuilder
+    private func checkRowView(
+        index: Int,
+        title: String,
+        icon: String,
+        status: ComprehensiveItemStatus
+    ) -> some SwiftUI.View {
+        let stateColor: SwiftUI.Color = {
+            switch status {
+            case .passed: return CSSTheme.suiGreen
+            case .failed: return CSSTheme.suiRed
+            case .checking: return CSSTheme.suiPrimary
+            case .pending: return CSSTheme.suiSecondary
+            }
+        }()
+
+        let statusSubtitle: String = {
+            switch status {
+            case .pending:
+                return "Đang chờ tới lượt kiểm tra..."
+            case .checking:
+                return "Đang kiểm tra..."
+            case .passed(let detail):
+                return "✓ ĐẠT: \(detail)"
+            case .failed(let reason):
+                return "✕ LỖI: \(reason)"
+            }
+        }()
+
+        HStack(alignment: .center, spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(stateColor.opacity(0.15))
+                    .frame(width: 38, height: 38)
+                SwiftUI.Image(systemName: icon)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(stateColor)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                SwiftUI.Text(title)
+                    .font(.system(size: 13.8, weight: .bold))
+                    .foregroundColor(CSSTheme.suiPureBlack)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                SwiftUI.Text(statusSubtitle)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(status == .pending ? CSSTheme.suiPureBlack.opacity(0.65) : stateColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Group {
+                switch status {
+                case .pending:
+                    SwiftUI.Image(systemName: "clock.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(CSSTheme.suiSecondary.opacity(0.55))
+                case .checking:
+                    ProgressView()
+                        .tint(CSSTheme.suiPrimary)
+                case .passed:
+                    SwiftUI.Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 21, weight: .bold))
+                        .foregroundColor(CSSTheme.suiGreen)
+                case .failed:
+                    SwiftUI.Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 21, weight: .bold))
+                        .foregroundColor(CSSTheme.suiRed)
+                }
+            }
+        }
+        .padding(10)
+        .background(
+            status.isPassed
+            ? CSSTheme.suiGreen.opacity(0.07)
+            : (status.isFailed ? CSSTheme.suiRed.opacity(0.07) : CSSTheme.suiInnerRowBg)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(
+                    status.isPassed
+                    ? CSSTheme.suiGreen.opacity(0.45)
+                    : (status.isFailed ? CSSTheme.suiRed.opacity(0.45) : CSSTheme.suiInnerBorder),
+                    lineWidth: 1.2
+                )
+        )
     }
 }
 
@@ -120,8 +929,10 @@ class MyAppsViewController: UICollectionViewController
     private var heroSideloadButton: UIButton?
     private var heroSideloadSpinner: UIActivityIndicatorView?
     private var heroLiveContainerButton: UIButton?
+    private var heroComprehensiveCheckButton: UIButton?
     private var floatingBackButton: UIButton?
-    private let heroTopSpace: CGFloat = 104.0
+    // Tăng không gian Hero Banner lên 142pt để chứa nút "Kiểm tra tổng quát" thật thoáng và đẹp
+    private let heroTopSpace: CGFloat = 142.0
     
     private var _imagePickerInstalledApp: InstalledApp?
     private var _viewDidAppear = false
@@ -482,7 +1293,7 @@ private extension MyAppsViewController {
         self.collectionView.contentInset.top = self.heroTopSpace
         self.collectionView.contentInset.bottom = 40
         
-        // 3. Khởi tạo khối .hero Banner kèm App Icon, nút "+ IPA" và nút Icon LiveContainer
+        // 3. Khởi tạo khối .hero Banner kèm App Icon, nút "+ IPA", nút Icon LiveContainer và nút "Kiểm tra tổng quát"
         setupCSSHeroBanner()
         
         // 4. Đồng bộ màu Badge trên TabBar
@@ -572,7 +1383,7 @@ private extension MyAppsViewController {
         let subLabel = UILabel()
         subLabel.translatesAutoresizingMaskIntoConstraints = false
         subLabel.text = "Quản lý, cài đặt tệp .ipa & gia hạn ứng dụng dễ dàng"
-        subLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .medium)
+        subLabel.font = UIFont.systemFont(ofSize: 12.2, weight: .medium)
         subLabel.textColor = CSSTheme.white.withAlphaComponent(0.95)
         subLabel.textAlignment = .center
         subLabel.numberOfLines = 1
@@ -624,6 +1435,31 @@ private extension MyAppsViewController {
         lcBtn.accessibilityLabel = "Chuyển qua LiveContainer"
         lcBtn.addTarget(self, action: #selector(handleHeroLiveContainerTap(_:)), for: .touchUpInside)
         self.heroLiveContainerButton = lcBtn
+
+        // ✨ NÚT KIỂM TRA TỔNG QUÁT ĐỒNG BỘ GIAO DIỆN TRÊN HERO BANNER ✨
+        let checkAllBtn = UIButton(type: .system)
+        checkAllBtn.translatesAutoresizingMaskIntoConstraints = false
+        let checkSymConfig = UIImage.SymbolConfiguration(pointSize: 12.5, weight: .bold)
+        checkAllBtn.setImage(
+            UIImage(systemName: "shield.lefthalf.filled.badge.checkmark", withConfiguration: checkSymConfig)
+            ?? UIImage(systemName: "checkmark.shield.fill", withConfiguration: checkSymConfig),
+            for: .normal
+        )
+        checkAllBtn.setTitle("  Kiểm Tra Tổng Quát Hệ Thống (5 Mục)  ", for: .normal)
+        checkAllBtn.tintColor = CSSTheme.blue
+        checkAllBtn.setTitleColor(CSSTheme.blue, for: .normal)
+        checkAllBtn.titleLabel?.font = UIFont.systemFont(ofSize: 12.2, weight: .heavy)
+        checkAllBtn.backgroundColor = CSSTheme.white.withAlphaComponent(0.96)
+        checkAllBtn.layer.cornerRadius = 15
+        checkAllBtn.layer.borderWidth = 1.0
+        checkAllBtn.layer.borderColor = CSSTheme.white.cgColor
+        checkAllBtn.contentEdgeInsets = UIEdgeInsets(top: 5, left: 12, bottom: 5, right: 12)
+        checkAllBtn.layer.shadowColor = UIColor.black.cgColor
+        checkAllBtn.layer.shadowOffset = CGSize(width: 0, height: 3)
+        checkAllBtn.layer.shadowRadius = 5
+        checkAllBtn.layer.shadowOpacity = 0.18
+        checkAllBtn.addTarget(self, action: #selector(handleComprehensiveCheckButtonTap(_:)), for: .touchUpInside)
+        self.heroComprehensiveCheckButton = checkAllBtn
         
         // Gắn thanh tiến trình cài đặt vào cạnh dưới Hero Card
         self.sideloadingProgressView.layer.cornerRadius = 2
@@ -633,6 +1469,7 @@ private extension MyAppsViewController {
         heroCard.addSubview(subLabel)
         heroCard.addSubview(addBtn)
         heroCard.addSubview(lcBtn)
+        heroCard.addSubview(checkAllBtn)
         heroCard.addSubview(self.sideloadingProgressView)
         headerContainer.addSubview(heroCard)
         self.collectionView.addSubview(headerContainer)
@@ -644,7 +1481,7 @@ private extension MyAppsViewController {
             heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -6),
             
             addBtn.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 10),
-            addBtn.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 12),
+            addBtn.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 11),
             addBtn.heightAnchor.constraint(equalToConstant: 28),
             
             spinner.centerXAnchor.constraint(equalTo: addBtn.centerXAnchor),
@@ -660,9 +1497,15 @@ private extension MyAppsViewController {
             titleStack.leadingAnchor.constraint(greaterThanOrEqualTo: addBtn.trailingAnchor, constant: 8),
             titleStack.trailingAnchor.constraint(lessThanOrEqualTo: lcBtn.leadingAnchor, constant: -8),
             
-            subLabel.topAnchor.constraint(equalTo: addBtn.bottomAnchor, constant: 12),
+            subLabel.topAnchor.constraint(equalTo: addBtn.bottomAnchor, constant: 8),
             subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
             subLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
+
+            checkAllBtn.topAnchor.constraint(equalTo: subLabel.bottomAnchor, constant: 8),
+            checkAllBtn.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
+            checkAllBtn.heightAnchor.constraint(equalToConstant: 30),
+            checkAllBtn.leadingAnchor.constraint(greaterThanOrEqualTo: heroCard.leadingAnchor, constant: 14),
+            checkAllBtn.trailingAnchor.constraint(lessThanOrEqualTo: heroCard.trailingAnchor, constant: -14),
             
             self.sideloadingProgressView.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
             self.sideloadingProgressView.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
@@ -675,6 +1518,62 @@ private extension MyAppsViewController {
         UIView.animate(withDuration: 0.5, delay: 0.05, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.5, options: .curveEaseOut) {
             heroCard.alpha = 1
             heroCard.transform = .identity
+        }
+    }
+
+    // MARK: - 🛡️ XỬ LÝ NHẤN NÚT KIỂM TRA TỔNG QUÁT (NHẮC BẬT LOCALDEVVPN NẾU CHƯA BẬT)
+    @objc func handleComprehensiveCheckButtonTap(_ sender: UIButton) {
+        animateButtonBounce(sender)
+
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            let snapshot = await Task.detached(priority: .userInitiated) {
+                ComprehensiveSystemCheckViewModel.scanNetworkInterfaces()
+            }.value
+
+            // Nếu LocalDevVPN chưa bật -> nhắc người dùng bật LocalDevVPN trước
+            if !snapshot.hasLocalDevUtun {
+                let alert = UIAlertController(
+                    title: "Vui lòng bật LocalDevVPN",
+                    message: "Đường hầm mạng LocalDevVPN hiện chưa được bật.\n\nHãy mở ứng dụng LocalDevVPN và bật công tắc kết nối VPN trước để kiểm tra chính xác Tệp ghép đôi (Pairing File) và Thiết bị đã ghép nối.",
+                    preferredStyle: .alert
+                )
+                alert.view.tintColor = CSSTheme.blue
+
+                alert.addAction(UIAlertAction(title: "Đã bật VPN, Kiểm tra ngay", style: .default) { [weak self] _ in
+                    self?.presentComprehensiveCheckModal()
+                })
+
+                alert.addAction(UIAlertAction(title: "Vẫn kiểm tra tiếp", style: .default) { [weak self] _ in
+                    self?.presentComprehensiveCheckModal()
+                })
+
+                alert.addAction(UIAlertAction(title: "Đóng", style: .cancel, handler: nil))
+                self.present(alert, animated: true)
+            } else {
+                self.presentComprehensiveCheckModal()
+            }
+        }
+    }
+
+    @MainActor
+    func presentComprehensiveCheckModal() {
+        let vm = ComprehensiveSystemCheckViewModel()
+        var hostingController: UIHostingController<ComprehensiveSystemCheckModalView>?
+
+        let modalView = ComprehensiveSystemCheckModalView(vm: vm) {
+            hostingController?.dismiss(animated: true)
+        }
+
+        let hc = UIHostingController(rootView: modalView)
+        hc.overrideUserInterfaceStyle = .light
+        hc.view.backgroundColor = .clear
+        hc.modalPresentationStyle = .overFullScreen
+        hc.modalTransitionStyle = .crossDissolve
+        hostingController = hc
+
+        self.present(hc, animated: true) {
+            vm.startComprehensiveCheck()
         }
     }
     

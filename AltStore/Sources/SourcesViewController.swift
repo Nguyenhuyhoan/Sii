@@ -1547,7 +1547,159 @@ private final class GuideStyledImageView: UIView {
     }
 }
 
-// MARK: - ⬇️ KHUNG NÚT "NHẤN VÀO ĐÂY ĐỂ TẢI VỀ" (CHỨC NĂNG BẢN MỚI + TÔNG MÀU XANH-TÍM BẢN CŨ)
+// MARK: - ⬇️ NÚT TẢI NỔI KHỐI RÕ NÉT (GRADIENT XANH - TÍM ĐẬM ĐÀ, CHỮ TRẮNG SẮC NÉT, HIỆU ỨNG NHẤN)
+private final class ProminentGradientDownloadButton: UIControl {
+    private let shadowWrap = UIView()
+    private let gradientContainer = UIView()
+    private let gradientLayer = CAGradientLayer()
+    private let contentStack = UIStackView()
+    private let iconImageView = UIImageView()
+    private let spinner = UIActivityIndicatorView(style: .medium)
+    private let titleLabel = UILabel()
+
+    override var isHighlighted: Bool {
+        didSet {
+            animateHighlightState(isHighlighted)
+        }
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupButton()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupButton()
+    }
+
+    private func setupButton() {
+        translatesAutoresizingMaskIntoConstraints = false
+        backgroundColor = .clear
+
+        shadowWrap.translatesAutoresizingMaskIntoConstraints = false
+        shadowWrap.isUserInteractionEnabled = false
+        shadowWrap.backgroundColor = .clear
+        shadowWrap.layer.shadowColor = SourcesCSSTheme.blue.cgColor
+        shadowWrap.layer.shadowOffset = CGSize(width: 0, height: 6)
+        shadowWrap.layer.shadowRadius = 12
+        shadowWrap.layer.shadowOpacity = 0.38
+
+        gradientContainer.translatesAutoresizingMaskIntoConstraints = false
+        gradientContainer.isUserInteractionEnabled = false
+        gradientContainer.backgroundColor = SourcesCSSTheme.blue
+        gradientContainer.layer.cornerRadius = 15
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            gradientContainer.layer.cornerCurve = .continuous
+        }
+        gradientContainer.clipsToBounds = true
+        gradientContainer.layer.borderWidth = 1.4
+        gradientContainer.layer.borderColor = UIColor.white.withAlphaComponent(0.45).cgColor
+
+        gradientLayer.colors = [
+            SourcesCSSTheme.blue.cgColor,
+            SourcesCSSTheme.purple.cgColor
+        ]
+        gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+        gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+        gradientContainer.layer.insertSublayer(gradientLayer, at: 0)
+
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+        contentStack.isUserInteractionEnabled = false
+        contentStack.axis = .horizontal
+        contentStack.spacing = 10
+        contentStack.alignment = .center
+
+        let iconCfg = UIImage.SymbolConfiguration(pointSize: 18, weight: .heavy)
+        iconImageView.image = UIImage(systemName: "icloud.and.arrow.down.fill", withConfiguration: iconCfg)
+        iconImageView.tintColor = .white
+        iconImageView.contentMode = .scaleAspectFit
+
+        spinner.color = .white
+        spinner.hidesWhenStopped = true
+
+        titleLabel.text = "Nhấn Vào Đây Để Tải Về"
+        if let roundedDesc = UIFont.systemFont(ofSize: 17, weight: .heavy).fontDescriptor.withDesign(.rounded) {
+            titleLabel.font = UIFont(descriptor: roundedDesc, size: 17)
+        } else {
+            titleLabel.font = UIFont.systemFont(ofSize: 17, weight: .heavy)
+        }
+        titleLabel.textColor = .white
+        titleLabel.textAlignment = .center
+        titleLabel.layer.shadowColor = UIColor.black.cgColor
+        titleLabel.layer.shadowOffset = CGSize(width: 0, height: 1.5)
+        titleLabel.layer.shadowRadius = 2.5
+        titleLabel.layer.shadowOpacity = 0.32
+
+        contentStack.addArrangedSubview(iconImageView)
+        contentStack.addArrangedSubview(spinner)
+        contentStack.addArrangedSubview(titleLabel)
+
+        gradientContainer.addSubview(contentStack)
+        shadowWrap.addSubview(gradientContainer)
+        addSubview(shadowWrap)
+
+        NSLayoutConstraint.activate([
+            shadowWrap.leadingAnchor.constraint(equalTo: leadingAnchor),
+            shadowWrap.trailingAnchor.constraint(equalTo: trailingAnchor),
+            shadowWrap.topAnchor.constraint(equalTo: topAnchor),
+            shadowWrap.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            gradientContainer.leadingAnchor.constraint(equalTo: shadowWrap.leadingAnchor),
+            gradientContainer.trailingAnchor.constraint(equalTo: shadowWrap.trailingAnchor),
+            gradientContainer.topAnchor.constraint(equalTo: shadowWrap.topAnchor),
+            gradientContainer.bottomAnchor.constraint(equalTo: shadowWrap.bottomAnchor),
+
+            contentStack.centerXAnchor.constraint(equalTo: gradientContainer.centerXAnchor),
+            contentStack.centerYAnchor.constraint(equalTo: gradientContainer.centerYAnchor),
+            contentStack.leadingAnchor.constraint(greaterThanOrEqualTo: gradientContainer.leadingAnchor, constant: 16),
+            contentStack.trailingAnchor.constraint(lessThanOrEqualTo: gradientContainer.trailingAnchor, constant: -16)
+        ])
+    }
+
+    func setLoadingState(_ isLoading: Bool) {
+        if isLoading {
+            iconImageView.isHidden = true
+            spinner.startAnimating()
+            titleLabel.text = "Đang Tải Về"
+            gradientLayer.colors = [
+                SourcesCSSTheme.purple.cgColor,
+                SourcesCSSTheme.blue.cgColor
+            ]
+        } else {
+            spinner.stopAnimating()
+            iconImageView.isHidden = false
+            titleLabel.text = "Nhấn Vào Đây Để Tải Về"
+            gradientLayer.colors = [
+                SourcesCSSTheme.blue.cgColor,
+                SourcesCSSTheme.purple.cgColor
+            ]
+        }
+    }
+
+    private func animateHighlightState(_ highlighted: Bool) {
+        UIView.animate(
+            withDuration: 0.16,
+            delay: 0,
+            usingSpringWithDamping: 0.7,
+            initialSpringVelocity: 0.6,
+            options: [.allowUserInteraction, .beginFromCurrentState]
+        ) {
+            self.shadowWrap.transform = highlighted ? CGAffineTransform(scaleX: 0.95, y: 0.95) : .identity
+            self.gradientContainer.alpha = highlighted ? 0.90 : 1.0
+        }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        gradientLayer.frame = gradientContainer.bounds
+        CATransaction.commit()
+    }
+}
+
+// MARK: - ⬇️ KHUNG TẢI VỀ (HIỆN CỐ ĐỊNH HƯỚNG DẪN TRÊN NÚT + NÚT TẢI NỔI BẬT RÕ NÉT)
 private final class GuideDownloadActionCardView: UIView {
     private let downloadURL: URL
     private weak var hostViewController: UIViewController?
@@ -1555,23 +1707,13 @@ private final class GuideDownloadActionCardView: UIView {
     private let cardContainer = UIView()
     private let mainStack = UIStackView()
 
-    // Hàng thông tin tệp phía trên nút
-    private let infoRow = UIView()
-    private let iconBox = UIView()
-    private let iconGradient = CAGradientLayer()
-    private let iconImageView = UIImageView()
-    private let fileTitleLabel = UILabel()
-    private let fileSubtitleLabel = UILabel()
-
-    // Nút bấm chính "Nhấn vào đây để tải về"
-    private let downloadButton = UIButton(type: .system)
-    private let buttonGradient = CAGradientLayer()
-
-    // Khu vực hiển thị rõ nét dòng chữ "Chờ tải xong bạn chọn Lưu Vào Tệp để lưu file"
+    // Khung thông báo hiện cố định phía trên nút tải: “Chờ tải xong bạn chọn Lưu Vào Tệp để lưu file”
     private let noticeBannerView = UIView()
     private let noticeIconView = UIImageView()
     private let noticeTextLabel = UILabel()
-    private let progressActivity = UIActivityIndicatorView(style: .medium)
+
+    // Nút tải nổi bật rõ nét: “Nhấn Vào Đây Để Tải Về” -> khi nhấn đổi thành “Đang Tải Về”
+    private let downloadButton = ProminentGradientDownloadButton()
 
     private var isDownloading = false
 
@@ -1597,108 +1739,15 @@ private final class GuideDownloadActionCardView: UIView {
         mainStack.axis = .vertical
         mainStack.spacing = 12
 
-        // 1. Khối thông tin tệp đính kèm (Đồng bộ màu Xanh - Tím của bản cũ)
-        infoRow.translatesAutoresizingMaskIntoConstraints = false
-        infoRow.backgroundColor = SourcesCSSTheme.light
-        infoRow.layer.cornerRadius = SourcesCSSTheme.innerCornerRadius
-        if #available(iOS 13.0, tvOS 13.0, *) {
-            infoRow.layer.cornerCurve = .continuous
-        }
-        infoRow.layer.borderWidth = 1.0
-        infoRow.layer.borderColor = SourcesCSSTheme.innerBorder.cgColor
-
-        iconBox.translatesAutoresizingMaskIntoConstraints = false
-        iconBox.layer.cornerRadius = 12
-        if #available(iOS 13.0, tvOS 13.0, *) {
-            iconBox.layer.cornerCurve = .continuous
-        }
-        iconBox.layer.masksToBounds = true
-
-        iconGradient.colors = [SourcesCSSTheme.heroStart, SourcesCSSTheme.heroEnd]
-        iconGradient.startPoint = CGPoint(x: 0, y: 0)
-        iconGradient.endPoint = CGPoint(x: 1, y: 1)
-        iconBox.layer.insertSublayer(iconGradient, at: 0)
-
-        iconImageView.translatesAutoresizingMaskIntoConstraints = false
-        let iconCfg = UIImage.SymbolConfiguration(pointSize: 18, weight: .bold)
-        iconImageView.image = UIImage(systemName: "arrow.down.doc.fill", withConfiguration: iconCfg)
-        iconImageView.tintColor = .white
-        iconBox.addSubview(iconImageView)
-
-        fileTitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        fileTitleLabel.text = resolvedDisplayFileName()
-        fileTitleLabel.font = UIFont.systemFont(ofSize: 15.5, weight: .bold)
-        fileTitleLabel.textColor = SourcesCSSTheme.pureBlack
-        fileTitleLabel.numberOfLines = 1
-
-        fileSubtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        fileSubtitleLabel.text = "Tệp đính kèm / Liên kết hỗ trợ sửa lỗi"
-        fileSubtitleLabel.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
-        fileSubtitleLabel.textColor = SourcesCSSTheme.blue
-        fileSubtitleLabel.numberOfLines = 1
-
-        infoRow.addSubview(iconBox)
-        infoRow.addSubview(fileTitleLabel)
-        infoRow.addSubview(fileSubtitleLabel)
-
-        NSLayoutConstraint.activate([
-            iconBox.leadingAnchor.constraint(equalTo: infoRow.leadingAnchor, constant: 12),
-            iconBox.centerYAnchor.constraint(equalTo: infoRow.centerYAnchor),
-            iconBox.widthAnchor.constraint(equalToConstant: 44),
-            iconBox.heightAnchor.constraint(equalToConstant: 44),
-
-            iconImageView.centerXAnchor.constraint(equalTo: iconBox.centerXAnchor),
-            iconImageView.centerYAnchor.constraint(equalTo: iconBox.centerYAnchor),
-
-            fileTitleLabel.leadingAnchor.constraint(equalTo: iconBox.trailingAnchor, constant: 12),
-            fileTitleLabel.trailingAnchor.constraint(equalTo: infoRow.trailingAnchor, constant: -12),
-            fileTitleLabel.topAnchor.constraint(equalTo: infoRow.topAnchor, constant: 12),
-
-            fileSubtitleLabel.leadingAnchor.constraint(equalTo: fileTitleLabel.leadingAnchor),
-            fileSubtitleLabel.trailingAnchor.constraint(equalTo: fileTitleLabel.trailingAnchor),
-            fileSubtitleLabel.topAnchor.constraint(equalTo: fileTitleLabel.bottomAnchor, constant: 3),
-            fileSubtitleLabel.bottomAnchor.constraint(equalTo: infoRow.bottomAnchor, constant: -12)
-        ])
-
-        // 2. Nút "Nhấn vào đây để tải về" đồng bộ màu Xanh - Tím của bản cũ
-        downloadButton.translatesAutoresizingMaskIntoConstraints = false
-        let btnIconCfg = UIImage.SymbolConfiguration(pointSize: 16, weight: .heavy)
-        downloadButton.setImage(UIImage(systemName: "icloud.and.arrow.down.fill", withConfiguration: btnIconCfg), for: .normal)
-        downloadButton.setTitle("  Nhấn vào đây để tải về", for: .normal)
-        downloadButton.titleLabel?.font = UIFont.systemFont(ofSize: 16, weight: .heavy)
-        downloadButton.tintColor = .white
-        downloadButton.setTitleColor(.white, for: .normal)
-        downloadButton.layer.cornerRadius = 14
-        if #available(iOS 13.0, tvOS 13.0, *) {
-            downloadButton.layer.cornerCurve = .continuous
-        }
-        downloadButton.layer.masksToBounds = false
-        downloadButton.layer.shadowColor = SourcesCSSTheme.blue.cgColor
-        downloadButton.layer.shadowOffset = CGSize(width: 0, height: 5)
-        downloadButton.layer.shadowRadius = 10
-        downloadButton.layer.shadowOpacity = 0.28
-
-        buttonGradient.colors = [
-            SourcesCSSTheme.blue.cgColor,
-            SourcesCSSTheme.purple.cgColor
-        ]
-        buttonGradient.startPoint = CGPoint(x: 0, y: 0.5)
-        buttonGradient.endPoint = CGPoint(x: 1, y: 0.5)
-        buttonGradient.cornerRadius = 14
-        downloadButton.layer.insertSublayer(buttonGradient, at: 0)
-
-        downloadButton.addTarget(self, action: #selector(handleDownloadButtonTap), for: .touchUpInside)
-
-        // 3. Khu vực thông báo dễ nhìn khi nhấn tải về: “Chờ tải xong bạn chọn Lưu Vào Tệp để lưu file”
+        // 1. Dòng chữ cố định phía trên nút tải: "Chờ tải xong bạn chọn Lưu Vào Tệp để lưu file"
         noticeBannerView.translatesAutoresizingMaskIntoConstraints = false
-        noticeBannerView.backgroundColor = SourcesCSSTheme.blue.withAlphaComponent(0.10)
-        noticeBannerView.layer.cornerRadius = 14
+        noticeBannerView.backgroundColor = SourcesCSSTheme.light
+        noticeBannerView.layer.cornerRadius = SourcesCSSTheme.innerCornerRadius
         if #available(iOS 13.0, tvOS 13.0, *) {
             noticeBannerView.layer.cornerCurve = .continuous
         }
-        noticeBannerView.layer.borderWidth = 1.4
-        noticeBannerView.layer.borderColor = SourcesCSSTheme.blue.withAlphaComponent(0.45).cgColor
-        noticeBannerView.isHidden = true
+        noticeBannerView.layer.borderWidth = 1.2
+        noticeBannerView.layer.borderColor = SourcesCSSTheme.blue.withAlphaComponent(0.35).cgColor
 
         noticeIconView.translatesAutoresizingMaskIntoConstraints = false
         let noticeIconCfg = UIImage.SymbolConfiguration(pointSize: 20, weight: .bold)
@@ -1708,39 +1757,30 @@ private final class GuideDownloadActionCardView: UIView {
 
         noticeTextLabel.translatesAutoresizingMaskIntoConstraints = false
         noticeTextLabel.numberOfLines = 0
-        noticeTextLabel.attributedText = makeNoticeAttributedText(
-            mainText: "Chờ tải xong bạn chọn Lưu Vào Tệp để lưu file",
-            subStatus: nil
-        )
-
-        progressActivity.translatesAutoresizingMaskIntoConstraints = false
-        progressActivity.color = SourcesCSSTheme.blue
-        progressActivity.hidesWhenStopped = true
+        noticeTextLabel.attributedText = makeNoticeAttributedText()
 
         noticeBannerView.addSubview(noticeIconView)
         noticeBannerView.addSubview(noticeTextLabel)
-        noticeBannerView.addSubview(progressActivity)
+
+        // 2. Nút "Nhấn Vào Đây Để Tải Về" ở ngay bên dưới
+        downloadButton.addTarget(self, action: #selector(handleDownloadButtonTap), for: .touchUpInside)
 
         NSLayoutConstraint.activate([
-            downloadButton.heightAnchor.constraint(equalToConstant: 50),
-
             noticeIconView.leadingAnchor.constraint(equalTo: noticeBannerView.leadingAnchor, constant: 13),
             noticeIconView.centerYAnchor.constraint(equalTo: noticeBannerView.centerYAnchor),
             noticeIconView.widthAnchor.constraint(equalToConstant: 26),
             noticeIconView.heightAnchor.constraint(equalToConstant: 26),
 
-            progressActivity.trailingAnchor.constraint(equalTo: noticeBannerView.trailingAnchor, constant: -13),
-            progressActivity.centerYAnchor.constraint(equalTo: noticeBannerView.centerYAnchor),
-
             noticeTextLabel.leadingAnchor.constraint(equalTo: noticeIconView.trailingAnchor, constant: 10),
-            noticeTextLabel.trailingAnchor.constraint(equalTo: progressActivity.leadingAnchor, constant: -8),
+            noticeTextLabel.trailingAnchor.constraint(equalTo: noticeBannerView.trailingAnchor, constant: -13),
             noticeTextLabel.topAnchor.constraint(equalTo: noticeBannerView.topAnchor, constant: 13),
-            noticeTextLabel.bottomAnchor.constraint(equalTo: noticeBannerView.bottomAnchor, constant: -13)
+            noticeTextLabel.bottomAnchor.constraint(equalTo: noticeBannerView.bottomAnchor, constant: -13),
+
+            downloadButton.heightAnchor.constraint(equalToConstant: 54)
         ])
 
-        mainStack.addArrangedSubview(infoRow)
-        mainStack.addArrangedSubview(downloadButton)
         mainStack.addArrangedSubview(noticeBannerView)
+        mainStack.addArrangedSubview(downloadButton)
 
         cardContainer.addSubview(mainStack)
         addSubview(cardContainer)
@@ -1758,18 +1798,8 @@ private final class GuideDownloadActionCardView: UIView {
         ])
     }
 
-    private func resolvedDisplayFileName() -> String {
-        let lastComp = downloadURL.lastPathComponent.removingPercentEncoding ?? downloadURL.lastPathComponent
-        if !lastComp.isEmpty && lastComp != "/" && lastComp.contains(".") {
-            return "Tệp: \(lastComp)"
-        }
-        if let host = downloadURL.host {
-            return "Liên kết tải về (\(host))"
-        }
-        return "Tệp tải về hỗ trợ sửa lỗi"
-    }
-
-    private func makeNoticeAttributedText(mainText: String, subStatus: String?) -> NSAttributedString {
+    private func makeNoticeAttributedText() -> NSAttributedString {
+        let mainText = "Chờ tải xong bạn chọn Lưu Vào Tệp để lưu file"
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = 3.5
 
@@ -1791,41 +1821,28 @@ private final class GuideDownloadActionCardView: UIView {
             ], range: highlightRange)
         }
 
-        if let sub = subStatus, !sub.isEmpty {
-            let subAttr = NSAttributedString(
-                string: "\n" + sub,
-                attributes: [
-                    .font: UIFont.systemFont(ofSize: 13.0, weight: .semibold),
-                    .foregroundColor: SourcesCSSTheme.purple,
-                    .paragraphStyle: paragraph
-                ]
-            )
-            result.append(subAttr)
-        }
-
         return result
     }
 
     @objc private func handleDownloadButtonTap() {
+        guard !isDownloading else { return }
+
+        #if !os(tvOS)
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+        #endif
+
+        // Hiệu ứng nhấn nảy rõ ràng và chuyển chữ thành "Đang Tải Về"
         UIView.animate(withDuration: 0.12, animations: {
-            self.downloadButton.transform = CGAffineTransform(scaleX: 0.96, y: 0.96)
+            self.downloadButton.transform = CGAffineTransform(scaleX: 0.95, y: 0.95)
         }) { _ in
-            UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 0.65, initialSpringVelocity: 0.5) {
+            UIView.animate(withDuration: 0.28, delay: 0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0.6) {
                 self.downloadButton.transform = .identity
             }
         }
 
-        if noticeBannerView.isHidden {
-            noticeBannerView.alpha = 0
-            noticeBannerView.isHidden = false
-            UIView.animate(withDuration: 0.25) {
-                self.noticeBannerView.alpha = 1
-                self.setNeedsLayout()
-                self.layoutIfNeeded()
-                self.hostViewController?.view.setNeedsLayout()
-                self.hostViewController?.view.layoutIfNeeded()
-            }
-        }
+        isDownloading = true
+        downloadButton.setLoadingState(true)
 
         let hostLower = (downloadURL.host ?? "").lowercased()
         let isCloudWebPortal = hostLower.contains("icloud.com")
@@ -1836,27 +1853,22 @@ private final class GuideDownloadActionCardView: UIView {
             || hostLower.contains("dropbox.com")
 
         if isCloudWebPortal && !downloadURL.pathExtension.lowercased().isOne(of: ["ipa", "zip", "mobileconfig", "plist", "deb", "tipa"]) {
-            noticeTextLabel.attributedText = makeNoticeAttributedText(
-                mainText: "Chờ tải xong bạn chọn Lưu Vào Tệp để lưu file",
-                subStatus: "• Đang mở trang tải tệp..."
-            )
-            UIApplication.shared.open(downloadURL, options: [:], completionHandler: nil)
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 450_000_000)
+                guard let self = self else { return }
+                UIApplication.shared.open(self.downloadURL, options: [:], completionHandler: nil)
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                self.isDownloading = false
+                self.downloadButton.setLoadingState(false)
+            }
             return
         }
-
-        guard !isDownloading else { return }
-        isDownloading = true
-        progressActivity.startAnimating()
-        noticeTextLabel.attributedText = makeNoticeAttributedText(
-            mainText: "Chờ tải xong bạn chọn Lưu Vào Tệp để lưu file",
-            subStatus: "• Đang tải tệp về thiết bị, vui lòng chờ..."
-        )
 
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             defer {
                 self.isDownloading = false
-                self.progressActivity.stopAnimating()
+                self.downloadButton.setLoadingState(false)
             }
 
             do {
@@ -1872,10 +1884,6 @@ private final class GuideDownloadActionCardView: UIView {
                    httpResp.value(forHTTPHeaderField: "Content-Disposition") == nil,
                    self.downloadURL.pathExtension.isEmpty {
                     try? FileManager.default.removeItem(at: tempLocalURL)
-                    self.noticeTextLabel.attributedText = self.makeNoticeAttributedText(
-                        mainText: "Chờ tải xong bạn chọn Lưu Vào Tệp để lưu file",
-                        subStatus: "• Đang chuyển hướng tới trang tải tệp..."
-                    )
                     UIApplication.shared.open(self.downloadURL, options: [:], completionHandler: nil)
                     return
                 }
@@ -1890,17 +1898,8 @@ private final class GuideDownloadActionCardView: UIView {
                 }
                 try FileManager.default.moveItem(at: tempLocalURL, to: destinationURL)
 
-                self.noticeTextLabel.attributedText = self.makeNoticeAttributedText(
-                    mainText: "Chờ tải xong bạn chọn Lưu Vào Tệp để lưu file",
-                    subStatus: "✓ Đã tải xong! Hãy chọn \"Lưu vào Tệp\" trong bảng vừa hiện lên."
-                )
-
                 self.presentSaveToFilesSheet(for: destinationURL)
             } catch {
-                self.noticeTextLabel.attributedText = self.makeNoticeAttributedText(
-                    mainText: "Chờ tải xong bạn chọn Lưu Vào Tệp để lưu file",
-                    subStatus: "• Đang mở trình duyệt để tải tệp..."
-                )
                 UIApplication.shared.open(self.downloadURL, options: [:], completionHandler: nil)
             }
         }
@@ -1922,12 +1921,6 @@ private final class GuideDownloadActionCardView: UIView {
         #else
         UIApplication.shared.open(downloadURL, options: [:], completionHandler: nil)
         #endif
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        iconGradient.frame = iconBox.bounds
-        buttonGradient.frame = downloadButton.bounds
     }
 }
 
@@ -2023,7 +2016,7 @@ private final class GuideImagePreviewController: UIViewController, UIScrollViewD
     }
 }
 
-// MARK: - 📖 TRANG CHI TIẾT BÀI HƯỚNG DẪN (GIAO DIỆN BẢN CŨ + VIDEO TỪ TAB TỔNG QUAN + TẢI VỀ BẢN MỚI)
+// MARK: - 📖 TRANG CHI TIẾT BÀI HƯỚNG DẪN (GIAO DIỆN BẢN CŨ + VIDEO TỪ TAB TỔNG QUAN + TẢI VỀ MỚI)
 private final class GuideArticleDetailViewController: UIViewController {
     private let article: GuideArticle
     private let scrollView = UIScrollView()

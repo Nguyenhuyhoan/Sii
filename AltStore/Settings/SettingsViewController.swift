@@ -21,6 +21,60 @@ import SemanticVersion
 import SideSign
 import UniformTypeIdentifiers
 
+// MARK: - 🌍 HỆ THỐNG ĐA NGÔN NGỮ TOÀN DIỆN (VIỆT / ANH / TRUNG) ĐỒNG BỘ TOÀN HỆ THỐNG
+private enum SettingsLanguage: String, CaseIterable, Identifiable {
+    case vi = "vi"
+    case en = "en"
+    case zh = "zh-Hans"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .vi: return "🇻🇳 Tiếng Việt"
+        case .en: return "🇺🇸 English"
+        case .zh: return "🇨🇳 简体中文"
+        }
+    }
+
+    var shortBadge: String {
+        switch self {
+        case .vi: return "🇻🇳 VI"
+        case .en: return "🇺🇸 EN"
+        case .zh: return "🇨🇳 中文"
+        }
+    }
+
+    static let storageKey = "SideStore.TroLy.AppLanguage"
+    static let didChangeNotification = Notification.Name("SideStore.AppLanguageDidChange")
+
+    static var current: SettingsLanguage {
+        get {
+            if let saved = UserDefaults.standard.string(forKey: storageKey),
+               let lang = SettingsLanguage(rawValue: saved) {
+                return lang
+            }
+            let preferred = Locale.preferredLanguages.first?.lowercased() ?? "vi"
+            if preferred.hasPrefix("vi") { return .vi }
+            if preferred.hasPrefix("zh") { return .zh }
+            if preferred.hasPrefix("en") { return .en }
+            return .vi
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: storageKey)
+            NotificationCenter.default.post(name: didChangeNotification, object: newValue)
+        }
+    }
+}
+
+private func L(_ vi: String, _ en: String, _ zh: String, lang: SettingsLanguage = SettingsLanguage.current) -> String {
+    switch lang {
+    case .vi: return vi
+    case .en: return en
+    case .zh: return zh
+    }
+}
+
 // MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% TOÀN HỆ THỐNG & CHỮ ĐEN TUYỀN)
 private struct CSSTheme {
     static let white = UIColor.white
@@ -223,8 +277,8 @@ private final class SettingsAnisetteViewModel: ObservableObject {
         selectedAnisetteServerURL = selectedURL
         let serverHost = URL(string: selectedURL)?.host ?? selectedURL
         anisetteDetail = onDevice
-            ? "Không ổn định • Hãy tắt Use On-Device Anisette"
-            : "Ổn định • Máy chủ: \(serverHost)"
+            ? L("Không ổn định • Hãy tắt Use On-Device Anisette", "Unstable • Please turn off Use On-Device Anisette", "不稳定 • 请关闭 Use On-Device Anisette")
+            : L("Ổn định • Máy chủ: \(serverHost)", "Stable • Server: \(serverHost)", "稳定 • 服务器: \(serverHost)")
     }
 
     func setUseOnDeviceAnisette(_ enabled: Bool) {
@@ -298,12 +352,23 @@ private final class SettingsAnisetteViewModel: ObservableObject {
 }
 
 private struct SettingsAnisetteSheetView: SwiftUI.View {
+    @AppStorage(SettingsLanguage.storageKey) private var selectedLanguageRaw: String = SettingsLanguage.current.rawValue
     @StateObject private var vm = SettingsAnisetteViewModel()
     @State private var customServerInput: String = ""
     @Environment(\.dismiss) private var dismiss
     var onDismiss: (() -> Void)? = nil
 
-    private let customServerPrefix = "Máy chủ tùy chỉnh"
+    private var lang: SettingsLanguage {
+        SettingsLanguage(rawValue: selectedLanguageRaw) ?? .vi
+    }
+
+    private func tr(_ vi: String, _ en: String, _ zh: String) -> String {
+        L(vi, en, zh, lang: lang)
+    }
+
+    private var customServerPrefix: String {
+        tr("Máy chủ tùy chỉnh", "Custom Server", "自定义服务器")
+    }
 
     private func isRecommendedSideStoreNew(_ server: AnisetteServerItem) -> Bool {
         let lowerName = server.name.lowercased()
@@ -326,8 +391,8 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                         }
                         VStack(alignment: .leading, spacing: 4) {
                             SwiftUI.Text(vm.isAnisetteOK
-                                         ? "Máy Chủ Anisette Ổn Định"
-                                         : "Đang Bật On-Device Anisette")
+                                         ? tr("Máy Chủ Anisette Ổn Định", "Anisette Server Is Stable", "Anisette 服务器稳定")
+                                         : tr("Đang Bật On-Device Anisette", "On-Device Anisette Is Enabled", "已开启设备端 Anisette"))
                                 .font(.system(size: 16.5, weight: .bold))
                                 .foregroundColor(CSSTheme.suiPureBlack)
                             SwiftUI.Text(vm.anisetteDetail)
@@ -346,7 +411,7 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                     .shadow(color: CSSTheme.suiPrimary.opacity(0.08), radius: 10, x: 0, y: 5)
 
                     SettingsSkySectionCard(
-                        title: "CHẾ ĐỘ XÁC THỰC ANISETTE",
+                        title: tr("CHẾ ĐỘ XÁC THỰC ANISETTE", "ANISETTE AUTHENTICATION MODE", "ANISETTE 验证模式"),
                         icon: "slider.horizontal.3",
                         color: CSSTheme.suiPrimary
                     ) {
@@ -364,8 +429,8 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                         .font(.system(size: 15, weight: .bold))
                                         .foregroundColor(CSSTheme.suiPureBlack)
                                     SwiftUI.Text(vm.useOnDeviceAnisette
-                                                 ? "Đang BẬT (Khuyên tắt để ổn định hơn)"
-                                                 : "(Nên Tắt Để Dễ Đăng Nhập)")
+                                                 ? tr("Đang BẬT (Khuyên tắt để ổn định hơn)", "ENABLED (Turn off for better stability)", "已开启（建议关闭以提高稳定性）")
+                                                 : tr("(Nên Tắt Để Dễ Đăng Nhập)", "(Recommended OFF for easier sign-in)", "（建议关闭以便更轻松登录）"))
                                         .font(.system(size: 13, weight: .semibold))
                                         .foregroundColor(vm.useOnDeviceAnisette ? CSSTheme.suiRed : CSSTheme.suiGreen)
                                 }
@@ -394,8 +459,8 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                         .font(.system(size: 15, weight: .bold))
                                         .foregroundColor(CSSTheme.suiPureBlack)
                                     SwiftUI.Text(vm.isAnisetteAutoRotationEnabled
-                                                 ? "(Tự Động Đổi Máy Chủ Khi Lỗi)"
-                                                 : "Đang Tắt “Nên chọn SideStore (New)”")
+                                                 ? tr("(Tự Động Đổi Máy Chủ Khi Lỗi)", "(Auto-Switch Server On Error)", "（出错时自动切换服务器）")
+                                                 : tr("Đang Tắt “Nên chọn SideStore (New)”", "Disabled “Select SideStore (New)”", "已关闭“建议选择 SideStore (New)”"))
                                         .font(.system(size: 13, weight: .semibold))
                                         .foregroundColor(vm.isAnisetteAutoRotationEnabled ? CSSTheme.suiGreen : CSSTheme.suiRed)
                                 }
@@ -416,7 +481,7 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                             } label: {
                                 HStack(spacing: 8) {
                                     SwiftUI.Image(systemName: "checkmark.shield.fill")
-                                    SwiftUI.Text("Tắt ngay Use On-Device Anisette")
+                                    SwiftUI.Text(tr("Tắt ngay Use On-Device Anisette", "Turn off Use On-Device Anisette Now", "立即关闭 Use On-Device Anisette"))
                                         .font(.system(size: 15, weight: .bold))
                                 }
                                 .foregroundColor(.white)
@@ -431,7 +496,7 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                     }
 
                     SettingsSkySectionCard(
-                        title: "CHỌN MÁY CHỦ ANISETTE",
+                        title: tr("CHỌN MÁY CHỦ ANISETTE", "SELECT ANISETTE SERVER", "选择 ANISETTE 服务器"),
                         icon: "server.rack",
                         color: CSSTheme.suiSecondary,
                         trailingView: vm.isLoading ? AnyView(ProgressView().tint(CSSTheme.suiPrimary)) : nil
@@ -457,7 +522,7 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                                     .foregroundColor(CSSTheme.suiPureBlack)
 
                                                 if isRecommended {
-                                                    SwiftUI.Text("★ Khuyên dùng")
+                                                    SwiftUI.Text(tr("★ Khuyên dùng", "★ Recommended", "★ 推荐使用"))
                                                         .font(.system(size: 10.5, weight: .heavy))
                                                         .padding(.horizontal, 7)
                                                         .padding(.vertical, 2.5)
@@ -473,7 +538,7 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                         }
                                         Spacer()
                                         if isSelected {
-                                            SwiftUI.Text("Đang dùng")
+                                            SwiftUI.Text(tr("Đang dùng", "Active", "使用中"))
                                                 .font(.system(size: 11.5, weight: .bold))
                                                 .padding(.horizontal, 8)
                                                 .padding(.vertical, 4)
@@ -506,7 +571,7 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                 SwiftUI.Image(systemName: "link.badge.plus")
                                     .font(.system(size: 14, weight: .bold))
                                     .foregroundColor(CSSTheme.suiPrimary)
-                                SwiftUI.Text("Hoặc nhập URL máy chủ tùy chỉnh:")
+                                SwiftUI.Text(tr("Hoặc nhập URL máy chủ tùy chỉnh:", "Or enter custom server URL:", "或输入自定义服务器 URL："))
                                     .font(.system(size: 13.5, weight: .bold))
                                     .foregroundColor(CSSTheme.suiPureBlack)
                             }
@@ -536,7 +601,7 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                                     HStack(spacing: 4) {
                                         SwiftUI.Image(systemName: "checkmark.circle.fill")
                                             .font(.system(size: 13.5, weight: .bold))
-                                        SwiftUI.Text("Lưu")
+                                        SwiftUI.Text(tr("Lưu", "Save", "保存"))
                                             .font(.system(size: 14.5, weight: .bold))
                                     }
                                     .foregroundColor(.white)
@@ -554,21 +619,48 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                 .padding(16)
             }
             .background(CSSTheme.suiPageGradient.ignoresSafeArea())
-            .navigationTitle("Máy Chủ Anisette")
+            .navigationTitle(tr("Máy Chủ Anisette", "Anisette Server", "Anisette 服务器"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Menu {
+                        ForEach(SettingsLanguage.allCases) { item in
+                            SwiftUI.Button {
+                                selectedLanguageRaw = item.rawValue
+                                SettingsLanguage.current = item
+                                vm.updateInstantStatus()
+                                Task { await vm.reloadCurrentSelection(customPrefix: customServerPrefix) }
+                            } label: {
+                                HStack {
+                                    SwiftUI.Text(item.displayName)
+                                    if item == lang {
+                                        SwiftUI.Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 3) {
+                            SwiftUI.Image(systemName: "globe")
+                                .font(.system(size: 12, weight: .bold))
+                            SwiftUI.Text(lang.shortBadge)
+                                .font(.system(size: 12, weight: .bold))
+                        }
+                        .foregroundColor(CSSTheme.suiPrimary)
+                    }
+                }
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 6) {
                         SwiftUI.Image(systemName: "server.rack")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundColor(CSSTheme.suiPrimary)
-                        SwiftUI.Text("Máy Chủ Anisette")
+                        SwiftUI.Text(tr("Máy Chủ Anisette", "Anisette Server", "Anisette 服务器"))
                             .font(.system(size: 17, weight: .bold))
                             .foregroundColor(CSSTheme.suiPrimary)
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    SwiftUI.Button("Xong") {
+                    SwiftUI.Button(tr("Xong", "Done", "完成")) {
                         onDismiss?()
                         dismiss()
                     }
@@ -726,6 +818,26 @@ extension SettingsViewController
             }
         }
 
+        // Tên hiển thị đa ngôn ngữ chuẩn xác cho từng mục
+        var localizedTitle: String {
+            switch self {
+            case .anisetteServers:
+                return L("Máy chủ Anisette", "Anisette Servers", "Anisette 服务器")
+            case .refreshAttempts:
+                return L("Lịch sử làm mới ứng dụng", "View Refresh Attempts", "应用刷新记录")
+            case .refreshSideJITServer:
+                return L("Cấu hình máy chủ SideJITServer", "Configure SideJITServer", "配置 SideJITServer 服务器")
+            case .certificateManagement:
+                return L("Quản lý chứng chỉ (Certificate)", "Certificate Management", "证书管理 (Certificate)")
+            case .userCustomizations:
+                return L("Tùy chỉnh giao diện & người dùng", "User Customizations", "界面与用户自定义")
+            case .errorLog:
+                return L("Nhật ký lỗi hệ thống", "System Error Log", "系统错误日志")
+            case .clearCache:
+                return L("Xóa bộ nhớ đệm (Cache)", "Clear App Cache", "清除应用缓存 (Cache)")
+            }
+        }
+
         // Ánh xạ chính xác về IndexPath gốc trên Storyboard để giữ nguyên UI và Segue
         var originalIndexPath: IndexPath {
             switch self {
@@ -759,6 +871,10 @@ final class SettingsViewController: UITableViewController
 
     private var prototypeHeaderFooterView: SettingsHeaderFooterView!
     private var heroGradientLayer: CAGradientLayer?
+    private var heroSubLabel: UILabel?
+    private var heroLanguageButton: UIButton?
+    private var footerTitleLabel: UILabel?
+    private var footerBodyLabel: UILabel?
 
     // Nút quay lại nhỏ cố định ở góc trên bên trái khi vào mục con
     private var floatingBackButton: UIButton?
@@ -808,6 +924,7 @@ final class SettingsViewController: UITableViewController
         super.init(coder: aDecoder)
         NotificationCenter.default.addObserver(self, selector: #selector(SettingsViewController.openPatreonSettings(_:)), name: AppDelegate.openPatreonSettingsDeepLinkNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(SettingsViewController.openErrorLog(_:)), name: ToastView.openErrorLogNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(SettingsViewController.handleLanguageDidChange(_:)), name: SettingsLanguage.didChangeNotification, object: nil)
     }
 
     deinit
@@ -866,7 +983,7 @@ final class SettingsViewController: UITableViewController
             self.tableView.sectionHeaderTopPadding = 0
         }
         
-        // ✨ KÍCH HOẠT GIAO DIỆN WEB CSS, ICON & VIỆT HÓA ✨
+        // ✨ KÍCH HOẠT GIAO DIỆN WEB CSS, ICON & ĐA NGÔN NGỮ ✨
         self.applySmartWebCSSTheme()
         
         self.update()
@@ -887,6 +1004,7 @@ final class SettingsViewController: UITableViewController
         super.viewWillAppear(animated)
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
         self.forceDisableRemovedSettings()
+        self.refreshLocalizedStaticViews()
         self.update()
         self.restoreVisibleCellsWhiteBackground()
     }
@@ -984,8 +1102,93 @@ extension SettingsViewController: UINavigationControllerDelegate {
     }
 }
 
-// MARK: - ✨ HỆ THỐNG RENDER CSS, ICON INLINE & VIỆT HÓA TOÀN DIỆN
+// MARK: - ✨ HỆ THỐNG RENDER CSS, ICON INLINE & ĐA NGÔN NGỮ TOÀN DIỆN
 private extension SettingsViewController {
+
+    @objc private func handleLanguageDidChange(_ notification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.isViewLoaded else { return }
+            self.refreshLocalizedStaticViews()
+            if let team = self.activeTeam {
+                self.accountTypeLabel.text = self.translateStaticText(team.type.localizedDescription)
+            }
+            self.tableView.reloadData()
+            self.restoreVisibleCellsWhiteBackground()
+        }
+    }
+
+    private func refreshLocalizedStaticViews() {
+        self.heroSubLabel?.text = L(
+            "✨ Tùy chỉnh & quản lý trải nghiệm cài đặt ứng dụng của bạn",
+            "✨ Customize & manage your app installation experience",
+            "✨ 自定义并管理您的应用安装体验"
+        )
+        self.heroLanguageButton?.setTitle(" " + SettingsLanguage.current.shortBadge, for: .normal)
+        #if !os(tvOS)
+        self.heroLanguageButton?.menu = buildLanguageMenu()
+        #endif
+
+        self.footerTitleLabel?.text = L("❤️ LỜI CẢM ƠN & TRI ÂN", "❤️ SPECIAL THANKS & CREDITS", "❤️ 特别鸣谢与致敬")
+        if let bodyLabel = self.footerBodyLabel {
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.alignment = .center
+            paragraph.lineSpacing = 3.5
+
+            let bodyText = L(
+                """
+                Tri ân đội ngũ phát triển & cộng đồng mã nguồn mở:
+                SideStore Team (@sidestoreio) • Giao diện: @lit_ritt
+                Nền tảng AltStore: Riley Testut & Cộng đồng
+                """,
+                """
+                Special thanks to the developers & open-source community:
+                SideStore Team (@sidestoreio) • UI Design: @lit_ritt
+                AltStore Platform: Riley Testut & Community
+                """,
+                """
+                致敬开发团队与开源社区：
+                SideStore 团队 (@sidestoreio) • 界面设计: @lit_ritt
+                AltStore 平台: Riley Testut 与社区
+                """
+            )
+            bodyLabel.attributedText = NSAttributedString(
+                string: bodyText,
+                attributes: [
+                    .font: UIFont.systemFont(ofSize: 11.5, weight: .semibold),
+                    .foregroundColor: CSSTheme.pureBlack,
+                    .paragraphStyle: paragraph
+                ]
+            )
+        }
+
+        let normalAttr = self.getVersionAttributedString()
+        self.versionLabel?.attributedText = normalAttr
+        if let footerLabel = self.tableView.tableFooterView?.viewWithTag(7771) as? UILabel {
+            footerLabel.attributedText = normalAttr
+        }
+
+        if let tabItem = self.navigationController?.tabBarItem {
+            tabItem.title = L("Cài đặt", "Settings", "设置")
+        }
+    }
+
+    #if !os(tvOS)
+    private func buildLanguageMenu() -> UIMenu {
+        let current = SettingsLanguage.current
+        let actions = SettingsLanguage.allCases.map { lang in
+            UIAction(
+                title: lang.displayName,
+                state: (lang == current) ? .on : .off
+            ) { _ in
+                SettingsLanguage.current = lang
+            }
+        }
+        return UIMenu(
+            title: L("Chọn ngôn ngữ / Language / 语言", "Select Language", "选择语言"),
+            children: actions
+        )
+    }
+    #endif
 
     private func applySmartWebCSSTheme() {
         // 1. Nền Body cố định: Không bao giờ bị trắng khi lướt xuống dưới
@@ -995,7 +1198,7 @@ private extension SettingsViewController {
         self.tableView.backgroundColor = .clear
         self.tableView.separatorStyle = .none
         
-        // 2. Tạo khối .hero Banner kèm Icon SideStore nổi bật
+        // 2. Tạo khối .hero Banner kèm Icon SideStore & Nút chọn ngôn ngữ nổi bật
         setupCSSHeroBanner()
         
         // 3. Tạo Footer hiển thị Lời cảm ơn gọn gàng + Phiên bản
@@ -1042,7 +1245,7 @@ private extension SettingsViewController {
         return nil
     }
 
-    // Tạo khối .hero Banner sang trọng có gắn Icon SideStore & Huy hiệu xác thực
+    // Tạo khối .hero Banner sang trọng có gắn Icon SideStore, Huy hiệu xác thực & Nút chuyển ngôn ngữ
     private func setupCSSHeroBanner() {
         let headerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 112))
         headerContainer.backgroundColor = .clear
@@ -1108,16 +1311,42 @@ private extension SettingsViewController {
         titleStack.axis = .horizontal
         titleStack.alignment = .center
         titleStack.spacing = 9
+
+        // Nút chuyển ngôn ngữ nhanh ở góc trên bên phải của Hero Card
+        let langBtn = UIButton(type: .system)
+        langBtn.translatesAutoresizingMaskIntoConstraints = false
+        let globeConfig = UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)
+        langBtn.setImage(UIImage(systemName: "globe", withConfiguration: globeConfig), for: .normal)
+        langBtn.setTitle(" " + SettingsLanguage.current.shortBadge, for: .normal)
+        langBtn.tintColor = CSSTheme.white
+        langBtn.setTitleColor(CSSTheme.white, for: .normal)
+        langBtn.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
+        langBtn.backgroundColor = UIColor.black.withAlphaComponent(0.22)
+        langBtn.layer.cornerRadius = 12
+        langBtn.layer.borderWidth = 1.0
+        langBtn.layer.borderColor = UIColor.white.withAlphaComponent(0.35).cgColor
+        langBtn.contentEdgeInsets = UIEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
+        #if !os(tvOS)
+        langBtn.showsMenuAsPrimaryAction = true
+        langBtn.menu = buildLanguageMenu()
+        #endif
+        self.heroLanguageButton = langBtn
         
         let subLabel = UILabel()
         subLabel.translatesAutoresizingMaskIntoConstraints = false
-        subLabel.text = "✨ Tùy chỉnh & quản lý trải nghiệm cài đặt ứng dụng của bạn"
+        subLabel.text = L(
+            "✨ Tùy chỉnh & quản lý trải nghiệm cài đặt ứng dụng của bạn",
+            "✨ Customize & manage your app installation experience",
+            "✨ 自定义并管理您的应用安装体验"
+        )
         subLabel.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
         subLabel.textColor = CSSTheme.white.withAlphaComponent(0.96)
         subLabel.textAlignment = .center
         subLabel.numberOfLines = 2
+        self.heroSubLabel = subLabel
         
         heroCard.addSubview(titleStack)
+        heroCard.addSubview(langBtn)
         heroCard.addSubview(subLabel)
         headerContainer.addSubview(heroCard)
         
@@ -1137,6 +1366,10 @@ private extension SettingsViewController {
             
             titleStack.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
             titleStack.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 14),
+
+            langBtn.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 10),
+            langBtn.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -10),
+            langBtn.heightAnchor.constraint(equalToConstant: 24),
             
             subLabel.topAnchor.constraint(equalTo: titleStack.bottomAnchor, constant: 6),
             subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 14),
@@ -1193,25 +1426,39 @@ private extension SettingsViewController {
 
         let titleLabel = UILabel()
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.text = "❤️ LỜI CẢM ƠN & TRI ÂN"
+        titleLabel.text = L("❤️ LỜI CẢM ƠN & TRI ÂN", "❤️ SPECIAL THANKS & CREDITS", "❤️ 特别鸣谢与致敬")
         titleLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .heavy)
         titleLabel.textColor = CSSTheme.blue
         titleLabel.textAlignment = .center
+        self.footerTitleLabel = titleLabel
 
         let bodyLabel = UILabel()
         bodyLabel.translatesAutoresizingMaskIntoConstraints = false
         bodyLabel.numberOfLines = 0
         bodyLabel.textAlignment = .center
+        self.footerBodyLabel = bodyLabel
 
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
         paragraph.lineSpacing = 3.5
 
-        let bodyText = """
-        Tri ân đội ngũ phát triển & cộng đồng mã nguồn mở:
-        SideStore Team (@sidestoreio) • Giao diện: @lit_ritt
-        Nền tảng AltStore: Riley Testut & Cộng đồng
-        """
+        let bodyText = L(
+            """
+            Tri ân đội ngũ phát triển & cộng đồng mã nguồn mở:
+            SideStore Team (@sidestoreio) • Giao diện: @lit_ritt
+            Nền tảng AltStore: Riley Testut & Cộng đồng
+            """,
+            """
+            Special thanks to the developers & open-source community:
+            SideStore Team (@sidestoreio) • UI Design: @lit_ritt
+            AltStore Platform: Riley Testut & Community
+            """,
+            """
+            致敬开发团队与开源社区：
+            SideStore 团队 (@sidestoreio) • 界面设计: @lit_ritt
+            AltStore 平台: Riley Testut 与社区
+            """
+        )
         bodyLabel.attributedText = NSAttributedString(
             string: bodyText,
             attributes: [
@@ -1297,6 +1544,27 @@ private extension SettingsViewController {
             let items = UnifiedSettingsItem.activeItems
             guard items.indices.contains(row) else { return nil }
             return items[row].iconSpec
+        default:
+            return nil
+        }
+    }
+
+    // Xác định tên hiển thị đa ngôn ngữ chính xác theo từng hàng (bất kể nhãn cũ đang là ngôn ngữ nào)
+    private func localizedRowTitleForRow(section: Section, row: Int) -> String? {
+        switch section {
+        case .signIn:
+            return L("Đăng nhập bằng ID Apple", "Sign in with Apple ID", "使用 Apple ID 登录")
+        case .account:
+            switch row {
+            case 0: return L("Họ tên", "Name", "姓名")
+            case 1: return L("Email", "Email", "邮箱")
+            case 2: return L("Loại tài khoản", "Account Type", "账户类型")
+            default: return nil
+            }
+        case .advancedSettings:
+            let items = UnifiedSettingsItem.activeItems
+            guard items.indices.contains(row) else { return nil }
+            return items[row].localizedTitle
         default:
             return nil
         }
@@ -1481,7 +1749,7 @@ private extension SettingsViewController {
             ])
         }
         
-        // Việt hóa và nhúng Icon trực tiếp vào Label bên trong Cell
+        // Đa ngôn ngữ và nhúng Icon trực tiếp vào Label bên trong Cell
         translateAndStyleLabelsInside(view: cell.contentView, section: section, row: indexPath.row)
     }
 
@@ -1499,49 +1767,67 @@ private extension SettingsViewController {
         self.enforceUniformWhiteBackgroundOnAccountRows()
     }
 
-    // Bộ từ điển dịch tự động 100% các chuỗi tĩnh từ Storyboard & Hệ thống sang Tiếng Việt
+    // Bộ từ điển dịch tự động 100% các chuỗi tĩnh từ Storyboard & Hệ thống sang VI / EN / ZH
     private func translateStaticText(_ text: String) -> String {
         let cleaned = text
             .replacingOccurrences(of: "\u{FFFC}", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let dictionary: [String: String] = [
+        let dictionary: [String: (String, String, String)] = [
             // Tài khoản & Đăng nhập
-            "Sign in with Apple ID": "Đăng nhập bằng ID Apple",
-            "Sign In with Apple ID": "Đăng nhập bằng ID Apple",
-            "Sign In": "Đăng nhập",
-            "Name": "Họ tên",
-            "Email": "Email",
-            "Type": "Loại tài khoản",
-            "Account Type": "Loại tài khoản",
-            "Free Developer Account": "Nhà phát triển Miễn phí",
-            "Tài khoản Nhà phát triển Miễn phí": "Nhà phát triển Miễn phí",
-            "Regular Account": "Tài khoản Miễn phí",
-            "Developer Account": "Nhà phát triển",
-            "Paid Developer Account": "Nhà phát triển Trả phí",
-            "Tài khoản Nhà phát triển Trả phí": "Nhà phát triển Trả phí",
-            "Individual": "Cá nhân",
-            "Organization": "Tổ chức",
-            "Unknown": "Không xác định",
+            "Sign in with Apple ID": ("Đăng nhập bằng ID Apple", "Sign in with Apple ID", "使用 Apple ID 登录"),
+            "Sign In with Apple ID": ("Đăng nhập bằng ID Apple", "Sign in with Apple ID", "使用 Apple ID 登录"),
+            "Sign In": ("Đăng nhập", "Sign In", "登录"),
+            "Name": ("Họ tên", "Name", "姓名"),
+            "Email": ("Email", "Email", "邮箱"),
+            "Type": ("Loại tài khoản", "Account Type", "账户类型"),
+            "Account Type": ("Loại tài khoản", "Account Type", "账户类型"),
+            "Free Developer Account": ("Nhà phát triển Miễn phí", "Free Developer Account", "免费开发者账户"),
+            "Tài khoản Nhà phát triển Miễn phí": ("Nhà phát triển Miễn phí", "Free Developer Account", "免费开发者账户"),
+            "Nhà phát triển Miễn phí": ("Nhà phát triển Miễn phí", "Free Developer Account", "免费开发者账户"),
+            "免费开发者账户": ("Nhà phát triển Miễn phí", "Free Developer Account", "免费开发者账户"),
+            "Regular Account": ("Tài khoản Miễn phí", "Free Account", "普通免费账户"),
+            "Tài khoản Miễn phí": ("Tài khoản Miễn phí", "Free Account", "普通免费账户"),
+            "Free Account": ("Tài khoản Miễn phí", "Free Account", "普通免费账户"),
+            "普通免费账户": ("Tài khoản Miễn phí", "Free Account", "普通免费账户"),
+            "Developer Account": ("Nhà phát triển", "Developer Account", "开发者账户"),
+            "Nhà phát triển": ("Nhà phát triển", "Developer Account", "开发者账户"),
+            "开发者账户": ("Nhà phát triển", "Developer Account", "开发者账户"),
+            "Paid Developer Account": ("Nhà phát triển Trả phí", "Paid Developer Account", "付费开发者账户"),
+            "Tài khoản Nhà phát triển Trả phí": ("Nhà phát triển Trả phí", "Paid Developer Account", "付费开发者账户"),
+            "Nhà phát triển Trả phí": ("Nhà phát triển Trả phí", "Paid Developer Account", "付费开发者账户"),
+            "付费开发者账户": ("Nhà phát triển Trả phí", "Paid Developer Account", "付费开发者账户"),
+            "Individual": ("Cá nhân", "Individual", "个人"),
+            "Cá nhân": ("Cá nhân", "Individual", "个人"),
+            "个人": ("Cá nhân", "Individual", "个人"),
+            "Organization": ("Tổ chức", "Organization", "组织"),
+            "Tổ chức": ("Tổ chức", "Organization", "组织"),
+            "组织": ("Tổ chức", "Organization", "组织"),
+            "Unknown": ("Không xác định", "Unknown", "未知"),
+            "Không xác định": ("Không xác định", "Unknown", "未知"),
+            "未知": ("Không xác định", "Unknown", "未知"),
             
             // Công cụ kỹ thuật
-            "Error Log": "Nhật ký lỗi hệ thống",
-            "View Error Log": "Xem nhật ký lỗi hệ thống",
-            "Clear Cache": "Xóa bộ nhớ đệm (Cache)",
+            "Error Log": ("Nhật ký lỗi hệ thống", "System Error Log", "系统错误日志"),
+            "View Error Log": ("Xem nhật ký lỗi hệ thống", "View Error Log", "查看系统错误日志"),
+            "Clear Cache": ("Xóa bộ nhớ đệm (Cache)", "Clear App Cache", "清除应用缓存 (Cache)"),
             
             // Cài đặt nâng cao & Máy chủ Anisette
-            "Anisette Servers": "Máy chủ Anisette",
-            "Anisette Server": "Máy chủ Anisette",
-            "View Refresh Attempts": "Lịch sử làm mới ứng dụng",
-            "Refresh Attempts": "Lịch sử làm mới ứng dụng",
-            "Refresh SideJITServer": "Cấu hình máy chủ SideJITServer",
-            "SideJITServer": "Cấu hình máy chủ SideJITServer",
-            "Certificate Management": "Quản lý chứng chỉ (Certificate)",
-            "Certificates Management": "Quản lý chứng chỉ (Certificate)",
-            "User Customizations": "Tùy chỉnh giao diện & người dùng"
+            "Anisette Servers": ("Máy chủ Anisette", "Anisette Servers", "Anisette 服务器"),
+            "Anisette Server": ("Máy chủ Anisette", "Anisette Servers", "Anisette 服务器"),
+            "View Refresh Attempts": ("Lịch sử làm mới ứng dụng", "View Refresh Attempts", "应用刷新记录"),
+            "Refresh Attempts": ("Lịch sử làm mới ứng dụng", "View Refresh Attempts", "应用刷新记录"),
+            "Refresh SideJITServer": ("Cấu hình máy chủ SideJITServer", "Configure SideJITServer", "配置 SideJITServer 服务器"),
+            "SideJITServer": ("Cấu hình máy chủ SideJITServer", "Configure SideJITServer", "配置 SideJITServer 服务器"),
+            "Certificate Management": ("Quản lý chứng chỉ (Certificate)", "Certificate Management", "证书管理 (Certificate)"),
+            "Certificates Management": ("Quản lý chứng chỉ (Certificate)", "Certificate Management", "证书管理 (Certificate)"),
+            "User Customizations": ("Tùy chỉnh giao diện & người dùng", "User Customizations", "界面与用户自定义")
         ]
         
-        return dictionary[cleaned] ?? cleaned
+        if let tuple = dictionary[cleaned] {
+            return L(tuple.0, tuple.1, tuple.2)
+        }
+        return cleaned
     }
 
     private func translateAndStyleLabelsInside(view: UIView, section: Section, row: Int) {
@@ -1558,8 +1844,12 @@ private extension SettingsViewController {
                 
                 // 1. Nhóm Label giá trị bên phải của khung Tài khoản (Tên, Email, Nhà phát triển Miễn phí)
                 if label == self.accountNameLabel || label == self.accountEmailLabel || label == self.accountTypeLabel {
-                    if label == self.accountTypeLabel, let typeText = label.text {
-                        label.text = translateStaticText(typeText)
+                    if label == self.accountTypeLabel {
+                        if let team = self.activeTeam {
+                            label.text = translateStaticText(team.type.localizedDescription)
+                        } else if let typeText = label.text {
+                            label.text = translateStaticText(typeText)
+                        }
                     }
                     label.textColor = (label == self.accountNameLabel) ? CSSTheme.blue : CSSTheme.purple
                     label.font = UIFont.systemFont(ofSize: 14.5, weight: .bold)
@@ -1569,7 +1859,7 @@ private extension SettingsViewController {
                 } else {
                     // 2. Nhóm Label tiêu đề bên trái (Họ tên, Email, Loại tài khoản & các mục Cài đặt)
                     let rawText = label.attributedText?.string ?? label.text ?? ""
-                    let cleanText = translateStaticText(rawText)
+                    let cleanText = localizedRowTitleForRow(section: section, row: row) ?? translateStaticText(rawText)
                     guard !cleanText.isEmpty else { continue }
 
                     let font: UIFont
@@ -1650,8 +1940,10 @@ private extension SettingsViewController
 {
     private func getVersionAttributedString() -> NSAttributedString {
         var appVersion = Bundle.Info.activeBundleVersion
-        appVersion = appVersion.replacingOccurrences(of: "Version ", with: "Phiên bản ")
-        let iosVersion = "iOS \(UIDevice.current.systemVersion) (Bản dựng \(ProcessInfo.processInfo.operatingSystemBuild))"
+        let versionPrefix = L("Phiên bản ", "Version ", "版本 ")
+        appVersion = appVersion.replacingOccurrences(of: "Version ", with: versionPrefix)
+        let buildPrefix = L("Bản dựng", "Build", "构建")
+        let iosVersion = "iOS \(UIDevice.current.systemVersion) (\(buildPrefix) \(ProcessInfo.processInfo.operatingSystemBuild))"
 
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .center
@@ -1693,7 +1985,7 @@ private extension SettingsViewController
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .center
         let attributed = NSMutableAttributedString(
-            string: "Đã sao chép phiên bản! ",
+            string: L("Đã sao chép phiên bản! ", "Copied version! ", "已复制版本号！"),
             attributes: [
                 .font: UIFont.systemFont(ofSize: 14, weight: .bold),
                 .foregroundColor: CSSTheme.blue,
@@ -1868,13 +2160,25 @@ private extension SettingsViewController
         {
         case .signIn:
             if isHeader {
-                setSectionHeaderTitle(settingsHeaderFooterView.primaryLabel, iconName: "person.crop.circle.fill", title: "TÀI KHOẢN APPLE ID")
+                setSectionHeaderTitle(
+                    settingsHeaderFooterView.primaryLabel,
+                    iconName: "person.crop.circle.fill",
+                    title: L("TÀI KHOẢN APPLE ID", "APPLE ID ACCOUNT", "APPLE ID 账户")
+                )
             } else {
-                settingsHeaderFooterView.secondaryLabel.text = "Đăng nhập bằng ID Apple của bạn để tải xuống và làm mới ứng dụng từ SideStore."
+                settingsHeaderFooterView.secondaryLabel.text = L(
+                    "Đăng nhập bằng ID Apple của bạn để tải xuống và làm mới ứng dụng từ SideStore.",
+                    "Sign in with your Apple ID to download and refresh apps in SideStore.",
+                    "使用您的 Apple ID 登录以在 SideStore 中下载和刷新应用。"
+                )
             }
             
         case .account:
-            setSectionHeaderTitle(settingsHeaderFooterView.primaryLabel, iconName: "person.text.rectangle.fill", title: "TÀI KHOẢN")
+            setSectionHeaderTitle(
+                settingsHeaderFooterView.primaryLabel,
+                iconName: "person.text.rectangle.fill",
+                title: L("TÀI KHOẢN", "ACCOUNT", "账户")
+            )
             
             let toggleBtn = UIButton(type: .system)
             toggleBtn.tag = toggleAccountTag
@@ -1882,7 +2186,9 @@ private extension SettingsViewController
             let eyeSymbol = self.isAccountDetailsExpanded ? "eye.slash.fill" : "eye.fill"
             let eyeConfig = UIImage.SymbolConfiguration(pointSize: 10.5, weight: .bold)
             toggleBtn.setImage(UIImage(systemName: eyeSymbol, withConfiguration: eyeConfig), for: .normal)
-            let toggleTitle = self.isAccountDetailsExpanded ? "  Ẩn ▲  " : "  Hiện ▼  "
+            let toggleTitle = self.isAccountDetailsExpanded
+                ? L("  Ẩn ▲  ", "  Hide ▲  ", "  隐藏 ▲  ")
+                : L("  Hiện ▼  ", "  Show ▼  ", "  显示 ▼  ")
             toggleBtn.setTitle(toggleTitle, for: .normal)
             toggleBtn.tintColor = CSSTheme.white
             toggleBtn.setTitleColor(CSSTheme.white, for: .normal)
@@ -1899,7 +2205,7 @@ private extension SettingsViewController
             
             let signOutBtn = settingsHeaderFooterView.button!
             signOutBtn.removeTarget(nil, action: nil, for: .allEvents)
-            signOutBtn.setTitle("  ĐĂNG XUẤT  ", for: .normal)
+            signOutBtn.setTitle(L("  ĐĂNG XUẤT  ", "  SIGN OUT  ", "  退出登录  "), for: .normal)
             signOutBtn.setTitleColor(CSSTheme.white, for: .normal)
             signOutBtn.titleLabel?.font = UIFont.systemFont(ofSize: 11, weight: .bold)
             signOutBtn.backgroundColor = CSSTheme.magenta
@@ -1919,9 +2225,17 @@ private extension SettingsViewController
             
         case .advancedSettings:
             if isHeader {
-                setSectionHeaderTitle(settingsHeaderFooterView.primaryLabel, iconName: "slider.horizontal.below.square.filled.and.square", title: "TRUNG TÂM CÀI ĐẶT & HỆ THỐNG")
+                setSectionHeaderTitle(
+                    settingsHeaderFooterView.primaryLabel,
+                    iconName: "slider.horizontal.below.square.filled.and.square",
+                    title: L("TRUNG TÂM CÀI ĐẶT & HỆ THỐNG", "SETTINGS & SYSTEM CENTER", "设置与系统中心")
+                )
             } else {
-                settingsHeaderFooterView.secondaryLabel.text = "Quản lý máy chủ Anisette, cấu hình chứng chỉ, tùy chỉnh giao diện và dọn dẹp bộ nhớ đệm để tối ưu hóa hiệu suất hoạt động của SideStore."
+                settingsHeaderFooterView.secondaryLabel.text = L(
+                    "Quản lý máy chủ Anisette, cấu hình chứng chỉ, tùy chỉnh giao diện và dọn dẹp bộ nhớ đệm để tối ưu hóa hiệu suất hoạt động của SideStore.",
+                    "Manage Anisette servers, configure certificates, customize UI, and clear cache to optimize SideStore performance.",
+                    "管理 Anisette 服务器、配置证书、自定义界面并清理缓存以优化 SideStore 的运行性能。"
+                )
             }
             
         case .patreon, .display, .appRefresh, .instructions, .techyThings, .credits, .betaTesting, .diagnostics:
@@ -1984,16 +2298,20 @@ private extension SettingsViewController
         let contentVC = SignOutAlertViewController()
         
         let alertController = UIAlertController(
-            title: "Đăng xuất tài khoản",
-            message: "Bạn có chắc chắn muốn đăng xuất không? Bạn sẽ không thể cài đặt hoặc làm mới ứng dụng sau khi đăng xuất.",
+            title: L("Đăng xuất tài khoản", "Sign Out", "退出账户"),
+            message: L(
+                "Bạn có chắc chắn muốn đăng xuất không? Bạn sẽ không thể cài đặt hoặc làm mới ứng dụng sau khi đăng xuất.",
+                "Are you sure you want to sign out? You won't be able to install or refresh apps after signing out.",
+                "您确定要退出登录吗？退出后将无法安装或刷新应用。"
+            ),
             preferredStyle: .alert
         )
         
         alertController.setValue(contentVC, forKey: "contentViewController")
         
-        let cancelAction = UIAlertAction(title: "Hủy", style: .cancel, handler: nil)
+        let cancelAction = UIAlertAction(title: L("Hủy", "Cancel", "取消"), style: .cancel, handler: nil)
         
-        let signOutAction = UIAlertAction(title: "Đăng xuất", style: .destructive) { [weak self] _ in
+        let signOutAction = UIAlertAction(title: L("Đăng xuất", "Sign Out", "退出登录"), style: .destructive) { [weak self] _ in
             let keepCert = contentVC.isChecked
             let keepAnisette = contentVC.isKeepAnisetteChecked
             let keepAnisetteHeaders = contentVC.isKeepAnisetteHeadersChecked
@@ -2059,7 +2377,10 @@ private extension SettingsViewController
             for time in (1...3).reversed() {
                 DispatchQueue.main.async {
                     guard UserDefaults.standard.recreateDatabaseOnNextStart else { return }
-                    let toast = ToastView(text: "Đã lên lịch xóa Cơ sở dữ liệu ở lần mở tới", detailText: "Ứng dụng sẽ đóng sau \(time) giây...")
+                    let toast = ToastView(
+                        text: L("Đã lên lịch xóa Cơ sở dữ liệu ở lần mở tới", "Scheduled database reset on next launch", "已计划在下次启动时重置数据库"),
+                        detailText: L("Ứng dụng sẽ đóng sau \(time) giây...", "Closing app in \(time)s...", "应用将在 \(time) 秒后关闭...")
+                    )
                     toast.tintColor = CSSTheme.purple
                     toast.preferredDuration = 1
                     toast.show(in: self)
@@ -2086,16 +2407,22 @@ private extension SettingsViewController
     private func clearCache()
     {
         let makeCacheTitle: (String) -> String = { sizeString in
-            String(format: "Dung lượng đệm: %@", sizeString)
+            String(format: L("Dung lượng đệm: %@", "Cache Size: %@", "缓存大小: %@"), sizeString)
         }
-        let alertController = UIAlertController(title: makeCacheTitle("Đang tính toán…"),
-                                                message: "Thao tác này sẽ xóa toàn bộ tệp tạm thời cũng như bản sao lưu của các ứng dụng đã gỡ cài đặt.",
-                                                preferredStyle: .actionSheet)
-        alertController.addAction(UIAlertAction(title: "Hủy", style: .cancel) { [weak self] _ in
+        let alertController = UIAlertController(
+            title: makeCacheTitle(L("Đang tính toán…", "Calculating…", "正在计算…")),
+            message: L(
+                "Thao tác này sẽ xóa toàn bộ tệp tạm thời cũng như bản sao lưu của các ứng dụng đã gỡ cài đặt.",
+                "This will remove all temporary files as well as backups of uninstalled apps.",
+                "此操作将删除所有临时文件以及已卸载应用的备份数据。"
+            ),
+            preferredStyle: .actionSheet
+        )
+        alertController.addAction(UIAlertAction(title: L("Hủy", "Cancel", "取消"), style: .cancel) { [weak self] _ in
             self?.tableView.indexPathForSelectedRow.map { self?.tableView.deselectRow(at: $0, animated: true) }
             self?.restoreVisibleCellsWhiteBackground()
         })
-        alertController.addAction(UIAlertAction(title: "Xóa bộ nhớ đệm", style: .destructive) { [weak self] _ in
+        alertController.addAction(UIAlertAction(title: L("Xóa bộ nhớ đệm", "Clear Cache", "清除缓存"), style: .destructive) { [weak self] _ in
             AppManager.shared.clearAppCache { result in
                 DispatchQueue.main.async {
                     self?.tableView.indexPathForSelectedRow.map { self?.tableView.deselectRow(at: $0, animated: true) }
@@ -2103,7 +2430,11 @@ private extension SettingsViewController
                     switch result {
                     case .success: break
                     case .failure(let error):
-                        let alertController = UIAlertController(title: "Không thể xóa bộ nhớ đệm", message: error.localizedDescription, preferredStyle: .alert)
+                        let alertController = UIAlertController(
+                            title: L("Không thể xóa bộ nhớ đệm", "Failed to Clear Cache", "无法清除缓存"),
+                            message: error.localizedDescription,
+                            preferredStyle: .alert
+                        )
                         alertController.addAction(.ok)
                         self?.present(alertController, animated: true)
                     }

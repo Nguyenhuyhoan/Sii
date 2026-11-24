@@ -13,90 +13,240 @@ import SwiftUI
 import CoreData
 import Nuke
 
-// MARK: - 🧊 BỘ GIAO DIỆN "NORDIC COOL MINIMALIST" (TÔNG LẠNH MÁT MẮT, TỐI GIẢN, SANG TRỌNG)
-private struct CoolMinimalTheme {
-    // Nền tổng thể: Xám xanh băng giá dịu mắt
-    static let bgTop = UIColor(red: 243/255, green: 247/255, blue: 251/255, alpha: 1.0).cgColor      // #F3F7FB
-    static let bgBottom = UIColor(red: 234/255, green: 242/255, blue: 248/255, alpha: 1.0).cgColor   // #EAF2F8
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN 100% MÃ CSS CHỦ ĐẠO CỦA BẠN
+private struct SourcesCSSTheme {
+    static let white = UIColor.white                                                          // #ffffff (--white)
+    static let pureBlack = UIColor.black                                                      // #000000 (Chữ đen tuyền độ tương phản tuyệt đối)
+    static let light = UIColor(red: 248/255, green: 249/255, blue: 250/255, alpha: 1.0)       // #f8f9fa (--light)
+    static let border = UIColor(red: 233/255, green: 236/255, blue: 239/255, alpha: 1.0)      // #e9ecef (--border chuẩn 4 góc đều nhau)
+    static let innerBorder = UIColor(red: 222/255, green: 229/255, blue: 240/255, alpha: 1.0) // #dee5f0
+    static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0)          // #007bff (--blue)
+    static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0)       // #6f42c1 (--purple)
+    static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0)         // #28a745 (--green)
+    static let magenta = UIColor(red: 230/255, green: 0/255, blue: 230/255, alpha: 1.0)       // #e600e6 (data-tab="1")
+    static let dark = UIColor(red: 52/255, green: 58/255, blue: 64/255, alpha: 1.0)           // #343a40 (--dark)
 
-    // Bề mặt thẻ & khối nội dung
-    static let surfaceWhite = UIColor.white                                                          // #FFFFFF
-    static let surfaceSubtle = UIColor(red: 248/255, green: 250/255, blue: 252/255, alpha: 1.0)      // #F8FAFC
-    static let iceBadgeBg = UIColor(red: 224/255, green: 242/255, blue: 254/255, alpha: 1.0)         // #E0F2FE
+    // Gradient Background (#f3e0ff -> #e0f7ff)
+    static let bgGradientStart = UIColor(red: 243/255, green: 224/255, blue: 255/255, alpha: 1.0).cgColor
+    static let bgGradientEnd = UIColor(red: 224/255, green: 247/255, blue: 255/255, alpha: 1.0).cgColor
 
-    // Đường viền mảnh tinh tế
-    static let hairlineBorder = UIColor(red: 226/255, green: 232/255, blue: 240/255, alpha: 1.0)     // #E2E8F0
-    static let dividerLine = UIColor(red: 241/255, green: 245/255, blue: 249/255, alpha: 1.0)        // #F1F5F9
+    // Sleek Top Banner Gradient 3 tầng bắt mắt (#007bff -> #6f42c1 -> #d600d6)
+    static let bannerGradStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0).cgColor
+    static let bannerGradMid = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0).cgColor
+    static let bannerGradEnd = UIColor(red: 214/255, green: 0/255, blue: 214/255, alpha: 1.0).cgColor
 
-    // Hệ thống chữ (Typography)
-    static let inkPrimary = UIColor(red: 15/255, green: 23/255, blue: 42/255, alpha: 1.0)            // #0F172A (Đen xanh than)
-    static let inkSecondary = UIColor(red: 71/255, green: 85/255, blue: 105/255, alpha: 1.0)         // #475569 (Xám đá lạnh)
-    static let inkMuted = UIColor(red: 148/255, green: 163/255, blue: 184/255, alpha: 1.0)           // #94A3B8 (Xám sương mù)
+    static let cornerRadius: CGFloat = 15.0
+    static let innerCornerRadius: CGFloat = 14.0
+    static let iPhoneImageCornerRadius: CGFloat = 18.0
 
-    // Điểm nhấn tông lạnh (Cool Ocean & Teal)
-    static let accentOcean = UIColor(red: 2/255, green: 132/255, blue: 199/255, alpha: 1.0)          // #0284C7 (Xanh lam lạnh)
-    static let accentDeepBlue = UIColor(red: 3/255, green: 105/255, blue: 161/255, alpha: 1.0)       // #0369A1 (Xanh biển sâu)
-    static let accentTeal = UIColor(red: 13/255, green: 148/255, blue: 136/255, alpha: 1.0)          // #0D9488 (Xanh ngọc bích trầm)
+    /// Trả về đúng 4 màu chủ đạo luân phiên theo chuẩn `.tab-button[data-tab="1..4"]` trong CSS của bạn
+    static func tabAccentColor(for index: Int) -> UIColor {
+        switch index % 4 {
+        case 0: return magenta // data-tab="1" (#e600e6)
+        case 1: return purple  // data-tab="2" (#6f42c1)
+        case 2: return blue    // data-tab="3" (#007bff)
+        default: return green  // data-tab="4" (#28a745)
+        }
+    }
 
-    static let cardCornerRadius: CGFloat = 16.0
-    static let innerCornerRadius: CGFloat = 12.0
-    static let mediaCornerRadius: CGFloat = 18.0
-
-    static func applyMinimalCard(to view: UIView, radius: CGFloat = CoolMinimalTheme.cardCornerRadius) {
-        view.backgroundColor = surfaceWhite
-        view.layer.cornerRadius = radius
+    /// Áp dụng viền 4 góc đều nhau (2pt solid --border) + đổ bóng màu phát sáng chuẩn CSS của bạn
+    static func applyColoredGlowCardStyle(
+        to view: UIView,
+        accentColor: UIColor,
+        cornerRadius: CGFloat = SourcesCSSTheme.cornerRadius,
+        shadowOpacity: Float = 0.22
+    ) {
+        view.backgroundColor = SourcesCSSTheme.white
+        view.layer.cornerRadius = cornerRadius
         if #available(iOS 13.0, tvOS 13.0, *) {
             view.layer.cornerCurve = .continuous
         }
-        view.layer.borderWidth = 1.0
-        view.layer.borderColor = hairlineBorder.cgColor
-        view.layer.shadowColor = UIColor(red: 15/255, green: 23/255, blue: 42/255, alpha: 1.0).cgColor
-        view.layer.shadowOffset = CGSize(width: 0, height: 4)
-        view.layer.shadowRadius = 12
-        view.layer.shadowOpacity = 0.035
+        view.layer.borderWidth = 2.0
+        view.layer.borderColor = SourcesCSSTheme.border.cgColor
+        view.layer.shadowColor = accentColor.cgColor
+        view.layer.shadowOffset = CGSize(width: 0, height: 8)
+        view.layer.shadowRadius = 14
+        view.layer.shadowOpacity = shadowOpacity
+    }
+
+    /// Áp dụng style cho khung bao trắng lớn (.tab-container)
+    static func applyContainerCardStyle(to view: UIView, cornerRadius: CGFloat = SourcesCSSTheme.cornerRadius) {
+        view.backgroundColor = SourcesCSSTheme.white
+        view.layer.cornerRadius = cornerRadius
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            view.layer.cornerCurve = .continuous
+        }
+        view.layer.borderWidth = 1.5
+        view.layer.borderColor = SourcesCSSTheme.border.cgColor
+        view.layer.shadowColor = UIColor.black.cgColor
+        view.layer.shadowOffset = CGSize(width: 0, height: 8)
+        view.layer.shadowRadius = 18
+        view.layer.shadowOpacity = 0.08
     }
 }
 
-// MARK: - 🎬 CÁC THÀNH PHẦN VIDEO YOUTUBE (PHONG CÁCH TỐI GIẢN, MÁT MẮT, GỌN GÀNG)
-private enum MinimalVideoTheme {
-    static let accent = SwiftUI.Color(red: 2/255, green: 132/255, blue: 199/255)        // #0284C7
-    static let inkPrimary = SwiftUI.Color(red: 15/255, green: 23/255, blue: 42/255)     // #0F172A
-    static let inkSecondary = SwiftUI.Color(red: 71/255, green: 85/255, blue: 105/255)  // #475569
-    static let surfaceWhite = SwiftUI.Color.white
-    static let surfaceSubtle = SwiftUI.Color(red: 248/255, green: 250/255, blue: 252/255)
-    static let border = SwiftUI.Color(red: 226/255, green: 232/255, blue: 240/255)
-    static let frameCornerRadius: CGFloat = 28.0
+// MARK: - 🎬 CÁC THÀNH PHẦN VIDEO LẤY NGUYÊN BẢN TỪ TAB TỔNG QUAN (NEWSVIEWCONTROLLER)
+private enum OverviewVideoCSSTheme {
+    static let primary = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255)      // #007bff (--primary-blue)
+    static let secondary = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)   // #6f42c1 (--primary-purple)
+    static let green = SwiftUI.Color(red: 40/255, green: 167/255, blue: 69/255)        // #28a745 (--primary-green)
+    static let red = SwiftUI.Color(red: 220/255, green: 53/255, blue: 69/255)          // #dc3545 (--primary-red)
+    static let pureBlack = SwiftUI.Color(red: 0/255, green: 0/255, blue: 0/255)        // #000000
+
+    static var accentBarGradient: LinearGradient {
+        LinearGradient(
+            colors: [primary, secondary],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    static var mediaFrameBorderGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                primary.opacity(0.75),
+                secondary.opacity(0.55),
+                primary.opacity(0.75)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    static let mediaFrameCornerRadius: CGFloat = 47.33
+    static let mediaFrameLineWidth: CGFloat = 4.0
+    static let cornerRadius: CGFloat = 15.0
+    static let innerCornerRadius: CGFloat = 14.0
+    static let cardBackground = SwiftUI.Color.white
+    static let innerRowBackground = SwiftUI.Color(red: 248/255, green: 249/255, blue: 250/255)
+    static let border = SwiftUI.Color(red: 233/255, green: 236/255, blue: 239/255)
+    static let innerBorder = SwiftUI.Color(red: 222/255, green: 229/255, blue: 240/255)
 }
 
-/// Khung phát video dọc tỉ lệ 9:19.5 tinh gọn, sang trọng
-private struct MinimalVerticalVideoFrameView: SwiftUI.View {
+private struct OverviewSectionHeaderView: SwiftUI.View {
+    let title: String
+    let icon: String
+    let color: SwiftUI.Color
+    var statusOK: Bool? = nil
+    var trailingView: AnyView? = nil
+
+    var body: some SwiftUI.View {
+        VStack(alignment: .center, spacing: 6) {
+            HStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(color.opacity(0.14))
+                        .frame(width: 24, height: 24)
+                    SwiftUI.Image(systemName: icon)
+                        .font(.system(size: 12.5, weight: .heavy))
+                        .foregroundColor(color)
+                }
+
+                SwiftUI.Text(title.uppercased())
+                    .font(.system(size: 15.5, weight: .heavy, design: .rounded))
+                    .foregroundColor(OverviewVideoCSSTheme.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+
+                if let statusOK = statusOK {
+                    SwiftUI.Image(systemName: statusOK ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(statusOK ? OverviewVideoCSSTheme.green : OverviewVideoCSSTheme.red)
+                        .animation(.spring(), value: statusOK)
+                }
+
+                if let trailingView = trailingView {
+                    trailingView
+                }
+            }
+
+            RoundedRectangle(cornerRadius: 2.0)
+                .fill(OverviewVideoCSSTheme.primary)
+                .frame(width: 60, height: 3.0)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+}
+
+private struct OverviewSkySectionCard<Content: SwiftUI.View>: SwiftUI.View {
+    let title: String
+    let icon: String
+    let color: SwiftUI.Color
+    var statusOK: Bool? = nil
+    var trailingView: AnyView? = nil
+    var footerText: String? = nil
+    @ViewBuilder let content: Content
+
+    var body: some SwiftUI.View {
+        VStack(alignment: .center, spacing: 12) {
+            OverviewSectionHeaderView(
+                title: title,
+                icon: icon,
+                color: color,
+                statusOK: statusOK,
+                trailingView: trailingView
+            )
+            .padding(.horizontal, 4)
+
+            VStack(alignment: .leading, spacing: 11) {
+                content
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(OverviewVideoCSSTheme.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: OverviewVideoCSSTheme.cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: OverviewVideoCSSTheme.cornerRadius, style: .continuous)
+                    .stroke(OverviewVideoCSSTheme.border, lineWidth: 2.0)
+            )
+            .shadow(color: OverviewVideoCSSTheme.secondary.opacity(0.20), radius: 14, x: 0, y: 8)
+
+            if let footerText = footerText {
+                SwiftUI.Text(footerText)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(OverviewVideoCSSTheme.pureBlack)
+                    .padding(.horizontal, 6)
+                    .padding(.top, 2)
+            }
+        }
+    }
+}
+
+/// Khung phát video dọc tỉ lệ 9:19.5 lấy nguyên bản từ tab Tổng quan (NewsViewController)
+private struct OverviewIPhone14VerticalVideoFrameView: SwiftUI.View {
     let videoID: String
     @State private var isVisibleOnScreen: Bool = false
     @State private var shouldMountWebView: Bool = false
     @State private var mountTask: Task<Void, Never>? = nil
 
+    private let iPhone14CornerRadius: CGFloat = OverviewVideoCSSTheme.mediaFrameCornerRadius
+
     var body: some SwiftUI.View {
         ZStack {
             SwiftUI.Color.black
             if shouldMountWebView {
-                MinimalYouTubePlayerWebView(
+                OverviewYouTubeVerticalPlayerWebView(
                     videoID: videoID,
                     isVisibleOnScreen: isVisibleOnScreen
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ProgressView()
-                    .tint(MinimalVideoTheme.accent)
+                    .tint(OverviewVideoCSSTheme.primary)
             }
         }
         .aspectRatio(9.0 / 19.5, contentMode: .fit)
         .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: MinimalVideoTheme.frameCornerRadius, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: iPhone14CornerRadius, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: MinimalVideoTheme.frameCornerRadius, style: .continuous)
-                .strokeBorder(MinimalVideoTheme.border, lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: iPhone14CornerRadius, style: .continuous)
+                .strokeBorder(
+                    OverviewVideoCSSTheme.mediaFrameBorderGradient,
+                    lineWidth: OverviewVideoCSSTheme.mediaFrameLineWidth
+                )
         )
-        .shadow(color: .black.opacity(0.06), radius: 14, x: 0, y: 6)
+        .shadow(color: OverviewVideoCSSTheme.secondary.opacity(0.24), radius: 14, x: 0, y: 7)
+        .padding(.horizontal, 4)
         .onAppear {
             isVisibleOnScreen = true
             if !shouldMountWebView {
@@ -116,8 +266,8 @@ private struct MinimalVerticalVideoFrameView: SwiftUI.View {
     }
 }
 
-/// WebView nhúng trình phát YouTube
-private struct MinimalYouTubePlayerWebView: UIViewRepresentable {
+/// WebView nhúng trình phát YouTube tối ưu cho khung dọc 9:19.5 lấy nguyên bản từ tab Tổng quan (NewsViewController)
+private struct OverviewYouTubeVerticalPlayerWebView: UIViewRepresentable {
     let videoID: String
     let isVisibleOnScreen: Bool
 
@@ -214,51 +364,55 @@ private struct MinimalYouTubePlayerWebView: UIViewRepresentable {
     }
 }
 
-/// Khối thẻ Video hướng dẫn gọn gàng
-private struct MinimalVideoGuideSectionView: SwiftUI.View {
+/// Mục Video hướng dẫn lấy nguyên bản từ `shortcutVideoGuideSection` của tab Tổng quan
+private struct OverviewVideoGuideSectionView: SwiftUI.View {
     let videoID: String
 
     var body: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                ZStack {
-                    Circle()
-                        .fill(MinimalVideoTheme.accent.opacity(0.12))
-                        .frame(width: 32, height: 32)
-                    SwiftUI.Image(systemName: "play.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(MinimalVideoTheme.accent)
-                }
+        OverviewSkySectionCard(
+            title: "HƯỚNG DẪN VIDEO",
+            icon: "play.rectangle.fill",
+            color: OverviewVideoCSSTheme.primary
+        ) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 10) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(OverviewVideoCSSTheme.primary.opacity(0.14))
+                            .frame(width: 36, height: 36)
+                        SwiftUI.Image(systemName: "sparkles.tv.fill")
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundColor(OverviewVideoCSSTheme.primary)
+                    }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    SwiftUI.Text("Video hướng dẫn trực quan")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(MinimalVideoTheme.inkPrimary)
-                    SwiftUI.Text("Nhấn vào khung bên dưới để xem thao tác chi tiết")
-                        .font(.system(size: 12.5, weight: .regular))
-                        .foregroundColor(MinimalVideoTheme.inkSecondary)
+                    SwiftUI.Text("Xem video hướng dẫn chi tiết bên dưới để thực hiện từng bước trực quan và chính xác nhất.")
+                        .font(.system(size: 14.5, weight: .semibold))
+                        .foregroundColor(OverviewVideoCSSTheme.pureBlack)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer()
+                .padding(13)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(OverviewVideoCSSTheme.innerRowBackground)
+                .cornerRadius(OverviewVideoCSSTheme.innerCornerRadius)
+                .overlay(
+                    RoundedRectangle(cornerRadius: OverviewVideoCSSTheme.innerCornerRadius, style: .continuous)
+                        .stroke(OverviewVideoCSSTheme.border, lineWidth: 2.0)
+                )
+
+                OverviewIPhone14VerticalVideoFrameView(
+                    videoID: videoID
+                )
             }
-
-            MinimalVerticalVideoFrameView(videoID: videoID)
         }
-        .padding(16)
-        .background(MinimalVideoTheme.surfaceWhite)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(MinimalVideoTheme.border, lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.03), radius: 10, x: 0, y: 4)
     }
 }
 
+/// UIKit Wrapper nhúng hoàn chỉnh phần Video của tab Tổng quan vào StackView của trang chi tiết
 private final class OverviewHostedVideoSectionView: UIView {
-    private let hostingController: UIHostingController<MinimalVideoGuideSectionView>
+    private let hostingController: UIHostingController<OverviewVideoGuideSectionView>
 
     init(videoID: String, parentViewController: UIViewController?) {
-        let rootView = MinimalVideoGuideSectionView(videoID: videoID)
+        let rootView = OverviewVideoGuideSectionView(videoID: videoID)
         self.hostingController = UIHostingController(rootView: rootView)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -290,8 +444,8 @@ private final class OverviewHostedVideoSectionView: UIView {
     }
 }
 
-// MARK: - 🧊 LỚP NỀN BĂNG SƯƠNG MÁT MẮT CỐ ĐỊNH
-private final class SourcesCoolBackgroundView: UIView {
+// MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH (#f3e0ff -> #e0f7ff)
+private final class SourcesGradientBackgroundView: UIView {
     override class var layerClass: AnyClass {
         return CAGradientLayer.self
     }
@@ -308,9 +462,55 @@ private final class SourcesCoolBackgroundView: UIView {
 
     private func setupGradient() {
         guard let gradientLayer = self.layer as? CAGradientLayer else { return }
-        gradientLayer.colors = [CoolMinimalTheme.bgTop, CoolMinimalTheme.bgBottom]
-        gradientLayer.startPoint = CGPoint(x: 0.5, y: 0.0)
-        gradientLayer.endPoint = CGPoint(x: 0.5, y: 1.0)
+        gradientLayer.colors = [SourcesCSSTheme.bgGradientStart, SourcesCSSTheme.bgGradientEnd]
+        gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+        gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+    }
+}
+
+// MARK: - ➖ THANH GẠCH CHÂN XANH NẰM CHÍNH GIỮA (60x3pt CHUẨN `.features h2::after` TRONG CSS GỐC)
+private final class SourcesCenteredUnderlineView: UIView {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = SourcesCSSTheme.blue
+        layer.cornerRadius = 1.5
+        clipsToBounds = true
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        backgroundColor = SourcesCSSTheme.blue
+        layer.cornerRadius = 1.5
+        clipsToBounds = true
+    }
+}
+
+// MARK: - 🖼️ LỚP KHUNG VIỀN GRADIENT 3 MÀU BAO TRỌN ẢNH (.guide img)
+private final class GradientBorderContainerView: UIView {
+    override class var layerClass: AnyClass {
+        return CAGradientLayer.self
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupGradientBorder()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupGradientBorder()
+    }
+
+    private func setupGradientBorder() {
+        guard let gradientLayer = self.layer as? CAGradientLayer else { return }
+        gradientLayer.colors = [
+            SourcesCSSTheme.blue.cgColor,
+            SourcesCSSTheme.purple.cgColor,
+            SourcesCSSTheme.magenta.cgColor
+        ]
+        gradientLayer.locations = [0.0, 0.5, 1.0]
+        gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+        gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
     }
 }
 
@@ -321,7 +521,7 @@ private final class SourcesFooterView: TextCollectionReusableView {
     @IBOutlet var textView: UITextView!
 }
 
-// MARK: - 📚 MÔ HÌNH DỮ LIỆU & BỘ PHÂN TÍCH HƯỚNG DẪN TỪ GITHUB (GIỮ NGUYÊN 100% LOGIC GỐC)
+// MARK: - 📚 MÔ HÌNH DỮ LIỆU & BỘ PHÂN TÍCH HƯỚNG DẪN TỪ GITHUB
 private struct GuideContentBlock: Hashable {
     enum BlockType: Hashable {
         case text(String)
@@ -382,38 +582,12 @@ private struct GuideArticle: Hashable {
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .first { !$0.isEmpty }
                 if let line = firstLine {
-                    return GuideParser.stripLeadingNumberOrBullet(from: line)
+                    let cleaned = GuideParser.stripLeadingNumberOrBullet(from: line)
+                    return "• " + cleaned
                 }
             }
         }
-        return "Xem chi tiết hướng dẫn thực hiện từng bước"
-    }
-
-    var cleanSummaryMeta: String {
-        var parts: [String] = []
-        if stepCount > 0 {
-            parts.append("\(stepCount) bước")
-        }
-        if imageCount > 0 {
-            parts.append("\(imageCount) ảnh")
-        }
-        if videoCount > 0 {
-            parts.append("Video")
-        }
-        if downloadCount > 0 {
-            parts.append("Tệp tải")
-        }
-        return parts.isEmpty ? "Chi tiết" : parts.joined(separator: " • ")
-    }
-
-    var searchableContent: String {
-        var parts: [String] = [title, "#\(orderNumber)"]
-        for block in blocks {
-            if case .text(let str) = block.type {
-                parts.append(str)
-            }
-        }
-        return parts.joined(separator: " ").lowercased()
+        return "• Nhấn để xem chi tiết hướng dẫn đầy đủ và hình ảnh minh họa..."
     }
 }
 
@@ -426,6 +600,7 @@ private enum GuideParser {
         case downloadLink(URL)
     }
 
+    /// Xóa bỏ con số đầu dòng (ví dụ: "1.", "2)", "Bước 1:") hoặc ký tự gạch đầu dòng để chuẩn hóa sang dấu chấm đầu dòng
     static func stripLeadingNumberOrBullet(from line: String) -> String {
         var cleaned = line.trimmingCharacters(in: .whitespacesAndNewlines)
         let pattern = #"^(?:(?:\d+[\.\)\:\-]?)|(?:[•\-\*\+]))\s*"#
@@ -435,6 +610,7 @@ private enum GuideParser {
         return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Làm sạch các dấu câu dính ở cuối hoặc đầu URL khi tách từ văn bản
     static func cleanCandidateURLString(_ raw: String) -> String {
         var cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let leadingChars = CharacterSet(charactersIn: "<>\"'()[]{}")
@@ -446,6 +622,7 @@ private enum GuideParser {
         return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Tự động chuẩn hóa mọi dạng link GitHub (`github.com/.../blob/...`, `github.com/.../raw/...`, `raw.githubusercontent.com/...`) để tải trực tiếp
     static func convertToRawGitHubURL(_ urlString: String) -> URL? {
         var cleaned = cleanCandidateURLString(urlString)
         guard !cleaned.isEmpty else { return nil }
@@ -490,6 +667,7 @@ private enum GuideParser {
         return nil
     }
 
+    /// Tách mã Video ID chuẩn từ mọi định dạng link YouTube (watch?v=, youtu.be/, shorts/, embed/, live/)
     static func extractYouTubeVideoID(from urlString: String) -> String? {
         let cleaned = cleanCandidateURLString(urlString)
         guard let url = URL(string: cleaned),
@@ -537,6 +715,7 @@ private enum GuideParser {
         return nil
     }
 
+    /// Kiểm tra xem link có phải là link ảnh trên GitHub hay không
     static func extractGitHubImageURL(from urlString: String) -> URL? {
         let cleaned = cleanCandidateURLString(urlString)
         guard cleaned.lowercased().hasPrefix("http://") || cleaned.lowercased().hasPrefix("https://"),
@@ -561,6 +740,7 @@ private enum GuideParser {
         return nil
     }
 
+    /// Phân loại bất kỳ đường dẫn http/https nào thành: Ảnh GitHub, Video YouTube, hoặc Nút Tải Về
     private static func classifyURL(from rawCandidate: String) -> DetectedLinkType? {
         let cleaned = cleanCandidateURLString(rawCandidate)
         guard cleaned.lowercased().hasPrefix("http://") || cleaned.lowercased().hasPrefix("https://"),
@@ -592,6 +772,7 @@ private enum GuideParser {
         return nil
     }
 
+    /// Phân tích toàn bộ nội dung file `huongdan.txt` và sắp xếp số trước `TTT` từ lớn nhất đến nhỏ nhất
     static func parse(_ rawText: String) -> [GuideArticle] {
         let normalized = rawText
             .replacingOccurrences(of: "\r\n", with: "\n")
@@ -641,9 +822,11 @@ private enum GuideParser {
         }
 
         finalizeCurrentArticle()
+
         return articles.sorted { $0.orderNumber > $1.orderNumber }
     }
 
+    /// Tách văn bản, link ảnh GitHub, link YouTube và link tải về thành các khối riêng biệt
     private static func parseContentBlocks(from lines: [String]) -> [GuideContentBlock] {
         var blocks: [GuideContentBlock] = []
         var currentTextBuffer: [String] = []
@@ -723,19 +906,20 @@ private enum GuideParser {
     }
 }
 
-// MARK: - 🏷️ HEADER ĐẦU TRANG TỐI GIẢN, THOÁNG ĐÃNG, MÁT MẮT (KHÔNG DÙNG KHỐI MÀU CHÓI)
-private final class MinimalistHeaderView: UIView, UITextFieldDelegate {
-    private let overlineLabel = UILabel()
-    private let countPillLabel = UILabel()
-    private let mainTitleLabel = UILabel()
-    private let subtitleLabel = UILabel()
+// MARK: - 🏷️ THANH TIÊU ĐỀ TRÊN CÙNG MỚI: GỌN ĐẸP, BẮT MẮT, CĂN GIỮA 100%, BỎ "6 BÀI VIẾT"
+private final class GuidesHeroHeaderView: UIView {
+    private let bannerShadowWrap = UIView()
+    private let bannerClipView = UIView()
+    private let bannerGradient = CAGradientLayer()
+    private let glassShineLayer = CAGradientLayer()
 
-    private let searchBarCard = UIView()
-    private let searchIconView = UIImageView()
-    private let searchTextField = UITextField()
-    private let clearButton = UIButton(type: .system)
+    private let iconGlassBox = UIView()
+    private let iconImageView = UIImageView()
+    private let titleLabel = UILabel()
+    private let subLabel = UILabel()
 
-    var onSearchTextChanged: ((String) -> Void)?
+    private let sectionTitleLabel = UILabel()
+    private let sectionUnderlineView = SourcesCenteredUnderlineView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -750,160 +934,190 @@ private final class MinimalistHeaderView: UIView, UITextFieldDelegate {
     private func setupViews() {
         backgroundColor = .clear
 
-        // Nhãn nhỏ phía trên (Overline)
-        overlineLabel.translatesAutoresizingMaskIntoConstraints = false
-        overlineLabel.text = "CẨM NANG HỆ THỐNG"
-        overlineLabel.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
-        overlineLabel.textColor = CoolMinimalTheme.accentOcean
+        // 1. Sleek Top Banner (Gọn đẹp, phối màu 3 tầng Xanh - Tím - Hồng Neon & Căn giữa 100%)
+        bannerShadowWrap.translatesAutoresizingMaskIntoConstraints = false
+        bannerShadowWrap.layer.cornerRadius = 18.0
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            bannerShadowWrap.layer.cornerCurve = .continuous
+        }
+        bannerShadowWrap.layer.masksToBounds = false
+        bannerShadowWrap.layer.shadowColor = SourcesCSSTheme.purple.cgColor
+        bannerShadowWrap.layer.shadowOffset = CGSize(width: 0, height: 8)
+        bannerShadowWrap.layer.shadowRadius = 16
+        bannerShadowWrap.layer.shadowOpacity = 0.28
 
-        // Nhãn đếm số lượng chuyên mục tinh gọn bên phải
-        countPillLabel.translatesAutoresizingMaskIntoConstraints = false
-        countPillLabel.font = UIFont.systemFont(ofSize: 12, weight: .semibold)
-        countPillLabel.textColor = CoolMinimalTheme.accentDeepBlue
-        countPillLabel.backgroundColor = CoolMinimalTheme.iceBadgeBg
-        countPillLabel.layer.cornerRadius = 10
-        countPillLabel.layer.masksToBounds = true
-        countPillLabel.isHidden = true
+        bannerClipView.translatesAutoresizingMaskIntoConstraints = false
+        bannerClipView.layer.cornerRadius = 18.0
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            bannerClipView.layer.cornerCurve = .continuous
+        }
+        bannerClipView.clipsToBounds = true
+        bannerClipView.layer.borderWidth = 1.5
+        bannerClipView.layer.borderColor = UIColor.white.withAlphaComponent(0.70).cgColor
 
-        // Tiêu đề chính sang trọng, sắc nét
-        mainTitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        mainTitleLabel.text = "Tin Tức & Sửa Lỗi"
-        mainTitleLabel.font = UIFont.systemFont(ofSize: 27, weight: .bold)
-        mainTitleLabel.textColor = CoolMinimalTheme.inkPrimary
+        bannerGradient.colors = [
+            SourcesCSSTheme.bannerGradStart,
+            SourcesCSSTheme.bannerGradMid,
+            SourcesCSSTheme.bannerGradEnd
+        ]
+        bannerGradient.locations = [0.0, 0.52, 1.0]
+        bannerGradient.startPoint = CGPoint(x: 0.0, y: 0.0)
+        bannerGradient.endPoint = CGPoint(x: 1.0, y: 1.0)
+        bannerClipView.layer.insertSublayer(bannerGradient, at: 0)
 
-        // Dòng mô tả ngắn gọn, thanh lịch
-        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        subtitleLabel.text = "Tổng hợp hướng dẫn xử lý sự cố và cấu hình ổn định từ cộng đồng"
-        subtitleLabel.font = UIFont.systemFont(ofSize: 14, weight: .regular)
-        subtitleLabel.textColor = CoolMinimalTheme.inkSecondary
-        subtitleLabel.numberOfLines = 2
+        // Vệt sáng mặt kính chéo nhẹ
+        glassShineLayer.colors = [
+            UIColor.clear.cgColor,
+            UIColor.white.withAlphaComponent(0.20).cgColor,
+            UIColor.clear.cgColor
+        ]
+        glassShineLayer.locations = [0.0, 0.5, 1.0]
+        glassShineLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+        glassShineLayer.endPoint = CGPoint(x: 1.0, y: 0.3)
+        bannerClipView.layer.insertSublayer(glassShineLayer, at: 1)
 
-        // Thanh tìm kiếm trắng sứ phẳng mịn
-        searchBarCard.translatesAutoresizingMaskIntoConstraints = false
-        CoolMinimalTheme.applyMinimalCard(to: searchBarCard, radius: 13)
+        // Hàng Tiêu đề + Icon kính nằm chính giữa
+        let titleRowStack = UIStackView()
+        titleRowStack.translatesAutoresizingMaskIntoConstraints = false
+        titleRowStack.axis = .horizontal
+        titleRowStack.spacing = 9
+        titleRowStack.alignment = .center
 
-        searchIconView.translatesAutoresizingMaskIntoConstraints = false
-        let iconCfg = UIImage.SymbolConfiguration(pointSize: 14.5, weight: .medium)
-        searchIconView.image = UIImage(systemName: "magnifyingglass", withConfiguration: iconCfg)
-        searchIconView.tintColor = CoolMinimalTheme.inkMuted
+        iconGlassBox.translatesAutoresizingMaskIntoConstraints = false
+        iconGlassBox.backgroundColor = UIColor.white.withAlphaComponent(0.22)
+        iconGlassBox.layer.cornerRadius = 10
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            iconGlassBox.layer.cornerCurve = .continuous
+        }
+        iconGlassBox.layer.borderWidth = 1.3
+        iconGlassBox.layer.borderColor = UIColor.white.withAlphaComponent(0.70).cgColor
 
-        searchTextField.translatesAutoresizingMaskIntoConstraints = false
-        searchTextField.delegate = self
-        searchTextField.font = UIFont.systemFont(ofSize: 14.5, weight: .regular)
-        searchTextField.textColor = CoolMinimalTheme.inkPrimary
-        searchTextField.tintColor = CoolMinimalTheme.accentOcean
-        searchTextField.returnKeyType = .done
-        searchTextField.attributedPlaceholder = NSAttributedString(
-            string: "Tìm kiếm hướng dẫn hoặc lỗi...",
-            attributes: [
-                .foregroundColor: CoolMinimalTheme.inkMuted,
-                .font: UIFont.systemFont(ofSize: 14.5, weight: .regular)
-            ]
-        )
-        searchTextField.addTarget(self, action: #selector(handleEditingChanged), for: .editingChanged)
+        iconImageView.translatesAutoresizingMaskIntoConstraints = false
+        let starCfg = UIImage.SymbolConfiguration(pointSize: 14.5, weight: .bold)
+        iconImageView.image = UIImage(systemName: "star.fill", withConfiguration: starCfg)
+            ?? UIImage(systemName: "sparkles", withConfiguration: starCfg)
+        iconImageView.tintColor = .white
+        iconGlassBox.addSubview(iconImageView)
 
-        clearButton.translatesAutoresizingMaskIntoConstraints = false
-        let clearCfg = UIImage.SymbolConfiguration(pointSize: 14, weight: .medium)
-        clearButton.setImage(UIImage(systemName: "xmark.circle.fill", withConfiguration: clearCfg), for: .normal)
-        clearButton.tintColor = CoolMinimalTheme.inkMuted
-        clearButton.isHidden = true
-        clearButton.addTarget(self, action: #selector(handleClearTapped), for: .touchUpInside)
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.text = "Tin Tức Và Sửa Lỗi"
+        if let roundedDesc = UIFont.systemFont(ofSize: 21.5, weight: .heavy).fontDescriptor.withDesign(.rounded) {
+            titleLabel.font = UIFont(descriptor: roundedDesc, size: 21.5)
+        } else {
+            titleLabel.font = UIFont.systemFont(ofSize: 21.5, weight: .heavy)
+        }
+        titleLabel.textColor = SourcesCSSTheme.white
+        titleLabel.textAlignment = .center
+        titleLabel.layer.shadowColor = UIColor.black.cgColor
+        titleLabel.layer.shadowOffset = CGSize(width: 0, height: 2)
+        titleLabel.layer.shadowRadius = 4
+        titleLabel.layer.shadowOpacity = 0.24
 
-        searchBarCard.addSubview(searchIconView)
-        searchBarCard.addSubview(searchTextField)
-        searchBarCard.addSubview(clearButton)
+        titleRowStack.addArrangedSubview(iconGlassBox)
+        titleRowStack.addArrangedSubview(titleLabel)
 
-        addSubview(overlineLabel)
-        addSubview(countPillLabel)
-        addSubview(mainTitleLabel)
-        addSubview(subtitleLabel)
-        addSubview(searchBarCard)
+        subLabel.translatesAutoresizingMaskIntoConstraints = false
+        subLabel.text = "Cẩm nang khắc phục sự cố do cộng đồng mạng chia sẻ"
+        subLabel.font = UIFont.systemFont(ofSize: 13.2, weight: .medium)
+        subLabel.textColor = SourcesCSSTheme.white.withAlphaComponent(0.95)
+        subLabel.textAlignment = .center
+        subLabel.numberOfLines = 2
+
+        bannerClipView.addSubview(titleRowStack)
+        bannerClipView.addSubview(subLabel)
+        bannerShadowWrap.addSubview(bannerClipView)
+
+        // 2. Tiêu đề `.features h2` CĂN GIỮA + gạch chân xanh 60x3pt ở chính giữa (Đã bỏ hoàn toàn nhãn 6 bài viết)
+        sectionTitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        sectionTitleLabel.text = "TỔNG HỢP CÁC DANH MỤC"
+        sectionTitleLabel.textColor = SourcesCSSTheme.blue
+        sectionTitleLabel.textAlignment = .center
+        if let roundedSecDesc = UIFont.systemFont(ofSize: 18.5, weight: .heavy).fontDescriptor.withDesign(.rounded) {
+            sectionTitleLabel.font = UIFont(descriptor: roundedSecDesc, size: 18.5)
+        } else {
+            sectionTitleLabel.font = UIFont.systemFont(ofSize: 18.5, weight: .heavy)
+        }
+
+        sectionUnderlineView.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(bannerShadowWrap)
+        addSubview(sectionTitleLabel)
+        addSubview(sectionUnderlineView)
 
         NSLayoutConstraint.activate([
-            overlineLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
-            overlineLabel.topAnchor.constraint(equalTo: topAnchor, constant: 14),
+            bannerShadowWrap.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+            bannerShadowWrap.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            bannerShadowWrap.topAnchor.constraint(equalTo: topAnchor, constant: 6),
 
-            countPillLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
-            countPillLabel.centerYAnchor.constraint(equalTo: overlineLabel.centerYAnchor),
-            countPillLabel.heightAnchor.constraint(equalToConstant: 22),
+            bannerClipView.leadingAnchor.constraint(equalTo: bannerShadowWrap.leadingAnchor),
+            bannerClipView.trailingAnchor.constraint(equalTo: bannerShadowWrap.trailingAnchor),
+            bannerClipView.topAnchor.constraint(equalTo: bannerShadowWrap.topAnchor),
+            bannerClipView.bottomAnchor.constraint(equalTo: bannerShadowWrap.bottomAnchor),
 
-            mainTitleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
-            mainTitleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
-            mainTitleLabel.topAnchor.constraint(equalTo: overlineLabel.bottomAnchor, constant: 4),
+            iconGlassBox.widthAnchor.constraint(equalToConstant: 30),
+            iconGlassBox.heightAnchor.constraint(equalToConstant: 30),
+            iconImageView.centerXAnchor.constraint(equalTo: iconGlassBox.centerXAnchor),
+            iconImageView.centerYAnchor.constraint(equalTo: iconGlassBox.centerYAnchor),
 
-            subtitleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
-            subtitleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
-            subtitleLabel.topAnchor.constraint(equalTo: mainTitleLabel.bottomAnchor, constant: 4),
+            titleRowStack.centerXAnchor.constraint(equalTo: bannerClipView.centerXAnchor),
+            titleRowStack.topAnchor.constraint(equalTo: bannerClipView.topAnchor, constant: 13),
 
-            searchBarCard.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            searchBarCard.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
-            searchBarCard.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 14),
-            searchBarCard.heightAnchor.constraint(equalToConstant: 42),
-            searchBarCard.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
+            subLabel.topAnchor.constraint(equalTo: titleRowStack.bottomAnchor, constant: 4),
+            subLabel.leadingAnchor.constraint(equalTo: bannerClipView.leadingAnchor, constant: 12),
+            subLabel.trailingAnchor.constraint(equalTo: bannerClipView.trailingAnchor, constant: -12),
+            subLabel.bottomAnchor.constraint(equalTo: bannerClipView.bottomAnchor, constant: -13),
 
-            searchIconView.leadingAnchor.constraint(equalTo: searchBarCard.leadingAnchor, constant: 13),
-            searchIconView.centerYAnchor.constraint(equalTo: searchBarCard.centerYAnchor),
-            searchIconView.widthAnchor.constraint(equalToConstant: 17),
-            searchIconView.heightAnchor.constraint(equalToConstant: 17),
+            sectionTitleLabel.topAnchor.constraint(equalTo: bannerShadowWrap.bottomAnchor, constant: 15),
+            sectionTitleLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            sectionTitleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            sectionTitleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
 
-            clearButton.trailingAnchor.constraint(equalTo: searchBarCard.trailingAnchor, constant: -10),
-            clearButton.centerYAnchor.constraint(equalTo: searchBarCard.centerYAnchor),
-            clearButton.widthAnchor.constraint(equalToConstant: 24),
-            clearButton.heightAnchor.constraint(equalToConstant: 24),
-
-            searchTextField.leadingAnchor.constraint(equalTo: searchIconView.trailingAnchor, constant: 9),
-            searchTextField.trailingAnchor.constraint(equalTo: clearButton.leadingAnchor, constant: -6),
-            searchTextField.centerYAnchor.constraint(equalTo: searchBarCard.centerYAnchor),
-            searchTextField.heightAnchor.constraint(equalToConstant: 36)
+            sectionUnderlineView.topAnchor.constraint(equalTo: sectionTitleLabel.bottomAnchor, constant: 6),
+            sectionUnderlineView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            sectionUnderlineView.widthAnchor.constraint(equalToConstant: 60),
+            sectionUnderlineView.heightAnchor.constraint(equalToConstant: 3.0),
+            sectionUnderlineView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8)
         ])
     }
 
-    @objc private func handleEditingChanged() {
-        let text = searchTextField.text ?? ""
-        clearButton.isHidden = text.isEmpty
-        onSearchTextChanged?(text)
-    }
-
-    @objc private func handleClearTapped() {
-        searchTextField.text = ""
-        clearButton.isHidden = true
-        searchTextField.resignFirstResponder()
-        onSearchTextChanged?("")
-    }
-
-    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-        textField.resignFirstResponder()
-        return true
-    }
-
     func updateCount(_ count: Int) {
-        if count > 0 {
-            countPillLabel.text = "  \(count) chủ đề  "
-            countPillLabel.isHidden = false
-        } else {
-            countPillLabel.isHidden = true
-        }
+        // Đã loại bỏ hoàn toàn nhãn "6 bài hướng dẫn" theo yêu cầu của bạn
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        bannerGradient.frame = bannerClipView.bounds
+        glassShineLayer.frame = CGRect(
+            x: -bannerClipView.bounds.width * 0.25,
+            y: 0,
+            width: bannerClipView.bounds.width * 0.65,
+            height: bannerClipView.bounds.height
+        )
+        CATransaction.commit()
     }
 }
 
-// MARK: - 🗂️ DÒNG BÀI VIẾT TỐI GIẢN, SẠCH SẼ (CLEAN EDITORIAL CARD)
+// MARK: - 🗂️ THẺ DANH MỤC HƯỚNG DẪN CHUẨN `.tab-button[data-tab="1..4"]` TRONG CSS GỐC
 private final class GuideTopicRowCell: UITableViewCell {
     static let reuseIdentifier = "GuideTopicRowCell"
 
+    private let outerContainerSlice = UIView()
     private let cardView = UIView()
-    private let numberBadgeView = UIView()
-    private let numberLabel = UILabel()
+    private let badgeContainer = UIView()
+    private let badgeIconView = UIImageView()
+    private let badgeNumberLabel = UILabel()
 
-    private let textStack = UIStackView()
     private let titleLabel = UILabel()
     private let subtitleLabel = UILabel()
+    private let metaStackView = UIStackView()
+    private let priorityTagLabel = UILabel()
+    private let stepsTagLabel = UILabel()
+    private let imagesTagLabel = UILabel()
 
-    private let bottomRowStack = UIStackView()
-    private let metaLabel = UILabel()
-    private let newDotView = UIView()
-    private let newLabel = UILabel()
-
-    private let chevronImageView = UIImageView()
+    private var topSliceConstraint: NSLayoutConstraint!
+    private var bottomSliceConstraint: NSLayoutConstraint!
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -917,9 +1131,15 @@ private final class GuideTopicRowCell: UITableViewCell {
 
     override func setHighlighted(_ highlighted: Bool, animated: Bool) {
         super.setHighlighted(highlighted, animated: animated)
-        UIView.animate(withDuration: 0.18, delay: 0, options: [.allowUserInteraction, .curveEaseOut]) {
-            self.cardView.transform = highlighted ? CGAffineTransform(scaleX: 0.98, y: 0.98) : .identity
-            self.cardView.backgroundColor = highlighted ? CoolMinimalTheme.surfaceSubtle : CoolMinimalTheme.surfaceWhite
+        UIView.animate(
+            withDuration: 0.22,
+            delay: 0,
+            usingSpringWithDamping: 0.72,
+            initialSpringVelocity: 0.5,
+            options: [.allowUserInteraction, .beginFromCurrentState]
+        ) {
+            self.cardView.transform = highlighted ? CGAffineTransform(scaleX: 0.975, y: 0.975) : .identity
+            self.cardView.alpha = highlighted ? 0.94 : 1.0
         }
     }
 
@@ -928,130 +1148,200 @@ private final class GuideTopicRowCell: UITableViewCell {
         contentView.backgroundColor = .clear
         selectionStyle = .none
 
-        // Thẻ trắng sứ tối giản
+        // Lớp nền trắng bao ngoài tạo cảm giác 1 khung `.tab-container` sát viền 99%
+        outerContainerSlice.translatesAutoresizingMaskIntoConstraints = false
+        outerContainerSlice.backgroundColor = SourcesCSSTheme.white
+        outerContainerSlice.layer.borderColor = SourcesCSSTheme.border.cgColor
+        contentView.addSubview(outerContainerSlice)
+
+        // Khối `.tab-button` bên trong: Viền 4 góc đều nhau 2pt + Đổ bóng phát sáng theo màu Tab
         cardView.translatesAutoresizingMaskIntoConstraints = false
-        CoolMinimalTheme.applyMinimalCard(to: cardView, radius: CoolMinimalTheme.cardCornerRadius)
+        outerContainerSlice.addSubview(cardView)
 
-        // Ô số thứ tự màu xanh băng dịu mắt
-        numberBadgeView.translatesAutoresizingMaskIntoConstraints = false
-        numberBadgeView.backgroundColor = CoolMinimalTheme.iceBadgeBg
-        numberBadgeView.layer.cornerRadius = 12
+        // Huy hiệu số thứ tự (#1, #2...) mang màu của Tab
+        badgeContainer.translatesAutoresizingMaskIntoConstraints = false
+        badgeContainer.layer.cornerRadius = 12
         if #available(iOS 13.0, tvOS 13.0, *) {
-            numberBadgeView.layer.cornerCurve = .continuous
+            badgeContainer.layer.cornerCurve = .continuous
         }
+        badgeContainer.layer.masksToBounds = false
 
-        numberLabel.translatesAutoresizingMaskIntoConstraints = false
-        if let desc = UIFont.systemFont(ofSize: 14, weight: .bold).fontDescriptor.withDesign(.rounded) {
-            numberLabel.font = UIFont(descriptor: desc, size: 14)
-        } else {
-            numberLabel.font = UIFont.systemFont(ofSize: 14, weight: .bold)
-        }
-        numberLabel.textColor = CoolMinimalTheme.accentDeepBlue
-        numberLabel.textAlignment = .center
-        numberBadgeView.addSubview(numberLabel)
+        badgeIconView.translatesAutoresizingMaskIntoConstraints = false
+        let iconConfig = UIImage.SymbolConfiguration(pointSize: 10.5, weight: .bold)
+        badgeIconView.image = UIImage(systemName: "sparkles", withConfiguration: iconConfig)
+        badgeIconView.tintColor = SourcesCSSTheme.white.withAlphaComponent(0.95)
+        badgeIconView.contentMode = .scaleAspectFit
 
-        // Tiêu đề chính gọn gàng
+        badgeNumberLabel.translatesAutoresizingMaskIntoConstraints = false
+        badgeNumberLabel.font = UIFont.systemFont(ofSize: 13.5, weight: .heavy)
+        badgeNumberLabel.textColor = SourcesCSSTheme.white
+        badgeNumberLabel.textAlignment = .center
+
+        badgeContainer.addSubview(badgeIconView)
+        badgeContainer.addSubview(badgeNumberLabel)
+
+        // Tiêu đề chính (Chữ đen tuyền #000000)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
-        titleLabel.textColor = CoolMinimalTheme.inkPrimary
+        titleLabel.font = UIFont.systemFont(ofSize: 15.8, weight: .bold)
+        titleLabel.textColor = SourcesCSSTheme.pureBlack
         titleLabel.numberOfLines = 2
 
-        // Dòng tóm tắt thanh mảnh
+        // Phụ đề tóm tắt
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        subtitleLabel.font = UIFont.systemFont(ofSize: 13.5, weight: .regular)
-        subtitleLabel.textColor = CoolMinimalTheme.inkSecondary
+        subtitleLabel.font = UIFont.systemFont(ofSize: 13.0, weight: .medium)
+        subtitleLabel.textColor = SourcesCSSTheme.dark
         subtitleLabel.numberOfLines = 1
 
-        // Hàng thông tin phụ nhỏ gọn (không dùng hộp màu lòe loẹt)
-        bottomRowStack.translatesAutoresizingMaskIntoConstraints = false
-        bottomRowStack.axis = .horizontal
-        bottomRowStack.spacing = 6
-        bottomRowStack.alignment = .center
+        // Thanh Tags thông tin (.tab-pill)
+        metaStackView.translatesAutoresizingMaskIntoConstraints = false
+        metaStackView.axis = .horizontal
+        metaStackView.spacing = 5
+        metaStackView.alignment = .center
 
-        newDotView.translatesAutoresizingMaskIntoConstraints = false
-        newDotView.backgroundColor = CoolMinimalTheme.accentTeal
-        newDotView.layer.cornerRadius = 3
-        NSLayoutConstraint.activate([
-            newDotView.widthAnchor.constraint(equalToConstant: 6),
-            newDotView.heightAnchor.constraint(equalToConstant: 6)
-        ])
+        metaStackView.addArrangedSubview(priorityTagLabel)
+        metaStackView.addArrangedSubview(stepsTagLabel)
+        metaStackView.addArrangedSubview(imagesTagLabel)
 
-        newLabel.translatesAutoresizingMaskIntoConstraints = false
-        newLabel.text = "Mới nhất •"
-        newLabel.font = UIFont.systemFont(ofSize: 12, weight: .semibold)
-        newLabel.textColor = CoolMinimalTheme.accentTeal
+        cardView.addSubview(badgeContainer)
+        cardView.addSubview(titleLabel)
+        cardView.addSubview(subtitleLabel)
+        cardView.addSubview(metaStackView)
 
-        metaLabel.translatesAutoresizingMaskIntoConstraints = false
-        metaLabel.font = UIFont.systemFont(ofSize: 12, weight: .medium)
-        metaLabel.textColor = CoolMinimalTheme.inkMuted
-
-        bottomRowStack.addArrangedSubview(newDotView)
-        bottomRowStack.addArrangedSubview(newLabel)
-        bottomRowStack.addArrangedSubview(metaLabel)
-
-        textStack.translatesAutoresizingMaskIntoConstraints = false
-        textStack.axis = .vertical
-        textStack.spacing = 4
-        textStack.alignment = .leading
-        textStack.addArrangedSubview(titleLabel)
-        textStack.addArrangedSubview(subtitleLabel)
-        textStack.addArrangedSubview(bottomRowStack)
-        textStack.setCustomSpacing(6, after: subtitleLabel)
-
-        // Mũi tên điều hướng mảnh
-        chevronImageView.translatesAutoresizingMaskIntoConstraints = false
-        let chevCfg = UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
-        chevronImageView.image = UIImage(systemName: "chevron.right", withConfiguration: chevCfg)
-        chevronImageView.tintColor = CoolMinimalTheme.inkMuted
-        chevronImageView.setContentHuggingPriority(.required, for: .horizontal)
-
-        cardView.addSubview(numberBadgeView)
-        cardView.addSubview(textStack)
-        cardView.addSubview(chevronImageView)
-        contentView.addSubview(cardView)
+        topSliceConstraint = cardView.topAnchor.constraint(equalTo: outerContainerSlice.topAnchor, constant: 6)
+        bottomSliceConstraint = cardView.bottomAnchor.constraint(equalTo: outerContainerSlice.bottomAnchor, constant: -6)
 
         NSLayoutConstraint.activate([
-            cardView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            cardView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            cardView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 5),
-            cardView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -5),
+            outerContainerSlice.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 4),
+            outerContainerSlice.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -4),
+            outerContainerSlice.topAnchor.constraint(equalTo: contentView.topAnchor),
+            outerContainerSlice.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
 
-            numberBadgeView.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 14),
-            numberBadgeView.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 15),
-            numberBadgeView.widthAnchor.constraint(equalToConstant: 42),
-            numberBadgeView.heightAnchor.constraint(equalToConstant: 42),
+            cardView.leadingAnchor.constraint(equalTo: outerContainerSlice.leadingAnchor, constant: 8),
+            cardView.trailingAnchor.constraint(equalTo: outerContainerSlice.trailingAnchor, constant: -8),
+            topSliceConstraint,
+            bottomSliceConstraint,
 
-            numberLabel.centerXAnchor.constraint(equalTo: numberBadgeView.centerXAnchor),
-            numberLabel.centerYAnchor.constraint(equalTo: numberBadgeView.centerYAnchor),
+            badgeContainer.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 11),
+            badgeContainer.centerYAnchor.constraint(equalTo: cardView.centerYAnchor),
+            badgeContainer.widthAnchor.constraint(equalToConstant: 46),
+            badgeContainer.heightAnchor.constraint(equalToConstant: 46),
 
-            chevronImageView.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -14),
-            chevronImageView.centerYAnchor.constraint(equalTo: cardView.centerYAnchor),
+            badgeIconView.centerXAnchor.constraint(equalTo: badgeContainer.centerXAnchor),
+            badgeIconView.topAnchor.constraint(equalTo: badgeContainer.topAnchor, constant: 7),
+            badgeIconView.widthAnchor.constraint(equalToConstant: 12),
+            badgeIconView.heightAnchor.constraint(equalToConstant: 12),
 
-            textStack.leadingAnchor.constraint(equalTo: numberBadgeView.trailingAnchor, constant: 13),
-            textStack.trailingAnchor.constraint(equalTo: chevronImageView.leadingAnchor, constant: -10),
-            textStack.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 14),
-            textStack.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -14)
+            badgeNumberLabel.topAnchor.constraint(equalTo: badgeIconView.bottomAnchor, constant: 2),
+            badgeNumberLabel.leadingAnchor.constraint(equalTo: badgeContainer.leadingAnchor, constant: 2),
+            badgeNumberLabel.trailingAnchor.constraint(equalTo: badgeContainer.trailingAnchor, constant: -2),
+
+            titleLabel.leadingAnchor.constraint(equalTo: badgeContainer.trailingAnchor, constant: 11),
+            titleLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -11),
+            titleLabel.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 12),
+
+            subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            subtitleLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
+            subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 3),
+
+            metaStackView.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            metaStackView.trailingAnchor.constraint(lessThanOrEqualTo: titleLabel.trailingAnchor),
+            metaStackView.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 6),
+            metaStackView.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -12)
         ])
     }
 
-    func configure(with article: GuideArticle, isTopPriority: Bool) {
-        numberLabel.text = String(format: "%02d", article.orderNumber)
+    private func stylePillLabel(_ label: UILabel, accentColor: UIColor) {
+        label.font = UIFont.systemFont(ofSize: 10.5, weight: .heavy)
+        label.textColor = accentColor
+        label.backgroundColor = SourcesCSSTheme.light
+        label.layer.cornerRadius = 7
+        label.layer.borderWidth = 1.0
+        label.layer.borderColor = SourcesCSSTheme.border.cgColor
+        label.layer.masksToBounds = true
+    }
+
+    func configure(with article: GuideArticle, rowIndex: Int, totalRows: Int) {
+        let accentColor = SourcesCSSTheme.tabAccentColor(for: rowIndex)
+
+        // Áp dụng viền 2pt đều 4 góc + bóng màu phát sáng chuẩn data-tab="1..4"
+        SourcesCSSTheme.applyColoredGlowCardStyle(
+            to: cardView,
+            accentColor: accentColor,
+            cornerRadius: SourcesCSSTheme.cornerRadius,
+            shadowOpacity: 0.22
+        )
+
+        badgeContainer.backgroundColor = accentColor
+        badgeContainer.layer.shadowColor = accentColor.cgColor
+        badgeContainer.layer.shadowOffset = CGSize(width: 0, height: 4)
+        badgeContainer.layer.shadowRadius = 8
+        badgeContainer.layer.shadowOpacity = 0.28
+
+        badgeNumberLabel.text = "#\(article.orderNumber)"
         titleLabel.text = article.title
         subtitleLabel.text = article.previewSubtitle
-        metaLabel.text = article.cleanSummaryMeta
 
-        newDotView.isHidden = !isTopPriority
-        newLabel.isHidden = !isTopPriority
+        stylePillLabel(priorityTagLabel, accentColor: accentColor)
+        stylePillLabel(stepsTagLabel, accentColor: accentColor)
+        stylePillLabel(imagesTagLabel, accentColor: accentColor)
+
+        if rowIndex == 0 {
+            priorityTagLabel.text = "  ★ MỚI NHẤT  "
+            priorityTagLabel.isHidden = false
+        } else {
+            priorityTagLabel.isHidden = true
+        }
+
+        let steps = article.stepCount
+        stepsTagLabel.text = steps > 0 ? "  \(steps) mục  " : "  Chi tiết  "
+
+        let imgs = article.imageCount
+        let vids = article.videoCount
+        let dls = article.downloadCount
+
+        var mediaParts: [String] = []
+        if imgs > 0 { mediaParts.append("🖼 \(imgs) ảnh") }
+        if vids > 0 { mediaParts.append("🎬 \(vids) video") }
+        if dls > 0 { mediaParts.append("⬇️ \(dls) tệp") }
+
+        if !mediaParts.isEmpty {
+            imagesTagLabel.text = "  " + mediaParts.joined(separator: " • ") + "  "
+            imagesTagLabel.isHidden = false
+        } else {
+            imagesTagLabel.isHidden = true
+        }
+
+        // Bo góc cho khung trắng lớn `.tab-container` ở dòng đầu tiên và dòng cuối cùng
+        let isFirst = (rowIndex == 0)
+        let isLast = (rowIndex == totalRows - 1)
+        topSliceConstraint.constant = isFirst ? 10 : 6
+        bottomSliceConstraint.constant = isLast ? -10 : -6
+
+        if isFirst && isLast {
+            outerContainerSlice.layer.cornerRadius = SourcesCSSTheme.cornerRadius
+            outerContainerSlice.layer.maskedCorners = [
+                .layerMinXMinYCorner, .layerMaxXMinYCorner,
+                .layerMinXMaxYCorner, .layerMaxXMaxYCorner
+            ]
+        } else if isFirst {
+            outerContainerSlice.layer.cornerRadius = SourcesCSSTheme.cornerRadius
+            outerContainerSlice.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        } else if isLast {
+            outerContainerSlice.layer.cornerRadius = SourcesCSSTheme.cornerRadius
+            outerContainerSlice.layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        } else {
+            outerContainerSlice.layer.cornerRadius = 0
+        }
     }
 }
 
-// MARK: - 📱 KHUNG HIỂN THỊ ẢNH TỐI GIẢN (KHÔNG VIỀN MÀU RƯỜM RÀ, BO GÓC SẠCH SẼ)
+// MARK: - 📱 KHUNG HIỂN THỊ ẢNH CHUẨN `.guide img` (VIỀN GRADIENT 3 MÀU + BÓNG ĐỔ SÂU)
 private final class GuideStyledImageView: UIView {
-    private let cardContainer = UIView()
+    private let outerShadowContainer = UIView()
+    private let borderContainer = GradientBorderContainerView()
+    private let innerClipContainer = UIView()
     private let imageView = UIImageView()
-    private let zoomPill = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialDark))
-    private let zoomIcon = UIImageView()
-    private let activityIndicator = UIActivityIndicatorView(style: .medium)
+    private let shimmerActivity = UIActivityIndicatorView(style: .medium)
     private let errorLabel = UILabel()
     private let retryButton = UIButton(type: .system)
 
@@ -1059,6 +1349,8 @@ private final class GuideStyledImageView: UIView {
     private var aspectRatioConstraint: NSLayoutConstraint?
     private var defaultHeightConstraint: NSLayoutConstraint!
     var onTapImage: ((UIImage) -> Void)?
+
+    private let borderThickness: CGFloat = 3.5
 
     init(url: URL) {
         self.imageURL = GuideParser.convertToRawGitHubURL(url.absoluteString) ?? url
@@ -1076,95 +1368,102 @@ private final class GuideStyledImageView: UIView {
         translatesAutoresizingMaskIntoConstraints = false
         backgroundColor = .clear
 
-        cardContainer.translatesAutoresizingMaskIntoConstraints = false
-        cardContainer.backgroundColor = CoolMinimalTheme.surfaceWhite
-        cardContainer.layer.cornerRadius = CoolMinimalTheme.mediaCornerRadius
+        outerShadowContainer.translatesAutoresizingMaskIntoConstraints = false
+        outerShadowContainer.backgroundColor = .clear
+        outerShadowContainer.layer.shadowColor = UIColor.black.cgColor
+        outerShadowContainer.layer.shadowOffset = CGSize(width: 0, height: 8)
+        outerShadowContainer.layer.shadowRadius = 16
+        outerShadowContainer.layer.shadowOpacity = 0.28
+
+        let outerRadius = SourcesCSSTheme.cornerRadius
+        borderContainer.translatesAutoresizingMaskIntoConstraints = false
+        borderContainer.layer.cornerRadius = outerRadius
         if #available(iOS 13.0, tvOS 13.0, *) {
-            cardContainer.layer.cornerCurve = .continuous
+            borderContainer.layer.cornerCurve = .continuous
         }
-        cardContainer.layer.borderWidth = 1.0
-        cardContainer.layer.borderColor = CoolMinimalTheme.hairlineBorder.cgColor
-        cardContainer.clipsToBounds = true
+        borderContainer.clipsToBounds = true
+
+        let innerRadius = max(outerRadius - borderThickness, 8.0)
+        innerClipContainer.translatesAutoresizingMaskIntoConstraints = false
+        innerClipContainer.backgroundColor = SourcesCSSTheme.white
+        innerClipContainer.layer.cornerRadius = innerRadius
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            innerClipContainer.layer.cornerCurve = .continuous
+        }
+        innerClipContainer.clipsToBounds = true
 
         imageView.translatesAutoresizingMaskIntoConstraints = false
         imageView.contentMode = .scaleAspectFill
-        imageView.backgroundColor = CoolMinimalTheme.surfaceSubtle
+        imageView.backgroundColor = SourcesCSSTheme.white
         imageView.clipsToBounds = true
         imageView.isUserInteractionEnabled = true
 
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleImageTap))
         imageView.addGestureRecognizer(tapGesture)
 
-        // Nút icon kính lúp nhỏ gọn góc dưới bên phải
-        zoomPill.translatesAutoresizingMaskIntoConstraints = false
-        zoomPill.layer.cornerRadius = 14
-        zoomPill.clipsToBounds = true
-        zoomPill.isUserInteractionEnabled = false
-        zoomPill.isHidden = true
-
-        zoomIcon.translatesAutoresizingMaskIntoConstraints = false
-        let cfg = UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
-        zoomIcon.image = UIImage(systemName: "arrow.up.left.and.arrow.down.right", withConfiguration: cfg)
-        zoomIcon.tintColor = .white
-        zoomPill.contentView.addSubview(zoomIcon)
-
-        activityIndicator.translatesAutoresizingMaskIntoConstraints = false
-        activityIndicator.color = CoolMinimalTheme.accentOcean
-        activityIndicator.hidesWhenStopped = true
+        shimmerActivity.translatesAutoresizingMaskIntoConstraints = false
+        shimmerActivity.color = SourcesCSSTheme.blue
+        shimmerActivity.hidesWhenStopped = true
 
         errorLabel.translatesAutoresizingMaskIntoConstraints = false
-        errorLabel.text = "Không thể tải hình ảnh"
-        errorLabel.font = UIFont.systemFont(ofSize: 13, weight: .medium)
-        errorLabel.textColor = CoolMinimalTheme.inkSecondary
+        errorLabel.text = "Không thể tải hình ảnh minh họa"
+        errorLabel.font = UIFont.systemFont(ofSize: 13.5, weight: .semibold)
+        errorLabel.textColor = SourcesCSSTheme.pureBlack
         errorLabel.textAlignment = .center
         errorLabel.isHidden = true
 
         retryButton.translatesAutoresizingMaskIntoConstraints = false
-        retryButton.setTitle("  Thử lại  ", for: .normal)
-        retryButton.setTitleColor(CoolMinimalTheme.accentOcean, for: .normal)
-        retryButton.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
-        retryButton.backgroundColor = CoolMinimalTheme.iceBadgeBg
-        retryButton.layer.cornerRadius = 12
+        retryButton.setTitle("  Thử tải lại ảnh  ", for: .normal)
+        retryButton.setTitleColor(SourcesCSSTheme.white, for: .normal)
+        retryButton.titleLabel?.font = UIFont.systemFont(ofSize: 12.5, weight: .bold)
+        retryButton.backgroundColor = SourcesCSSTheme.blue
+        retryButton.layer.cornerRadius = 14
         retryButton.isHidden = true
         retryButton.addTarget(self, action: #selector(loadImage), for: .touchUpInside)
 
-        cardContainer.addSubview(imageView)
-        cardContainer.addSubview(zoomPill)
-        cardContainer.addSubview(activityIndicator)
-        cardContainer.addSubview(errorLabel)
-        cardContainer.addSubview(retryButton)
-        addSubview(cardContainer)
+        innerClipContainer.addSubview(imageView)
+        innerClipContainer.addSubview(shimmerActivity)
+        innerClipContainer.addSubview(errorLabel)
+        innerClipContainer.addSubview(retryButton)
 
-        defaultHeightConstraint = cardContainer.heightAnchor.constraint(equalToConstant: 210)
+        borderContainer.addSubview(innerClipContainer)
+        outerShadowContainer.addSubview(borderContainer)
+        addSubview(outerShadowContainer)
+
+        defaultHeightConstraint = innerClipContainer.heightAnchor.constraint(equalToConstant: 220)
         defaultHeightConstraint.priority = .defaultHigh
 
         NSLayoutConstraint.activate([
-            cardContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
-            cardContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
-            cardContainer.topAnchor.constraint(equalTo: topAnchor),
-            cardContainer.bottomAnchor.constraint(equalTo: bottomAnchor),
+            outerShadowContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
+            outerShadowContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
+            outerShadowContainer.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            outerShadowContainer.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+
+            borderContainer.leadingAnchor.constraint(equalTo: outerShadowContainer.leadingAnchor),
+            borderContainer.trailingAnchor.constraint(equalTo: outerShadowContainer.trailingAnchor),
+            borderContainer.topAnchor.constraint(equalTo: outerShadowContainer.topAnchor),
+            borderContainer.bottomAnchor.constraint(equalTo: outerShadowContainer.bottomAnchor),
+
+            innerClipContainer.leadingAnchor.constraint(equalTo: borderContainer.leadingAnchor, constant: borderThickness),
+            innerClipContainer.trailingAnchor.constraint(equalTo: borderContainer.trailingAnchor, constant: -borderThickness),
+            innerClipContainer.topAnchor.constraint(equalTo: borderContainer.topAnchor, constant: borderThickness),
+            innerClipContainer.bottomAnchor.constraint(equalTo: borderContainer.bottomAnchor, constant: -borderThickness),
             defaultHeightConstraint,
 
-            imageView.leadingAnchor.constraint(equalTo: cardContainer.leadingAnchor),
-            imageView.trailingAnchor.constraint(equalTo: cardContainer.trailingAnchor),
-            imageView.topAnchor.constraint(equalTo: cardContainer.topAnchor),
-            imageView.bottomAnchor.constraint(equalTo: cardContainer.bottomAnchor),
+            imageView.leadingAnchor.constraint(equalTo: innerClipContainer.leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: innerClipContainer.trailingAnchor),
+            imageView.topAnchor.constraint(equalTo: innerClipContainer.topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: innerClipContainer.bottomAnchor),
 
-            zoomPill.trailingAnchor.constraint(equalTo: cardContainer.trailingAnchor, constant: -10),
-            zoomPill.bottomAnchor.constraint(equalTo: cardContainer.bottomAnchor, constant: -10),
-            zoomPill.widthAnchor.constraint(equalToConstant: 28),
-            zoomPill.heightAnchor.constraint(equalToConstant: 28),
+            shimmerActivity.centerXAnchor.constraint(equalTo: innerClipContainer.centerXAnchor),
+            shimmerActivity.centerYAnchor.constraint(equalTo: innerClipContainer.centerYAnchor),
 
-            zoomIcon.centerXAnchor.constraint(equalTo: zoomPill.contentView.centerXAnchor),
-            zoomIcon.centerYAnchor.constraint(equalTo: zoomPill.contentView.centerYAnchor),
+            errorLabel.centerXAnchor.constraint(equalTo: innerClipContainer.centerXAnchor),
+            errorLabel.centerYAnchor.constraint(equalTo: innerClipContainer.centerYAnchor, constant: -14),
+            errorLabel.leadingAnchor.constraint(equalTo: innerClipContainer.leadingAnchor, constant: 16),
+            errorLabel.trailingAnchor.constraint(equalTo: innerClipContainer.trailingAnchor, constant: -16),
 
-            activityIndicator.centerXAnchor.constraint(equalTo: cardContainer.centerXAnchor),
-            activityIndicator.centerYAnchor.constraint(equalTo: cardContainer.centerYAnchor),
-
-            errorLabel.centerXAnchor.constraint(equalTo: cardContainer.centerXAnchor),
-            errorLabel.centerYAnchor.constraint(equalTo: cardContainer.centerYAnchor, constant: -12),
-
-            retryButton.centerXAnchor.constraint(equalTo: cardContainer.centerXAnchor),
+            retryButton.centerXAnchor.constraint(equalTo: innerClipContainer.centerXAnchor),
             retryButton.topAnchor.constraint(equalTo: errorLabel.bottomAnchor, constant: 8),
             retryButton.heightAnchor.constraint(equalToConstant: 28)
         ])
@@ -1176,8 +1475,7 @@ private final class GuideStyledImageView: UIView {
 
         errorLabel.isHidden = true
         retryButton.isHidden = true
-        zoomPill.isHidden = true
-        activityIndicator.startAnimating()
+        shimmerActivity.startAnimating()
 
         Task { @MainActor [weak self] in
             guard let self = self else { return }
@@ -1199,7 +1497,7 @@ private final class GuideStyledImageView: UIView {
                 }
                 self.applyLoadedImage(loadedImage)
             } catch {
-                self.activityIndicator.stopAnimating()
+                self.shimmerActivity.stopAnimating()
                 self.errorLabel.isHidden = false
                 self.retryButton.isHidden = false
             }
@@ -1207,10 +1505,9 @@ private final class GuideStyledImageView: UIView {
     }
 
     private func applyLoadedImage(_ image: UIImage) {
-        activityIndicator.stopAnimating()
+        shimmerActivity.stopAnimating()
         errorLabel.isHidden = true
         retryButton.isHidden = true
-        zoomPill.isHidden = false
 
         imageView.alpha = 0
         imageView.image = image
@@ -1221,7 +1518,7 @@ private final class GuideStyledImageView: UIView {
             if let oldAspect = aspectRatioConstraint {
                 oldAspect.isActive = false
             }
-            let newAspect = cardContainer.heightAnchor.constraint(equalTo: cardContainer.widthAnchor, multiplier: ratio)
+            let newAspect = innerClipContainer.heightAnchor.constraint(equalTo: innerClipContainer.widthAnchor, multiplier: ratio)
             newAspect.priority = .required
             newAspect.isActive = true
             aspectRatioConstraint = newAspect
@@ -1243,20 +1540,162 @@ private final class GuideStyledImageView: UIView {
     }
 }
 
-// MARK: - ⬇️ KHUNG TẢI VỀ TỐI GIẢN, GỌN GÀNG, CHUYÊN NGHIỆP
+// MARK: - ⬇️ NÚT TẢI NỔI KHỐI RÕ NÉT (.btn-primary GRADIENT XANH - TÍM)
+private final class ProminentGradientDownloadButton: UIControl {
+    private let shadowWrap = UIView()
+    private let gradientContainer = UIView()
+    private let gradientLayer = CAGradientLayer()
+    private let contentStack = UIStackView()
+    private let iconImageView = UIImageView()
+    private let spinner = UIActivityIndicatorView(style: .medium)
+    private let titleLabel = UILabel()
+
+    override var isHighlighted: Bool {
+        didSet {
+            animateHighlightState(isHighlighted)
+        }
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupButton()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupButton()
+    }
+
+    private func setupButton() {
+        translatesAutoresizingMaskIntoConstraints = false
+        backgroundColor = .clear
+
+        shadowWrap.translatesAutoresizingMaskIntoConstraints = false
+        shadowWrap.isUserInteractionEnabled = false
+        shadowWrap.backgroundColor = .clear
+        shadowWrap.layer.shadowColor = SourcesCSSTheme.blue.cgColor
+        shadowWrap.layer.shadowOffset = CGSize(width: 0, height: 6)
+        shadowWrap.layer.shadowRadius = 12
+        shadowWrap.layer.shadowOpacity = 0.32
+
+        gradientContainer.translatesAutoresizingMaskIntoConstraints = false
+        gradientContainer.isUserInteractionEnabled = false
+        gradientContainer.backgroundColor = SourcesCSSTheme.blue
+        gradientContainer.layer.cornerRadius = SourcesCSSTheme.cornerRadius
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            gradientContainer.layer.cornerCurve = .continuous
+        }
+        gradientContainer.clipsToBounds = true
+
+        gradientLayer.colors = [
+            SourcesCSSTheme.blue.cgColor,
+            SourcesCSSTheme.purple.cgColor
+        ]
+        gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+        gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+        gradientContainer.layer.insertSublayer(gradientLayer, at: 0)
+
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+        contentStack.isUserInteractionEnabled = false
+        contentStack.axis = .horizontal
+        contentStack.spacing = 10
+        contentStack.alignment = .center
+
+        let iconCfg = UIImage.SymbolConfiguration(pointSize: 18, weight: .heavy)
+        iconImageView.image = UIImage(systemName: "icloud.and.arrow.down.fill", withConfiguration: iconCfg)
+        iconImageView.tintColor = .white
+        iconImageView.contentMode = .scaleAspectFit
+
+        spinner.color = .white
+        spinner.hidesWhenStopped = true
+
+        titleLabel.text = "Nhấn Vào Đây Để Tải Về"
+        if let roundedDesc = UIFont.systemFont(ofSize: 16.5, weight: .heavy).fontDescriptor.withDesign(.rounded) {
+            titleLabel.font = UIFont(descriptor: roundedDesc, size: 16.5)
+        } else {
+            titleLabel.font = UIFont.systemFont(ofSize: 16.5, weight: .heavy)
+        }
+        titleLabel.textColor = .white
+        titleLabel.textAlignment = .center
+
+        contentStack.addArrangedSubview(iconImageView)
+        contentStack.addArrangedSubview(spinner)
+        contentStack.addArrangedSubview(titleLabel)
+
+        gradientContainer.addSubview(contentStack)
+        shadowWrap.addSubview(gradientContainer)
+        addSubview(shadowWrap)
+
+        NSLayoutConstraint.activate([
+            shadowWrap.leadingAnchor.constraint(equalTo: leadingAnchor),
+            shadowWrap.trailingAnchor.constraint(equalTo: trailingAnchor),
+            shadowWrap.topAnchor.constraint(equalTo: topAnchor),
+            shadowWrap.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            gradientContainer.leadingAnchor.constraint(equalTo: shadowWrap.leadingAnchor),
+            gradientContainer.trailingAnchor.constraint(equalTo: shadowWrap.trailingAnchor),
+            gradientContainer.topAnchor.constraint(equalTo: shadowWrap.topAnchor),
+            gradientContainer.bottomAnchor.constraint(equalTo: shadowWrap.bottomAnchor),
+
+            contentStack.centerXAnchor.constraint(equalTo: gradientContainer.centerXAnchor),
+            contentStack.centerYAnchor.constraint(equalTo: gradientContainer.centerYAnchor),
+            contentStack.leadingAnchor.constraint(greaterThanOrEqualTo: gradientContainer.leadingAnchor, constant: 16),
+            contentStack.trailingAnchor.constraint(lessThanOrEqualTo: gradientContainer.trailingAnchor, constant: -16)
+        ])
+    }
+
+    func setLoadingState(_ isLoading: Bool) {
+        if isLoading {
+            iconImageView.isHidden = true
+            spinner.startAnimating()
+            titleLabel.text = "Đang Tải Về"
+            gradientLayer.colors = [
+                SourcesCSSTheme.purple.cgColor,
+                SourcesCSSTheme.blue.cgColor
+            ]
+        } else {
+            spinner.stopAnimating()
+            iconImageView.isHidden = false
+            titleLabel.text = "Nhấn Vào Đây Để Tải Về"
+            gradientLayer.colors = [
+                SourcesCSSTheme.blue.cgColor,
+                SourcesCSSTheme.purple.cgColor
+            ]
+        }
+    }
+
+    private func animateHighlightState(_ highlighted: Bool) {
+        UIView.animate(
+            withDuration: 0.16,
+            delay: 0,
+            usingSpringWithDamping: 0.7,
+            initialSpringVelocity: 0.6,
+            options: [.allowUserInteraction, .beginFromCurrentState]
+        ) {
+            self.shadowWrap.transform = highlighted ? CGAffineTransform(scaleX: 0.96, y: 0.96) : .identity
+            self.gradientContainer.alpha = highlighted ? 0.92 : 1.0
+        }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        gradientLayer.frame = gradientContainer.bounds
+        CATransaction.commit()
+    }
+}
+
+// MARK: - ⬇️ KHUNG TẢI VỀ CHUẨN `.guide-actions` (KHUNG HƯỚNG DẪN VIỀN ĐỀU + NÚT TẢI)
 private final class GuideDownloadActionCardView: UIView {
     private let downloadURL: URL
     private weak var hostViewController: UIViewController?
 
-    private let cardContainer = UIView()
     private let mainStack = UIStackView()
-
-    private let infoRow = UIStackView()
-    private let folderIconView = UIImageView()
+    private let noticeBannerView = UIView()
+    private let noticeIconView = UIImageView()
     private let noticeTextLabel = UILabel()
-
-    private let downloadButton = UIButton(type: .system)
-    private let spinner = UIActivityIndicatorView(style: .medium)
+    private let downloadButton = ProminentGradientDownloadButton()
 
     private var isDownloading = false
 
@@ -1275,111 +1714,105 @@ private final class GuideDownloadActionCardView: UIView {
         translatesAutoresizingMaskIntoConstraints = false
         backgroundColor = .clear
 
-        cardContainer.translatesAutoresizingMaskIntoConstraints = false
-        CoolMinimalTheme.applyMinimalCard(to: cardContainer, radius: CoolMinimalTheme.cardCornerRadius)
-
         mainStack.translatesAutoresizingMaskIntoConstraints = false
         mainStack.axis = .vertical
         mainStack.spacing = 12
 
-        // Dòng hướng dẫn lưu file gọn gàng phía trên
-        infoRow.axis = .horizontal
-        infoRow.spacing = 10
-        infoRow.alignment = .center
-
-        let iconCfg = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
-        folderIconView.image = UIImage(systemName: "arrow.down.doc.fill", withConfiguration: iconCfg)
-        folderIconView.tintColor = CoolMinimalTheme.accentOcean
-        folderIconView.setContentHuggingPriority(.required, for: .horizontal)
-
-        let rawNotice = "Chờ tải xong bạn chọn Lưu Vào Tệp để lưu file"
-        let attr = NSMutableAttributedString(
-            string: rawNotice,
-            attributes: [
-                .font: UIFont.systemFont(ofSize: 14, weight: .medium),
-                .foregroundColor: CoolMinimalTheme.inkSecondary
-            ]
+        // 1. Khung hướng dẫn viền đều 4 cạnh + bóng xanh dương chuẩn `.btn-outline-glow`
+        noticeBannerView.translatesAutoresizingMaskIntoConstraints = false
+        SourcesCSSTheme.applyColoredGlowCardStyle(
+            to: noticeBannerView,
+            accentColor: SourcesCSSTheme.blue,
+            cornerRadius: SourcesCSSTheme.cornerRadius,
+            shadowOpacity: 0.20
         )
-        let nsRange = (rawNotice as NSString).range(of: "Lưu Vào Tệp", options: .caseInsensitive)
-        if nsRange.location != NSNotFound {
-            attr.addAttributes([
-                .font: UIFont.systemFont(ofSize: 14, weight: .bold),
-                .foregroundColor: CoolMinimalTheme.inkPrimary
-            ], range: nsRange)
-        }
-        noticeTextLabel.attributedText = attr
+
+        noticeIconView.translatesAutoresizingMaskIntoConstraints = false
+        let noticeIconCfg = UIImage.SymbolConfiguration(pointSize: 20, weight: .bold)
+        noticeIconView.image = UIImage(systemName: "folder.fill.badge.plus", withConfiguration: noticeIconCfg)
+        noticeIconView.tintColor = SourcesCSSTheme.blue
+        noticeIconView.contentMode = .scaleAspectFit
+
+        noticeTextLabel.translatesAutoresizingMaskIntoConstraints = false
         noticeTextLabel.numberOfLines = 0
+        noticeTextLabel.attributedText = makeNoticeAttributedText()
 
-        infoRow.addArrangedSubview(folderIconView)
-        infoRow.addArrangedSubview(noticeTextLabel)
+        noticeBannerView.addSubview(noticeIconView)
+        noticeBannerView.addSubview(noticeTextLabel)
 
-        // Nút tải màu Xanh Lam Đậm phẳng hiện đại
-        downloadButton.translatesAutoresizingMaskIntoConstraints = false
-        downloadButton.backgroundColor = CoolMinimalTheme.accentOcean
-        downloadButton.setTitleColor(.white, for: .normal)
-        downloadButton.tintColor = .white
-        downloadButton.titleLabel?.font = UIFont.systemFont(ofSize: 15.5, weight: .semibold)
-        let btnIconCfg = UIImage.SymbolConfiguration(pointSize: 14, weight: .bold)
-        downloadButton.setImage(UIImage(systemName: "arrow.down.circle.fill", withConfiguration: btnIconCfg), for: .normal)
-        downloadButton.setTitle("  Nhấn Vào Đây Để Tải Về", for: .normal)
-        downloadButton.layer.cornerRadius = 12
-        if #available(iOS 13.0, tvOS 13.0, *) {
-            downloadButton.layer.cornerCurve = .continuous
-        }
+        // 2. Nút "Nhấn Vào Đây Để Tải Về"
         downloadButton.addTarget(self, action: #selector(handleDownloadButtonTap), for: .touchUpInside)
 
-        spinner.translatesAutoresizingMaskIntoConstraints = false
-        spinner.color = .white
-        spinner.hidesWhenStopped = true
-        downloadButton.addSubview(spinner)
+        NSLayoutConstraint.activate([
+            noticeIconView.leadingAnchor.constraint(equalTo: noticeBannerView.leadingAnchor, constant: 13),
+            noticeIconView.centerYAnchor.constraint(equalTo: noticeBannerView.centerYAnchor),
+            noticeIconView.widthAnchor.constraint(equalToConstant: 26),
+            noticeIconView.heightAnchor.constraint(equalToConstant: 26),
 
-        mainStack.addArrangedSubview(infoRow)
+            noticeTextLabel.leadingAnchor.constraint(equalTo: noticeIconView.trailingAnchor, constant: 10),
+            noticeTextLabel.trailingAnchor.constraint(equalTo: noticeBannerView.trailingAnchor, constant: -13),
+            noticeTextLabel.topAnchor.constraint(equalTo: noticeBannerView.topAnchor, constant: 13),
+            noticeTextLabel.bottomAnchor.constraint(equalTo: noticeBannerView.bottomAnchor, constant: -13),
+
+            downloadButton.heightAnchor.constraint(equalToConstant: 52)
+        ])
+
+        mainStack.addArrangedSubview(noticeBannerView)
         mainStack.addArrangedSubview(downloadButton)
-        cardContainer.addSubview(mainStack)
-        addSubview(cardContainer)
+        addSubview(mainStack)
 
         NSLayoutConstraint.activate([
-            cardContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
-            cardContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
-            cardContainer.topAnchor.constraint(equalTo: topAnchor),
-            cardContainer.bottomAnchor.constraint(equalTo: bottomAnchor),
-
-            mainStack.leadingAnchor.constraint(equalTo: cardContainer.leadingAnchor, constant: 16),
-            mainStack.trailingAnchor.constraint(equalTo: cardContainer.trailingAnchor, constant: -16),
-            mainStack.topAnchor.constraint(equalTo: cardContainer.topAnchor, constant: 14),
-            mainStack.bottomAnchor.constraint(equalTo: cardContainer.bottomAnchor, constant: -14),
-
-            downloadButton.heightAnchor.constraint(equalToConstant: 46),
-
-            spinner.trailingAnchor.constraint(equalTo: downloadButton.trailingAnchor, constant: -16),
-            spinner.centerYAnchor.constraint(equalTo: downloadButton.centerYAnchor)
+            mainStack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            mainStack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            mainStack.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            mainStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4)
         ])
     }
 
-    private func setLoadingState(_ loading: Bool) {
-        if loading {
-            spinner.startAnimating()
-            downloadButton.setImage(nil, for: .normal)
-            downloadButton.setTitle("Đang Tải Về...", for: .normal)
-            downloadButton.backgroundColor = CoolMinimalTheme.accentDeepBlue
-        } else {
-            spinner.stopAnimating()
-            let btnIconCfg = UIImage.SymbolConfiguration(pointSize: 14, weight: .bold)
-            downloadButton.setImage(UIImage(systemName: "arrow.down.circle.fill", withConfiguration: btnIconCfg), for: .normal)
-            downloadButton.setTitle("  Nhấn Vào Đây Để Tải Về", for: .normal)
-            downloadButton.backgroundColor = CoolMinimalTheme.accentOcean
+    private func makeNoticeAttributedText() -> NSAttributedString {
+        let mainText = "Chờ tải xong bạn chọn Lưu Vào Tệp để lưu file"
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 3.5
+
+        let result = NSMutableAttributedString(
+            string: mainText,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 15.0, weight: .bold),
+                .foregroundColor: SourcesCSSTheme.pureBlack,
+                .paragraphStyle: paragraph
+            ]
+        )
+
+        let nsMain = mainText as NSString
+        let highlightRange = nsMain.range(of: "Lưu Vào Tệp", options: .caseInsensitive)
+        if highlightRange.location != NSNotFound {
+            result.addAttributes([
+                .foregroundColor: SourcesCSSTheme.blue,
+                .font: UIFont.systemFont(ofSize: 15.5, weight: .heavy)
+            ], range: highlightRange)
         }
+
+        return result
     }
 
     @objc private func handleDownloadButtonTap() {
         guard !isDownloading else { return }
 
         #if !os(tvOS)
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
         #endif
 
+        UIView.animate(withDuration: 0.12, animations: {
+            self.downloadButton.transform = CGAffineTransform(scaleX: 0.96, y: 0.96)
+        }) { _ in
+            UIView.animate(withDuration: 0.28, delay: 0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0.6) {
+                self.downloadButton.transform = .identity
+            }
+        }
+
         isDownloading = true
-        setLoadingState(true)
+        downloadButton.setLoadingState(true)
 
         let hostLower = (downloadURL.host ?? "").lowercased()
         let isCloudWebPortal = hostLower.contains("icloud.com")
@@ -1391,12 +1824,12 @@ private final class GuideDownloadActionCardView: UIView {
 
         if isCloudWebPortal && !downloadURL.pathExtension.lowercased().isOne(of: ["ipa", "zip", "mobileconfig", "plist", "deb", "tipa"]) {
             Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 400_000_000)
+                try? await Task.sleep(nanoseconds: 450_000_000)
                 guard let self = self else { return }
                 UIApplication.shared.open(self.downloadURL, options: [:], completionHandler: nil)
-                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
                 self.isDownloading = false
-                self.setLoadingState(false)
+                self.downloadButton.setLoadingState(false)
             }
             return
         }
@@ -1405,7 +1838,7 @@ private final class GuideDownloadActionCardView: UIView {
             guard let self = self else { return }
             defer {
                 self.isDownloading = false
-                self.setLoadingState(false)
+                self.downloadButton.setLoadingState(false)
             }
 
             do {
@@ -1470,7 +1903,6 @@ private extension String {
 // MARK: - 🔍 TRÌNH XEM ẢNH PHÓNG TO TOÀN MÀN HÌNH
 private final class GuideImagePreviewController: UIViewController, UIScrollViewDelegate {
     private let image: UIImage
-    private let blurView = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterialDark))
     private let scrollView = UIScrollView()
     private let imageView = UIImageView()
     private let closeButton = UIButton(type: .system)
@@ -1488,10 +1920,7 @@ private final class GuideImagePreviewController: UIViewController, UIScrollViewD
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .clear
-
-        blurView.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(blurView)
+        view.backgroundColor = UIColor.black.withAlphaComponent(0.92)
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.delegate = self
@@ -1505,11 +1934,13 @@ private final class GuideImagePreviewController: UIViewController, UIScrollViewD
         imageView.contentMode = .scaleAspectFit
 
         closeButton.translatesAutoresizingMaskIntoConstraints = false
-        let config = UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)
+        let config = UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)
         closeButton.setImage(UIImage(systemName: "xmark", withConfiguration: config), for: .normal)
         closeButton.tintColor = .white
-        closeButton.backgroundColor = UIColor.white.withAlphaComponent(0.2)
+        closeButton.backgroundColor = UIColor.white.withAlphaComponent(0.22)
         closeButton.layer.cornerRadius = 18
+        closeButton.layer.borderWidth = 1.0
+        closeButton.layer.borderColor = UIColor.white.withAlphaComponent(0.3).cgColor
         closeButton.addTarget(self, action: #selector(dismissSelf), for: .touchUpInside)
 
         let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
@@ -1521,11 +1952,6 @@ private final class GuideImagePreviewController: UIViewController, UIScrollViewD
         view.addSubview(closeButton)
 
         NSLayoutConstraint.activate([
-            blurView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            blurView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            blurView.topAnchor.constraint(equalTo: view.topAnchor),
-            blurView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -1560,14 +1986,21 @@ private final class GuideImagePreviewController: UIViewController, UIScrollViewD
     }
 }
 
-// MARK: - 📖 TRANG CHI TIẾT BÀI VIẾT (THIẾT KẾ SẠCH SẼ NHƯ TRANG TẠP CHÍ EDITORIAL)
+// MARK: - 📖 TRANG CHI TIẾT BÀI HƯỚNG DẪN (THANH TIÊU ĐỀ CĂN GIỮA + KHUNG VIỀN 4 GÓC ĐỀU NHAU & ĐỔ BÓNG MÀU)
 private final class GuideArticleDetailViewController: UIViewController {
     private let article: GuideArticle
-    private let topBarView = UIView()
-    private let backButton = UIButton(type: .system)
-    private let topTopicBadge = UILabel()
     private let scrollView = UIScrollView()
     private let contentStackView = UIStackView()
+
+    private let bannerShadowWrap = UIView()
+    private let bannerClipView = UIView()
+    private let bannerGradient = CAGradientLayer()
+    private let glassShineLayer = CAGradientLayer()
+
+    private let whiteTabContainerCard = UIView()
+    private let guideInnerStackView = UIStackView()
+
+    private var stepCounter: Int = 0
 
     #if !os(tvOS)
     override var preferredStatusBarStyle: UIStatusBarStyle {
@@ -1595,9 +2028,11 @@ private final class GuideArticleDetailViewController: UIViewController {
         navigationController?.setNavigationBarHidden(true, animated: false)
 
         setupBackground()
-        setupTopNavigationBar()
         setupScrollView()
-        setupCleanTitleCard()
+        setupTopBackBarRow()
+        setupCenteredSleekBanner()
+        setupCenteredSectionHeader()
+        setupWhiteTabContainer()
         buildArticleContent()
     }
 
@@ -1606,8 +2041,22 @@ private final class GuideArticleDetailViewController: UIViewController {
         navigationController?.setNavigationBarHidden(true, animated: animated)
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        bannerGradient.frame = bannerClipView.bounds
+        glassShineLayer.frame = CGRect(
+            x: -bannerClipView.bounds.width * 0.25,
+            y: 0,
+            width: bannerClipView.bounds.width * 0.65,
+            height: bannerClipView.bounds.height
+        )
+        CATransaction.commit()
+    }
+
     private func setupBackground() {
-        let bgView = SourcesCoolBackgroundView(frame: view.bounds)
+        let bgView = SourcesGradientBackgroundView(frame: view.bounds)
         bgView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(bgView)
         NSLayoutConstraint.activate([
@@ -1618,60 +2067,18 @@ private final class GuideArticleDetailViewController: UIViewController {
         ])
     }
 
-    private func setupTopNavigationBar() {
-        topBarView.translatesAutoresizingMaskIntoConstraints = false
-        topBarView.backgroundColor = .clear
-
-        backButton.translatesAutoresizingMaskIntoConstraints = false
-        let config = UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
-        backButton.setImage(UIImage(systemName: "chevron.left", withConfiguration: config), for: .normal)
-        backButton.setTitle(" Danh mục", for: .normal)
-        backButton.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
-        backButton.tintColor = CoolMinimalTheme.accentOcean
-        backButton.setTitleColor(CoolMinimalTheme.accentOcean, for: .normal)
-        backButton.backgroundColor = CoolMinimalTheme.surfaceWhite
-        backButton.layer.cornerRadius = 16
-        backButton.layer.borderWidth = 1.0
-        backButton.layer.borderColor = CoolMinimalTheme.hairlineBorder.cgColor
-        backButton.contentEdgeInsets = UIEdgeInsets(top: 6, left: 12, bottom: 6, right: 14)
-        backButton.addTarget(self, action: #selector(handleBackButtonTap), for: .touchUpInside)
-
-        topTopicBadge.translatesAutoresizingMaskIntoConstraints = false
-        topTopicBadge.text = String(format: "CHỦ ĐỀ #%02d", article.orderNumber)
-        topTopicBadge.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
-        topTopicBadge.textColor = CoolMinimalTheme.inkMuted
-
-        topBarView.addSubview(backButton)
-        topBarView.addSubview(topTopicBadge)
-        view.addSubview(topBarView)
-
-        NSLayoutConstraint.activate([
-            topBarView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            topBarView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            topBarView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            topBarView.heightAnchor.constraint(equalToConstant: 46),
-
-            backButton.leadingAnchor.constraint(equalTo: topBarView.leadingAnchor, constant: 16),
-            backButton.centerYAnchor.constraint(equalTo: topBarView.centerYAnchor),
-            backButton.heightAnchor.constraint(equalToConstant: 32),
-
-            topTopicBadge.trailingAnchor.constraint(equalTo: topBarView.trailingAnchor, constant: -20),
-            topTopicBadge.centerYAnchor.constraint(equalTo: topBarView.centerYAnchor)
-        ])
-    }
-
     private func setupScrollView() {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.backgroundColor = .clear
         scrollView.showsVerticalScrollIndicator = true
         scrollView.alwaysBounceVertical = true
-        scrollView.contentInset = UIEdgeInsets(top: 4, left: 0, bottom: 48, right: 0)
+        scrollView.contentInset = UIEdgeInsets(top: 4, left: 0, bottom: 50, right: 0)
 
         contentStackView.translatesAutoresizingMaskIntoConstraints = false
         contentStackView.axis = .vertical
-        contentStackView.spacing = 14
+        contentStackView.spacing = 12
         contentStackView.isLayoutMarginsRelativeArrangement = true
-        contentStackView.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 4, leading: 16, bottom: 24, trailing: 16)
+        contentStackView.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 4, leading: 6, bottom: 24, trailing: 6)
 
         scrollView.addSubview(contentStackView)
         view.addSubview(scrollView)
@@ -1679,7 +2086,7 @@ private final class GuideArticleDetailViewController: UIViewController {
         NSLayoutConstraint.activate([
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: topBarView.bottomAnchor),
+            scrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
             contentStackView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
@@ -1690,208 +2097,322 @@ private final class GuideArticleDetailViewController: UIViewController {
         ])
     }
 
-    /// Khối tiêu đề bài viết trắng sứ sạch sẽ, có điểm nhấn thanh dọc màu xanh biển lạnh
-    private func setupCleanTitleCard() {
-        let titleCard = UIView()
-        titleCard.translatesAutoresizingMaskIntoConstraints = false
-        CoolMinimalTheme.applyMinimalCard(to: titleCard, radius: CoolMinimalTheme.cardCornerRadius)
+    // Hàng nút "‹ Quay lại danh mục" + Huy hiệu "✦ CHỦ ĐỀ #..." gọn đẹp trên cùng
+    private func setupTopBackBarRow() {
+        let topBar = UIView()
+        topBar.translatesAutoresizingMaskIntoConstraints = false
 
-        let accentBar = UIView()
-        accentBar.translatesAutoresizingMaskIntoConstraints = false
-        accentBar.backgroundColor = CoolMinimalTheme.accentOcean
-        accentBar.layer.cornerRadius = 2
+        let backBtn = UIButton(type: .system)
+        backBtn.translatesAutoresizingMaskIntoConstraints = false
+        backBtn.setTitle("‹ Quay lại danh mục", for: .normal)
+        backBtn.setTitleColor(SourcesCSSTheme.blue, for: .normal)
+        backBtn.titleLabel?.font = UIFont.systemFont(ofSize: 13.5, weight: .heavy)
+        backBtn.backgroundColor = SourcesCSSTheme.white
+        backBtn.contentEdgeInsets = UIEdgeInsets(top: 6, left: 14, bottom: 6, right: 14)
+        backBtn.layer.cornerRadius = 10
+        backBtn.layer.borderWidth = 1.5
+        backBtn.layer.borderColor = SourcesCSSTheme.border.cgColor
+        backBtn.layer.shadowColor = SourcesCSSTheme.blue.cgColor
+        backBtn.layer.shadowOffset = CGSize(width: 0, height: 5)
+        backBtn.layer.shadowRadius = 10
+        backBtn.layer.shadowOpacity = 0.18
+        backBtn.addTarget(self, action: #selector(handleBackButtonTap), for: .touchUpInside)
+
+        let topicBadge = UILabel()
+        topicBadge.translatesAutoresizingMaskIntoConstraints = false
+        topicBadge.text = "  ✦ CHỦ ĐỀ #\(article.orderNumber)  "
+        topicBadge.font = UIFont.systemFont(ofSize: 12, weight: .heavy)
+        topicBadge.textColor = SourcesCSSTheme.white
+        topicBadge.backgroundColor = SourcesCSSTheme.blue
+        topicBadge.layer.cornerRadius = 10
+        topicBadge.layer.masksToBounds = true
+        topicBadge.layer.borderWidth = 1.5
+        topicBadge.layer.borderColor = UIColor(red: 50/255, green: 196/255, blue: 83/255, alpha: 1.0).cgColor
+
+        topBar.addSubview(backBtn)
+        topBar.addSubview(topicBadge)
+
+        NSLayoutConstraint.activate([
+            backBtn.leadingAnchor.constraint(equalTo: topBar.leadingAnchor, constant: 2),
+            backBtn.topAnchor.constraint(equalTo: topBar.topAnchor),
+            backBtn.bottomAnchor.constraint(equalTo: topBar.bottomAnchor),
+            backBtn.heightAnchor.constraint(equalToConstant: 32),
+
+            topicBadge.trailingAnchor.constraint(equalTo: topBar.trailingAnchor, constant: -2),
+            topicBadge.centerYAnchor.constraint(equalTo: backBtn.centerYAnchor),
+            topicBadge.heightAnchor.constraint(equalToConstant: 28)
+        ])
+
+        contentStackView.addArrangedSubview(topBar)
+    }
+
+    // Thanh tiêu đề bài viết CĂN GIỮA 100%, đồng bộ màu Gradient 3 tầng bắt mắt
+    private func setupCenteredSleekBanner() {
+        bannerShadowWrap.translatesAutoresizingMaskIntoConstraints = false
+        bannerShadowWrap.layer.cornerRadius = 18.0
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            bannerShadowWrap.layer.cornerCurve = .continuous
+        }
+        bannerShadowWrap.layer.masksToBounds = false
+        bannerShadowWrap.layer.shadowColor = SourcesCSSTheme.purple.cgColor
+        bannerShadowWrap.layer.shadowOffset = CGSize(width: 0, height: 8)
+        bannerShadowWrap.layer.shadowRadius = 16
+        bannerShadowWrap.layer.shadowOpacity = 0.28
+
+        bannerClipView.translatesAutoresizingMaskIntoConstraints = false
+        bannerClipView.layer.cornerRadius = 18.0
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            bannerClipView.layer.cornerCurve = .continuous
+        }
+        bannerClipView.clipsToBounds = true
+        bannerClipView.layer.borderWidth = 1.5
+        bannerClipView.layer.borderColor = UIColor.white.withAlphaComponent(0.70).cgColor
+
+        bannerGradient.colors = [
+            SourcesCSSTheme.bannerGradStart,
+            SourcesCSSTheme.bannerGradMid,
+            SourcesCSSTheme.bannerGradEnd
+        ]
+        bannerGradient.locations = [0.0, 0.52, 1.0]
+        bannerGradient.startPoint = CGPoint(x: 0.0, y: 0.0)
+        bannerGradient.endPoint = CGPoint(x: 1.0, y: 1.0)
+        bannerClipView.layer.insertSublayer(bannerGradient, at: 0)
+
+        glassShineLayer.colors = [
+            UIColor.clear.cgColor,
+            UIColor.white.withAlphaComponent(0.20).cgColor,
+            UIColor.clear.cgColor
+        ]
+        glassShineLayer.locations = [0.0, 0.5, 1.0]
+        glassShineLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+        glassShineLayer.endPoint = CGPoint(x: 1.0, y: 0.3)
+        bannerClipView.layer.insertSublayer(glassShineLayer, at: 1)
 
         let titleLabel = UILabel()
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.text = article.title
-        titleLabel.font = UIFont.systemFont(ofSize: 20, weight: .bold)
-        titleLabel.textColor = CoolMinimalTheme.inkPrimary
+        if let roundedDesc = UIFont.systemFont(ofSize: 20, weight: .heavy).fontDescriptor.withDesign(.rounded) {
+            titleLabel.font = UIFont(descriptor: roundedDesc, size: 20)
+        } else {
+            titleLabel.font = UIFont.systemFont(ofSize: 20, weight: .heavy)
+        }
+        titleLabel.textColor = SourcesCSSTheme.white
+        titleLabel.textAlignment = .center
         titleLabel.numberOfLines = 0
+        titleLabel.layer.shadowColor = UIColor.black.cgColor
+        titleLabel.layer.shadowOffset = CGSize(width: 0, height: 2)
+        titleLabel.layer.shadowRadius = 4
+        titleLabel.layer.shadowOpacity = 0.24
 
-        let divider = UIView()
-        divider.translatesAutoresizingMaskIntoConstraints = false
-        divider.backgroundColor = CoolMinimalTheme.dividerLine
+        let subLabel = UILabel()
+        subLabel.translatesAutoresizingMaskIntoConstraints = false
+        subLabel.text = "Mọi cách khắc phục không đảm bảo thành công 100%, bạn cần kiên nhẫn và thực hiện lại nhiều lần."
+        subLabel.font = UIFont.systemFont(ofSize: 13.0, weight: .medium)
+        subLabel.textColor = SourcesCSSTheme.white.withAlphaComponent(0.95)
+        subLabel.textAlignment = .center
+        subLabel.numberOfLines = 0
 
-        let noteLabel = UILabel()
-        noteLabel.translatesAutoresizingMaskIntoConstraints = false
-        noteLabel.text = "Lưu ý: Thực hiện tuần tự từng bước bên dưới. Nếu chưa thành công ở lần đầu, hãy kiên nhẫn thử lại."
-        noteLabel.font = UIFont.systemFont(ofSize: 13, weight: .regular)
-        noteLabel.textColor = CoolMinimalTheme.inkSecondary
-        noteLabel.numberOfLines = 0
-
-        titleCard.addSubview(accentBar)
-        titleCard.addSubview(titleLabel)
-        titleCard.addSubview(divider)
-        titleCard.addSubview(noteLabel)
+        bannerClipView.addSubview(titleLabel)
+        bannerClipView.addSubview(subLabel)
+        bannerShadowWrap.addSubview(bannerClipView)
 
         NSLayoutConstraint.activate([
-            accentBar.leadingAnchor.constraint(equalTo: titleCard.leadingAnchor, constant: 16),
-            accentBar.topAnchor.constraint(equalTo: titleLabel.topAnchor, constant: 2),
-            accentBar.bottomAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: -2),
-            accentBar.widthAnchor.constraint(equalToConstant: 3.5),
+            bannerClipView.leadingAnchor.constraint(equalTo: bannerShadowWrap.leadingAnchor),
+            bannerClipView.trailingAnchor.constraint(equalTo: bannerShadowWrap.trailingAnchor),
+            bannerClipView.topAnchor.constraint(equalTo: bannerShadowWrap.topAnchor),
+            bannerClipView.bottomAnchor.constraint(equalTo: bannerShadowWrap.bottomAnchor),
 
-            titleLabel.leadingAnchor.constraint(equalTo: accentBar.trailingAnchor, constant: 12),
-            titleLabel.trailingAnchor.constraint(equalTo: titleCard.trailingAnchor, constant: -16),
-            titleLabel.topAnchor.constraint(equalTo: titleCard.topAnchor, constant: 16),
+            titleLabel.topAnchor.constraint(equalTo: bannerClipView.topAnchor, constant: 14),
+            titleLabel.leadingAnchor.constraint(equalTo: bannerClipView.leadingAnchor, constant: 14),
+            titleLabel.trailingAnchor.constraint(equalTo: bannerClipView.trailingAnchor, constant: -14),
 
-            divider.leadingAnchor.constraint(equalTo: titleCard.leadingAnchor, constant: 16),
-            divider.trailingAnchor.constraint(equalTo: titleCard.trailingAnchor, constant: -16),
-            divider.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
-            divider.heightAnchor.constraint(equalToConstant: 1),
-
-            noteLabel.leadingAnchor.constraint(equalTo: titleCard.leadingAnchor, constant: 16),
-            noteLabel.trailingAnchor.constraint(equalTo: titleCard.trailingAnchor, constant: -16),
-            noteLabel.topAnchor.constraint(equalTo: divider.bottomAnchor, constant: 10),
-            noteLabel.bottomAnchor.constraint(equalTo: titleCard.bottomAnchor, constant: -14)
+            subLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 5),
+            subLabel.leadingAnchor.constraint(equalTo: bannerClipView.leadingAnchor, constant: 14),
+            subLabel.trailingAnchor.constraint(equalTo: bannerClipView.trailingAnchor, constant: -14),
+            subLabel.bottomAnchor.constraint(equalTo: bannerClipView.bottomAnchor, constant: -14)
         ])
 
-        contentStackView.addArrangedSubview(titleCard)
+        contentStackView.addArrangedSubview(bannerShadowWrap)
+    }
+
+    // Tiêu đề "HƯỚNG DẪN & KHẮC PHỤC SỰ CỐ" căn giữa + gạch chân xanh 60x3pt ở giữa
+    private func setupCenteredSectionHeader() {
+        let headerContainer = UIView()
+        headerContainer.translatesAutoresizingMaskIntoConstraints = false
+
+        let primaryLabel = UILabel()
+        primaryLabel.translatesAutoresizingMaskIntoConstraints = false
+        primaryLabel.text = "HƯỚNG DẪN & KHẮC PHỤC SỰ CỐ"
+        primaryLabel.textColor = SourcesCSSTheme.blue
+        primaryLabel.textAlignment = .center
+        if let roundedDesc = UIFont.systemFont(ofSize: 18, weight: .heavy).fontDescriptor.withDesign(.rounded) {
+            primaryLabel.font = UIFont(descriptor: roundedDesc, size: 18)
+        } else {
+            primaryLabel.font = UIFont.systemFont(ofSize: 18, weight: .heavy)
+        }
+
+        let underline = SourcesCenteredUnderlineView()
+        underline.translatesAutoresizingMaskIntoConstraints = false
+
+        headerContainer.addSubview(primaryLabel)
+        headerContainer.addSubview(underline)
+
+        NSLayoutConstraint.activate([
+            primaryLabel.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 4),
+            primaryLabel.centerXAnchor.constraint(equalTo: headerContainer.centerXAnchor),
+            primaryLabel.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor, constant: 8),
+            primaryLabel.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -8),
+
+            underline.topAnchor.constraint(equalTo: primaryLabel.bottomAnchor, constant: 6),
+            underline.centerXAnchor.constraint(equalTo: headerContainer.centerXAnchor),
+            underline.widthAnchor.constraint(equalToConstant: 60),
+            underline.heightAnchor.constraint(equalToConstant: 3.0),
+            underline.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -4)
+        ])
+
+        contentStackView.addArrangedSubview(headerContainer)
+    }
+
+    // Khung trắng lớn `.tab-container` bao bọc toàn bộ các bước hướng dẫn
+    private func setupWhiteTabContainer() {
+        whiteTabContainerCard.translatesAutoresizingMaskIntoConstraints = false
+        SourcesCSSTheme.applyContainerCardStyle(to: whiteTabContainerCard, cornerRadius: SourcesCSSTheme.cornerRadius)
+
+        guideInnerStackView.translatesAutoresizingMaskIntoConstraints = false
+        guideInnerStackView.axis = .vertical
+        guideInnerStackView.spacing = 12
+
+        whiteTabContainerCard.addSubview(guideInnerStackView)
+        NSLayoutConstraint.activate([
+            guideInnerStackView.leadingAnchor.constraint(equalTo: whiteTabContainerCard.leadingAnchor, constant: 9),
+            guideInnerStackView.trailingAnchor.constraint(equalTo: whiteTabContainerCard.trailingAnchor, constant: -9),
+            guideInnerStackView.topAnchor.constraint(equalTo: whiteTabContainerCard.topAnchor, constant: 12),
+            guideInnerStackView.bottomAnchor.constraint(equalTo: whiteTabContainerCard.bottomAnchor, constant: -12)
+        ])
+
+        contentStackView.addArrangedSubview(whiteTabContainerCard)
     }
 
     private func buildArticleContent() {
+        stepCounter = 0
+
         if article.blocks.isEmpty {
-            let emptyCard = makeTextCardView(for: "Nội dung hướng dẫn đang được cập nhật.", startingStepIndex: 1)
-            contentStackView.addArrangedSubview(emptyCard)
-            return
-        }
+            let emptyStep = makeUniformBorderGlowStepCard(stepText: "Nội dung hướng dẫn đang được cập nhật.", colorIndex: 0)
+            guideInnerStackView.addArrangedSubview(emptyStep)
+        } else {
+            for block in article.blocks {
+                switch block.type {
+                case .text(let textContent):
+                    let rawLines = textContent.components(separatedBy: .newlines)
+                    for line in rawLines {
+                        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty else { continue }
+                        let cleanedText = GuideParser.stripLeadingNumberOrBullet(from: trimmed)
+                        if !cleanedText.isEmpty {
+                            let stepCard = makeUniformBorderGlowStepCard(stepText: cleanedText, colorIndex: stepCounter)
+                            guideInnerStackView.addArrangedSubview(stepCard)
+                            stepCounter += 1
+                        }
+                    }
 
-        var runningStepNumber = 1
+                case .image(let imageURL):
+                    let imageViewCard = GuideStyledImageView(url: imageURL)
+                    imageViewCard.onTapImage = { [weak self] tappedImage in
+                        let previewVC = GuideImagePreviewController(image: tappedImage)
+                        self?.present(previewVC, animated: true)
+                    }
+                    guideInnerStackView.addArrangedSubview(imageViewCard)
 
-        for block in article.blocks {
-            switch block.type {
-            case .text(let textContent):
-                let linesCount = textContent
-                    .components(separatedBy: .newlines)
-                    .map { GuideParser.stripLeadingNumberOrBullet(from: $0) }
-                    .filter { !$0.isEmpty }
-                    .count
-                let textCard = makeTextCardView(for: textContent, startingStepIndex: runningStepNumber)
-                runningStepNumber += max(linesCount, 1)
-                contentStackView.addArrangedSubview(textCard)
+                case .youtube(let videoID):
+                    let overviewVideoView = OverviewHostedVideoSectionView(videoID: videoID, parentViewController: self)
+                    guideInnerStackView.addArrangedSubview(overviewVideoView)
 
-            case .image(let imageURL):
-                let imageViewCard = GuideStyledImageView(url: imageURL)
-                imageViewCard.onTapImage = { [weak self] tappedImage in
-                    let previewVC = GuideImagePreviewController(image: tappedImage)
-                    self?.present(previewVC, animated: true)
+                case .download(let downloadURL):
+                    let downloadCard = GuideDownloadActionCardView(url: downloadURL, hostViewController: self)
+                    guideInnerStackView.addArrangedSubview(downloadCard)
                 }
-                contentStackView.addArrangedSubview(imageViewCard)
-
-            case .youtube(let videoID):
-                let overviewVideoSection = OverviewHostedVideoSectionView(videoID: videoID, parentViewController: self)
-                contentStackView.addArrangedSubview(overviewVideoSection)
-
-            case .download(let downloadURL):
-                let downloadCard = GuideDownloadActionCardView(url: downloadURL, hostViewController: self)
-                contentStackView.addArrangedSubview(downloadCard)
             }
         }
+
+        // Đường kẻ phân cách & Nút quay lại ở cuối bài (.btn-tertiary màu Tím)
+        let separator = UIView()
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        separator.backgroundColor = SourcesCSSTheme.border
+        separator.heightAnchor.constraint(equalToConstant: 1.0).isActive = true
+        guideInnerStackView.addArrangedSubview(separator)
+
+        let bottomBackBtn = UIButton(type: .system)
+        bottomBackBtn.translatesAutoresizingMaskIntoConstraints = false
+        bottomBackBtn.setTitle("‹ Quay Lại Tổng Hợp Danh Mục", for: .normal)
+        bottomBackBtn.setTitleColor(SourcesCSSTheme.white, for: .normal)
+        bottomBackBtn.titleLabel?.font = UIFont.systemFont(ofSize: 16, weight: .bold)
+        bottomBackBtn.backgroundColor = SourcesCSSTheme.purple
+        bottomBackBtn.layer.cornerRadius = SourcesCSSTheme.cornerRadius
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            bottomBackBtn.layer.cornerCurve = .continuous
+        }
+        bottomBackBtn.layer.shadowColor = SourcesCSSTheme.purple.cgColor
+        bottomBackBtn.layer.shadowOffset = CGSize(width: 0, height: 6)
+        bottomBackBtn.layer.shadowRadius = 12
+        bottomBackBtn.layer.shadowOpacity = 0.25
+        bottomBackBtn.heightAnchor.constraint(equalToConstant: 48).isActive = true
+        bottomBackBtn.addTarget(self, action: #selector(handleBackButtonTap), for: .touchUpInside)
+
+        guideInnerStackView.addArrangedSubview(bottomBackBtn)
     }
 
-    /// Tạo thẻ đọc hướng dẫn phẳng mịn, phân tách bằng đường kẻ mảnh tinh tế thay vì đóng nhiều hộp rối mắt
-    private func makeTextCardView(for rawText: String, startingStepIndex: Int) -> UIView {
+    /// Khung bước hướng dẫn (`guide-step-card`): Viền 4 cạnh bằng nhau (`2pt solid --border`), bỏ hoàn toàn viền trái dày, giữ nguyên bóng màu phát sáng
+    private func makeUniformBorderGlowStepCard(stepText: String, colorIndex: Int) -> UIView {
+        let accentColor = SourcesCSSTheme.tabAccentColor(for: colorIndex)
+
         let card = UIView()
         card.translatesAutoresizingMaskIntoConstraints = false
-        CoolMinimalTheme.applyMinimalCard(to: card, radius: CoolMinimalTheme.cardCornerRadius)
+        SourcesCSSTheme.applyColoredGlowCardStyle(
+            to: card,
+            accentColor: accentColor,
+            cornerRadius: SourcesCSSTheme.cornerRadius,
+            shadowOpacity: 0.18
+        )
 
-        let innerStack = UIStackView()
-        innerStack.translatesAutoresizingMaskIntoConstraints = false
-        innerStack.axis = .vertical
-        innerStack.spacing = 0
+        let bulletDot = UILabel()
+        bulletDot.translatesAutoresizingMaskIntoConstraints = false
+        bulletDot.text = "•"
+        bulletDot.font = UIFont.systemFont(ofSize: 21, weight: .black)
+        bulletDot.textColor = accentColor
+        bulletDot.textAlignment = .center
 
-        let rawLines = rawText.components(separatedBy: .newlines)
-        var bulletItems: [String] = []
+        let bodyLabel = UILabel()
+        bodyLabel.translatesAutoresizingMaskIntoConstraints = false
+        bodyLabel.numberOfLines = 0
+        bodyLabel.attributedText = styleHighlightedInstructionText(stepText)
 
-        for line in rawLines {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            let cleanedText = GuideParser.stripLeadingNumberOrBullet(from: trimmed)
-            if !cleanedText.isEmpty {
-                bulletItems.append(cleanedText)
-            }
-        }
+        card.addSubview(bulletDot)
+        card.addSubview(bodyLabel)
 
-        for (index, itemText) in bulletItems.enumerated() {
-            let stepNum = startingStepIndex + index
-            let isLast = (index == bulletItems.count - 1)
-            let row = makeCleanStepRow(stepNumber: stepNum, stepText: itemText, showBottomDivider: !isLast)
-            innerStack.addArrangedSubview(row)
-        }
-
-        card.addSubview(innerStack)
         NSLayoutConstraint.activate([
-            innerStack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
-            innerStack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
-            innerStack.topAnchor.constraint(equalTo: card.topAnchor, constant: 4),
-            innerStack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -4)
+            bulletDot.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 11),
+            bulletDot.topAnchor.constraint(equalTo: card.topAnchor, constant: 9),
+            bulletDot.widthAnchor.constraint(equalToConstant: 16),
+
+            bodyLabel.leadingAnchor.constraint(equalTo: bulletDot.trailingAnchor, constant: 6),
+            bodyLabel.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
+            bodyLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: 11),
+            bodyLabel.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -11)
         ])
 
         return card
     }
 
-    private func makeCleanStepRow(stepNumber: Int, stepText: String, showBottomDivider: Bool) -> UIView {
-        let container = UIView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-
-        let stepCircle = UIView()
-        stepCircle.translatesAutoresizingMaskIntoConstraints = false
-        stepCircle.backgroundColor = CoolMinimalTheme.iceBadgeBg
-        stepCircle.layer.cornerRadius = 11
-
-        let stepNumLabel = UILabel()
-        stepNumLabel.translatesAutoresizingMaskIntoConstraints = false
-        stepNumLabel.text = "\(stepNumber)"
-        stepNumLabel.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
-        stepNumLabel.textColor = CoolMinimalTheme.accentDeepBlue
-        stepNumLabel.textAlignment = .center
-        stepCircle.addSubview(stepNumLabel)
-
-        let bodyLabel = UILabel()
-        bodyLabel.translatesAutoresizingMaskIntoConstraints = false
-        bodyLabel.numberOfLines = 0
-        bodyLabel.attributedText = styleInstructionText(stepText)
-
-        let divider = UIView()
-        divider.translatesAutoresizingMaskIntoConstraints = false
-        divider.backgroundColor = CoolMinimalTheme.dividerLine
-        divider.isHidden = !showBottomDivider
-
-        container.addSubview(stepCircle)
-        container.addSubview(bodyLabel)
-        container.addSubview(divider)
-
-        NSLayoutConstraint.activate([
-            stepCircle.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            stepCircle.topAnchor.constraint(equalTo: container.topAnchor, constant: 13),
-            stepCircle.widthAnchor.constraint(equalToConstant: 22),
-            stepCircle.heightAnchor.constraint(equalToConstant: 22),
-
-            stepNumLabel.centerXAnchor.constraint(equalTo: stepCircle.centerXAnchor),
-            stepNumLabel.centerYAnchor.constraint(equalTo: stepCircle.centerYAnchor),
-
-            bodyLabel.leadingAnchor.constraint(equalTo: stepCircle.trailingAnchor, constant: 12),
-            bodyLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            bodyLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
-            bodyLabel.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
-
-            divider.leadingAnchor.constraint(equalTo: bodyLabel.leadingAnchor),
-            divider.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            divider.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            divider.heightAnchor.constraint(equalToConstant: 1)
-        ])
-
-        return container
-    }
-
-    private func styleInstructionText(_ text: String) -> NSAttributedString {
+    /// Tự động làm nổi bật mũi tên `→` màu xanh chuẩn CSS và giữ chữ đen tuyền `#000000` sắc nét
+    private func styleHighlightedInstructionText(_ text: String) -> NSAttributedString {
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineSpacing = 4.5
+        paragraphStyle.lineSpacing = 4
 
         let attr = NSMutableAttributedString(
             string: text,
             attributes: [
-                .font: UIFont.systemFont(ofSize: 15, weight: .regular),
-                .foregroundColor: CoolMinimalTheme.inkPrimary,
+                .font: UIFont.systemFont(ofSize: 15.2, weight: .medium),
+                .foregroundColor: SourcesCSSTheme.pureBlack,
                 .paragraphStyle: paragraphStyle
             ]
         )
@@ -1902,8 +2423,8 @@ private final class GuideArticleDetailViewController: UIViewController {
             let found = nsString.range(of: "→", options: [], range: searchRange)
             if found.location != NSNotFound {
                 attr.addAttributes([
-                    .foregroundColor: CoolMinimalTheme.accentOcean,
-                    .font: UIFont.systemFont(ofSize: 15.5, weight: .bold)
+                    .foregroundColor: SourcesCSSTheme.blue,
+                    .font: UIFont.systemFont(ofSize: 16, weight: .heavy)
                 ], range: found)
                 searchRange.location = found.location + found.length
                 searchRange.length = nsString.length - searchRange.location
@@ -1924,29 +2445,28 @@ private final class GuideArticleDetailViewController: UIViewController {
     }
 }
 
-// MARK: - 🚀 CONTROLLER CHÍNH: SOURCESVIEWCONTROLLER (GIỮ NGUYÊN MỌI CHỨC NĂNG GỐC)
+// MARK: - 🚀 CONTROLLER CHÍNH: SOURCESVIEWCONTROLLER
 final class SourcesViewController: UICollectionViewController {
+    // Giữ nguyên biến này để tương thích 100% với AppDelegate / SceneDelegate khi build IPA
     var deepLinkSourceURL: URL? {
         didSet {
             self.handleAddSourceDeepLink()
         }
     }
 
-    private var allArticles: [GuideArticle] = []
-    private var filteredArticles: [GuideArticle] = []
-    private var currentSearchQuery: String = ""
+    private var articles: [GuideArticle] = []
     private var isLoadingGuides = false
     private var fetchTask: Task<Void, Never>?
 
     private let guidesTableView = UITableView(frame: .zero, style: .plain)
-    private let headerView = MinimalistHeaderView(frame: CGRect(x: 0, y: 0, width: 375, height: 158))
+    private let heroHeaderView = GuidesHeroHeaderView(frame: CGRect(x: 0, y: 0, width: 375, height: 142))
     #if !os(tvOS)
     private let refreshControl = UIRefreshControl()
     #endif
 
-    // Khung trạng thái Đang tải / Lỗi mạng tối giản
+    // Khung trạng thái Đang tải / Lỗi mạng
     private let stateCardView = UIView()
-    private let stateActivityIndicator = UIActivityIndicatorView(style: .medium)
+    private let stateActivityIndicator = UIActivityIndicatorView(style: .large)
     private let stateTitleLabel = UILabel()
     private let stateSubtitleLabel = UILabel()
     private let stateRetryButton = UIButton(type: .system)
@@ -1988,7 +2508,7 @@ final class SourcesViewController: UICollectionViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         if let header = guidesTableView.tableHeaderView {
-            let targetHeight: CGFloat = 158
+            let targetHeight: CGFloat = 142
             if header.frame.height != targetHeight || header.frame.width != guidesTableView.bounds.width {
                 header.frame = CGRect(x: 0, y: 0, width: guidesTableView.bounds.width, height: targetHeight)
                 guidesTableView.tableHeaderView = header
@@ -1996,6 +2516,7 @@ final class SourcesViewController: UICollectionViewController {
         }
     }
 
+    // Giữ nguyên các @IBSegueAction và @IBAction để Storyboard kết nối hoàn hảo không lỗi
     @IBSegueAction
     func makeSourceDetailViewController(_ coder: NSCoder, sender: Any?) -> UIViewController? {
         guard let source = sender as? Source else { return nil }
@@ -2014,14 +2535,13 @@ private extension SourcesViewController {
         collectionView.prefetchDataSource = nil
         collectionView.backgroundColor = .clear
 
-        let coolBg = SourcesCoolBackgroundView(frame: UIScreen.main.bounds)
-        coolBg.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        guidesTableView.backgroundView = coolBg
+        let gradientBg = SourcesGradientBackgroundView(frame: UIScreen.main.bounds)
+        gradientBg.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        guidesTableView.backgroundView = gradientBg
         guidesTableView.backgroundColor = .clear
         guidesTableView.separatorStyle = .none
         guidesTableView.showsVerticalScrollIndicator = true
-        guidesTableView.keyboardDismissMode = .onDrag
-        guidesTableView.contentInset = UIEdgeInsets(top: 4, left: 0, bottom: 48, right: 0)
+        guidesTableView.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: 50, right: 0)
         if #available(iOS 15.0, tvOS 15.0, *) {
             guidesTableView.sectionHeaderTopPadding = 0
         }
@@ -2030,16 +2550,13 @@ private extension SourcesViewController {
         guidesTableView.delegate = self
         guidesTableView.dataSource = self
         guidesTableView.rowHeight = UITableView.automaticDimension
-        guidesTableView.estimatedRowHeight = 96
+        guidesTableView.estimatedRowHeight = 112
         guidesTableView.register(GuideTopicRowCell.self, forCellReuseIdentifier: GuideTopicRowCell.reuseIdentifier)
 
-        headerView.onSearchTextChanged = { [weak self] query in
-            self?.applySearchFilter(query)
-        }
-        guidesTableView.tableHeaderView = headerView
+        guidesTableView.tableHeaderView = heroHeaderView
 
         #if !os(tvOS)
-        refreshControl.tintColor = CoolMinimalTheme.accentOcean
+        refreshControl.tintColor = SourcesCSSTheme.blue
         refreshControl.addTarget(self, action: #selector(handlePullToRefresh), for: .valueChanged)
         guidesTableView.refreshControl = refreshControl
         #endif
@@ -2053,63 +2570,74 @@ private extension SourcesViewController {
         ])
     }
 
-    func applySearchFilter(_ query: String) {
-        currentSearchQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if currentSearchQuery.isEmpty {
-            filteredArticles = allArticles
-        } else {
-            filteredArticles = allArticles.filter { $0.searchableContent.contains(currentSearchQuery) }
-        }
-        headerView.updateCount(filteredArticles.count)
-        guidesTableView.reloadData()
-    }
-
     func setupTableFooterInfo() {
-        let footer = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 48))
-        footer.backgroundColor = .clear
+        let footerWrap = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 84))
+        footerWrap.backgroundColor = .clear
+
+        let footerCard = UIView()
+        footerCard.translatesAutoresizingMaskIntoConstraints = false
+        SourcesCSSTheme.applyContainerCardStyle(to: footerCard, cornerRadius: SourcesCSSTheme.cornerRadius)
 
         let infoLabel = UILabel()
         infoLabel.translatesAutoresizingMaskIntoConstraints = false
-        infoLabel.text = "Kéo xuống để làm mới dữ liệu hướng dẫn"
-        infoLabel.font = UIFont.systemFont(ofSize: 12, weight: .regular)
-        infoLabel.textColor = CoolMinimalTheme.inkMuted
+        infoLabel.text = "Dữ liệu hướng dẫn được đồng bộ trực tiếp từ hệ thống máy chủ GitHub\nNhấn vào từng danh mục để xem hướng dẫn chi tiết & hình ảnh minh họa"
+        infoLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .semibold)
+        infoLabel.textColor = SourcesCSSTheme.dark
+        infoLabel.numberOfLines = 2
         infoLabel.textAlignment = .center
 
-        footer.addSubview(infoLabel)
+        footerCard.addSubview(infoLabel)
+        footerWrap.addSubview(footerCard)
+
         NSLayoutConstraint.activate([
-            infoLabel.centerXAnchor.constraint(equalTo: footer.centerXAnchor),
-            infoLabel.centerYAnchor.constraint(equalTo: footer.centerYAnchor)
+            footerCard.leadingAnchor.constraint(equalTo: footerWrap.leadingAnchor, constant: 4),
+            footerCard.trailingAnchor.constraint(equalTo: footerWrap.trailingAnchor, constant: -4),
+            footerCard.topAnchor.constraint(equalTo: footerWrap.topAnchor, constant: 12),
+            footerCard.bottomAnchor.constraint(equalTo: footerWrap.bottomAnchor, constant: -4),
+
+            infoLabel.centerXAnchor.constraint(equalTo: footerCard.centerXAnchor),
+            infoLabel.centerYAnchor.constraint(equalTo: footerCard.centerYAnchor),
+            infoLabel.leadingAnchor.constraint(equalTo: footerCard.leadingAnchor, constant: 12),
+            infoLabel.trailingAnchor.constraint(equalTo: footerCard.trailingAnchor, constant: -12)
         ])
 
-        guidesTableView.tableFooterView = footer
+        guidesTableView.tableFooterView = footerWrap
     }
 
     func setupStateOverlayCard() {
         stateCardView.translatesAutoresizingMaskIntoConstraints = false
-        CoolMinimalTheme.applyMinimalCard(to: stateCardView, radius: CoolMinimalTheme.cardCornerRadius)
+        SourcesCSSTheme.applyColoredGlowCardStyle(
+            to: stateCardView,
+            accentColor: SourcesCSSTheme.blue,
+            cornerRadius: SourcesCSSTheme.cornerRadius
+        )
 
         stateActivityIndicator.translatesAutoresizingMaskIntoConstraints = false
-        stateActivityIndicator.color = CoolMinimalTheme.accentOcean
+        stateActivityIndicator.color = SourcesCSSTheme.blue
         stateActivityIndicator.hidesWhenStopped = true
 
         stateTitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        stateTitleLabel.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
-        stateTitleLabel.textColor = CoolMinimalTheme.inkPrimary
+        stateTitleLabel.font = UIFont.systemFont(ofSize: 17, weight: .bold)
+        stateTitleLabel.textColor = SourcesCSSTheme.blue
         stateTitleLabel.textAlignment = .center
         stateTitleLabel.numberOfLines = 0
 
         stateSubtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        stateSubtitleLabel.font = UIFont.systemFont(ofSize: 13.5, weight: .regular)
-        stateSubtitleLabel.textColor = CoolMinimalTheme.inkSecondary
+        stateSubtitleLabel.font = UIFont.systemFont(ofSize: 13.5, weight: .medium)
+        stateSubtitleLabel.textColor = SourcesCSSTheme.pureBlack
         stateSubtitleLabel.textAlignment = .center
         stateSubtitleLabel.numberOfLines = 0
 
         stateRetryButton.translatesAutoresizingMaskIntoConstraints = false
-        stateRetryButton.setTitle("  Tải lại  ", for: .normal)
-        stateRetryButton.setTitleColor(.white, for: .normal)
-        stateRetryButton.titleLabel?.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
-        stateRetryButton.backgroundColor = CoolMinimalTheme.accentOcean
-        stateRetryButton.layer.cornerRadius = 10
+        stateRetryButton.setTitle("  Tải Lại Hướng Dẫn  ", for: .normal)
+        stateRetryButton.setTitleColor(SourcesCSSTheme.white, for: .normal)
+        stateRetryButton.titleLabel?.font = UIFont.systemFont(ofSize: 14, weight: .bold)
+        stateRetryButton.backgroundColor = SourcesCSSTheme.blue
+        stateRetryButton.layer.cornerRadius = 18
+        stateRetryButton.layer.shadowColor = SourcesCSSTheme.blue.cgColor
+        stateRetryButton.layer.shadowOffset = CGSize(width: 0, height: 3)
+        stateRetryButton.layer.shadowRadius = 6
+        stateRetryButton.layer.shadowOpacity = 0.25
         stateRetryButton.addTarget(self, action: #selector(handleRetryButtonTap), for: .touchUpInside)
 
         stateCardView.addSubview(stateActivityIndicator)
@@ -2121,23 +2649,23 @@ private extension SourcesViewController {
         NSLayoutConstraint.activate([
             stateCardView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
             stateCardView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
-            stateCardView.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: 30),
+            stateCardView.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: 40),
 
-            stateActivityIndicator.topAnchor.constraint(equalTo: stateCardView.topAnchor, constant: 22),
+            stateActivityIndicator.topAnchor.constraint(equalTo: stateCardView.topAnchor, constant: 24),
             stateActivityIndicator.centerXAnchor.constraint(equalTo: stateCardView.centerXAnchor),
 
-            stateTitleLabel.topAnchor.constraint(equalTo: stateActivityIndicator.bottomAnchor, constant: 12),
-            stateTitleLabel.leadingAnchor.constraint(equalTo: stateCardView.leadingAnchor, constant: 16),
-            stateTitleLabel.trailingAnchor.constraint(equalTo: stateCardView.trailingAnchor, constant: -16),
+            stateTitleLabel.topAnchor.constraint(equalTo: stateActivityIndicator.bottomAnchor, constant: 14),
+            stateTitleLabel.leadingAnchor.constraint(equalTo: stateCardView.leadingAnchor, constant: 18),
+            stateTitleLabel.trailingAnchor.constraint(equalTo: stateCardView.trailingAnchor, constant: -18),
 
             stateSubtitleLabel.topAnchor.constraint(equalTo: stateTitleLabel.bottomAnchor, constant: 6),
-            stateSubtitleLabel.leadingAnchor.constraint(equalTo: stateCardView.leadingAnchor, constant: 16),
-            stateSubtitleLabel.trailingAnchor.constraint(equalTo: stateCardView.trailingAnchor, constant: -16),
+            stateSubtitleLabel.leadingAnchor.constraint(equalTo: stateCardView.leadingAnchor, constant: 18),
+            stateSubtitleLabel.trailingAnchor.constraint(equalTo: stateCardView.trailingAnchor, constant: -18),
 
-            stateRetryButton.topAnchor.constraint(equalTo: stateSubtitleLabel.bottomAnchor, constant: 14),
+            stateRetryButton.topAnchor.constraint(equalTo: stateSubtitleLabel.bottomAnchor, constant: 16),
             stateRetryButton.centerXAnchor.constraint(equalTo: stateCardView.centerXAnchor),
             stateRetryButton.heightAnchor.constraint(equalToConstant: 36),
-            stateRetryButton.bottomAnchor.constraint(equalTo: stateCardView.bottomAnchor, constant: -20)
+            stateRetryButton.bottomAnchor.constraint(equalTo: stateCardView.bottomAnchor, constant: -22)
         ])
     }
 
@@ -2154,20 +2682,22 @@ private extension SourcesViewController {
 
         let cacheKey = "CachedGitHubGuidesText"
 
-        if allArticles.isEmpty, let cachedText = UserDefaults.standard.string(forKey: cacheKey) {
+        // 1. ⚡ HIỂN THỊ NGAY LẬP TỨC TỪ BỘ NHỚ MÁY (NẾU CÓ)
+        if articles.isEmpty, let cachedText = UserDefaults.standard.string(forKey: cacheKey) {
             let cachedArticles = GuideParser.parse(cachedText)
             if !cachedArticles.isEmpty {
-                self.allArticles = cachedArticles
-                self.applySearchFilter(self.currentSearchQuery)
+                self.articles = cachedArticles
+                self.heroHeaderView.updateCount(cachedArticles.count)
+                self.guidesTableView.reloadData()
                 self.stateCardView.isHidden = true
             }
         }
 
-        if showLoadingCard && allArticles.isEmpty {
+        if showLoadingCard && articles.isEmpty {
             stateCardView.isHidden = false
             stateActivityIndicator.startAnimating()
-            stateTitleLabel.text = "Đang đồng bộ hướng dẫn..."
-            stateSubtitleLabel.text = "Vui lòng chờ trong giây lát"
+            stateTitleLabel.text = "Đang tải danh sách hướng dẫn..."
+            stateSubtitleLabel.text = "Vui lòng chờ trong giây lát khi hệ thống đồng bộ nội dung mới nhất."
             stateRetryButton.isHidden = true
         }
 
@@ -2183,8 +2713,8 @@ private extension SourcesViewController {
             }
 
             guard let rawURL = GuideParser.convertToRawGitHubURL(GuideParser.githubGuideURL) else {
-                if self.allArticles.isEmpty {
-                    self.showErrorState(message: "Đường dẫn cấu hình không hợp lệ.")
+                if self.articles.isEmpty {
+                    self.showErrorState(message: "Đường dẫn cấu hình hướng dẫn không hợp lệ.")
                 }
                 return
             }
@@ -2201,7 +2731,7 @@ private extension SourcesViewController {
 
                 let rawText = String(decoding: data, as: UTF8.self)
 
-                if rawText == UserDefaults.standard.string(forKey: cacheKey) && !self.allArticles.isEmpty {
+                if rawText == UserDefaults.standard.string(forKey: cacheKey) && !self.articles.isEmpty {
                     self.stateCardView.isHidden = true
                     self.stateActivityIndicator.stopAnimating()
                     return
@@ -2210,16 +2740,17 @@ private extension SourcesViewController {
                 let parsedArticles = GuideParser.parse(rawText)
                 if !parsedArticles.isEmpty {
                     UserDefaults.standard.set(rawText, forKey: cacheKey)
-                    self.allArticles = parsedArticles
-                    self.applySearchFilter(self.currentSearchQuery)
+                    self.articles = parsedArticles
+                    self.heroHeaderView.updateCount(parsedArticles.count)
+                    self.guidesTableView.reloadData()
                     self.stateCardView.isHidden = true
                     self.stateActivityIndicator.stopAnimating()
-                } else if self.allArticles.isEmpty {
-                    self.showErrorState(message: "Chưa có bài viết hướng dẫn nào.")
+                } else if self.articles.isEmpty {
+                    self.showErrorState(message: "Hiện chưa có bài viết hướng dẫn nào trong tệp cấu hình.")
                 }
             } catch {
-                if self.allArticles.isEmpty {
-                    self.showErrorState(message: "Không thể kết nối máy chủ. Vui lòng kiểm tra mạng và thử lại.")
+                if self.articles.isEmpty {
+                    self.showErrorState(message: "Không thể kết nối tới máy chủ GitHub. Vui lòng kiểm tra kết nối mạng và thử lại.")
                 }
             }
         }
@@ -2255,27 +2786,32 @@ extension SourcesViewController: UITableViewDataSource, UITableViewDelegate {
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return filteredArticles.count
+        return articles.count
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         guard let cell = tableView.dequeueReusableCell(withIdentifier: GuideTopicRowCell.reuseIdentifier, for: indexPath) as? GuideTopicRowCell else {
             return UITableViewCell()
         }
-        let article = filteredArticles[indexPath.row]
-        let isTopOverall = (article.id == allArticles.first?.id)
-        cell.configure(with: article, isTopPriority: isTopOverall)
+        let article = articles[indexPath.row]
+        cell.configure(with: article, rowIndex: indexPath.row, totalRows: articles.count)
         return cell
     }
 
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        guard filteredArticles.indices.contains(indexPath.row) else { return }
-        let selectedArticle = filteredArticles[indexPath.row]
+        guard articles.indices.contains(indexPath.row) else { return }
+        let selectedArticle = articles[indexPath.row]
 
-        #if !os(tvOS)
-        UISelectionFeedbackGenerator().selectionChanged()
-        #endif
+        if let cell = tableView.cellForRow(at: indexPath) {
+            UIView.animate(withDuration: 0.12, animations: {
+                cell.transform = CGAffineTransform(translationX: 4, y: -2).scaledBy(x: 0.98, y: 0.98)
+            }) { _ in
+                UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.55, initialSpringVelocity: 0.5, options: .curveEaseOut, animations: {
+                    cell.transform = .identity
+                }, completion: nil)
+            }
+        }
 
         let detailVC = GuideArticleDetailViewController(article: selectedArticle)
         if let nav = self.navigationController {

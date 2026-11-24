@@ -21,224 +21,190 @@ import Nuke
 
 private let maximumCollapsedUpdatesCount = 2
 
-// MARK: - 🎨 HỆ THỐNG ĐỒNG BỘ GIAO DIỆN KÉP (MÃ WEB 1: LIGHT GLASS & MÃ WEB 2: CYBERPUNK DARK NEON)
-private enum WebThemeMode: Int {
-    case lightWeb1 = 0
-    case darkWeb2 = 1
-    
-    static let storageKey = "SideStore.WebThemeMode"
-    static let didChangeNotification = Notification.Name("SideStore.WebThemeModeDidChange")
-    
-    static var current: WebThemeMode {
-        get {
-            let saved = UserDefaults.standard.integer(forKey: storageKey)
-            return WebThemeMode(rawValue: saved) ?? .lightWeb1
-        }
-        set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: storageKey)
-            NotificationCenter.default.post(name: didChangeNotification, object: nil)
-        }
-    }
-}
-
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN 100% MÃ WEB CSS & SOURCESVIEWCONTROLLER CỦA BẠN
 private struct CSSTheme {
-    static var isDark: Bool { WebThemeMode.current == .darkWeb2 }
-    
-    // Màu nền thẻ Kính mờ (Glassmorphism)
-    // Web 1: rgba(255, 255, 255, 0.78) | Web 2: rgba(25, 25, 35, 0.65)
-    static var cardBg: UIColor {
-        isDark
-            ? UIColor(red: 25/255, green: 25/255, blue: 35/255, alpha: 0.78)
-            : UIColor(red: 255/255, green: 255/255, blue: 255/255, alpha: 0.86)
+    static let white = UIColor.white                                                          // #fff (--white)
+    static let pureBlack = UIColor.black                                                      // #000 (Chữ tiêu đề & nội dung)
+    static let light = UIColor(red: 248/255, green: 249/255, blue: 250/255, alpha: 1.0)       // #f8f9fa (--light)
+    static let border = UIColor(red: 233/255, green: 236/255, blue: 239/255, alpha: 1.0)      // #e9ecef (--border)
+    static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0)          // #007bff (--blue)
+    static let pillBg = UIColor(red: 248/255, green: 249/255, blue: 250/255, alpha: 1.0)      // #f8f9fa (.tab-pill background)
+    static let pillBorder = UIColor(red: 233/255, green: 236/255, blue: 239/255, alpha: 1.0)  // #e9ecef (.tab-pill border)
+    static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0)       // #6f42c1 (--purple)
+    static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0)         // #28a745 (--green)
+    static let badgeGreenBorder = UIColor(red: 50/255, green: 196/255, blue: 83/255, alpha: 1.0) // #32c453 (.topic-id-badge border)
+    static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0)          // #dc3545
+    static let redBg = UIColor(red: 255/255, green: 240/255, blue: 242/255, alpha: 1.0)
+    static let magenta = UIColor(red: 230/255, green: 0/255, blue: 230/255, alpha: 1.0)       // #e600e6 (data-tab="1")
+    static let dark = UIColor(red: 52/255, green: 58/255, blue: 64/255, alpha: 1.0)           // #343a40 (--dark)
+    static let textPrimary = UIColor.black                                                    // #000 (.tab-card-title)
+    static let textSecondary = UIColor(red: 52/255, green: 58/255, blue: 64/255, alpha: 1.0)  // #343a40 (--dark / .tab-card-sub)
+
+    // Body Gradient: linear-gradient(to right, #f3e0ff, #e0f7ff)
+    static let bgGradientStart = UIColor(red: 243/255, green: 224/255, blue: 255/255, alpha: 1.0).cgColor
+    static let bgGradientEnd = UIColor(red: 224/255, green: 247/255, blue: 255/255, alpha: 1.0).cgColor
+
+    // Sleek Top Banner Gradient: linear-gradient(125deg, #007bff 0%, #6f42c1 52%, #d600d6 100%)
+    static let bannerGradStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0).cgColor
+    static let bannerGradMid = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0).cgColor
+    static let bannerGradEnd = UIColor(red: 214/255, green: 0/255, blue: 214/255, alpha: 1.0).cgColor
+
+    static let cornerRadius: CGFloat = 15.0        // --radius: 15px
+    static let bannerCornerRadius: CGFloat = 18.0  // .sleek-top-banner border-radius: 18px
+
+    /// Trả về đúng 4 màu chủ đạo luân phiên theo chuẩn `.tab-button[data-tab="1..4"]`
+    static func tabAccentColor(for index: Int) -> UIColor {
+        switch index % 4 {
+        case 0: return magenta // #e600e6
+        case 1: return purple  // #6f42c1
+        case 2: return blue    // #007bff
+        default: return green  // #28a745
+        }
     }
-    
-    static var white: UIColor { cardBg }
-    
-    // Màu nền phụ cho Icon / Ô con
-    static var light: UIColor {
-        isDark
-            ? UIColor(red: 36/255, green: 36/255, blue: 52/255, alpha: 0.9)
-            : UIColor(red: 248/255, green: 250/255, blue: 252/255, alpha: 1.0)
+
+    /// Áp dụng viền 4 cạnh bằng nhau (2px solid var(--border)) + đổ bóng màu chuẩn CSS `.tab-button`
+    static func applyColoredGlowCardStyle(
+        to view: UIView,
+        accentColor: UIColor,
+        cornerRadius: CGFloat = CSSTheme.cornerRadius,
+        shadowOpacity: Float = 0.24
+    ) {
+        view.backgroundColor = CSSTheme.white
+        view.layer.cornerRadius = cornerRadius
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            view.layer.cornerCurve = .continuous
+        }
+        view.layer.borderWidth = 2.0
+        view.layer.borderColor = CSSTheme.border.cgColor
+        view.layer.shadowColor = accentColor.cgColor
+        view.layer.shadowOffset = CGSize(width: 0, height: 8)
+        view.layer.shadowRadius = 14
+        view.layer.shadowOpacity = shadowOpacity
     }
-    
-    // Viền kính: Web 1 rgba(255,255,255,0.85) | Web 2 rgba(255,255,255,0.08)
-    static var border: UIColor {
-        isDark
-            ? UIColor(white: 1.0, alpha: 0.12)
-            : UIColor(red: 226/255, green: 232/255, blue: 240/255, alpha: 0.95)
+
+    /// Áp dụng style cho khung bao trắng lớn (.tab-container & footer)
+    static func applyContainerCardStyle(to view: UIView, cornerRadius: CGFloat = CSSTheme.cornerRadius) {
+        view.backgroundColor = CSSTheme.white
+        view.layer.cornerRadius = cornerRadius
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            view.layer.cornerCurve = .continuous
+        }
+        view.layer.borderWidth = 0.0
+        view.layer.shadowColor = UIColor.black.cgColor
+        view.layer.shadowOffset = CGSize(width: 0, height: 8)
+        view.layer.shadowRadius = 20
+        view.layer.shadowOpacity = 0.08
     }
-    
-    // Điểm nhấn chính: Web 1 #0284c7 (Sky Blue) | Web 2 #38bdf8 (Neon Cyan)
-    static var blue: UIColor {
-        isDark
-            ? UIColor(red: 56/255, green: 189/255, blue: 248/255, alpha: 1.0)
-            : UIColor(red: 2/255, green: 132/255, blue: 199/255, alpha: 1.0)
-    }
-    
-    // Điểm nhấn phụ: Web 1 #6366f1 (Indigo) | Web 2 #818cf8 (Soft Purple)
-    static var purple: UIColor {
-        isDark
-            ? UIColor(red: 129/255, green: 140/255, blue: 248/255, alpha: 1.0)
-            : UIColor(red: 99/255, green: 102/255, blue: 241/255, alpha: 1.0)
-    }
-    
-    // Nền nút Pill phụ
-    static var pillBg: UIColor {
-        isDark
-            ? UIColor(red: 56/255, green: 189/255, blue: 248/255, alpha: 0.15)
-            : UIColor(red: 224/255, green: 242/255, blue: 254/255, alpha: 0.9)
-    }
-    
-    static var pillBorder: UIColor {
-        isDark
-            ? UIColor(red: 56/255, green: 189/255, blue: 248/255, alpha: 0.35)
-            : UIColor(red: 2/255, green: 132/255, blue: 199/255, alpha: 0.25)
-    }
-    
-    static let green = UIColor(red: 16/255, green: 185/255, blue: 129/255, alpha: 1.0) // #10b981
-    static let red = UIColor(red: 239/255, green: 68/255, blue: 68/255, alpha: 1.0)    // #ef4444
-    static var redBg: UIColor {
-        isDark
-            ? UIColor(red: 239/255, green: 68/255, blue: 68/255, alpha: 0.18)
-            : UIColor(red: 254/255, green: 226/255, blue: 226/255, alpha: 1.0)
-    }
-    static let magenta = UIColor(red: 236/255, green: 72/255, blue: 153/255, alpha: 1.0)
-    
-    // Chữ chính: Web 1 #0f172a | Web 2 #f8fafc
-    static var textPrimary: UIColor {
-        isDark
-            ? UIColor(red: 248/255, green: 250/255, blue: 252/255, alpha: 1.0)
-            : UIColor(red: 15/255, green: 23/255, blue: 42/255, alpha: 1.0)
-    }
-    
-    // Chữ phụ: Web 1 #475569 | Web 2 #94a3b8
-    static var textSecondary: UIColor {
-        isDark
-            ? UIColor(red: 148/255, green: 163/255, blue: 184/255, alpha: 1.0)
-            : UIColor(red: 71/255, green: 85/255, blue: 105/255, alpha: 1.0)
-    }
-    
-    // Bóng đổ thẻ
-    static var cardShadowColor: CGColor {
-        isDark
-            ? UIColor.black.cgColor
-            : UIColor(red: 2/255, green: 132/255, blue: 199/255, alpha: 1.0).cgColor
-    }
-    
-    static var cardShadowOpacity: Float {
-        isDark ? 0.42 : 0.08
-    }
-    
-    // Hero Banner Gradient
-    static var heroStart: CGColor {
-        isDark
-            ? UIColor(red: 14/255, green: 165/255, blue: 233/255, alpha: 0.92).cgColor
-            : UIColor(red: 2/255, green: 132/255, blue: 199/255, alpha: 0.95).cgColor
-    }
-    static var heroEnd: CGColor {
-        isDark
-            ? UIColor(red: 99/255, green: 102/255, blue: 241/255, alpha: 0.90).cgColor
-            : UIColor(red: 79/255, green: 70/255, blue: 229/255, alpha: 0.92).cgColor
-    }
-    
-    static let cornerRadius: CGFloat = 20.0
 }
 
-// MARK: - 🌈 LỚP NỀN MESH GRADIENT & RADIAL GLOW CHUẨN MÃ WEB 1 & MÃ WEB 2
+// MARK: - 🌈 LỚP NỀN BODY GRADIENT NGANG (linear-gradient(to right, #f3e0ff, #e0f7ff))
 private final class MyAppsGradientBackgroundView: UIView {
-    private let baseGradientLayer = CAGradientLayer()
-    private let topLeftGlowLayer = CAGradientLayer()
-    private let bottomRightGlowLayer = CAGradientLayer()
-    private let centerGlowLayer = CAGradientLayer()
-    
+    override class var layerClass: AnyClass {
+        return CAGradientLayer.self
+    }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
-        setupLayers()
+        setupGradient()
     }
-    
+
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        setupLayers()
+        setupGradient()
     }
-    
-    private func setupLayers() {
-        baseGradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
-        baseGradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
-        layer.addSublayer(baseGradientLayer)
-        
-        topLeftGlowLayer.type = .radial
-        topLeftGlowLayer.startPoint = CGPoint(x: 0.15, y: 0.12)
-        topLeftGlowLayer.endPoint = CGPoint(x: 0.85, y: 0.65)
-        layer.addSublayer(topLeftGlowLayer)
-        
-        bottomRightGlowLayer.type = .radial
-        bottomRightGlowLayer.startPoint = CGPoint(x: 0.88, y: 0.85)
-        bottomRightGlowLayer.endPoint = CGPoint(x: 0.20, y: 0.30)
-        layer.addSublayer(bottomRightGlowLayer)
-        
-        centerGlowLayer.type = .radial
-        centerGlowLayer.startPoint = CGPoint(x: 0.5, y: 0.45)
-        centerGlowLayer.endPoint = CGPoint(x: 1.0, y: 0.95)
-        layer.addSublayer(centerGlowLayer)
-        
-        updateTheme()
+
+    private func setupGradient() {
+        self.overrideUserInterfaceStyle = .light
+        guard let gradientLayer = self.layer as? CAGradientLayer else { return }
+        gradientLayer.colors = [CSSTheme.bgGradientStart, CSSTheme.bgGradientEnd]
+        // Chuẩn CSS: linear-gradient(to right, #f3e0ff, #e0f7ff)
+        gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.5)
+        gradientLayer.endPoint = CGPoint(x: 1.0, y: 0.5)
     }
-    
-    func updateTheme() {
-        self.overrideUserInterfaceStyle = CSSTheme.isDark ? .dark : .light
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        
-        if CSSTheme.isDark {
-            // Mã Web 2: Dark Neon (#0f0f14 + Radial Glow #38bdf8 & #818cf8)
-            baseGradientLayer.colors = [
-                UIColor(red: 15/255, green: 15/255, blue: 20/255, alpha: 1.0).cgColor,
-                UIColor(red: 19/255, green: 20/255, blue: 28/255, alpha: 1.0).cgColor
-            ]
-            topLeftGlowLayer.colors = [
-                UIColor(red: 56/255, green: 189/255, blue: 248/255, alpha: 0.18).cgColor,
-                UIColor.clear.cgColor
-            ]
-            bottomRightGlowLayer.colors = [
-                UIColor(red: 129/255, green: 140/255, blue: 248/255, alpha: 0.18).cgColor,
-                UIColor.clear.cgColor
-            ]
-            centerGlowLayer.colors = [
-                UIColor(red: 56/255, green: 189/255, blue: 248/255, alpha: 0.06).cgColor,
-                UIColor.clear.cgColor
-            ]
-        } else {
-            // Mã Web 1: Light Glass (#f0f4f8 + Mesh Gradient #0ea5e9, #6366f1 & #ec4899)
-            baseGradientLayer.colors = [
-                UIColor(red: 240/255, green: 244/255, blue: 248/255, alpha: 1.0).cgColor,
-                UIColor(red: 232/255, green: 240/255, blue: 252/255, alpha: 1.0).cgColor
-            ]
-            topLeftGlowLayer.colors = [
-                UIColor(red: 14/255, green: 165/255, blue: 233/255, alpha: 0.16).cgColor,
-                UIColor.clear.cgColor
-            ]
-            bottomRightGlowLayer.colors = [
-                UIColor(red: 99/255, green: 102/255, blue: 241/255, alpha: 0.16).cgColor,
-                UIColor.clear.cgColor
-            ]
-            centerGlowLayer.colors = [
-                UIColor(red: 236/255, green: 72/255, blue: 153/255, alpha: 0.09).cgColor,
-                UIColor.clear.cgColor
-            ]
+}
+
+// MARK: - 🌟 LỚP NỀN SLEEK TOP BANNER TỰ ĐỘNG PHỦ MÀU 100% (.sleek-top-banner & ::before)
+private final class MyAppsSleekTopBannerGradientView: UIView {
+    override class var layerClass: AnyClass {
+        return CAGradientLayer.self
+    }
+
+    private let shineLayer = CAGradientLayer()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupBannerLayers()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupBannerLayers()
+    }
+
+    private func setupBannerLayers() {
+        backgroundColor = CSSTheme.purple
+
+        layer.cornerRadius = CSSTheme.bannerCornerRadius
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            layer.cornerCurve = .continuous
         }
-        
-        CATransaction.commit()
+        clipsToBounds = true
+        layer.borderWidth = 1.5
+        layer.borderColor = UIColor.white.withAlphaComponent(0.70).cgColor
+
+        if let gradientLayer = self.layer as? CAGradientLayer {
+            // Chuẩn CSS: background: linear-gradient(125deg, #007bff 0%, #6f42c1 52%, #d600d6 100%)
+            gradientLayer.colors = [
+                CSSTheme.bannerGradStart,
+                CSSTheme.bannerGradMid,
+                CSSTheme.bannerGradEnd
+            ]
+            gradientLayer.locations = [0.0, 0.52, 1.0]
+            gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+            gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+        }
+
+        // Chuẩn CSS .sleek-top-banner::before (Vệt kính chéo skewX(-22deg))
+        shineLayer.colors = [
+            UIColor.clear.cgColor,
+            UIColor.white.withAlphaComponent(0.24).cgColor,
+            UIColor.clear.cgColor
+        ]
+        shineLayer.locations = [0.0, 0.5, 1.0]
+        shineLayer.startPoint = CGPoint(x: 0.0, y: 0.5)
+        shineLayer.endPoint = CGPoint(x: 1.0, y: 0.5)
+        shineLayer.setAffineTransform(CGAffineTransform(a: 1, b: 0, c: -0.40, d: 1, tx: 0, ty: 0))
+        layer.insertSublayer(shineLayer, at: 0)
     }
-    
+
     override func layoutSubviews() {
         super.layoutSubviews()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        baseGradientLayer.frame = bounds
-        topLeftGlowLayer.frame = bounds
-        bottomRightGlowLayer.frame = bounds
-        centerGlowLayer.frame = bounds
+        shineLayer.frame = CGRect(
+            x: -bounds.width * 0.15,
+            y: -bounds.height * 0.2,
+            width: bounds.width * 0.55,
+            height: bounds.height * 1.4
+        )
         CATransaction.commit()
+    }
+}
+
+// MARK: - ➖ THANH GẠCH CHÂN XANH NẰM CHÍNH GIỮA (60x3pt CHUẨN .features h2::after TRONG CSS GỐC)
+private final class MyAppsCenteredUnderlineView: UIView {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = CSSTheme.blue
+        layer.cornerRadius = 1.5
+        clipsToBounds = true
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        backgroundColor = CSSTheme.blue
+        layer.cornerRadius = 1.5
+        clipsToBounds = true
     }
 }
 
@@ -259,17 +225,17 @@ class MyAppsViewController: UICollectionViewController
 {
     private let coordinator = NSFileCoordinator()
     private let operationQueue = OperationQueue()
-    
+
     private lazy var dataSource = self.makeDataSource()
     private lazy var noUpdatesDataSource = self.makeNoUpdatesDataSource()
     private lazy var updatesDataSource = self.makeUpdatesDataSource()
     private lazy var activeAppsDataSource = self.makeActiveAppsDataSource()
     private lazy var inactiveAppsDataSource = self.makeInactiveAppsDataSource()
     private lazy var unsupportedUpdates = Set<StoreApp>()
-    
+
     private var prototypeUpdateCell: UpdateCollectionViewCell!
     private var sideloadingProgressView: UIProgressView!
-    
+
     // State
     private var isUpdateSectionCollapsed = true
     private var expandedAppUpdates = Set<String>()
@@ -281,29 +247,27 @@ class MyAppsViewController: UICollectionViewController
     private var didChangeActiveApps = false
     private var previousInactiveAppsCount = 0
     private var statusDotView: UIView?
-    
-    // Thành phần giao diện CSS Hero Banner & Nút điều hướng nổi
+
+    // Thành phần giao diện CSS Sleek Top Banner & Nút điều hướng nổi
     private var heroContainerView: UIView?
     private var heroCardView: UIView?
-    private var heroGradientLayer: CAGradientLayer?
     private var heroSideloadButton: UIButton?
     private var heroSideloadSpinner: UIActivityIndicatorView?
     private var heroLiveContainerButton: UIButton?
     private var floatingBackButton: UIButton?
-    private var gradientBgView: MyAppsGradientBackgroundView?
-    private let heroTopSpace: CGFloat = 104.0
-    
+    private let heroTopSpace: CGFloat = 112.0
+
     private var _imagePickerInstalledApp: InstalledApp?
     private var _viewDidAppear = false
     private var pendingImportURL: URL?
-    
+
     private var minimuxerStatusCheckTask: Task<Void, Never>?
-    
+
     // Cache
     private var cachedUpdateSizes = [String: CGSize]()
-    
+
     private var activeTeam: ALTTeam?
-    
+
     // Truy xuất Team hiện tại từ CoreData (dùng làm fallback ngay lập tức khi activeTeam đang tải bất đồng bộ)
     private func resolveCurrentManagedTeam() -> Team?
     {
@@ -317,13 +281,13 @@ class MyAppsViewController: UICollectionViewController
         }
         return DatabaseManager.shared.activeTeam(in: context)
     }
-    
+
     #if !os(tvOS)
     override var preferredStatusBarStyle: UIStatusBarStyle {
-        return CSSTheme.isDark ? .lightContent : .darkContent
+        return .darkContent
     }
     #endif
-    
+
     required init?(coder aDecoder: NSCoder)
     {
         super.init(coder: aDecoder)
@@ -331,16 +295,14 @@ class MyAppsViewController: UICollectionViewController
         NotificationCenter.default.addObserver(self, selector: #selector(MyAppsViewController.didFetchSource(_:)), name: AppManager.didFetchSourceNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(MyAppsViewController.importApp(_:)), name: AppDelegate.importAppDeepLinkNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(MyAppsViewController.appIDsViewControllerDidDismiss(_:)), name: AppIDsViewController.didDismissNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(MyAppsViewController.handleWebThemeDidChange(_:)), name: WebThemeMode.didChangeNotification, object: nil)
     }
-    
+
     deinit {
-        NotificationCenter.default.removeObserver(self)
         if !(minimuxerStatusCheckTask?.isCancelled == true) {
             minimuxerStatusCheckTask?.cancel()
         }
     }
-    
+
     override func viewDidLoad()
     {
         super.viewDidLoad()
@@ -350,12 +312,12 @@ class MyAppsViewController: UICollectionViewController
             self.navigationItem.leftBarButtonItems = []
         }
         
-        let currentStyle: UIUserInterfaceStyle = CSSTheme.isDark ? .dark : .light
-        self.overrideUserInterfaceStyle = currentStyle
-        self.view.overrideUserInterfaceStyle = currentStyle
-        self.collectionView.overrideUserInterfaceStyle = currentStyle
+        // Cố định toàn bộ màn hình ở giao diện Sáng (Light Mode) để không bao giờ bị chuyển sang nền đen
+        self.overrideUserInterfaceStyle = .light
+        self.view.overrideUserInterfaceStyle = .light
+        self.collectionView.overrideUserInterfaceStyle = .light
         
-        // Ẩn hoàn toàn thanh điều hướng ở trên cùng để đồng bộ với Tab Cài đặt
+        // Ẩn hoàn toàn thanh điều hướng trắng ở trên cùng để đồng bộ với SourcesViewController & Tab Cài đặt
         self.title = nil
         self.navigationItem.title = nil
         self.navigationController?.delegate = self
@@ -382,7 +344,7 @@ class MyAppsViewController: UICollectionViewController
                 
         self.prototypeUpdateCell = UpdateCollectionViewCell.instantiate(with: UpdateCollectionViewCell.nib)
         self.prototypeUpdateCell.contentView.translatesAutoresizingMaskIntoConstraints = false
-        self.prototypeUpdateCell.overrideUserInterfaceStyle = currentStyle
+        self.prototypeUpdateCell.overrideUserInterfaceStyle = .light
         
         self.collectionView.register(UpdateCollectionViewCell.nib, forCellWithReuseIdentifier: "UpdateCell")
         self.collectionView.register(UpdatesCollectionHeaderView.self, forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader, withReuseIdentifier: "UpdatesHeader")
@@ -403,11 +365,11 @@ class MyAppsViewController: UICollectionViewController
         #endif
         self.sideloadingProgressView.translatesAutoresizingMaskIntoConstraints = false
         self.sideloadingProgressView.progressTintColor = CSSTheme.green
-        self.sideloadingProgressView.trackTintColor = UIColor.white.withAlphaComponent(0.25)
+        self.sideloadingProgressView.trackTintColor = UIColor.white.withAlphaComponent(0.28)
         self.sideloadingProgressView.progress = 0
         self.sideloadingProgressView.isHidden = true
         
-        // ✨ KÍCH HOẠT GIAO DIỆN WEB 1 & WEB 2 KÈM VIỆT HÓA ✨
+        // ✨ KÍCH HOẠT GIAO DIỆN WEB CSS 100% & VIỆT HÓA ✨
         self.applySmartWebCSSTheme()
         
         #if !os(tvOS)
@@ -439,14 +401,13 @@ class MyAppsViewController: UICollectionViewController
             }
         }
     }
-    
+
     override func viewWillAppear(_ animated: Bool)
     {
         super.viewWillAppear(animated)
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
-        self.refreshCurrentWebThemeAppearance()
     }
-    
+
     override func viewIsAppearing(_ animated: Bool)
     {
         super.viewIsAppearing(animated)
@@ -473,18 +434,15 @@ class MyAppsViewController: UICollectionViewController
         
         self.previousInactiveAppsCount = self.inactiveAppsDataSource.itemCount
     }
-    
+
     override func viewDidLayoutSubviews()
     {
         super.viewDidLayoutSubviews()
         if let heroContainer = self.heroContainerView {
             heroContainer.frame = CGRect(x: 0, y: -self.heroTopSpace, width: self.collectionView.bounds.width, height: self.heroTopSpace)
         }
-        if let heroCard = self.heroCardView {
-            self.heroGradientLayer?.frame = heroCard.bounds
-        }
     }
-    
+
     override func viewDidAppear(_ animated: Bool)
     {
         super.viewDidAppear(animated)
@@ -496,12 +454,12 @@ class MyAppsViewController: UICollectionViewController
             self.presentImportDialog(for: pendingURL)
         }
     }
-    
+
     override func viewWillDisappear(_ animated: Bool)
     {
         super.viewWillDisappear(animated)
     }
-    
+
     private func updateStatusDot(isReady: Bool)
     {
         DispatchQueue.main.async { [weak self] in
@@ -527,7 +485,7 @@ class MyAppsViewController: UICollectionViewController
             }
         }
     }
-    
+
     override func prepare(for segue: UIStoryboardSegue, sender: Any?)
     {
         let controller = segue.destination
@@ -557,7 +515,7 @@ class MyAppsViewController: UICollectionViewController
         default: break
         }
     }
-    
+
     override func shouldPerformSegue(withIdentifier identifier: String, sender: Any?) -> Bool
     {
         guard identifier == "showApp" else { return true }
@@ -567,13 +525,13 @@ class MyAppsViewController: UICollectionViewController
         let installedApp = self.dataSource.item(at: indexPath)
         return !installedApp.isSideloaded
     }
-    
+
     @IBAction func unwindToMyAppsViewController(_ segue: UIStoryboardSegue)
     {
     }
 }
 
-// MARK: - 🧭 QUẢN LÝ ẨN THANH ĐIỀU HƯỚNG & NÚT QUAY LẠI NHỎ CỐ ĐỊNH Ở MỤC CON
+// MARK: - 🧭 QUẢN LÝ ẨN THANH ĐIỀU HƯỚNG & NÚT QUAY LẠI CHUẨN .back-clean-btn Ở MỤC CON
 extension MyAppsViewController: UINavigationControllerDelegate, UIGestureRecognizerDelegate {
     func navigationController(_ navigationController: UINavigationController, willShow viewController: UIViewController, animated: Bool) {
         navigationController.setNavigationBarHidden(true, animated: false)
@@ -582,46 +540,41 @@ extension MyAppsViewController: UINavigationControllerDelegate, UIGestureRecogni
         #if !os(tvOS)
         viewController.navigationItem.largeTitleDisplayMode = .never
         #endif
-        
+
         let isRoot = (viewController === navigationController.viewControllers.first)
         updateFloatingBackButton(in: navigationController, show: !isRoot)
     }
-    
+
     private func updateFloatingBackButton(in nav: UINavigationController, show: Bool) {
         if self.floatingBackButton == nil {
             let btn = UIButton(type: .system)
             btn.translatesAutoresizingMaskIntoConstraints = false
-            
-            let config = UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)
-            btn.setImage(UIImage(systemName: "chevron.left", withConfiguration: config), for: .normal)
-            btn.tintColor = CSSTheme.blue
-            btn.backgroundColor = CSSTheme.cardBg
-            
-            btn.layer.cornerRadius = 17
-            btn.layer.borderWidth = 1.0
+            btn.setTitle("‹ Quay lại", for: .normal)
+            btn.setTitleColor(CSSTheme.blue, for: .normal)
+            btn.titleLabel?.font = UIFont.systemFont(ofSize: 13.5, weight: .heavy)
+            btn.backgroundColor = CSSTheme.white
+            btn.contentEdgeInsets = UIEdgeInsets(top: 6, left: 14, bottom: 6, right: 14)
+            btn.layer.cornerRadius = 10
+            btn.layer.borderWidth = 1.5
             btn.layer.borderColor = CSSTheme.border.cgColor
-            btn.layer.shadowColor = UIColor.black.cgColor
-            btn.layer.shadowOffset = CGSize(width: 0, height: 2)
-            btn.layer.shadowRadius = 6
-            btn.layer.shadowOpacity = 0.15
+            btn.layer.shadowColor = CSSTheme.blue.cgColor
+            btn.layer.shadowOffset = CGSize(width: 0, height: 6)
+            btn.layer.shadowRadius = 10
+            btn.layer.shadowOpacity = 0.18
             
             btn.addTarget(self, action: #selector(handleFloatingBackTap), for: .touchUpInside)
             nav.view.addSubview(btn)
             
             NSLayoutConstraint.activate([
-                btn.leadingAnchor.constraint(equalTo: nav.view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+                btn.leadingAnchor.constraint(equalTo: nav.view.safeAreaLayoutGuide.leadingAnchor, constant: 12),
                 btn.topAnchor.constraint(equalTo: nav.view.safeAreaLayoutGuide.topAnchor, constant: 6),
-                btn.widthAnchor.constraint(equalToConstant: 34),
-                btn.heightAnchor.constraint(equalToConstant: 34)
+                btn.heightAnchor.constraint(equalToConstant: 32)
             ])
             
             self.floatingBackButton = btn
         }
         
         guard let btn = self.floatingBackButton else { return }
-        btn.tintColor = CSSTheme.blue
-        btn.backgroundColor = CSSTheme.cardBg
-        btn.layer.borderColor = CSSTheme.border.cgColor
         nav.view.bringSubviewToFront(btn)
         
         UIView.animate(withDuration: 0.2) {
@@ -629,11 +582,11 @@ extension MyAppsViewController: UINavigationControllerDelegate, UIGestureRecogni
             btn.isHidden = !show
         }
     }
-    
+
     @objc private func handleFloatingBackTap() {
         self.navigationController?.popViewController(animated: true)
     }
-    
+
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         #if !os(tvOS)
         if gestureRecognizer === self.navigationController?.interactivePopGestureRecognizer {
@@ -644,67 +597,21 @@ extension MyAppsViewController: UINavigationControllerDelegate, UIGestureRecogni
     }
 }
 
-// MARK: - ✨ HỆ THỐNG RENDER CSS THÔNG MINH (WEB 1 & WEB 2) & VIỆT HÓA TOÀN DIỆN
+// MARK: - ✨ HỆ THỐNG RENDER CSS THÔNG MINH CHUẨN 100% MÃ WEB & SOURCESVIEWCONTROLLER
 private extension MyAppsViewController {
-    
-    @objc func handleWebThemeDidChange(_ notification: Notification) {
-        DispatchQueue.main.async { [weak self] in
-            self?.refreshCurrentWebThemeAppearance()
-        }
-    }
-    
-    func refreshCurrentWebThemeAppearance() {
-        let style: UIUserInterfaceStyle = CSSTheme.isDark ? .dark : .light
-        self.overrideUserInterfaceStyle = style
-        self.view.overrideUserInterfaceStyle = style
-        self.collectionView.overrideUserInterfaceStyle = style
-        self.prototypeUpdateCell?.overrideUserInterfaceStyle = style
-        self.heroContainerView?.overrideUserInterfaceStyle = style
-        self.setNeedsStatusBarAppearanceUpdate()
-        
-        self.gradientBgView?.updateTheme()
-        
-        #if !os(tvOS)
-        self.collectionView.refreshControl?.tintColor = CSSTheme.blue
-        #endif
-        
-        if let heroGradient = self.heroGradientLayer {
-            heroGradient.colors = [CSSTheme.heroStart, CSSTheme.heroEnd]
-        }
-        if let heroCard = self.heroCardView {
-            heroCard.layer.shadowColor = CSSTheme.blue.cgColor
-            heroCard.layer.shadowOpacity = CSSTheme.isDark ? 0.38 : 0.25
-        }
-        if let addBtn = self.heroSideloadButton {
-            let btnTextColor = CSSTheme.isDark ? UIColor(red: 2/255, green: 132/255, blue: 199/255, alpha: 1.0) : CSSTheme.blue
-            addBtn.tintColor = btnTextColor
-            addBtn.setTitleColor(btnTextColor, for: .normal)
-            addBtn.backgroundColor = UIColor.white
-        }
-        if let btn = self.floatingBackButton {
-            btn.tintColor = CSSTheme.blue
-            btn.backgroundColor = CSSTheme.cardBg
-            btn.layer.borderColor = CSSTheme.border.cgColor
-        }
-        
-        self.cachedUpdateSizes.removeAll()
-        self.collectionView.collectionViewLayout.invalidateLayout()
-        self.collectionView.reloadData()
-    }
-    
+
     func applySmartWebCSSTheme() {
-        // 1. Nền Mesh Gradient / Radial Glow cố định toàn màn hình
+        // 1. Nền Body Gradient ngang cố định toàn màn hình: linear-gradient(to right, #f3e0ff, #e0f7ff)
         let bgView = MyAppsGradientBackgroundView(frame: UIScreen.main.bounds)
         bgView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         self.collectionView.backgroundView = bgView
         self.collectionView.backgroundColor = .clear
-        self.gradientBgView = bgView
         
-        // 2. Dành không gian phía trên cho khối .hero Banner và dưới đáy cho TabBar
+        // 2. Dành không gian phía trên cho khối .sleek-top-banner và dưới đáy cho TabBar
         self.collectionView.contentInset.top = self.heroTopSpace
         self.collectionView.contentInset.bottom = 40
         
-        // 3. Khởi tạo khối .hero Banner kèm App Icon, nút "+ IPA" và nút Icon LiveContainer
+        // 3. Khởi tạo khối .sleek-top-banner kèm Hộp kính .banner-glass-icon, nút "+ IPA" và nút Icon LiveContainer
         setupCSSHeroBanner()
         
         // 4. Đồng bộ màu Badge trên TabBar
@@ -716,191 +623,213 @@ private extension MyAppsViewController {
         #endif
         self.navigationController?.tabBarItem.title = "Ứng dụng"
     }
-    
+
     func setupCSSHeroBanner() {
         let headerContainer = UIView(frame: CGRect(x: 0, y: -self.heroTopSpace, width: self.collectionView.bounds.width, height: self.heroTopSpace))
         headerContainer.backgroundColor = .clear
         headerContainer.autoresizingMask = [.flexibleWidth]
-        headerContainer.overrideUserInterfaceStyle = CSSTheme.isDark ? .dark : .light
+        headerContainer.overrideUserInterfaceStyle = .light
         self.heroContainerView = headerContainer
         
-        let heroCard = UIView()
-        heroCard.translatesAutoresizingMaskIntoConstraints = false
-        heroCard.layer.cornerRadius = CSSTheme.cornerRadius
-        heroCard.layer.masksToBounds = false
-        heroCard.layer.shadowColor = CSSTheme.blue.cgColor
-        heroCard.layer.shadowOffset = CGSize(width: 0, height: 8)
-        heroCard.layer.shadowRadius = 18
-        heroCard.layer.shadowOpacity = CSSTheme.isDark ? 0.38 : 0.25
-        self.heroCardView = heroCard
+        // Khối đổ bóng ngoài của .sleek-top-banner (box-shadow: 0 10px 22px rgba(111, 66, 193, 0.28))
+        let shadowWrapper = UIView()
+        shadowWrapper.translatesAutoresizingMaskIntoConstraints = false
+        shadowWrapper.backgroundColor = .clear
+        shadowWrapper.layer.cornerRadius = CSSTheme.bannerCornerRadius
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            shadowWrapper.layer.cornerCurve = .continuous
+        }
+        shadowWrapper.layer.masksToBounds = false
+        shadowWrapper.layer.shadowColor = CSSTheme.purple.cgColor
+        shadowWrapper.layer.shadowOffset = CGSize(width: 0, height: 10)
+        shadowWrapper.layer.shadowRadius = 16
+        shadowWrapper.layer.shadowOpacity = 0.28
+        self.heroCardView = shadowWrapper
         
-        let gradient = CAGradientLayer()
-        gradient.colors = [CSSTheme.heroStart, CSSTheme.heroEnd]
-        gradient.startPoint = CGPoint(x: 0, y: 0)
-        gradient.endPoint = CGPoint(x: 1, y: 1)
-        gradient.cornerRadius = CSSTheme.cornerRadius
-        heroCard.layer.insertSublayer(gradient, at: 0)
-        self.heroGradientLayer = gradient
+        // Lớp nền Gradient 125deg (#007bff -> #6f42c1 -> #d600d6) + vệt kính chéo ::before
+        let gradientBannerView = MyAppsSleekTopBannerGradientView()
+        gradientBannerView.translatesAutoresizingMaskIntoConstraints = false
+        shadowWrapper.addSubview(gradientBannerView)
         
-        // Biểu tượng App Icon + Tiêu đề chính + Chấm trạng thái Minimuxer (Đồng bộ với SettingsViewController)
-        let titleStack = UIStackView()
-        titleStack.translatesAutoresizingMaskIntoConstraints = false
-        titleStack.axis = .horizontal
-        titleStack.alignment = .center
-        titleStack.spacing = 6
+        // Hộp kính .banner-glass-icon (30x30px, border-radius: 10px, border: 1.3px solid rgba(255,255,255,0.7))
+        let iconGlassBox = UIView()
+        iconGlassBox.translatesAutoresizingMaskIntoConstraints = false
+        iconGlassBox.backgroundColor = UIColor.white.withAlphaComponent(0.22)
+        iconGlassBox.layer.cornerRadius = 10
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            iconGlassBox.layer.cornerCurve = .continuous
+        }
+        iconGlassBox.layer.borderWidth = 1.3
+        iconGlassBox.layer.borderColor = UIColor.white.withAlphaComponent(0.70).cgColor
+        iconGlassBox.layer.shadowColor = UIColor.black.cgColor
+        iconGlassBox.layer.shadowOffset = CGSize(width: 0, height: 3)
+        iconGlassBox.layer.shadowRadius = 5
+        iconGlassBox.layer.shadowOpacity = 0.15
+
+        let starIconImageView = UIImageView()
+        starIconImageView.translatesAutoresizingMaskIntoConstraints = false
+        let starCfg = UIImage.SymbolConfiguration(pointSize: 14.5, weight: .bold)
+        starIconImageView.image = UIImage(systemName: "star", withConfiguration: starCfg)
+        starIconImageView.tintColor = CSSTheme.white
+        starIconImageView.contentMode = .scaleAspectFit
+        iconGlassBox.addSubview(starIconImageView)
         
-        let appIconView = UIImageView(image: UIImage(named: "AppIcon60x60") ?? UIImage(systemName: "square.stack.3d.up.fill"))
-        appIconView.tintColor = UIColor.white
-        appIconView.contentMode = .scaleAspectFill
-        appIconView.layer.cornerRadius = 7
-        appIconView.layer.masksToBounds = true
-        appIconView.layer.borderWidth = 1.0
-        appIconView.layer.borderColor = UIColor.white.withAlphaComponent(0.6).cgColor
-        appIconView.translatesAutoresizingMaskIntoConstraints = false
-        
+        // Tiêu đề h1 (.sleek-top-banner h1)
         let titleLabel = UILabel()
-        titleLabel.text = "Ứng dụng của tôi"
-        titleLabel.font = UIFont.systemFont(ofSize: 19, weight: .heavy)
-        titleLabel.textColor = UIColor.white
+        titleLabel.text = "Ứng Dụng Của Tôi"
+        titleLabel.font = UIFont.systemFont(ofSize: 20.5, weight: .heavy)
+        titleLabel.textColor = CSSTheme.white
         titleLabel.adjustsFontSizeToFitWidth = true
         titleLabel.minimumScaleFactor = 0.75
         titleLabel.layer.shadowColor = UIColor.black.cgColor
-        titleLabel.layer.shadowOffset = CGSize(width: 1, height: 2)
+        titleLabel.layer.shadowOffset = CGSize(width: 0, height: 2)
         titleLabel.layer.shadowRadius = 4
-        titleLabel.layer.shadowOpacity = 0.35
+        titleLabel.layer.shadowOpacity = 0.22
         
+        // Chấm trạng thái Minimuxer
         let dot = UIView()
         dot.translatesAutoresizingMaskIntoConstraints = false
         dot.layer.cornerRadius = 4.5
         dot.backgroundColor = CSSTheme.green
         dot.layer.borderWidth = 1.5
-        dot.layer.borderColor = UIColor.white.cgColor
+        dot.layer.borderColor = CSSTheme.white.cgColor
         dot.transform = CGAffineTransform(scaleX: 0.01, y: 0.01)
         dot.alpha = 0.0
         self.statusDotView = dot
         
         NSLayoutConstraint.activate([
-            appIconView.widthAnchor.constraint(equalToConstant: 24),
-            appIconView.heightAnchor.constraint(equalToConstant: 24),
+            iconGlassBox.widthAnchor.constraint(equalToConstant: 30),
+            iconGlassBox.heightAnchor.constraint(equalToConstant: 30),
+            starIconImageView.centerXAnchor.constraint(equalTo: iconGlassBox.centerXAnchor),
+            starIconImageView.centerYAnchor.constraint(equalTo: iconGlassBox.centerYAnchor),
             dot.widthAnchor.constraint(equalToConstant: 9),
             dot.heightAnchor.constraint(equalToConstant: 9)
         ])
         
-        titleStack.addArrangedSubview(appIconView)
-        titleStack.addArrangedSubview(titleLabel)
-        titleStack.addArrangedSubview(dot)
+        // Hàng tiêu đề căn giữa (.banner-title-row)
+        let titleStack = UIStackView(arrangedSubviews: [iconGlassBox, titleLabel, dot])
+        titleStack.translatesAutoresizingMaskIntoConstraints = false
+        titleStack.axis = .horizontal
+        titleStack.alignment = .center
+        titleStack.spacing = 8
         
-        // Phụ đề hướng dẫn
+        // Phụ đề p (.sleek-top-banner p)
         let subLabel = UILabel()
         subLabel.translatesAutoresizingMaskIntoConstraints = false
         subLabel.text = "Quản lý, cài đặt tệp .ipa & gia hạn ứng dụng dễ dàng"
-        subLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .medium)
-        subLabel.textColor = UIColor.white.withAlphaComponent(0.95)
+        subLabel.font = UIFont.systemFont(ofSize: 13.0, weight: .medium)
+        subLabel.textColor = CSSTheme.white.withAlphaComponent(0.95)
         subLabel.textAlignment = .center
         subLabel.numberOfLines = 1
         subLabel.adjustsFontSizeToFitWidth = true
         
-        // Nút "+ IPA" bên trái Hero Card
+        // Nút "+ IPA" bên trái Sleek Top Banner
         let addBtn = UIButton(type: .system)
         addBtn.translatesAutoresizingMaskIntoConstraints = false
         let plusConfig = UIImage.SymbolConfiguration(pointSize: 11.5, weight: .bold)
         addBtn.setImage(UIImage(systemName: "plus.circle.fill", withConfiguration: plusConfig), for: .normal)
         addBtn.setTitle(" IPA", for: .normal)
-        addBtn.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
-        let addBtnTint = UIColor(red: 2/255, green: 132/255, blue: 199/255, alpha: 1.0)
-        addBtn.tintColor = addBtnTint
-        addBtn.setTitleColor(addBtnTint, for: .normal)
-        addBtn.backgroundColor = UIColor.white
-        addBtn.layer.cornerRadius = 14
+        addBtn.titleLabel?.font = UIFont.systemFont(ofSize: 12.0, weight: .heavy)
+        addBtn.tintColor = CSSTheme.blue
+        addBtn.setTitleColor(CSSTheme.blue, for: .normal)
+        addBtn.backgroundColor = CSSTheme.white
+        addBtn.layer.cornerRadius = 10
+        addBtn.layer.borderWidth = 1.2
+        addBtn.layer.borderColor = CSSTheme.border.cgColor
         addBtn.contentEdgeInsets = UIEdgeInsets(top: 5, left: 9, bottom: 5, right: 10)
         addBtn.layer.shadowColor = UIColor.black.cgColor
-        addBtn.layer.shadowOffset = CGSize(width: 0, height: 2)
-        addBtn.layer.shadowRadius = 4
+        addBtn.layer.shadowOffset = CGSize(width: 0, height: 3)
+        addBtn.layer.shadowRadius = 6
         addBtn.layer.shadowOpacity = 0.18
         addBtn.addTarget(self, action: #selector(handleHeroSideloadButtonTap(_:)), for: .touchUpInside)
         self.heroSideloadButton = addBtn
         
         let spinner = UIActivityIndicatorView(style: .medium)
         spinner.translatesAutoresizingMaskIntoConstraints = false
-        spinner.color = addBtnTint
+        spinner.color = CSSTheme.blue
         spinner.hidesWhenStopped = true
         addBtn.addSubview(spinner)
         self.heroSideloadSpinner = spinner
         
-        // Nút Icon LiveContainer nằm gọn ở góc phải Hero Card
+        // Nút Icon LiveContainer kiểu hộp kính (.banner-glass-icon) ở góc phải
         let lcBtn = UIButton(type: .system)
         lcBtn.translatesAutoresizingMaskIntoConstraints = false
-        let lcIconConfig = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
+        let lcIconConfig = UIImage.SymbolConfiguration(pointSize: 13.5, weight: .bold)
         let lcIcon = UIImage(systemName: "escape", withConfiguration: lcIconConfig)
             ?? UIImage(systemName: "arrow.up.forward.app.fill", withConfiguration: lcIconConfig)
         lcBtn.setImage(lcIcon, for: .normal)
         lcBtn.setTitle(nil, for: .normal)
-        lcBtn.tintColor = UIColor.white
-        lcBtn.backgroundColor = UIColor.white.withAlphaComponent(0.24)
-        lcBtn.layer.cornerRadius = 14
-        lcBtn.layer.borderWidth = 1.0
-        lcBtn.layer.borderColor = UIColor.white.withAlphaComponent(0.55).cgColor
+        lcBtn.tintColor = CSSTheme.white
+        lcBtn.backgroundColor = CSSTheme.white.withAlphaComponent(0.22)
+        lcBtn.layer.cornerRadius = 10
+        lcBtn.layer.borderWidth = 1.3
+        lcBtn.layer.borderColor = CSSTheme.white.withAlphaComponent(0.70).cgColor
         lcBtn.layer.shadowColor = UIColor.black.cgColor
-        lcBtn.layer.shadowOffset = CGSize(width: 0, height: 2)
-        lcBtn.layer.shadowRadius = 4
-        lcBtn.layer.shadowOpacity = 0.12
+        lcBtn.layer.shadowOffset = CGSize(width: 0, height: 3)
+        lcBtn.layer.shadowRadius = 5
+        lcBtn.layer.shadowOpacity = 0.15
         lcBtn.accessibilityLabel = "Chuyển qua LiveContainer"
         lcBtn.addTarget(self, action: #selector(handleHeroLiveContainerTap(_:)), for: .touchUpInside)
         self.heroLiveContainerButton = lcBtn
         
-        // Gắn thanh tiến trình cài đặt vào cạnh dưới Hero Card
+        // Gắn thanh tiến trình cài đặt vào cạnh dưới Banner
         self.sideloadingProgressView.layer.cornerRadius = 2
         self.sideloadingProgressView.clipsToBounds = true
         
-        heroCard.addSubview(titleStack)
-        heroCard.addSubview(subLabel)
-        heroCard.addSubview(addBtn)
-        heroCard.addSubview(lcBtn)
-        heroCard.addSubview(self.sideloadingProgressView)
-        headerContainer.addSubview(heroCard)
+        gradientBannerView.addSubview(titleStack)
+        gradientBannerView.addSubview(subLabel)
+        gradientBannerView.addSubview(addBtn)
+        gradientBannerView.addSubview(lcBtn)
+        gradientBannerView.addSubview(self.sideloadingProgressView)
+        headerContainer.addSubview(shadowWrapper)
         self.collectionView.addSubview(headerContainer)
         
         NSLayoutConstraint.activate([
-            heroCard.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor, constant: 16),
-            heroCard.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -16),
-            heroCard.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 4),
-            heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -6),
+            shadowWrapper.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor, constant: 6),
+            shadowWrapper.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -6),
+            shadowWrapper.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 8),
+            shadowWrapper.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -4),
             
-            addBtn.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 10),
-            addBtn.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 12),
-            addBtn.heightAnchor.constraint(equalToConstant: 28),
+            gradientBannerView.leadingAnchor.constraint(equalTo: shadowWrapper.leadingAnchor),
+            gradientBannerView.trailingAnchor.constraint(equalTo: shadowWrapper.trailingAnchor),
+            gradientBannerView.topAnchor.constraint(equalTo: shadowWrapper.topAnchor),
+            gradientBannerView.bottomAnchor.constraint(equalTo: shadowWrapper.bottomAnchor),
+            
+            addBtn.leadingAnchor.constraint(equalTo: gradientBannerView.leadingAnchor, constant: 12),
+            addBtn.topAnchor.constraint(equalTo: gradientBannerView.topAnchor, constant: 14),
+            addBtn.heightAnchor.constraint(equalToConstant: 30),
             
             spinner.centerXAnchor.constraint(equalTo: addBtn.centerXAnchor),
             spinner.centerYAnchor.constraint(equalTo: addBtn.centerYAnchor),
             
-            lcBtn.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -10),
+            lcBtn.trailingAnchor.constraint(equalTo: gradientBannerView.trailingAnchor, constant: -12),
             lcBtn.centerYAnchor.constraint(equalTo: addBtn.centerYAnchor),
             lcBtn.widthAnchor.constraint(equalToConstant: 30),
-            lcBtn.heightAnchor.constraint(equalToConstant: 28),
+            lcBtn.heightAnchor.constraint(equalToConstant: 30),
             
-            titleStack.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
+            titleStack.centerXAnchor.constraint(equalTo: gradientBannerView.centerXAnchor),
             titleStack.centerYAnchor.constraint(equalTo: addBtn.centerYAnchor),
             titleStack.leadingAnchor.constraint(greaterThanOrEqualTo: addBtn.trailingAnchor, constant: 8),
             titleStack.trailingAnchor.constraint(lessThanOrEqualTo: lcBtn.leadingAnchor, constant: -8),
             
-            subLabel.topAnchor.constraint(equalTo: addBtn.bottomAnchor, constant: 12),
-            subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
-            subLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
+            subLabel.topAnchor.constraint(equalTo: titleStack.bottomAnchor, constant: 8),
+            subLabel.leadingAnchor.constraint(equalTo: gradientBannerView.leadingAnchor, constant: 14),
+            subLabel.trailingAnchor.constraint(equalTo: gradientBannerView.trailingAnchor, constant: -14),
             
-            self.sideloadingProgressView.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
-            self.sideloadingProgressView.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
-            self.sideloadingProgressView.bottomAnchor.constraint(equalTo: heroCard.bottomAnchor, constant: -3),
+            self.sideloadingProgressView.leadingAnchor.constraint(equalTo: gradientBannerView.leadingAnchor, constant: 14),
+            self.sideloadingProgressView.trailingAnchor.constraint(equalTo: gradientBannerView.trailingAnchor, constant: -14),
+            self.sideloadingProgressView.bottomAnchor.constraint(equalTo: gradientBannerView.bottomAnchor, constant: -4),
             self.sideloadingProgressView.heightAnchor.constraint(equalToConstant: 3)
         ])
         
-        heroCard.alpha = 0
-        heroCard.transform = CGAffineTransform(translationX: 0, y: -10)
-        UIView.animate(withDuration: 0.5, delay: 0.05, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.5, options: .curveEaseOut) {
-            heroCard.alpha = 1
-            heroCard.transform = .identity
+        shadowWrapper.alpha = 0
+        shadowWrapper.transform = CGAffineTransform(translationX: 0, y: -8)
+        UIView.animate(withDuration: 0.45, delay: 0.04, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.5, options: .curveEaseOut) {
+            shadowWrapper.alpha = 1
+            shadowWrapper.transform = .identity
         }
     }
-    
+
     func setSideloadingActivity(_ isIndicating: Bool) {
         self.navigationItem.leftBarButtonItem?.isIndicatingActivity = isIndicating
         guard let btn = self.heroSideloadButton, let spinner = self.heroSideloadSpinner else { return }
@@ -917,13 +846,13 @@ private extension MyAppsViewController {
             btn.isUserInteractionEnabled = true
         }
     }
-    
+
     @objc func handleHeroSideloadButtonTap(_ sender: UIButton) {
         animateButtonBounce(sender)
         let barButton = self.navigationItem.leftBarButtonItem ?? UIBarButtonItem()
         self.sideloadApp(barButton)
     }
-    
+
     // Kích hoạt chuyển sang LiveContainer tương thích 100% với SideStoreHooks.m mà không gây lỗi khi build IPA độc lập
     @objc func handleHeroLiveContainerTap(_ sender: UIButton) {
         animateButtonBounce(sender)
@@ -966,7 +895,7 @@ private extension MyAppsViewController {
             }
         }
     }
-    
+
     func animateButtonBounce(_ sender: UIView) {
         UIView.animate(withDuration: 0.12, animations: {
             sender.transform = CGAffineTransform(scaleX: 0.92, y: 0.92)
@@ -976,7 +905,7 @@ private extension MyAppsViewController {
             }
         }
     }
-    
+
     // Dịch tự động các chuỗi thời gian hết hạn của nút ứng dụng sang tiếng Việt
     func translateDynamicAppText(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1019,38 +948,40 @@ private extension MyAppsViewController {
         result = result.replacingOccurrences(of: "minute", with: "phút")
         return result
     }
-    
-    // Cố định nút chứa số ngày (PillButton) luôn có nền xanh (hoặc đỏ khi hết hạn) và chữ luôn màu trắng
-    func stylePillButton(_ pillButton: PillButton) {
-        pillButton.overrideUserInterfaceStyle = CSSTheme.isDark ? .dark : .light
+
+    // Chuẩn hóa nút chứa số ngày (PillButton) theo màu chủ đạo của từng thẻ hoặc màu đỏ khi hết hạn
+    func stylePillButton(_ pillButton: PillButton, accentColor: UIColor = CSSTheme.blue) {
+        pillButton.overrideUserInterfaceStyle = .light
         
         let titleText = (pillButton.title(for: .normal) ?? "").uppercased()
         let isWarning = titleText.contains("HẾT HẠN") || titleText.contains("THU HỒI") || titleText.contains("EXPIRED") || titleText.contains("REVOKED")
-        let bgColor: UIColor = isWarning
-            ? CSSTheme.red
-            : (CSSTheme.isDark ? UIColor(red: 14/255, green: 165/255, blue: 233/255, alpha: 1.0) : CSSTheme.blue)
+        let bgColor = isWarning ? CSSTheme.red : accentColor
         
         pillButton.backgroundColor = bgColor
         pillButton.tintColor = bgColor
         pillButton.layer.backgroundColor = bgColor.cgColor
         pillButton.layer.borderWidth = 0.0
+        pillButton.layer.shadowColor = bgColor.cgColor
+        pillButton.layer.shadowOffset = CGSize(width: 0, height: 4)
+        pillButton.layer.shadowRadius = 8
+        pillButton.layer.shadowOpacity = 0.25
         
-        pillButton.setTitleColor(UIColor.white, for: .normal)
-        pillButton.setTitleColor(UIColor.white.withAlphaComponent(0.85), for: .highlighted)
-        pillButton.setTitleColor(UIColor.white, for: .selected)
-        pillButton.setTitleColor(UIColor.white.withAlphaComponent(0.75), for: .disabled)
+        pillButton.setTitleColor(CSSTheme.white, for: .normal)
+        pillButton.setTitleColor(CSSTheme.white.withAlphaComponent(0.85), for: .highlighted)
+        pillButton.setTitleColor(CSSTheme.white, for: .selected)
+        pillButton.setTitleColor(CSSTheme.white.withAlphaComponent(0.75), for: .disabled)
         
-        pillButton.titleLabel?.textColor = UIColor.white
-        pillButton.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .bold)
-        pillButton.activityIndicatorView.color = UIColor.white
+        pillButton.titleLabel?.textColor = CSSTheme.white
+        pillButton.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .heavy)
+        pillButton.activityIndicatorView.color = CSSTheme.white
         
         for subview in pillButton.subviews {
             if let label = subview as? UILabel {
-                label.textColor = UIColor.white
+                label.textColor = CSSTheme.white
             }
         }
     }
-    
+
     // ✨ TRÍCH XUẤT BUNDLE ID THỰC TẾ SAU KHI SIDESTORE ĐÃ KÝ CHỨNG CHỈ & ĐÃ LOẠI BỎ HẬU TỐ TEAM ID CỦA APPLE ✨
     func cleanSignedBundleID(from rawSignedBundleID: String) -> String {
         let trimmed = rawSignedBundleID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1087,7 +1018,7 @@ private extension MyAppsViewController {
         
         return trimmed
     }
-    
+
     func cleanSignedBundleID(for installedApp: InstalledApp) -> String {
         let signedID = installedApp.resignedBundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
         if !signedID.isEmpty {
@@ -1095,9 +1026,9 @@ private extension MyAppsViewController {
         }
         return cleanSignedBundleID(from: installedApp.bundleIdentifier)
     }
-    
-    // ✨ HIỂN THỊ BUNDLE ID ĐÃ KÝ (ĐÃ BỎ HẬU TỐ TEAM ID) NGAY DƯỚI TÊN ỨNG DỤNG ĐÃ CÀI (ĐẸP, GỌN & ĐỒNG BỘ CSS THEME) ✨
-    func applyAppSubtitleWithBundleID(on banner: AppBannerView, bundleID: String, primarySubtitle: String? = nil) {
+
+    // ✨ HIỂN THỊ BUNDLE ID ĐÃ KÝ (ĐÃ BỎ HẬU TỐ TEAM ID) NGAY DƯỚI TÊN ỨNG DỤNG ĐÃ CÀI (CHUẨN .tab-card-sub & .tab-pill) ✨
+    func applyAppSubtitleWithBundleID(on banner: AppBannerView, bundleID: String, primarySubtitle: String? = nil, accentColor: UIColor = CSSTheme.blue) {
         let displayBundleID = cleanSignedBundleID(from: bundleID)
         guard !displayBundleID.isEmpty else { return }
         
@@ -1113,16 +1044,16 @@ private extension MyAppsViewController {
         }
         
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineSpacing = 1.5
+        paragraphStyle.lineSpacing = 2.0
         paragraphStyle.lineBreakMode = .byTruncatingMiddle
         
         let attributed = NSMutableAttributedString()
         
-        // Nếu dòng 1 (Nhà phát triển / Phiên bản) khác với Bundle ID thì giữ ở dòng trên, dòng dưới là Bundle ID thực tế đã loại bỏ hậu tố Team ID
+        // Dòng 1: Nhà phát triển / Phiên bản chuẩn .tab-card-sub (13px, medium, var(--dark))
         if !rawFirstLine.isEmpty && rawFirstLine.caseInsensitiveCompare(displayBundleID) != .orderedSame {
             attributed.append(NSAttributedString(string: rawFirstLine, attributes: [
-                .font: UIFont.systemFont(ofSize: 12.0, weight: .medium),
-                .foregroundColor: CSSTheme.textSecondary,
+                .font: UIFont.systemFont(ofSize: 12.8, weight: .medium),
+                .foregroundColor: CSSTheme.dark,
                 .paragraphStyle: paragraphStyle
             ]))
             attributed.append(NSAttributedString(string: "\n", attributes: [
@@ -1130,17 +1061,17 @@ private extension MyAppsViewController {
             ]))
         }
         
-        // Dòng Bundle ID sử dụng font Monospaced sắc nét, màu xanh dương hiện đại đồng bộ với SettingsViewController
+        // Dòng 2: Bundle ID chuẩn màu chủ đạo của thẻ (.tab-pill color: var(--tab-color))
         let bundleFont: UIFont
         if #available(iOS 13.0, *) {
-            bundleFont = UIFont.monospacedSystemFont(ofSize: 11.0, weight: .semibold)
+            bundleFont = UIFont.monospacedSystemFont(ofSize: 11.0, weight: .bold)
         } else {
-            bundleFont = UIFont.systemFont(ofSize: 11.0, weight: .semibold)
+            bundleFont = UIFont.systemFont(ofSize: 11.0, weight: .bold)
         }
         
-        attributed.append(NSAttributedString(string: displayBundleID, attributes: [
+        attributed.append(NSAttributedString(string: "✦ " + displayBundleID, attributes: [
             .font: bundleFont,
-            .foregroundColor: CSSTheme.blue.withAlphaComponent(0.92),
+            .foregroundColor: accentColor,
             .paragraphStyle: paragraphStyle
         ]))
         
@@ -1150,15 +1081,14 @@ private extension MyAppsViewController {
         banner.subtitleLabel.lineBreakMode = .byTruncatingMiddle
         banner.subtitleLabel.attributedText = attributed
     }
-    
-    // Chuẩn hóa lớp nền thẻ Glassmorphism theo đúng Mã Web 1 / Mã Web 2 và loại bỏ UIVisualEffectView mặc định
-    func applyThemeCardAndText(in rootView: UIView, preservingSubtitleLabel: UILabel? = nil) {
-        let style: UIUserInterfaceStyle = CSSTheme.isDark ? .dark : .light
-        rootView.overrideUserInterfaceStyle = style
+
+    // Triệt tiêu hoàn toàn mọi lớp nền tối/blur của hệ thống hoặc của AppBannerView và cố định nền sáng trắng
+    func applyWhiteCardAndBlackText(in rootView: UIView, preservingSubtitleLabel: UILabel? = nil, accentColor: UIColor = CSSTheme.blue) {
+        rootView.overrideUserInterfaceStyle = .light
         for subview in rootView.subviews {
-            subview.overrideUserInterfaceStyle = style
+            subview.overrideUserInterfaceStyle = .light
             
-            // Vô hiệu hóa UIVisualEffectView mặc định của AppBannerView để áp dụng chuẩn màu kính Web 1 / Web 2
+            // Vô hiệu hóa triệt để UIVisualEffectView (nguyên nhân chính gây ra nền đen khi load icon tối màu hoặc Dark Mode)
             if let effectView = subview as? UIVisualEffectView {
                 effectView.effect = nil
                 effectView.backgroundColor = .clear
@@ -1168,114 +1098,126 @@ private extension MyAppsViewController {
                 continue
             }
             
-            // Nếu là PillButton (khung chứa số ngày / Cập nhật / Kích hoạt): Cố định nền xanh chữ trắng và KHÔNG đệ quy vào bên trong nút
+            // Nếu là PillButton (khung chứa số ngày / Cập nhật / Kích hoạt): Cố định nền màu chủ đạo & chữ trắng
             if let pillButton = subview as? PillButton {
-                stylePillButton(pillButton)
+                stylePillButton(pillButton, accentColor: accentColor)
                 continue
             }
             
             // Nếu là UIButton thông thường (ví dụ nút "Xem thêm / Thu gọn")
             if let button = subview as? UIButton {
-                button.tintColor = CSSTheme.blue
-                button.setTitleColor(CSSTheme.blue, for: .normal)
-                button.setTitleColor(CSSTheme.blue.withAlphaComponent(0.7), for: .highlighted)
-                button.setTitleColor(CSSTheme.blue, for: .selected)
-                button.titleLabel?.textColor = CSSTheme.blue
+                button.tintColor = accentColor
+                button.setTitleColor(accentColor, for: .normal)
+                button.setTitleColor(accentColor.withAlphaComponent(0.7), for: .highlighted)
+                button.setTitleColor(accentColor, for: .selected)
+                button.titleLabel?.textColor = accentColor
                 button.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .bold)
                 continue
             }
             
-            // Nếu có view nền phụ bên dưới (không phải nút hay ảnh), ép về trong suốt để lộ nền thẻ chuẩn Web
+            // Nếu có view nền phụ bên dưới (không phải nút hay ảnh), ép về trong suốt để lộ nền trắng cố định của thẻ
             if !(subview is UIControl) && !(subview is UIImageView) && !(subview is UILabel) && !(subview is UITextView) && !(subview is UIStackView) {
-                if subview.backgroundColor != nil && subview.backgroundColor != .clear && subview.backgroundColor != CSSTheme.cardBg {
+                if subview.backgroundColor != nil && subview.backgroundColor != .clear && subview.backgroundColor != CSSTheme.white {
                     subview.backgroundColor = .clear
                 }
             }
             
             if let label = subview as? UILabel {
                 if label !== preservingSubtitleLabel {
-                    label.textColor = CSSTheme.textPrimary
+                    label.textColor = CSSTheme.pureBlack
                 }
             } else if let textView = subview as? UITextView {
-                textView.textColor = CSSTheme.textSecondary
+                textView.textColor = CSSTheme.dark
                 textView.backgroundColor = .clear
             }
             
-            applyThemeCardAndText(in: subview, preservingSubtitleLabel: preservingSubtitleLabel)
+            applyWhiteCardAndBlackText(in: subview, preservingSubtitleLabel: preservingSubtitleLabel, accentColor: accentColor)
         }
     }
-    
-    // Làm đẹp từng thẻ Ứng dụng theo chuẩn Glassmorphism Web 1 & Web 2 và hiển thị Bundle ID thực tế dưới tên App
-    func styleAppCardCell(_ cell: UICollectionViewCell) {
-        let style: UIUserInterfaceStyle = CSSTheme.isDark ? .dark : .light
-        cell.overrideUserInterfaceStyle = style
-        cell.contentView.overrideUserInterfaceStyle = style
+
+    // Làm đẹp từng thẻ Ứng dụng chuẩn 100% `.tab-button[data-tab="1..4"]`: Viền 2px #e9ecef + Bóng phát sáng 4 màu luân phiên
+    func styleAppCardCell(_ cell: UICollectionViewCell, at indexPath: IndexPath? = nil) {
+        let resolvedIndex = indexPath?.item ?? self.collectionView.indexPath(for: cell)?.item ?? cell.tag
+        cell.tag = resolvedIndex
+        let accentColor = CSSTheme.tabAccentColor(for: resolvedIndex)
+
+        cell.overrideUserInterfaceStyle = .light
+        cell.contentView.overrideUserInterfaceStyle = .light
         cell.backgroundColor = .clear
         cell.contentView.backgroundColor = .clear
         cell.backgroundView = nil
         cell.selectedBackgroundView = nil
         
-        // Đổ bóng hiện đại đồng bộ với SettingsViewController (Web 1 & Web 2)
+        // Đổ bóng màu chuẩn CSS `.tab-button`: box-shadow: 0 10px 20px var(--tab-shadow)
         cell.layer.masksToBounds = false
-        cell.layer.shadowColor = CSSTheme.cardShadowColor
-        cell.layer.shadowOffset = CGSize(width: 0, height: 6)
+        cell.layer.shadowColor = accentColor.cgColor
+        cell.layer.shadowOffset = CGSize(width: 0, height: 8)
         cell.layer.shadowRadius = 14
-        cell.layer.shadowOpacity = CSSTheme.cardShadowOpacity
+        cell.layer.shadowOpacity = 0.24
         
         if let appCell = cell as? InstalledAppCollectionViewCell {
             let banner = appCell.bannerView!
-            banner.overrideUserInterfaceStyle = style
-            banner.backgroundColor = CSSTheme.cardBg
-            banner.tintColor = CSSTheme.blue
+            banner.overrideUserInterfaceStyle = .light
+            banner.backgroundColor = CSSTheme.white
+            banner.tintColor = accentColor
             banner.layer.cornerRadius = CSSTheme.cornerRadius
-            banner.layer.cornerCurve = .continuous
+            if #available(iOS 13.0, tvOS 13.0, *) {
+                banner.layer.cornerCurve = .continuous
+            }
             banner.layer.masksToBounds = true
-            banner.layer.borderWidth = 1.0
+            banner.layer.borderWidth = 2.0
             banner.layer.borderColor = CSSTheme.border.cgColor
             
             if let btnTitle = banner.button.title(for: .normal) {
                 banner.button.setTitle(translateDynamicAppText(btnTitle), for: .normal)
             }
             
-            // Đệ quy dọn sạch mọi lớp nền cũ và chuẩn hóa nút bấm (giữ nguyên attributedText của subtitleLabel)
-            applyThemeCardAndText(in: banner, preservingSubtitleLabel: banner.subtitleLabel)
-            stylePillButton(banner.button)
+            // Đệ quy dọn sạch mọi lớp nền đen/blur và chuẩn hóa nút bấm (giữ nguyên attributedText của subtitleLabel)
+            applyWhiteCardAndBlackText(in: banner, preservingSubtitleLabel: banner.subtitleLabel, accentColor: accentColor)
+            stylePillButton(banner.button, accentColor: accentColor)
             
-            // Tinh chỉnh phân cấp Typography & Icon sau khi áp dụng nền
-            banner.titleLabel.textColor = CSSTheme.textPrimary
-            banner.titleLabel.font = UIFont.systemFont(ofSize: 15.5, weight: .bold)
-            banner.buttonLabel.textColor = CSSTheme.textSecondary
-            banner.buttonLabel.font = UIFont.systemFont(ofSize: 10.5, weight: .semibold)
+            // Tinh chỉnh phân cấp Typography chuẩn .tab-card-title (15.8px, bold, #000)
+            banner.titleLabel.textColor = CSSTheme.pureBlack
+            banner.titleLabel.font = UIFont.systemFont(ofSize: 15.8, weight: .bold)
+            banner.buttonLabel.textColor = CSSTheme.dark
+            banner.buttonLabel.font = UIFont.systemFont(ofSize: 10.5, weight: .bold)
             
             // Hiển thị Bundle ID thực tế đã ký (đã loại bỏ hậu tố Team ID) ngay dưới tên App đã cài
             if let bundleID = appCell.bundleIdentifier, !bundleID.isEmpty {
-                applyAppSubtitleWithBundleID(on: banner, bundleID: bundleID)
+                applyAppSubtitleWithBundleID(on: banner, bundleID: bundleID, accentColor: accentColor)
             } else {
-                banner.subtitleLabel.textColor = CSSTheme.textSecondary
-                banner.subtitleLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .medium)
+                banner.subtitleLabel.textColor = CSSTheme.dark
+                banner.subtitleLabel.font = UIFont.systemFont(ofSize: 13.0, weight: .medium)
             }
             
+            // Icon ứng dụng chuẩn .tab-num-badge (bo góc 12pt)
             banner.iconImageView.backgroundColor = CSSTheme.light
-            banner.iconImageView.layer.cornerRadius = 13.5
-            banner.iconImageView.layer.cornerCurve = .continuous
+            banner.iconImageView.layer.cornerRadius = 12.0
+            if #available(iOS 13.0, tvOS 13.0, *) {
+                banner.iconImageView.layer.cornerCurve = .continuous
+            }
             banner.iconImageView.layer.masksToBounds = true
-            banner.iconImageView.layer.borderWidth = 0.8
+            banner.iconImageView.layer.borderWidth = 1.0
             banner.iconImageView.layer.borderColor = CSSTheme.border.cgColor
             
         } else if let updateCell = cell as? UpdateCollectionViewCell {
-            updateCell.contentView.backgroundColor = CSSTheme.cardBg
+            updateCell.contentView.backgroundColor = CSSTheme.white
             updateCell.contentView.layer.cornerRadius = CSSTheme.cornerRadius
-            updateCell.contentView.layer.cornerCurve = .continuous
+            if #available(iOS 13.0, tvOS 13.0, *) {
+                updateCell.contentView.layer.cornerCurve = .continuous
+            }
             updateCell.contentView.layer.masksToBounds = true
-            updateCell.contentView.layer.borderWidth = 1.0
+            updateCell.contentView.layer.borderWidth = 2.0
             updateCell.contentView.layer.borderColor = CSSTheme.border.cgColor
             
             let banner = updateCell.bannerView!
-            banner.overrideUserInterfaceStyle = style
-            banner.backgroundColor = .clear
-            banner.tintColor = CSSTheme.blue
+            banner.overrideUserInterfaceStyle = .light
+            banner.backgroundColor = CSSTheme.white
+            banner.tintColor = accentColor
             banner.layer.cornerRadius = CSSTheme.cornerRadius
-            banner.layer.cornerCurve = .continuous
+            if #available(iOS 13.0, tvOS 13.0, *) {
+                banner.layer.cornerCurve = .continuous
+            }
             banner.layer.masksToBounds = true
             banner.layer.borderWidth = 0.0
             
@@ -1286,99 +1228,117 @@ private extension MyAppsViewController {
                 updateCell.versionDescriptionTextView.toggleButton.setTitle(translateDynamicAppText(toggleTitle), for: .normal)
             }
             
-            applyThemeCardAndText(in: updateCell.contentView, preservingSubtitleLabel: banner.subtitleLabel)
-            stylePillButton(banner.button)
+            applyWhiteCardAndBlackText(in: updateCell.contentView, preservingSubtitleLabel: banner.subtitleLabel, accentColor: accentColor)
+            stylePillButton(banner.button, accentColor: accentColor)
             
-            banner.titleLabel.textColor = CSSTheme.textPrimary
-            banner.titleLabel.font = UIFont.systemFont(ofSize: 15.5, weight: .bold)
+            banner.titleLabel.textColor = CSSTheme.pureBlack
+            banner.titleLabel.font = UIFont.systemFont(ofSize: 15.8, weight: .bold)
             
             // Hiển thị Phiên bản cập nhật + Bundle ID thực tế đã ký (đã loại bỏ hậu tố Team ID) ngay dưới tên App
             if let bundleID = updateCell.bundleIdentifier, !bundleID.isEmpty {
-                applyAppSubtitleWithBundleID(on: banner, bundleID: bundleID)
+                applyAppSubtitleWithBundleID(on: banner, bundleID: bundleID, accentColor: accentColor)
             } else {
-                banner.subtitleLabel.textColor = CSSTheme.textSecondary
-                banner.subtitleLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .medium)
+                banner.subtitleLabel.textColor = CSSTheme.dark
+                banner.subtitleLabel.font = UIFont.systemFont(ofSize: 13.0, weight: .medium)
             }
             
             banner.iconImageView.backgroundColor = CSSTheme.light
-            banner.iconImageView.layer.cornerRadius = 13.5
-            banner.iconImageView.layer.cornerCurve = .continuous
+            banner.iconImageView.layer.cornerRadius = 12.0
+            if #available(iOS 13.0, tvOS 13.0, *) {
+                banner.iconImageView.layer.cornerCurve = .continuous
+            }
             banner.iconImageView.layer.masksToBounds = true
-            banner.iconImageView.layer.borderWidth = 0.8
+            banner.iconImageView.layer.borderWidth = 1.0
             banner.iconImageView.layer.borderColor = CSSTheme.border.cgColor
             
             // Duyệt an toàn qua subviews của CollapsingTextView để đổi màu UITextView mà không đụng phải hàm delegate textView(...)
             for subview in updateCell.versionDescriptionTextView.subviews {
                 if let innerTextView = subview as? UITextView {
-                    innerTextView.textColor = CSSTheme.textSecondary
+                    innerTextView.textColor = CSSTheme.dark
                     innerTextView.backgroundColor = .clear
                 }
             }
-            updateCell.versionDescriptionTextView.toggleButton.setTitleColor(CSSTheme.blue, for: .normal)
+            updateCell.versionDescriptionTextView.toggleButton.setTitleColor(accentColor, for: .normal)
         }
     }
-    
-    // Gắn thanh gạch chân màu xanh (.features h2::after) dưới tiêu đề các mục giống hệt Tab Cài đặt
+
+    // Gắn thanh gạch chân màu xanh (.features h2::after) dưới tiêu đề các mục chuẩn mã Web
     func styleSectionHeader(_ headerView: InstalledAppsCollectionHeaderView) {
-        headerView.overrideUserInterfaceStyle = CSSTheme.isDark ? .dark : .light
+        headerView.overrideUserInterfaceStyle = .light
         headerView.textLabel.textColor = CSSTheme.blue
-        headerView.textLabel.font = UIFont.systemFont(ofSize: 15.5, weight: .heavy)
+        headerView.textLabel.font = UIFont.systemFont(ofSize: 17.5, weight: .heavy)
         
         let underlineTag = 9991
         headerView.viewWithTag(underlineTag)?.removeFromSuperview()
         
-        let underline = UIView()
+        let underline = MyAppsCenteredUnderlineView()
         underline.tag = underlineTag
-        underline.backgroundColor = CSSTheme.blue
-        underline.layer.cornerRadius = 1.5
         underline.translatesAutoresizingMaskIntoConstraints = false
         headerView.addSubview(underline)
         
         NSLayoutConstraint.activate([
             underline.leadingAnchor.constraint(equalTo: headerView.textLabel.leadingAnchor),
-            underline.topAnchor.constraint(equalTo: headerView.textLabel.bottomAnchor, constant: 2),
-            underline.widthAnchor.constraint(equalToConstant: 38),
+            underline.topAnchor.constraint(equalTo: headerView.textLabel.bottomAnchor, constant: 4),
+            underline.widthAnchor.constraint(equalToConstant: 60),
             underline.heightAnchor.constraint(equalToConstant: 3)
         ])
     }
-    
-    // ✨ VIỆT HÓA "View App IDs" & LÀM KHUNG CHỨA NHỎ GỌN HƠN ✨
+
+    // ✨ VIỆT HÓA "View App IDs" & ÁP DỤNG KHUNG FOOTER CHUẨN 100% MÃ WEB (`footer` + `.btn-outline-glow`) ✨
     func styleCompactAppIDsFooter(_ footerView: InstalledAppsCollectionFooterView) {
-        let style: UIUserInterfaceStyle = CSSTheme.isDark ? .dark : .light
-        footerView.overrideUserInterfaceStyle = style
+        footerView.overrideUserInterfaceStyle = .light
         footerView.isHidden = false
-        footerView.textLabel.textColor = CSSTheme.textSecondary
-        footerView.textLabel.font = UIFont.systemFont(ofSize: 12.0, weight: .semibold)
+        footerView.backgroundColor = .clear
+        
+        let footerCardTag = 9993
+        if footerView.viewWithTag(footerCardTag) == nil {
+            let cardBg = UIView()
+            cardBg.tag = footerCardTag
+            cardBg.translatesAutoresizingMaskIntoConstraints = false
+            cardBg.isUserInteractionEnabled = false
+            CSSTheme.applyContainerCardStyle(to: cardBg, cornerRadius: CSSTheme.cornerRadius)
+            footerView.insertSubview(cardBg, at: 0)
+            
+            NSLayoutConstraint.activate([
+                cardBg.leadingAnchor.constraint(equalTo: footerView.leadingAnchor, constant: 12),
+                cardBg.trailingAnchor.constraint(equalTo: footerView.trailingAnchor, constant: -12),
+                cardBg.topAnchor.constraint(equalTo: footerView.topAnchor, constant: 2),
+                cardBg.bottomAnchor.constraint(equalTo: footerView.bottomAnchor, constant: -2)
+            ])
+        }
+        
+        footerView.textLabel.textColor = CSSTheme.dark
+        footerView.textLabel.font = UIFont.systemFont(ofSize: 13.0, weight: .semibold)
         
         guard let btn = footerView.button else { return }
-        btn.overrideUserInterfaceStyle = style
+        btn.overrideUserInterfaceStyle = .light
         btn.isHidden = false
         btn.tintColor = CSSTheme.blue
         
-        let vietnameseTitle = "Xem danh sách App ID"
+        let vietnameseTitle = "✦ Xem Danh Sách App ID"
         if #available(iOS 15.0, *), var config = btn.configuration {
             var attrTitle = AttributedString(vietnameseTitle)
-            attrTitle.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
+            attrTitle.font = UIFont.systemFont(ofSize: 12.5, weight: .heavy)
             attrTitle.foregroundColor = CSSTheme.blue
             config.attributedTitle = attrTitle
-            config.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12)
-            config.background.backgroundColor = CSSTheme.cardBg
-            config.background.strokeColor = CSSTheme.pillBorder
-            config.background.strokeWidth = 1.0
-            config.background.cornerRadius = 13
+            config.contentInsets = NSDirectionalEdgeInsets(top: 5, leading: 14, bottom: 5, trailing: 14)
+            config.background.backgroundColor = CSSTheme.light
+            config.background.strokeColor = CSSTheme.border
+            config.background.strokeWidth = 1.5
+            config.background.cornerRadius = 10
             btn.configuration = config
         } else {
             btn.setTitle(vietnameseTitle, for: .normal)
             btn.setTitleColor(CSSTheme.blue, for: .normal)
-            btn.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
-            btn.contentEdgeInsets = UIEdgeInsets(top: 4, left: 12, bottom: 4, right: 12)
-            btn.backgroundColor = CSSTheme.cardBg
-            btn.layer.cornerRadius = 13
-            btn.layer.borderWidth = 1.0
-            btn.layer.borderColor = CSSTheme.pillBorder.cgColor
+            btn.titleLabel?.font = UIFont.systemFont(ofSize: 12.5, weight: .heavy)
+            btn.contentEdgeInsets = UIEdgeInsets(top: 5, left: 14, bottom: 5, right: 14)
+            btn.backgroundColor = CSSTheme.light
+            btn.layer.cornerRadius = 10
+            btn.layer.borderWidth = 1.5
+            btn.layer.borderColor = CSSTheme.border.cgColor
         }
         
-        // Khoá kích thước khung nút nhỏ gọn (cao 26pt, tự co giãn vừa khít chữ thay vì trải rộng cả chiều ngang)
+        // Khoá kích thước khung nút nhỏ gọn (cao 28pt, tự co giãn vừa khít chữ)
         let compactTag = 9992
         if btn.viewWithTag(compactTag) == nil {
             let marker = UIView(frame: .zero)
@@ -1386,7 +1346,6 @@ private extension MyAppsViewController {
             marker.isHidden = true
             btn.addSubview(marker)
             
-            // Hạ độ ưu tiên các constraint chiều ngang/dọc cũ từ Storyboard (nếu có) để khung nút thu gọn vừa vặn
             for constraint in footerView.constraints {
                 if (constraint.firstItem as? UIView) === btn || (constraint.secondItem as? UIView) === btn {
                     if constraint.firstAttribute == .leading || constraint.firstAttribute == .trailing || constraint.firstAttribute == .width {
@@ -1401,7 +1360,7 @@ private extension MyAppsViewController {
             btn.translatesAutoresizingMaskIntoConstraints = false
             let centerX = btn.centerXAnchor.constraint(equalTo: footerView.centerXAnchor)
             centerX.priority = .required
-            let heightConstraint = btn.heightAnchor.constraint(equalToConstant: 26)
+            let heightConstraint = btn.heightAnchor.constraint(equalToConstant: 28)
             heightConstraint.priority = .required
             NSLayoutConstraint.activate([centerX, heightConstraint])
         }
@@ -1416,7 +1375,7 @@ private extension MyAppsViewController
         dataSource.proxy = self
         return dataSource
     }
-    
+
     // Đã xóa bỏ hoàn toàn khung "Mọi ứng dụng đều đã được cập nhật mới nhất"
     func makeNoUpdatesDataSource() -> DynamicCollectionViewDataSource<InstalledApp>
     {
@@ -1427,7 +1386,7 @@ private extension MyAppsViewController
         dynamicDataSource.dynamicCellConfigurationHandler = { _, _ in }
         return dynamicDataSource
     }
-    
+
     func makeUpdatesDataSource() -> FetchedResultsCollectionViewPrefetchingDataSource<InstalledApp, UIImage>
     {
         let fetchRequest = InstalledApp.supportedUpdatesFetchRequest()
@@ -1442,11 +1401,13 @@ private extension MyAppsViewController
             guard let self = self else { return }
             guard let app = installedApp.storeApp, let latestSupportedVersion = app.latestSupportedVersion else { return }
             
+            let accentColor = CSSTheme.tabAccentColor(for: indexPath.item)
             let cell = cell as! UpdateCollectionViewCell
+            cell.tag = indexPath.item
             cell.layoutMargins.left = self.view.layoutMargins.left
             cell.layoutMargins.right = self.view.layoutMargins.right
             
-            cell.tintColor = CSSTheme.blue
+            cell.tintColor = accentColor
             cell.versionDescriptionTextView.maximumNumberOfLines = 3
             cell.versionDescriptionTextView.text = latestSupportedVersion.localizedDescription ?? "Không có mô tả chi tiết cho bản cập nhật này."
             
@@ -1473,7 +1434,7 @@ private extension MyAppsViewController
             }
             
             let versionLine = String(format: "Phiên bản %@", versionText)
-            self.applyAppSubtitleWithBundleID(on: cell.bannerView, bundleID: signedCleanID, primarySubtitle: versionLine)
+            self.applyAppSubtitleWithBundleID(on: cell.bannerView, bundleID: signedCleanID, primarySubtitle: versionLine, accentColor: accentColor)
 
             let appName: String
             
@@ -1503,7 +1464,7 @@ private extension MyAppsViewController
             
             cell.versionDescriptionTextView.toggleButton.addTarget(self, action: #selector(MyAppsViewController.toggleUpdateCellMode(_:)), for: .primaryActionTriggered)
 
-            self.styleAppCardCell(cell)
+            self.styleAppCardCell(cell, at: indexPath)
             cell.setNeedsLayout()
             cell.layoutIfNeeded()
         }
@@ -1516,8 +1477,8 @@ private extension MyAppsViewController
             cell.bannerView.iconImageView.isIndicatingActivity = false
             cell.bannerView.iconImageView.image = image
             
-            // Áp dụng lại chuẩn màu thẻ Web 1 / Web 2 ngay sau khi gán ảnh icon
-            self?.styleAppCardCell(cell)
+            // Ép lại nền trắng sáng và bóng phát sáng 4 màu ngay sau khi gán ảnh icon
+            self?.styleAppCardCell(cell, at: indexPath)
             
             if let error = error
             {
@@ -1527,7 +1488,7 @@ private extension MyAppsViewController
         
         return dataSource
     }
-    
+
     func makeActiveAppsDataSource() -> FetchedResultsCollectionViewPrefetchingDataSource<InstalledApp, UIImage>
     {
         let fetchRequest = InstalledApp.activeAppsFetchRequest()
@@ -1542,10 +1503,12 @@ private extension MyAppsViewController
         dataSource.cellConfigurationHandler = { [weak self] (cell, installedApp, indexPath) in
             guard let self = self else { return }
             
+            let accentColor = CSSTheme.tabAccentColor(for: indexPath.item)
             let cell = cell as! InstalledAppCollectionViewCell
+            cell.tag = indexPath.item
             cell.layoutMargins.left = self.view.layoutMargins.left
             cell.layoutMargins.right = self.view.layoutMargins.right
-            cell.tintColor = CSSTheme.blue
+            cell.tintColor = accentColor
             
             cell.deactivateBadge?.isHidden = false
             
@@ -1581,7 +1544,7 @@ private extension MyAppsViewController
             
             // Gắn Bundle ID thực tế (đã loại bỏ hậu tố Team ID) ngay dưới tên ứng dụng đã cài
             let defaultDeveloperSubtitle = cell.bannerView.subtitleLabel.text
-            self.applyAppSubtitleWithBundleID(on: cell.bannerView, bundleID: signedCleanID, primarySubtitle: defaultDeveloperSubtitle)
+            self.applyAppSubtitleWithBundleID(on: cell.bannerView, bundleID: signedCleanID, primarySubtitle: defaultDeveloperSubtitle, accentColor: accentColor)
             
             let currentDate = Date()
             let isExpired = currentDate > installedApp.expirationDate
@@ -1604,7 +1567,7 @@ private extension MyAppsViewController
                 cell.bannerView.button.alpha = 1.0
             }
             
-            self.styleAppCardCell(cell)
+            self.styleAppCardCell(cell, at: indexPath)
             cell.layoutIfNeeded()
             
             if let progress = AppManager.shared.refreshProgress(for: installedApp), progress.fractionCompleted < 1.0
@@ -1616,8 +1579,8 @@ private extension MyAppsViewController
                 cell.bannerView.button.progress = nil
             }
             
-            // Đảm bảo sau khi gán progress, nút vẫn cố định nền xanh chữ trắng
-            self.stylePillButton(cell.bannerView.button)
+            // Đảm bảo sau khi gán progress, nút vẫn cố định màu chủ đạo & chữ trắng
+            self.stylePillButton(cell.bannerView.button, accentColor: accentColor)
         }
         dataSource.prefetchHandler = { (item, indexPath) in
             return try await item.loadIcon()
@@ -1627,13 +1590,13 @@ private extension MyAppsViewController
             cell.bannerView.iconImageView.image = image
             cell.bannerView.iconImageView.isIndicatingActivity = false
             
-            // Áp dụng lại chuẩn màu thẻ Web 1 / Web 2 ngay khi tải xong Icon ứng dụng
-            self?.styleAppCardCell(cell)
+            // Khoá cứng nền trắng và bóng phát sáng 4 màu ngay khi tải xong Icon ứng dụng
+            self?.styleAppCardCell(cell, at: indexPath)
         }
         
         return dataSource
     }
-    
+
     func makeInactiveAppsDataSource() -> FetchedResultsCollectionViewPrefetchingDataSource<InstalledApp, UIImage>
     {
         let fetchRequest = InstalledApp.fetchRequest() as NSFetchRequest<InstalledApp>
@@ -1649,10 +1612,12 @@ private extension MyAppsViewController
         dataSource.cellConfigurationHandler = { [weak self] (cell, installedApp, indexPath) in
             guard let self = self else { return }
             
+            let accentColor = CSSTheme.tabAccentColor(for: indexPath.item)
             let cell = cell as! InstalledAppCollectionViewCell
+            cell.tag = indexPath.item
             cell.layoutMargins.left = self.view.layoutMargins.left
             cell.layoutMargins.right = self.view.layoutMargins.right
-            cell.tintColor = CSSTheme.blue
+            cell.tintColor = accentColor
             
             // Lấy Bundle ID thực tế sau khi SideStore đã ký chứng chỉ & đã loại bỏ hậu tố Team ID của Apple
             let signedCleanID = self.cleanSignedBundleID(for: installedApp)
@@ -1674,9 +1639,9 @@ private extension MyAppsViewController
             
             // Gắn Bundle ID thực tế (đã loại bỏ hậu tố Team ID) ngay dưới tên ứng dụng không hoạt động
             let defaultDeveloperSubtitle = cell.bannerView.subtitleLabel.text
-            self.applyAppSubtitleWithBundleID(on: cell.bannerView, bundleID: signedCleanID, primarySubtitle: defaultDeveloperSubtitle)
+            self.applyAppSubtitleWithBundleID(on: cell.bannerView, bundleID: signedCleanID, primarySubtitle: defaultDeveloperSubtitle, accentColor: accentColor)
             
-            cell.bannerView.button.tintColor = CSSTheme.blue
+            cell.bannerView.button.tintColor = accentColor
             cell.bannerView.button.removeTarget(self, action: nil, for: .primaryActionTriggered)
             cell.bannerView.button.addTarget(self, action: #selector(MyAppsViewController.activateApp(_:)), for: .primaryActionTriggered)
             cell.bannerView.button.accessibilityLabel = String(format: "Kích hoạt %@", installedApp.name)
@@ -1692,7 +1657,7 @@ private extension MyAppsViewController
                 cell.bannerView.button.alpha = 1.0
             }
             
-            self.styleAppCardCell(cell)
+            self.styleAppCardCell(cell, at: indexPath)
             cell.layoutIfNeeded()
             
             cell.bannerView.button.progress = nil
@@ -1706,8 +1671,8 @@ private extension MyAppsViewController
                 cell.bannerView.button.progress = nil
             }
             
-            // Đảm bảo sau khi gán progress, nút vẫn cố định nền xanh chữ trắng
-            self.stylePillButton(cell.bannerView.button)
+            // Đảm bảo sau khi gán progress, nút vẫn cố định màu chủ đạo & chữ trắng
+            self.stylePillButton(cell.bannerView.button, accentColor: accentColor)
         }
         dataSource.prefetchHandler = { (item, indexPath) in
             return try await item.loadIcon()
@@ -1717,13 +1682,13 @@ private extension MyAppsViewController
             cell.bannerView.iconImageView.image = image
             cell.bannerView.iconImageView.isIndicatingActivity = false
             
-            // Áp dụng lại chuẩn màu thẻ Web 1 / Web 2 ngay khi tải xong Icon ứng dụng
-            self?.styleAppCardCell(cell)
+            // Khoá cứng nền trắng và bóng phát sáng 4 màu ngay khi tải xong Icon ứng dụng
+            self?.styleAppCardCell(cell, at: indexPath)
         }
         
         return dataSource
     }
-    
+
     func updateDataSource()
     {
         do
@@ -1745,7 +1710,7 @@ private extension MyAppsViewController
     func update()
     {
         self.updateUnsupportedUpdates()
-        
+
         if self.updatesDataSource.itemCount > 0
         {
             self.navigationController?.tabBarItem.badgeValue = String(describing: self.updatesDataSource.itemCount)
@@ -1757,7 +1722,7 @@ private extension MyAppsViewController
             UIApplication.shared.applicationIconBadgeNumber = 0
         }
     }
-    
+
     func updateUnsupportedUpdates()
     {
         let predicate = NSPredicate(format: "%K == YES AND %K != nil", #keyPath(InstalledApp.isActive), #keyPath(InstalledApp.storeApp))
@@ -1770,7 +1735,7 @@ private extension MyAppsViewController
         
         self.unsupportedUpdates = Set(unsupportedUpdates)
     }
-    
+
     func fetchAppIDs()
     {
         AppManager.shared.syncAppIDs { [weak self] (result) in
@@ -1793,7 +1758,7 @@ private extension MyAppsViewController
             }
         }
     }
-    
+
     @objc private func appIDsViewControllerDidDismiss(_ notification: Notification)
     {
         DispatchQueue.main.async {
@@ -1802,7 +1767,7 @@ private extension MyAppsViewController
             self.fetchAppIDs()
         }
     }
-    
+
     func refresh(_ installedApps: [InstalledApp], completionHandler: @escaping ([String : Result<InstalledApp, Error>]) -> Void)
     {
         let group = AppManager.shared.refresh(installedApps, presentingViewController: self, group: self.isRefreshingAllApps ? self.refreshGroup : nil)
@@ -1863,7 +1828,7 @@ private extension MyAppsViewController
     @IBAction func toggleAppUpdates(_ sender: UIButton)
     {
         let visibleCells = self.collectionView.visibleCells
-        
+
         self.collectionView.performBatchUpdates({
             
             self.isUpdateSectionCollapsed.toggle()
@@ -1895,7 +1860,7 @@ private extension MyAppsViewController
             
         }, completion: nil)
     }
-    
+
     @IBAction func toggleUpdateCellMode(_ sender: UIButton)
     {
         let point = self.collectionView.convert(sender.center, from: sender.superview)
@@ -1924,7 +1889,7 @@ private extension MyAppsViewController
             }, completion: nil)
         }
     }
-    
+
     @IBAction func refreshApp(_ sender: UIButton)
     {
         let point = self.collectionView.convert(sender.center, from: sender.superview)
@@ -1933,7 +1898,7 @@ private extension MyAppsViewController
         let installedApp = self.dataSource.item(at: indexPath)
         self.refresh(installedApp)
     }
-    
+
     @IBAction func refreshAllApps(_ sender: UIBarButtonItem)
     {
         Task { @MainActor in
@@ -1984,7 +1949,7 @@ private extension MyAppsViewController
             #endif
         }
     }
-    
+
     @IBAction func updateApp(_ sender: UIButton)
     {
         let point = self.collectionView.convert(sender.center, from: sender.superview)
@@ -2021,10 +1986,11 @@ private extension MyAppsViewController
         if let pillButton = sender as? PillButton
         {
             pillButton.progress = progress
-            self.stylePillButton(pillButton)
+            let accentColor = CSSTheme.tabAccentColor(for: indexPath.item)
+            self.stylePillButton(pillButton, accentColor: accentColor)
         }
     }
-    
+
     @IBAction func sideloadApp(_ sender: UIBarButtonItem)
     {
         InstallAppDialog.presentSourceSelection(
@@ -2042,7 +2008,7 @@ private extension MyAppsViewController
             }
         )
     }
-    
+
     #if !os(tvOS)
     private func presentDocumentPicker()
     {
@@ -2069,7 +2035,7 @@ private extension MyAppsViewController
         }
     }
     #endif
-    
+
     func sideloadApp(at url: URL, completion: @escaping (Result<Void, Error>) -> Void)
     {
         self.pendingImportURL = nil
@@ -2106,7 +2072,7 @@ private extension MyAppsViewController
         self.sideloadingProgressView.isHidden = false
         self.sideloadingProgressView.observedProgress = group.progress
     }
-    
+
     @IBAction func activateApp(_ sender: UIButton)
     {
         let point = self.collectionView.convert(sender.center, from: sender.superview)
@@ -2115,7 +2081,7 @@ private extension MyAppsViewController
         let installedApp = self.dataSource.item(at: indexPath)
         self.activate(installedApp)
     }
-    
+
     @IBAction func deactivateApp(_ sender: UIButton)
     {
         let point = self.collectionView.convert(sender.center, from: sender.superview)
@@ -2124,7 +2090,7 @@ private extension MyAppsViewController
         let installedApp = self.dataSource.item(at: indexPath)
         self.deactivate(installedApp)
     }
-    
+
     @objc func presentInactiveAppsAlert()
     {
         var message: String
@@ -2148,7 +2114,7 @@ private extension MyAppsViewController
         alertController.addAction(.ok)
         self.present(alertController, animated: true, completion: nil)
     }
-    
+
     func updateCell(at indexPath: IndexPath)
     {
         guard let cell = collectionView.cellForItem(at: indexPath) as? InstalledAppCollectionViewCell else { return }
@@ -2157,9 +2123,9 @@ private extension MyAppsViewController
         self.dataSource.cellConfigurationHandler(cell, installedApp, indexPath)
         
         cell.bannerView.iconImageView.isIndicatingActivity = false
-        self.styleAppCardCell(cell)
+        self.styleAppCardCell(cell, at: indexPath)
     }
-    
+
     func reconfigureVisibleCells()
     {
         for indexPath in self.collectionView.indexPathsForVisibleItems
@@ -2174,7 +2140,7 @@ private extension MyAppsViewController
             }
         }
     }
-    
+
     @objc func showHiddenUpdatesAlert(_ sender: UIButton)
     {
         guard !self.unsupportedUpdates.isEmpty else { return }
@@ -2224,11 +2190,11 @@ private extension MyAppsViewController
     {
         UIApplication.shared.open(installedApp.openAppURL) { success in
             guard !success else { return }
-            
+
             ToastView(error: OperationError.openAppFailed(name: installedApp.name), opensLog: true).show(in: self)
         }
     }
-    
+
     func refresh(_ installedApp: InstalledApp)
     {
         Task { @MainActor in
@@ -2247,7 +2213,7 @@ private extension MyAppsViewController
             }
         }
     }
-    
+
     func resign(_ installedApp: InstalledApp, alternateIconMode: AlternateIconMode = .preserve)
     {
         Task { @MainActor in
@@ -2274,7 +2240,7 @@ private extension MyAppsViewController
             }
         }
     }
-    
+
     func reinstallFromCache(_ installedApp: InstalledApp)
     {
         InstallAppDialog.present(installedApp: installedApp, from: self) { [weak self] in
@@ -2309,7 +2275,7 @@ private extension MyAppsViewController
             }
         }
     }
-    
+
     func reinstallFromSource(_ storeApp: StoreApp)
     {
         InstallAppDialog.present(storeApp: storeApp, from: self) { [weak self] in
@@ -2344,7 +2310,7 @@ private extension MyAppsViewController
             }
         }
     }
-    
+
     func activate(_ installedApp: InstalledApp)
     {
         Task { @MainActor in
@@ -2473,7 +2439,7 @@ private extension MyAppsViewController
             }
         }
     }
-    
+
     func deleteApp(_ installedApp: InstalledApp, completionHandler: ((Result<InstalledApp, Error>) -> Void)? = nil)
     {
         guard installedApp.isActive else { return }
@@ -2557,7 +2523,7 @@ private extension MyAppsViewController
         
         self.present(alertController, animated: true, completion: nil)
     }
-    
+
     func remove(_ installedApp: InstalledApp)
     {
         let title = String(format: "Gỡ “%@” khỏi SideStore?", installedApp.name)
@@ -2589,7 +2555,7 @@ private extension MyAppsViewController
         
         self.present(alertController, animated: true, completion: nil)
     }
-    
+
     func backup(_ installedApp: InstalledApp)
     {
         debugLog("[UI] User clicked 'Back Up' for app: \(installedApp.bundleIdentifier)")
@@ -2636,7 +2602,7 @@ private extension MyAppsViewController
             self.present(alertController, animated: true, completion: nil)
         }
     }
-    
+
     func importBackup(for installedApp: InstalledApp, isZip: Bool = false){
         ImportExport.importBackup(presentingViewController: self, for: installedApp, isZip: isZip) { result in
             var toast: ToastView
@@ -2653,14 +2619,14 @@ private extension MyAppsViewController
             }
         }
     }
-    
+
     private func getPreviousBackupURL(_ installedApp: InstalledApp) -> URL
     {
         let backupURL = FileManager.default.backupDirectoryURL(for: installedApp)!
         let backupBakURL = ImportExport.getPreviousBackupURL(backupURL)
         return backupBakURL
     }
-    
+
     func restorePreviousBackup(for installedApp: InstalledApp){
         let backupURL = FileManager.default.backupDirectoryURL(for: installedApp)!
         let backupBakURL = ImportExport.getPreviousBackupURL(backupURL)
@@ -2673,7 +2639,7 @@ private extension MyAppsViewController
         
         restore(installedApp)
     }
-    
+
     func restore(_ installedApp: InstalledApp)
     {
         Task { @MainActor in
@@ -2712,7 +2678,7 @@ private extension MyAppsViewController
             self.present(alertController, animated: true, completion: nil)
         }
     }
-    
+
     func exportBackup(for installedApp: InstalledApp, asZip: Bool = false)
     {
         guard let backupURL = FileManager.default.backupDirectoryURL(for: installedApp) else { return }
@@ -2738,7 +2704,7 @@ private extension MyAppsViewController
         TVWebFileTransferManager.shared.startExport(fileURL: backupURL, title: "Xuất bản sao lưu ứng dụng", presentingVC: self)
         #endif
     }
-    
+
     func deleteBackup(for installedApp: InstalledApp)
     {
         let alertController = UIAlertController(
@@ -2762,14 +2728,14 @@ private extension MyAppsViewController
         })
         self.present(alertController, animated: true)
     }
-    
+
     func showAppInfo(_ installedApp: InstalledApp)
     {
         let appInfoView = AppInfoView(installedApp: installedApp)
         let hostingController = UIHostingController(rootView: appInfoView)
         self.present(hostingController, animated: true, completion: nil)
     }
-    
+
     func chooseIcon(for installedApp: InstalledApp)
     {
         #if !os(tvOS)
@@ -2794,7 +2760,7 @@ private extension MyAppsViewController
         }
         #endif
     }
-    
+
     func changeIcon(for installedApp: InstalledApp, to image: UIImage?)
     {
         self.activeAppsDataSource.prefetchItemCache.removeObject(forKey: installedApp)
@@ -2848,7 +2814,7 @@ private extension MyAppsViewController
             self.update()
         }
     }
-    
+
     @objc func importApp(_ notification: Notification)
     {
         self.loadViewIfNeeded()
@@ -2862,7 +2828,7 @@ private extension MyAppsViewController
         
         self.presentImportDialog(for: url)
     }
-    
+
     private func presentImportDialog(for url: URL)
     {
         InstallAppDialog.present(
@@ -2874,7 +2840,7 @@ private extension MyAppsViewController
             onCancel: {}
         )
     }
-    
+
     #if !os(tvOS)
     @objc func checkForUpdates(_ sender: UIRefreshControl)
     {
@@ -2888,7 +2854,7 @@ private extension MyAppsViewController
         self.performCheckForUpdates(completion: nil)
     }
     #endif
-    
+
     private func performCheckForUpdates(completion: (() -> Void)? = nil)
     {
         guard !self.isCheckingForUpdates else { return }
@@ -2963,7 +2929,7 @@ private extension MyAppsViewController
             }
         }
     }
-    
+
     @objc func didChangeAppIcon(_ notification: Notification)
     {
         guard let altStoreApp = InstalledApp.fetchAltStore(in: DatabaseManager.shared.viewContext) else { return }
@@ -2991,10 +2957,10 @@ extension MyAppsViewController
 {
     override func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath)
     {
-        // Đảm bảo mỗi khi cell hiển thị trên màn hình (kể cả khi mới mở app, cuộn nhanh hoặc tái sử dụng), giao diện thẻ luôn khớp chuẩn Web 1 / Web 2
-        self.styleAppCardCell(cell)
+        // Đảm bảo mỗi khi cell hiển thị trên màn hình (kể cả khi mới mở app, cuộn nhanh hoặc tái sử dụng), nền thẻ luôn trắng và bóng phát sáng 4 màu chuẩn CSS
+        self.styleAppCardCell(cell, at: indexPath)
     }
-    
+
     override func collectionView(_ collectionView: UICollectionView, viewForSupplementaryElementOfKind kind: String, at indexPath: IndexPath) -> UICollectionReusableView
     {
         let section = Section(rawValue: indexPath.section)!
@@ -3006,10 +2972,10 @@ extension MyAppsViewController
             let headerView = collectionView.dequeueReusableSupplementaryView(ofKind: UICollectionView.elementKindSectionHeader, withReuseIdentifier: "UpdatesHeader", for: indexPath) as! UpdatesCollectionHeaderView
             
             UIView.performWithoutAnimation {
-                headerView.overrideUserInterfaceStyle = CSSTheme.isDark ? .dark : .light
-                headerView.button.backgroundColor = CSSTheme.pillBg
-                headerView.button.layer.borderWidth = 1.0
-                headerView.button.layer.borderColor = CSSTheme.pillBorder.cgColor
+                headerView.overrideUserInterfaceStyle = .light
+                headerView.button.backgroundColor = CSSTheme.white
+                headerView.button.layer.borderWidth = 1.5
+                headerView.button.layer.borderColor = CSSTheme.border.cgColor
                 headerView.button.setTitle("▾", for: .normal)
                 headerView.button.titleLabel?.font = UIFont.boldSystemFont(ofSize: 28)
                 headerView.button.setTitleColor(CSSTheme.blue, for: .normal)
@@ -3049,15 +3015,20 @@ extension MyAppsViewController
                 
                 self.styleSectionHeader(headerView)
                 
+                // Nút "Làm mới tất cả" kiểu .back-clean-btn / .btn-outline-glow chuẩn mã Web
                 headerView.button.isIndicatingActivity = false
                 headerView.button.activityIndicatorView.color = CSSTheme.blue
-                headerView.button.setTitle("  Làm mới tất cả  ", for: .normal)
+                headerView.button.setTitle("  ✦ Làm mới tất cả  ", for: .normal)
                 headerView.button.setTitleColor(CSSTheme.blue, for: .normal)
-                headerView.button.titleLabel?.font = UIFont.systemFont(ofSize: 12.5, weight: .bold)
-                headerView.button.backgroundColor = CSSTheme.pillBg
-                headerView.button.layer.cornerRadius = 12
-                headerView.button.layer.borderWidth = 1.0
-                headerView.button.layer.borderColor = CSSTheme.pillBorder.cgColor
+                headerView.button.titleLabel?.font = UIFont.systemFont(ofSize: 12.5, weight: .heavy)
+                headerView.button.backgroundColor = CSSTheme.white
+                headerView.button.layer.cornerRadius = 10
+                headerView.button.layer.borderWidth = 1.5
+                headerView.button.layer.borderColor = CSSTheme.border.cgColor
+                headerView.button.layer.shadowColor = CSSTheme.blue.cgColor
+                headerView.button.layer.shadowOffset = CGSize(width: 0, height: 4)
+                headerView.button.layer.shadowRadius = 8
+                headerView.button.layer.shadowOpacity = 0.16
                 headerView.button.addTarget(self, action: #selector(MyAppsViewController.refreshAllApps(_:)), for: .primaryActionTriggered)
                 
                 headerView.button.layoutIfNeeded()
@@ -3102,7 +3073,7 @@ extension MyAppsViewController
         case .activeApps, .inactiveApps:
             let footerView = collectionView.dequeueReusableSupplementaryView(ofKind: UICollectionView.elementKindSectionFooter, withReuseIdentifier: "InstalledAppsFooter", for: indexPath) as! InstalledAppsCollectionFooterView
             
-            // Dịch "View App IDs" sang tiếng Việt và thu gọn khung chứa nút bấm
+            // Dịch "View App IDs" sang tiếng Việt và bọc trong thẻ trắng chuẩn `<footer>` mã Web
             self.styleCompactAppIDsFooter(footerView)
             
             let managedTeam = self.resolveCurrentManagedTeam()
@@ -3137,14 +3108,14 @@ extension MyAppsViewController
             return footerView
         }
     }
-    
+
     override func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath)
     {
         if let cell = collectionView.cellForItem(at: indexPath) {
             UIView.animate(withDuration: 0.12, animations: {
-                cell.transform = CGAffineTransform(scaleX: 0.97, y: 0.97)
+                cell.transform = CGAffineTransform(translationX: 0, y: -2).scaledBy(x: 0.985, y: 0.985)
             }) { _ in
-                UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.5, initialSpringVelocity: 0.5, options: .curveEaseOut) {
+                UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0.5, options: .curveEaseOut) {
                     cell.transform = .identity
                 }
             }
@@ -3167,7 +3138,7 @@ extension MyAppsViewController
     private func contextMenu(for installedApp: InstalledApp) -> UIMenu
     {
         var actions = [UIMenuElement]()
-        
+
         let openAction = UIAction(title: "Mở ứng dụng", image: UIImage(systemName: "arrow.up.forward.app")) { (action) in
             self.open(installedApp)
         }
@@ -3455,7 +3426,7 @@ extension MyAppsViewController
         let menu = UIMenu(title: title ?? "", children: actions)
         return menu
     }
-    
+
     #if !os(tvOS)
     override func collectionView(_ collectionView: UICollectionView, contextMenuConfigurationForItemAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration?
     {
@@ -3475,7 +3446,7 @@ extension MyAppsViewController
             }
         }
     }
-    
+
     override func collectionView(_ collectionView: UICollectionView, previewForHighlightingContextMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview?
     {
         guard let indexPath = configuration.identifier as? NSIndexPath else { return nil }
@@ -3488,7 +3459,7 @@ extension MyAppsViewController
         let preview = UITargetedPreview(view: cell.bannerView, parameters: parameters)
         return preview
     }
-    
+
     override func collectionView(_ collectionView: UICollectionView, previewForDismissingContextMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview?
     {
         return self.collectionView(collectionView, previewForHighlightingContextMenuWithConfiguration: configuration)
@@ -3505,7 +3476,7 @@ extension MyAppsViewController: UICollectionViewDelegateFlowLayout
         {
         case .noUpdates:
             return .zero
-            
+
         case .updates:
             let item = self.dataSource.item(at: indexPath)
             
@@ -3529,7 +3500,7 @@ extension MyAppsViewController: UICollectionViewDelegateFlowLayout
             return CGSize(width: collectionView.bounds.width, height: 88)
         }
     }
-    
+
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, referenceSizeForHeaderInSection section: Int) -> CGSize
     {
         let section = Section.allCases[section]
@@ -3540,12 +3511,12 @@ extension MyAppsViewController: UICollectionViewDelegateFlowLayout
             let height: CGFloat = (self.updatesDataSource.fetchedResultsController.fetchedObjects?.count ?? 0 > maximumCollapsedUpdatesCount) ? 28 : 0
             return CGSize(width: collectionView.bounds.width, height: height)
             
-        case .activeApps: return CGSize(width: collectionView.bounds.width, height: 34)
+        case .activeApps: return CGSize(width: collectionView.bounds.width, height: 38)
         case .inactiveApps where self.inactiveAppsDataSource.itemCount == 0: return .zero
-        case .inactiveApps: return CGSize(width: collectionView.bounds.width, height: 34)
+        case .inactiveApps: return CGSize(width: collectionView.bounds.width, height: 38)
         }
     }
-    
+
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, referenceSizeForFooterInSection section: Int) -> CGSize
     {
         let section = Section.allCases[section]
@@ -3553,8 +3524,7 @@ extension MyAppsViewController: UICollectionViewDelegateFlowLayout
         func appIDsFooterSize() -> CGSize
         {
             guard self.activeTeam != nil || self.resolveCurrentManagedTeam() != nil else { return .zero }
-            // Đã thu gọn chiều cao khung Footer chứa nút "Xem danh sách App ID"
-            return CGSize(width: collectionView.bounds.width, height: 48.0)
+            return CGSize(width: collectionView.bounds.width, height: 64.0)
         }
         
         switch section
@@ -3569,7 +3539,7 @@ extension MyAppsViewController: UICollectionViewDelegateFlowLayout
         case .inactiveApps: return appIDsFooterSize()
         }
     }
-    
+
     func collectionView(_ myCV: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, insetForSectionAt section: Int) -> UIEdgeInsets
     {
         let section = Section.allCases[section]
@@ -3589,7 +3559,7 @@ extension MyAppsViewController: UICollectionViewDragDelegate
     {
         return []
     }
-    
+
     func collectionView(_ collectionView: UICollectionView, dragPreviewParametersForItemAt indexPath: IndexPath) -> UIDragPreviewParameters?
     {
         guard let cell = collectionView.cellForItem(at: indexPath as IndexPath) as? InstalledAppCollectionViewCell else { return nil }
@@ -3600,7 +3570,7 @@ extension MyAppsViewController: UICollectionViewDragDelegate
         
         return parameters
     }
-    
+
     func collectionView(_ collectionView: UICollectionView, dragSessionDidEnd session: UIDragSession)
     {
         let previousDestinationIndexPath = self.dropDestinationIndexPath
@@ -3619,7 +3589,7 @@ extension MyAppsViewController: UICollectionViewDropDelegate
     {
         return session.localDragSession != nil
     }
-    
+
     func collectionView(_ collectionView: UICollectionView, dropSessionDidUpdate session: UIDropSession, withDestinationIndexPath destinationIndexPath: IndexPath?) -> UICollectionViewDropProposal
     {
         guard
@@ -3704,7 +3674,7 @@ extension MyAppsViewController: UICollectionViewDropDelegate
             }
         }
     }
-    
+
     func collectionView(_ collectionView: UICollectionView, performDropWith coordinator: UICollectionViewDropCoordinator)
     {
         guard let installedApp = coordinator.session.items.first?.localObject as? InstalledApp else { return }
@@ -3751,7 +3721,7 @@ extension MyAppsViewController: NSFetchedResultsControllerDelegate
     func controllerWillChangeContent(_ controller: NSFetchedResultsController<NSFetchRequestResult>)
     {
         guard let dataSource = self.dataSource(for: controller) else { return }
-        
+
         if self.collectionView.window != nil
         {
             switch dataSource
@@ -3766,14 +3736,14 @@ extension MyAppsViewController: NSFetchedResultsControllerDelegate
         
         dataSource.controllerWillChangeContent(controller)
     }
-    
+
     func controller(_ controller: NSFetchedResultsController<NSFetchRequestResult>, didChange sectionInfo: NSFetchedResultsSectionInfo, atSectionIndex sectionIndex: Int, for type: NSFetchedResultsChangeType)
     {
         guard let dataSource = self.dataSource(for: controller) else { return }
         
         dataSource.controller(controller, didChange: sectionInfo, atSectionIndex: sectionIndex, for: type)
     }
-    
+
     func controller(_ controller: NSFetchedResultsController<NSFetchRequestResult>, didChange anObject: Any, at indexPath: IndexPath?, for type: NSFetchedResultsChangeType, newIndexPath: IndexPath?)
     {
         guard let dataSource = self.dataSource(for: controller) else { return }
@@ -3788,7 +3758,7 @@ extension MyAppsViewController: NSFetchedResultsControllerDelegate
         
         dataSource.controller(controller, didChange: anObject, at: indexPath, for: type, newIndexPath: newIndexPath)
     }
-    
+
     func controllerDidChangeContent(_ controller: NSFetchedResultsController<NSFetchRequestResult>)
     {
         guard let dataSource = self.dataSource(for: controller) else { return }
@@ -3833,7 +3803,7 @@ extension MyAppsViewController: NSFetchedResultsControllerDelegate
         
         dataSource.controllerDidChangeContent(controller)
     }
-    
+
     private func dataSource(for controller: NSFetchedResultsController<NSFetchRequestResult>) -> FetchedResultsCollectionViewPrefetchingDataSource<InstalledApp, UIImage>?
     {
         switch controller
@@ -3852,7 +3822,7 @@ extension MyAppsViewController: UIDocumentPickerDelegate
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL])
     {
         guard let fileURL = urls.first else { return }
-        
+
         InstallAppDialog.present(ipaURL: fileURL, from: self) { [weak self] in
             self?.sideloadApp(at: fileURL) { (result) in
                 debugLog("Sideloaded app at \(fileURL) with result: \(result)")
@@ -3871,7 +3841,7 @@ extension MyAppsViewController: UIViewControllerPreviewingDelegate
             let indexPath = self.collectionView.indexPathForItem(at: location),
             let cell = self.collectionView.cellForItem(at: indexPath)
         else { return nil }
-        
+
         let section = Section.allCases[indexPath.section]
         switch section
         {
@@ -3887,7 +3857,7 @@ extension MyAppsViewController: UIViewControllerPreviewingDelegate
         default: return nil
         }
     }
-    
+
     @available(iOS, deprecated: 13.0)
     func previewingContext(_ previewingContext: UIViewControllerPreviewing, commit viewControllerToCommit: UIViewController)
     {
@@ -3907,11 +3877,11 @@ extension MyAppsViewController: UIImagePickerControllerDelegate
             picker.dismiss(animated: true, completion: nil)
             self._imagePickerInstalledApp = nil
         }
-        
+
         guard let image = info[.editedImage] as? UIImage, let installedApp = self._imagePickerInstalledApp else { return }
         self.changeIcon(for: installedApp, to: image)
     }
-    
+
     func imagePickerControllerDidCancel(_ picker: UIImagePickerController)
     {
         picker.dismiss(animated: true, completion: nil)

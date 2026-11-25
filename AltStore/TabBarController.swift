@@ -217,7 +217,7 @@ private extension TabBarController
 }
 
 // ============================================================================
-// MARK: - 🩺 MÀN HÌNH “BÁC SĨ” CHẨN ĐOÁN HỆ THỐNG (ĐỒNG BỘ CSS THEME 100%)
+// MARK: - 🩺 MÀN HÌNH "BÁC SĨ" CHẨN ĐOÁN HỆ THỐNG (ĐỒNG BỘ CSS THEME 100%)
 // ============================================================================
 
 @MainActor
@@ -260,6 +260,8 @@ private final class SystemDiagnosticViewController: UIViewController
 
     private let heroCard = UIView()
     private let heroGradientLayer = CAGradientLayer()
+    private let networkPillView = UIView()
+    private let networkBadgeLabel = UILabel()
 
     private let startButton = UIButton(type: .system)
     private let startButtonGradientLayer = CAGradientLayer()
@@ -276,7 +278,7 @@ private final class SystemDiagnosticViewController: UIViewController
         StepSpec(title: "1. Kết nối LocalDevVPN", symbol: "network.badge.shield.half.filled", accentColor: DiagnosticCSSTheme.blue),
         StepSpec(title: "2. Đường truyền ngầm & File Pairing", symbol: "cable.connector.horizontal", accentColor: DiagnosticCSSTheme.purple),
         StepSpec(title: "3. Máy chủ Anisette (Đăng nhập / Làm mới)", symbol: "server.rack", accentColor: DiagnosticCSSTheme.teal),
-        StepSpec(title: "4. Chứng chỉ gốc (Certificate)", symbol: "checkmark.seal.fill", accentColor: DiagnosticCSSTheme.blue),
+        StepSpec(title: "4. Chứng chỉ gốc (Certificate)", symbol: "checkmark.seal.fill", accentColor: DiagnosticCSSTheme.orange),
         StepSpec(title: "5. Đồng bộ Chứng chỉ các App đang cài", symbol: "square.stack.3d.up.badge.a.fill", accentColor: DiagnosticCSSTheme.indigo)
     ]
 
@@ -302,6 +304,7 @@ private final class SystemDiagnosticViewController: UIViewController
     {
         super.viewWillAppear(animated)
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
+        updateNetworkBadge()
     }
 
     override func viewDidLayoutSubviews()
@@ -367,7 +370,7 @@ private final class SystemDiagnosticViewController: UIViewController
         // 2. Khối Hero Banner đồng bộ 100% với SettingsViewController
         setupHeroBanner()
 
-        // 3. Nút bấm Gradient "NHẤP VÀO ĐÂY ĐỂ KHÁM BỆNH"
+        // 3. Nút bấm Gradient "BẮT ĐẦU KHÁM BỆNH TOÀN DIỆN"
         setupStartActionCard()
 
         // 4. Tiêu đề Section "KẾT QUẢ CHẨN ĐOÁN 5 HẠNG MỤC" chuẩn SettingsSkySectionCard
@@ -465,8 +468,25 @@ private final class SystemDiagnosticViewController: UIViewController
         subLabel.textAlignment = .center
         subLabel.numberOfLines = 2
 
+        // Huy hiệu mạng hiện tại nằm trong Hero Card
+        networkPillView.translatesAutoresizingMaskIntoConstraints = false
+        networkPillView.backgroundColor = UIColor.white.withAlphaComponent(0.18)
+        networkPillView.layer.cornerRadius = 12
+        networkPillView.layer.borderWidth = 1.0
+        networkPillView.layer.borderColor = UIColor.white.withAlphaComponent(0.38).cgColor
+
+        networkBadgeLabel.translatesAutoresizingMaskIntoConstraints = false
+        networkBadgeLabel.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
+        networkBadgeLabel.textColor = DiagnosticCSSTheme.white
+        networkBadgeLabel.textAlignment = .center
+        networkBadgeLabel.numberOfLines = 1
+        networkBadgeLabel.adjustsFontSizeToFitWidth = true
+        networkBadgeLabel.minimumScaleFactor = 0.8
+        networkPillView.addSubview(networkBadgeLabel)
+
         heroCard.addSubview(titleStack)
         heroCard.addSubview(subLabel)
+        heroCard.addSubview(networkPillView)
 
         NSLayoutConstraint.activate([
             iconBadge.widthAnchor.constraint(equalToConstant: 34),
@@ -483,7 +503,17 @@ private final class SystemDiagnosticViewController: UIViewController
             subLabel.topAnchor.constraint(equalTo: titleStack.bottomAnchor, constant: 6),
             subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 14),
             subLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -14),
-            subLabel.bottomAnchor.constraint(equalTo: heroCard.bottomAnchor, constant: -14)
+
+            networkPillView.topAnchor.constraint(equalTo: subLabel.bottomAnchor, constant: 9),
+            networkPillView.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
+            networkPillView.leadingAnchor.constraint(greaterThanOrEqualTo: heroCard.leadingAnchor, constant: 12),
+            networkPillView.trailingAnchor.constraint(lessThanOrEqualTo: heroCard.trailingAnchor, constant: -12),
+            networkPillView.bottomAnchor.constraint(equalTo: heroCard.bottomAnchor, constant: -12),
+            networkPillView.heightAnchor.constraint(equalToConstant: 24),
+
+            networkBadgeLabel.leadingAnchor.constraint(equalTo: networkPillView.leadingAnchor, constant: 10),
+            networkBadgeLabel.trailingAnchor.constraint(equalTo: networkPillView.trailingAnchor, constant: -10),
+            networkBadgeLabel.centerYAnchor.constraint(equalTo: networkPillView.centerYAnchor)
         ])
 
         heroCard.alpha = 0
@@ -499,7 +529,7 @@ private final class SystemDiagnosticViewController: UIViewController
     private func setupStartActionCard()
     {
         startButton.translatesAutoresizingMaskIntoConstraints = false
-        startButton.setTitle("  🩺 NHẤP VÀO ĐÂY ĐỂ KHÁM BỆNH  ", for: .normal)
+        startButton.setTitle("  🩺 BẮT ĐẦU KHÁM BỆNH TOÀN DIỆN  ", for: .normal)
         startButton.titleLabel?.font = UIFont.systemFont(ofSize: 16, weight: .heavy)
         startButton.setTitleColor(DiagnosticCSSTheme.white, for: .normal)
         startButton.layer.cornerRadius = 15
@@ -790,6 +820,18 @@ private final class SystemDiagnosticViewController: UIViewController
 
     // MARK: - Cập nhật Trạng thái Giao diện
 
+    private func updateNetworkBadge()
+    {
+        let hasWifi = minimuxer.network.isWifiSatisfied
+        if hasWifi {
+            networkBadgeLabel.text = "🛜 Mạng hiện tại: Wi-Fi (Kiểm tra trực tiếp không cần tắt 4G)"
+            networkPillView.backgroundColor = DiagnosticCSSTheme.green.withAlphaComponent(0.28)
+        } else {
+            networkBadgeLabel.text = "📡 Mạng hiện tại: 4G/5G (Sẽ tự động Tắt/Bật 4G ở Bước 2)"
+            networkPillView.backgroundColor = UIColor.white.withAlphaComponent(0.20)
+        }
+    }
+
     private func cleanStatusMessage(_ raw: String) -> String
     {
         return raw
@@ -809,10 +851,6 @@ private final class SystemDiagnosticViewController: UIViewController
         case .idle:
             card.spinner.stopAnimating()
             card.symbolImageView.isHidden = false
-            card.symbolImageView.tintColor = card.accentColor
-            card.badgeBox.backgroundColor = card.accentColor.withAlphaComponent(0.14)
-            card.badgeBox.layer.borderColor = card.accentColor.withAlphaComponent(0.28).cgColor
-
             card.pillLabel.text = "Chờ khám"
             card.pillLabel.textColor = card.accentColor
             card.pillView.backgroundColor = card.accentColor.withAlphaComponent(0.12)
@@ -828,9 +866,6 @@ private final class SystemDiagnosticViewController: UIViewController
         case .running(let msg):
             card.symbolImageView.isHidden = true
             card.spinner.startAnimating()
-            card.badgeBox.backgroundColor = DiagnosticCSSTheme.blue.withAlphaComponent(0.14)
-            card.badgeBox.layer.borderColor = DiagnosticCSSTheme.blue.withAlphaComponent(0.28).cgColor
-
             card.pillLabel.text = "Đang khám..."
             card.pillLabel.textColor = DiagnosticCSSTheme.blue
             card.pillView.backgroundColor = DiagnosticCSSTheme.blue.withAlphaComponent(0.14)
@@ -846,12 +881,6 @@ private final class SystemDiagnosticViewController: UIViewController
         case .success(let msg):
             card.spinner.stopAnimating()
             card.symbolImageView.isHidden = false
-            // Khi không bị lỗi, icon mục 4 (và các mục khác) hiển thị màu xanh đồng bộ
-            let successBadgeColor = (index == 3) ? DiagnosticCSSTheme.blue : card.accentColor
-            card.symbolImageView.tintColor = successBadgeColor
-            card.badgeBox.backgroundColor = successBadgeColor.withAlphaComponent(0.14)
-            card.badgeBox.layer.borderColor = successBadgeColor.withAlphaComponent(0.28).cgColor
-
             card.pillLabel.text = "Tốt • Ổn định"
             card.pillLabel.textColor = DiagnosticCSSTheme.green
             card.pillView.backgroundColor = DiagnosticCSSTheme.green.withAlphaComponent(0.15)
@@ -867,10 +896,6 @@ private final class SystemDiagnosticViewController: UIViewController
         case .warning(let msg):
             card.spinner.stopAnimating()
             card.symbolImageView.isHidden = false
-            card.symbolImageView.tintColor = DiagnosticCSSTheme.orange
-            card.badgeBox.backgroundColor = DiagnosticCSSTheme.orange.withAlphaComponent(0.14)
-            card.badgeBox.layer.borderColor = DiagnosticCSSTheme.orange.withAlphaComponent(0.28).cgColor
-
             card.pillLabel.text = "Cần chú ý"
             card.pillLabel.textColor = DiagnosticCSSTheme.orange
             card.pillView.backgroundColor = DiagnosticCSSTheme.orange.withAlphaComponent(0.16)
@@ -886,10 +911,6 @@ private final class SystemDiagnosticViewController: UIViewController
         case .failure(let msg):
             card.spinner.stopAnimating()
             card.symbolImageView.isHidden = false
-            card.symbolImageView.tintColor = DiagnosticCSSTheme.red
-            card.badgeBox.backgroundColor = DiagnosticCSSTheme.red.withAlphaComponent(0.14)
-            card.badgeBox.layer.borderColor = DiagnosticCSSTheme.red.withAlphaComponent(0.28).cgColor
-
             card.pillLabel.text = "Phát hiện lỗi"
             card.pillLabel.textColor = DiagnosticCSSTheme.red
             card.pillView.backgroundColor = DiagnosticCSSTheme.red.withAlphaComponent(0.15)
@@ -961,18 +982,20 @@ private final class SystemDiagnosticViewController: UIViewController
         startButton.setTitle("  ⏳ BÁC SĨ ĐANG KHÁM HỆ THỐNG...  ", for: .normal)
 
         resetAllStepsToIdle()
+        updateNetworkBadge()
 
         Task { @MainActor in
             await runFullDiagnosticFlow()
             self.isRunningDiagnostic = false
             self.startButton.isEnabled = true
             self.startButton.alpha = 1.0
-            self.startButton.setTitle("  🩺 NHẤP VÀO ĐÂY ĐỂ KHÁM BỆNH  ", for: .normal)
+            self.startButton.setTitle("  🩺 BẮT ĐẦU KHÁM BỆNH TOÀN DIỆN  ", for: .normal)
+            self.updateNetworkBadge()
         }
     }
 
     // ========================================================================
-    // MARK: - QUY TRÌNH 5 BƯỚC “KHÁM BỆNH THỰC CHIẾN”
+    // MARK: - QUY TRÌNH 5 BƯỚC "KHÁM BỆNH THỰC CHIẾN"
     // ========================================================================
 
     private func runFullDiagnosticFlow() async
@@ -1273,7 +1296,7 @@ private final class SystemDiagnosticViewController: UIViewController
         }
     }
 
-    /// Chuẩn hóa chuỗi Serial của chứng chỉ (bỏ khoảng trắng, dấu ‘:’, tiền tố 0x và số 0 ở đầu) để so sánh chính xác
+    /// Chuẩn hóa chuỗi Serial của chứng chỉ (bỏ khoảng trắng, dấu ':', tiền tố 0x và số 0 ở đầu) để so sánh chính xác
     private static func normalizeSerial(_ raw: String?) -> String
     {
         guard let raw else { return "" }

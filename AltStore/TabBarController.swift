@@ -29,29 +29,29 @@ extension TabBarController
 final class TabBarController: UITabBarController
 {
     private var initialSegue: (identifier: String, sender: Any?)?
-    
+
     private var _viewDidAppear = false
-    
+
     private var sourcesViewController: SourcesViewController!
-    
+
     required init?(coder aDecoder: NSCoder)
     {
         super.init(coder: aDecoder)
-        
+
         NotificationCenter.default.addObserver(self, selector: #selector(TabBarController.importApp(_:)), name: AppDelegate.importAppDeepLinkNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(TabBarController.presentSources(_:)), name: AppDelegate.addSourceDeepLinkNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(TabBarController.openErrorLog(_:)), name: ToastView.openErrorLogNotification, object: nil)
     }
-    
-    override func viewDidLoad() 
+
+    override func viewDidLoad()
     {
         super.viewDidLoad()
         debugLog("[TabBarController] viewDidLoad()")
-        
+
         // 0. CỐ ĐỊNH GIAO DIỆN SÁNG (Light Mode)
         // Thuộc tính này sẽ áp dụng cho cả TabBarController và toàn bộ các NavigationController con bên trong.
         self.overrideUserInterfaceStyle = .light
-        
+
         // 1. Thay thế tab Browse cũ (nằm ở vị trí index 2 trên Storyboard gốc) bằng Tab "Kiểm tra" (Chẩn đoán hệ thống)
         if var viewControllers = self.viewControllers, viewControllers.count == 5 {
             let diagnosticVC = SystemDiagnosticViewController()
@@ -65,7 +65,7 @@ final class TabBarController: UITabBarController
             viewControllers[Tab.diagnostic.rawValue] = diagnosticNav
             self.viewControllers = viewControllers
         }
-        
+
         // 2. Đổi tab News thành "Tổng quan"
         if let newsNav = self.viewControllers?[Tab.news.rawValue] as? UINavigationController
         {
@@ -73,57 +73,57 @@ final class TabBarController: UITabBarController
             newsNav.tabBarItem.image = UIImage(systemName: "checkmark.shield")
             newsNav.tabBarItem.selectedImage = UIImage(systemName: "checkmark.shield.fill")
         }
-        
+
         // 3. Đổi tab Sources (Nguồn) thành "Sửa lỗi" và cập nhật icon
         if let sourcesNav = self.viewControllers?[Tab.sources.rawValue] as? UINavigationController
         {
             sourcesNav.tabBarItem.title = "Sửa lỗi"
             sourcesNav.tabBarItem.image = UIImage(systemName: "wrench.and.screwdriver")
             sourcesNav.tabBarItem.selectedImage = UIImage(systemName: "wrench.and.screwdriver.fill")
-            
+
             self.sourcesViewController = sourcesNav.viewControllers.first as? SourcesViewController
         }
-        
+
         // 4. Đổi tab My Apps thành "Ứng dụng"
         if let myAppsNav = self.viewControllers?[Tab.myApps.rawValue] as? UINavigationController
         {
             myAppsNav.tabBarItem.title = "Ứng dụng"
         }
-        
+
         // 5. Đổi tab Settings thành "Cài đặt"
         if let settingsNav = self.viewControllers?[Tab.settings.rawValue] as? UINavigationController
         {
             settingsNav.tabBarItem.title = "Cài đặt"
         }
-        
+
         // 6. Đặt tab My Apps ("Ứng dụng") làm tab active mặc định khi mở app
         self.selectedIndex = Tab.myApps.rawValue
     }
-    
+
     override func viewDidAppear(_ animated: Bool)
     {
         super.viewDidAppear(animated)
         debugLog("[TabBarController] viewDidAppear() — TabBarController is now visible")
-        
+
         // Đảm bảo toàn bộ cửa sổ ứng dụng (bao gồm cả các Alert, Toast, Popup...) cũng luôn ở giao diện sáng
         self.view.window?.overrideUserInterfaceStyle = .light
-        
+
         _viewDidAppear = true
-        
+
         if let (identifier, sender) = self.initialSegue
         {
             self.initialSegue = nil
             self.performSegue(withIdentifier: identifier, sender: sender)
         }
     }
-    
+
     override func performSegue(withIdentifier identifier: String, sender: Any?)
     {
         guard _viewDidAppear else {
             self.initialSegue = (identifier, sender)
             return
         }
-        
+
         super.performSegue(withIdentifier: identifier, sender: sender)
     }
 }
@@ -137,15 +137,15 @@ extension TabBarController
             presentedViewController.dismiss(animated: true) {
                 self.presentSources(sender)
             }
-            
+
             return
         }
-                
+
         if let notification = (sender as? Notification), let sourceURL = notification.userInfo?[AppDelegate.addSourceDeepLinkURLKey] as? URL
         {
             self.sourcesViewController?.deepLinkSourceURL = sourceURL
         }
-        
+
         self.selectedIndex = Tab.sources.rawValue
     }
 }
@@ -524,7 +524,7 @@ private final class SystemDiagnosticViewController: UIViewController
     }
 
     // ========================================================================
-    // MARK: - QUY TRÌNH 6 BƯỚC "KHÁM BỆNH THỰC CHIẾN"
+    // MARK: - QUY TRÌNH 5 BƯỚC "KHÁM BỆNH THỰC CHIẾN"
     // ========================================================================
 
     private func runFullDiagnosticFlow() async
@@ -541,9 +541,9 @@ private final class SystemDiagnosticViewController: UIViewController
             }
         }
 
-        // --------------------------------------------------------------------
+        // ––––––––––––––––––––––––––––––––––
         // 🛑 BƯỚC 1: KIỂM TRA LOCALDEVVPN TRƯỚC TIÊN (BẮT BUỘC)
-        // --------------------------------------------------------------------
+        // ––––––––––––––––––––––––––––––––––
         updateStep(0, state: .running("Đang quét giao diện mạng tun/utun của LocalDevVPN..."))
         try? await Task.sleep(nanoseconds: 250_000_000)
 
@@ -558,9 +558,9 @@ private final class SystemDiagnosticViewController: UIViewController
         let isWifi = minimuxer.network.isWifiSatisfied
         updateStep(0, state: .success(isWifi ? "✅ Đã bật LocalDevVPN (Đang dùng Wi-Fi)" : "✅ Đã bật LocalDevVPN (Đang dùng 4G)"))
 
-        // --------------------------------------------------------------------
+        // ––––––––––––––––––––––––––––––––––
         // 📱 BƯỚC 2: KIỂM TRA FILE PAIRING & ĐƯỜNG TRUYỀN NGẦM iOS (127.0.0.1)
-        // --------------------------------------------------------------------
+        // ––––––––––––––––––––––––––––––––––
         updateStep(1, state: .running("Tầng 1: Đang kiểm tra cấu trúc File Pairing..."))
         try? await Task.sleep(nanoseconds: 200_000_000)
 
@@ -608,9 +608,9 @@ private final class SystemDiagnosticViewController: UIViewController
             try? await Task.sleep(nanoseconds: 1_500_000_000)
         }
 
-        // --------------------------------------------------------------------
+        // ––––––––––––––––––––––––––––––––––
         // 🌐 BƯỚC 3: KIỂM TRA MÁY CHỦ ANISETTE (TEST DỮ LIỆU REFRESH THỰC TẾ)
-        // --------------------------------------------------------------------
+        // ––––––––––––––––––––––––––––––––––
         updateStep(2, state: .running("Đang kiểm tra gói dữ liệu bảo mật từ Máy chủ Anisette..."))
         let anisetteResult = await checkAnisetteServerHealth()
         switch anisetteResult
@@ -627,9 +627,9 @@ private final class SystemDiagnosticViewController: UIViewController
             break
         }
 
-        // --------------------------------------------------------------------
+        // ––––––––––––––––––––––––––––––––––
         // 🔐 BƯỚC 4: KIỂM TRA CHỨNG CHỈ GỐC (CERTIFICATE)
-        // --------------------------------------------------------------------
+        // ––––––––––––––––––––––––––––––––––
         updateStep(3, state: .running("Đang kiểm tra Chứng chỉ phát triển và Tài khoản Apple ID..."))
         try? await Task.sleep(nanoseconds: 150_000_000)
 
@@ -645,9 +645,9 @@ private final class SystemDiagnosticViewController: UIViewController
 
         updateStep(3, state: .success(certCheck.message))
 
-        // --------------------------------------------------------------------
+        // ––––––––––––––––––––––––––––––––––
         // 📦 BƯỚC 5: KIỂM TRA ĐỒNG BỘ CHỨNG CHỈ CỦA TỪNG APP ĐANG CÀI
-        // --------------------------------------------------------------------
+        // ––––––––––––––––––––––––––––––––––
         updateStep(4, state: .running("Đang quét và đối chiếu chứng chỉ của toàn bộ ứng dụng đã cài..."))
         try? await Task.sleep(nanoseconds: 150_000_000)
 
@@ -883,49 +883,88 @@ private final class SystemDiagnosticViewController: UIViewController
         var mismatched: [String] = []
 
         let normalizedRoot = Self.normalizeSerial(activeRootSerial)
+        let activeTeamID: String? = {
+            var teamID: String?
+            context.performAndWait {
+                teamID = DatabaseManager.shared.activeTeam(in: context)?.identifier
+            }
+            return teamID
+        }()
 
         context.performAndWait {
             let allApps = InstalledApp.all(in: context)
             total = allApps.count
-            var didRepairMissingSerials = false
+            var didRepairDatabase = false
 
             for app in allApps
             {
-                // 1. Lấy serial đã lưu trong DB hoặc đọc từ bản cache .app trên đĩa (nếu có)
-                var rawAppSerial = app.certificateSerialNumber
-                if (rawAppSerial == nil || rawAppSerial!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty),
-                   let cachedCert = CertificateManager.shared.getSigningCertificate(at: app.fileURL) {
-                    rawAppSerial = cachedCert.serialNumber
-                }
+                // 1. Lấy serial đã lưu trong DB
+                var resolvedSerial = app.certificateSerialNumber?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-                let normalizedAppSerial = Self.normalizeSerial(rawAppSerial)
-                var isMismatch = false
-
-                // 2. Chỉ báo lệch khi:
-                // - App có lưu Serial chứng chỉ khác với Serial chứng chỉ gốc hiện tại
-                // - Hoặc trạng thái chứng chỉ của App bị đánh dấu là ký chéo (isCrossSigned == true)
-                if !normalizedAppSerial.isEmpty && !normalizedRoot.isEmpty && normalizedAppSerial != normalizedRoot {
-                    isMismatch = true
-                } else if case .valid(let isCrossSigned) = app.certificateStatus, isCrossSigned {
-                    isMismatch = true
-                } else if normalizedAppSerial.isEmpty {
-                    // Nếu app vừa cài hoặc Refresh 4G xong (còn hạn sử dụng) mà DB chưa kịp lưu certificateSerialNumber,
-                    // tự động đồng bộ lại serial hiện tại để DB sạch sẽ, không báo lỗi oan!
-                    if app.expirationDate > Date() {
-                        app.certificateSerialNumber = activeRootSerial
-                        app.certificateStatus = .valid(isCrossSigned: false)
-                        didRepairMissingSerials = true
-                    } else {
-                        isMismatch = true
+                // 2. Nếu DB bị trống (do InstallAppOperation chỉ gán overrideSigningCertificate),
+                // đọc từ nơi SideStore thực sự lưu chứng chỉ đã ký của App:
+                // (a) CertificateManager.shared.getSigningCertificate(for: app) -> đọc file signing_certificate.der
+                // TUYỆT ĐỐI KHÔNG gọi getSigningCertificate(at: app.fileURL) vì app.fileURL là Payload IPA gốc chưa ký!
+                if resolvedSerial == nil || resolvedSerial!.isEmpty {
+                    if let signedCert = CertificateManager.shared.getSigningCertificate(for: app) {
+                        resolvedSerial = signedCert.serialNumber
                     }
                 }
 
-                if isMismatch {
+                // (b) Đọc từ Provisioning Profile (Resigned) của App (giống hệt AppInfoView.swift)
+                let resignedProfile = app.customProvisioningProfile
+                if resolvedSerial == nil || resolvedSerial!.isEmpty,
+                   let profileCerts = resignedProfile?.certificates,
+                   !profileCerts.isEmpty
+                {
+                    if let matched = profileCerts.first(where: { Self.normalizeSerial($0.serialNumber) == normalizedRoot }) {
+                        resolvedSerial = matched.serialNumber
+                    } else {
+                        resolvedSerial = profileCerts.first?.serialNumber
+                    }
+                }
+
+                let normalizedAppSerial = Self.normalizeSerial(resolvedSerial)
+                var isMatchedWithRoot = false
+
+                if !normalizedAppSerial.isEmpty && !normalizedRoot.isEmpty {
+                    if normalizedAppSerial == normalizedRoot {
+                        isMatchedWithRoot = true
+                    } else if let profileCerts = resignedProfile?.certificates,
+                              profileCerts.contains(where: { Self.normalizeSerial($0.serialNumber) == normalizedRoot }) {
+                        // Trường hợp Resigned Profile chứa nhiều cert và có chứa chứng chỉ gốc hiện tại
+                        resolvedSerial = activeRootSerial
+                        isMatchedWithRoot = true
+                    }
+                } else {
+                    // 3. Nếu App không lưu file .der riêng và dùng chung Main Profile (useMainProfile == true)
+                    // hoặc có cùng Team ID và còn hạn sử dụng -> Đồng bộ chuẩn với Chứng chỉ gốc hiện tại
+                    let effectiveExpiration = resignedProfile?.expirationDate ?? app.expirationDate
+                    let sameTeam = (activeTeamID == nil) || (app.team?.identifier == activeTeamID) || (resignedProfile?.teamIdentifier == activeTeamID)
+                    if effectiveExpiration > Date() && (app.useMainProfile || sameTeam) {
+                        resolvedSerial = activeRootSerial
+                        isMatchedWithRoot = true
+                    }
+                }
+
+                if isMatchedWithRoot {
+                    // Tự động điền lại certificateSerialNumber vào DB (để AppInfoView hiện luôn dòng Certificate Serial)
+                    // và xóa cờ validCrossSigned bị gán nhầm (nếu có)
+                    let finalSerial = (resolvedSerial?.isEmpty == false) ? resolvedSerial! : activeRootSerial
+                    if app.certificateSerialNumber != finalSerial {
+                        app.certificateSerialNumber = finalSerial
+                        didRepairDatabase = true
+                    }
+                    if app.certificateStatus != .valid(isCrossSigned: false) {
+                        app.certificateStatus = .valid(isCrossSigned: false)
+                        didRepairDatabase = true
+                    }
+                } else {
                     mismatched.append(app.name)
                 }
             }
 
-            if didRepairMissingSerials && context.hasChanges {
+            if didRepairDatabase && context.hasChanges {
                 try? context.save()
             }
         }

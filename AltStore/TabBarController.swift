@@ -1,5 +1,5 @@
 
-//  AltStore/TabBarController.swift
+//
 //  TabBarController.swift
 //  AltStore
 //
@@ -28,6 +28,7 @@ private struct DiagnosticCSSTheme {
     static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0)     // #28a745
     static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0)       // #dc3545
     static let magenta = UIColor(red: 232/255, green: 30/255, blue: 99/255, alpha: 1.0)   // #e91e63
+    static let mutedText = UIColor(red: 108/255, green: 117/255, blue: 125/255, alpha: 1.0)
 
     // Gradient Background (#f3e0ff -> #e0f7ff)
     static let bgGradientStart = UIColor(red: 243/255, green: 224/255, blue: 255/255, alpha: 1.0).cgColor
@@ -64,16 +65,177 @@ private final class DiagnosticGradientBackgroundView: UIView {
     }
 }
 
+// MARK: - 🧭 THANH 6-TAB CUSTOM DOCK (KHÔNG BỊ LỖI NÚT "MORE..." CỦA IOS)
+private final class SixTabCustomDockView: UIView {
+    struct TabItemSpec {
+        let title: String
+        let iconName: String
+        let selectedIconName: String
+    }
+
+    var onSelectTab: ((Int) -> Void)?
+
+    private let blurView = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterialLight))
+    private let topBorder = UIView()
+    private let stackView = UIStackView()
+    private var tabButtons: [UIControl] = []
+    private var iconViews: [UIImageView] = []
+    private var titleLabels: [UILabel] = []
+    private var activePills: [UIView] = []
+    private var specs: [TabItemSpec] = []
+
+    private(set) var selectedIndex: Int = 0
+
+    init(specs: [TabItemSpec]) {
+        self.specs = specs
+        super.init(frame: .zero)
+        setupDockUI()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupDockUI()
+    }
+
+    private func setupDockUI() {
+        self.backgroundColor = DiagnosticCSSTheme.white.withAlphaComponent(0.94)
+
+        blurView.translatesAutoresizingMaskIntoConstraints = false
+        blurView.isUserInteractionEnabled = false
+        addSubview(blurView)
+
+        topBorder.translatesAutoresizingMaskIntoConstraints = false
+        topBorder.backgroundColor = DiagnosticCSSTheme.border
+        addSubview(topBorder)
+
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        stackView.axis = .horizontal
+        stackView.distribution = .fillEqually
+        stackView.alignment = .fill
+        stackView.spacing = 2
+        addSubview(stackView)
+
+        NSLayoutConstraint.activate([
+            blurView.topAnchor.constraint(equalTo: topAnchor),
+            blurView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            blurView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            blurView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            topBorder.topAnchor.constraint(equalTo: topAnchor),
+            topBorder.leadingAnchor.constraint(equalTo: leadingAnchor),
+            topBorder.trailingAnchor.constraint(equalTo: trailingAnchor),
+            topBorder.heightAnchor.constraint(equalToConstant: 0.8),
+
+            stackView.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            stackView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            stackView.heightAnchor.constraint(equalToConstant: 45)
+        ])
+
+        for (index, spec) in specs.enumerated() {
+            let control = UIControl()
+            control.translatesAutoresizingMaskIntoConstraints = false
+            control.tag = index
+            control.addTarget(self, action: #selector(handleTabTapped(_:)), for: .touchUpInside)
+
+            let pillView = UIView()
+            pillView.translatesAutoresizingMaskIntoConstraints = false
+            pillView.backgroundColor = DiagnosticCSSTheme.blue.withAlphaComponent(0.12)
+            pillView.layer.cornerRadius = 11
+            pillView.isUserInteractionEnabled = false
+            pillView.alpha = 0
+
+            let iconView = UIImageView()
+            iconView.translatesAutoresizingMaskIntoConstraints = false
+            iconView.contentMode = .scaleAspectFit
+            iconView.isUserInteractionEnabled = false
+
+            let label = UILabel()
+            label.translatesAutoresizingMaskIntoConstraints = false
+            label.text = spec.title
+            label.font = UIFont.systemFont(ofSize: 10.0, weight: .bold)
+            label.textAlignment = .center
+            label.adjustsFontSizeToFitWidth = true
+            label.minimumScaleFactor = 0.75
+            label.isUserInteractionEnabled = false
+
+            control.addSubview(pillView)
+            control.addSubview(iconView)
+            control.addSubview(label)
+
+            NSLayoutConstraint.activate([
+                pillView.topAnchor.constraint(equalTo: control.topAnchor, constant: 1),
+                pillView.centerXAnchor.constraint(equalTo: control.centerXAnchor),
+                pillView.widthAnchor.constraint(equalToConstant: 44),
+                pillView.heightAnchor.constraint(equalToConstant: 25),
+
+                iconView.centerXAnchor.constraint(equalTo: pillView.centerXAnchor),
+                iconView.centerYAnchor.constraint(equalTo: pillView.centerYAnchor),
+                iconView.widthAnchor.constraint(equalToConstant: 20),
+                iconView.heightAnchor.constraint(equalToConstant: 20),
+
+                label.topAnchor.constraint(equalTo: pillView.bottomAnchor, constant: 2),
+                label.leadingAnchor.constraint(equalTo: control.leadingAnchor, constant: 1),
+                label.trailingAnchor.constraint(equalTo: control.trailingAnchor, constant: -1),
+                label.bottomAnchor.constraint(lessThanOrEqualTo: control.bottomAnchor)
+            ])
+
+            stackView.addArrangedSubview(control)
+            tabButtons.append(control)
+            iconViews.append(iconView)
+            titleLabels.append(label)
+            activePills.append(pillView)
+        }
+
+        setSelectedIndex(0, animated: false)
+    }
+
+    func setSelectedIndex(_ index: Int, animated: Bool = true) {
+        guard index >= 0 && index < specs.count else { return }
+        self.selectedIndex = index
+
+        let updates = {
+            for i in 0..<self.specs.count {
+                let isSelected = (i == index)
+                let spec = self.specs[i]
+                let cfg = UIImage.SymbolConfiguration(pointSize: isSelected ? 16.5 : 15.5, weight: isSelected ? .heavy : .semibold)
+                let symbolName = isSelected ? spec.selectedIconName : spec.iconName
+                let img = UIImage(systemName: symbolName, withConfiguration: cfg) ?? UIImage(systemName: spec.iconName, withConfiguration: cfg)
+
+                self.iconViews[i].image = img
+                self.iconViews[i].tintColor = isSelected ? DiagnosticCSSTheme.blue : DiagnosticCSSTheme.mutedText
+                self.titleLabels[i].textColor = isSelected ? DiagnosticCSSTheme.blue : DiagnosticCSSTheme.pureBlack.withAlphaComponent(0.75)
+                self.titleLabels[i].font = UIFont.systemFont(ofSize: 10.0, weight: isSelected ? .heavy : .semibold)
+                self.activePills[i].alpha = isSelected ? 1.0 : 0.0
+                self.activePills[i].transform = isSelected ? .identity : CGAffineTransform(scaleX: 0.85, y: 0.85)
+            }
+        }
+
+        if animated {
+            UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseOut, .beginFromCurrentState], animations: updates)
+        } else {
+            updates()
+        }
+    }
+
+    @objc private func handleTabTapped(_ sender: UIControl) {
+        let index = sender.tag
+        setSelectedIndex(index, animated: true)
+        onSelectTab?(index)
+    }
+}
+
 extension TabBarController
 {
-    // Khôi phục đủ 5 Tab: Thay thế vị trí tab Browse (index 2) bằng tab Bác sĩ (diagnostic)
+    // Đầy đủ 6 Tab: Tổng quan, Sửa lỗi, Bác sĩ, Kho IPA (BrowseViewController), Ứng dụng, Cài đặt
     private enum Tab: Int, CaseIterable
     {
         case news        // 0: Tổng quan
         case sources     // 1: Sửa lỗi
         case diagnostic  // 2: Bác sĩ (Chẩn đoán hệ thống)
-        case myApps      // 3: Ứng dụng
-        case settings    // 4: Cài đặt
+        case ipaHub      // 3: Kho IPA (Tải về & Ký cài trực tiếp - BrowseViewController)
+        case myApps      // 4: Ứng dụng (App đã cài)
+        case settings    // 5: Cài đặt
     }
 }
 
@@ -84,6 +246,21 @@ final class TabBarController: UITabBarController
     private var _viewDidAppear = false
 
     private var sourcesViewController: SourcesViewController!
+    private var customSixTabDock: SixTabCustomDockView?
+
+    override var selectedIndex: Int {
+        didSet {
+            customSixTabDock?.setSelectedIndex(selectedIndex, animated: true)
+        }
+    }
+
+    override var selectedViewController: UIViewController? {
+        didSet {
+            if let vc = selectedViewController, let idx = viewControllers?.firstIndex(of: vc) {
+                customSixTabDock?.setSelectedIndex(idx, animated: true)
+            }
+        }
+    }
 
     required init?(coder aDecoder: NSCoder)
     {
@@ -100,11 +277,17 @@ final class TabBarController: UITabBarController
         debugLog("[TabBarController] viewDidLoad()")
 
         // 0. CỐ ĐỊNH GIAO DIỆN SÁNG (Light Mode)
-        // Thuộc tính này sẽ áp dụng cho cả TabBarController và toàn bộ các NavigationController con bên trong.
         self.overrideUserInterfaceStyle = .light
+        // Không cho phép chỉnh sửa thứ tự tab của MoreNavigationController
+        self.customizableViewControllers = []
 
-        // 1. Thay thế tab Browse cũ (nằm ở vị trí index 2 trên Storyboard gốc) bằng Tab "Bác sĩ" (Chẩn đoán hệ thống)
-        if var viewControllers = self.viewControllers, viewControllers.count == 5 {
+        // 1. Nâng cấp từ 5 Tab gốc của Storyboard lên 6 Tab (Giữ lại BrowseViewController làm "Kho IPA" + Chèn thêm "Bác sĩ")
+        if var originalVCs = self.viewControllers, originalVCs.count == 5 {
+            // Trên Storyboard gốc:
+            // [0]: News, [1]: Sources, [2]: Browse (NavigationController), [3]: MyApps, [4]: Settings
+            let originalBrowseNav = originalVCs[2]
+
+            // Tạo NavigationController cho Tab Bác sĩ (index 2)
             let diagnosticVC = SystemDiagnosticViewController()
             let diagnosticNav = UINavigationController(rootViewController: diagnosticVC)
             diagnosticNav.overrideUserInterfaceStyle = .light
@@ -115,8 +298,40 @@ final class TabBarController: UITabBarController
                 image: doctorIcon,
                 selectedImage: doctorIcon
             )
-            viewControllers[Tab.diagnostic.rawValue] = diagnosticNav
-            self.viewControllers = viewControllers
+
+            // Đảm bảo Tab thứ 4 (index 3) là BrowseViewController (Kho IPA & Ký Cài)
+            let ipaHubNav: UINavigationController
+            if let nav = originalBrowseNav as? UINavigationController {
+                // Nếu root của Browse trên Storyboard là FeaturedViewController hoặc BrowseViewController,
+                // ta đặt thẳng BrowseViewController làm root để mở trực tiếp Kho IPA & Ký Cài
+                if !(nav.viewControllers.first is BrowseViewController) {
+                    let ipaVC = BrowseViewController()
+                    nav.setViewControllers([ipaVC], animated: false)
+                }
+                nav.overrideUserInterfaceStyle = .light
+                ipaHubNav = nav
+            } else {
+                let ipaVC = BrowseViewController()
+                ipaHubNav = UINavigationController(rootViewController: ipaVC)
+                ipaHubNav.overrideUserInterfaceStyle = .light
+            }
+            ipaHubNav.tabBarItem = UITabBarItem(
+                title: "Kho IPA",
+                image: UIImage(systemName: "arrow.down.doc"),
+                selectedImage: UIImage(systemName: "arrow.down.doc.fill")
+            )
+
+            // Gán đủ 6 Tab theo thứ tự chuẩn
+            let sixVCs: [UIViewController] = [
+                originalVCs[0], // 0: Tổng quan
+                originalVCs[1], // 1: Sửa lỗi
+                diagnosticNav,  // 2: Bác sĩ
+                ipaHubNav,      // 3: Kho IPA (Tải về & Ký cài)
+                originalVCs[3], // 4: Ứng dụng (My Apps)
+                originalVCs[4]  // 5: Cài đặt (Settings)
+            ]
+            self.viewControllers = sixVCs
+            self.customizableViewControllers = []
         }
 
         // 2. Đổi tab News thành "Tổng quan"
@@ -127,7 +342,7 @@ final class TabBarController: UITabBarController
             newsNav.tabBarItem.selectedImage = UIImage(systemName: "checkmark.shield.fill")
         }
 
-        // 3. Đổi tab Sources (Nguồn) thành "Sửa lỗi" và cập nhật icon
+        // 3. Đổi tab Sources (Nguồn) thành "Sửa lỗi"
         if let sourcesNav = self.viewControllers?[Tab.sources.rawValue] as? UINavigationController
         {
             sourcesNav.tabBarItem.title = "Sửa lỗi"
@@ -149,8 +364,73 @@ final class TabBarController: UITabBarController
             settingsNav.tabBarItem.title = "Cài đặt"
         }
 
-        // 6. Đặt tab My Apps ("Ứng dụng") làm tab active mặc định khi mở app
-        self.selectedIndex = Tab.myApps.rawValue
+        // 6. Cài đặt Thanh 6-Tab Custom Dock đè lên UITabBar để hiển thị trọn vẹn 6 Tab (không bị gom vào nút More)
+        setupCustomSixTabDock()
+
+        // 7. Đặt tab My Apps ("Ứng dụng") làm tab active mặc định khi mở app
+        self.selectTab(at: Tab.myApps.rawValue)
+    }
+
+    private func setupCustomSixTabDock()
+    {
+        let specs: [SixTabCustomDockView.TabItemSpec] = [
+            .init(title: "Tổng quan", iconName: "checkmark.shield", selectedIconName: "checkmark.shield.fill"),
+            .init(title: "Sửa lỗi", iconName: "wrench.and.screwdriver", selectedIconName: "wrench.and.screwdriver.fill"),
+            .init(title: "Bác sĩ", iconName: "stethoscope", selectedIconName: "stethoscope"),
+            .init(title: "Kho IPA", iconName: "arrow.down.doc", selectedIconName: "arrow.down.doc.fill"),
+            .init(title: "Ứng dụng", iconName: "square.stack.3d.up", selectedIconName: "square.stack.3d.up.fill"),
+            .init(title: "Cài đặt", iconName: "gearshape", selectedIconName: "gearshape.fill")
+        ]
+
+        let dock = SixTabCustomDockView(specs: specs)
+        dock.translatesAutoresizingMaskIntoConstraints = false
+        dock.onSelectTab = { [weak self] index in
+            self?.selectTab(at: index)
+        }
+
+        self.tabBar.addSubview(dock)
+        NSLayoutConstraint.activate([
+            dock.topAnchor.constraint(equalTo: self.tabBar.topAnchor),
+            dock.leadingAnchor.constraint(equalTo: self.tabBar.leadingAnchor),
+            dock.trailingAnchor.constraint(equalTo: self.tabBar.trailingAnchor),
+            dock.bottomAnchor.constraint(equalTo: self.tabBar.bottomAnchor)
+        ])
+        self.customSixTabDock = dock
+    }
+
+    private func selectTab(at index: Int)
+    {
+        guard let vcs = self.viewControllers, index >= 0 && index < vcs.count else { return }
+        let targetVC = vcs[index]
+
+        // Nếu người dùng bấm lại vào đúng Tab đang mở -> Pop về màn hình gốc của NavigationController đó
+        if self.selectedViewController === targetVC, let nav = targetVC as? UINavigationController {
+            nav.popToRootViewController(animated: true)
+        } else {
+            // Gán trực tiếp selectedViewController giúp UITabBarController mở thẳng cả Tab 5 và Tab 6
+            // mà KHÔNG BAO GIỜ nhảy vào moreNavigationController của iOS!
+            self.selectedViewController = targetVC
+        }
+        self.customSixTabDock?.setSelectedIndex(index, animated: true)
+    }
+
+    override func viewDidLayoutSubviews()
+    {
+        super.viewDidLayoutSubviews()
+
+        // Ẩn toàn bộ các nút UITabBarButton mặc định (bao gồm nút "More...") của iOS,
+        // chỉ giữ lại thanh SixTabCustomDockView của chúng ta ở lớp trên cùng.
+        if let dock = self.customSixTabDock {
+            self.tabBar.bringSubviewToFront(dock)
+            for subview in self.tabBar.subviews where subview !== dock {
+                let className = NSStringFromClass(type(of: subview))
+                if className.contains("UITabBarButton") {
+                    subview.isHidden = true
+                    subview.alpha = 0
+                    subview.isUserInteractionEnabled = false
+                }
+            }
+        }
     }
 
     override func viewDidAppear(_ animated: Bool)
@@ -158,7 +438,7 @@ final class TabBarController: UITabBarController
         super.viewDidAppear(animated)
         debugLog("[TabBarController] viewDidAppear() — TabBarController is now visible")
 
-        // Đảm bảo toàn bộ cửa sổ ứng dụng (bao gồm cả các Alert, Toast, Popup...) cũng luôn ở giao diện sáng
+        // Đảm bảo toàn bộ cửa sổ ứng dụng luôn ở giao diện sáng
         self.view.window?.overrideUserInterfaceStyle = .light
 
         _viewDidAppear = true
@@ -190,7 +470,6 @@ extension TabBarController
             presentedViewController.dismiss(animated: true) {
                 self.presentSources(sender)
             }
-
             return
         }
 
@@ -199,7 +478,7 @@ extension TabBarController
             self.sourcesViewController?.deepLinkSourceURL = sourceURL
         }
 
-        self.selectedIndex = Tab.sources.rawValue
+        self.selectTab(at: Tab.sources.rawValue)
     }
 }
 
@@ -207,12 +486,12 @@ private extension TabBarController
 {
     @objc func importApp(_ notification: Notification)
     {
-        self.selectedIndex = Tab.myApps.rawValue
+        self.selectTab(at: Tab.myApps.rawValue)
     }
 
     @objc func openErrorLog(_ notification: Notification)
     {
-        self.selectedIndex = Tab.settings.rawValue
+        self.selectTab(at: Tab.settings.rawValue)
     }
 }
 
@@ -613,7 +892,6 @@ private final class SystemDiagnosticViewController: UIViewController
 
     private func makeStepCard(spec: StepSpec) -> StepCardViews
     {
-        // Khung Card trắng tinh #FFFFFF bo góc 18pt, viền #dce2ec, bóng xanh nhẹ chuẩn CSSTheme
         let container = UIView()
         container.translatesAutoresizingMaskIntoConstraints = false
         container.backgroundColor = DiagnosticCSSTheme.white
@@ -625,7 +903,6 @@ private final class SystemDiagnosticViewController: UIViewController
         container.layer.shadowRadius = 11
         container.layer.shadowOpacity = 0.08
 
-        // Ô vuông Icon 30x30 bên trái (giống inline badge trong SettingsViewController)
         let badgeBox = UIView()
         badgeBox.translatesAutoresizingMaskIntoConstraints = false
         badgeBox.backgroundColor = spec.accentColor.withAlphaComponent(0.14)
@@ -647,7 +924,6 @@ private final class SystemDiagnosticViewController: UIViewController
         spinner.hidesWhenStopped = true
         badgeBox.addSubview(spinner)
 
-        // Tiêu đề đen tuyền #000000 đậm nét
         let titleLabel = UILabel()
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.text = spec.title
@@ -655,7 +931,6 @@ private final class SystemDiagnosticViewController: UIViewController
         titleLabel.textColor = DiagnosticCSSTheme.pureBlack
         titleLabel.numberOfLines = 2
 
-        // Huy hiệu trạng thái (Pill Badge) góc trên bên phải
         let pillView = UIView()
         pillView.translatesAutoresizingMaskIntoConstraints = false
         pillView.backgroundColor = DiagnosticCSSTheme.light
@@ -670,7 +945,6 @@ private final class SystemDiagnosticViewController: UIViewController
         pillLabel.textColor = DiagnosticCSSTheme.blue
         pillView.addSubview(pillLabel)
 
-        // Hộp nội dung kết quả bên dưới (#f5f8ff) giống suiInnerRowBackground
         let statusBox = UIView()
         statusBox.translatesAutoresizingMaskIntoConstraints = false
         statusBox.backgroundColor = DiagnosticCSSTheme.light
@@ -1003,7 +1277,6 @@ private final class SystemDiagnosticViewController: UIViewController
         var remediationTips: [String] = []
         var didToggleOffCellularInStep2 = false
 
-        // Đảm bảo luôn khôi phục 4G nếu quá trình bị dừng giữa chừng
         defer {
             if didToggleOffCellularInStep2 {
                 Task {
@@ -1012,9 +1285,7 @@ private final class SystemDiagnosticViewController: UIViewController
             }
         }
 
-        // ––––––––––––––––––––––––––––––––––
-        // 🛑 BƯỚC 1: KIỂM TRA LOCALDEVVPN TRƯỚC TIÊN (BẮT BUỘC)
-        // ––––––––––––––––––––––––––––––––––
+        // BƯỚC 1: KIỂM TRA LOCALDEVVPN
         updateStep(0, state: .running("Đang quét giao diện mạng tun/utun của LocalDevVPN..."))
         try? await Task.sleep(nanoseconds: 250_000_000)
 
@@ -1029,13 +1300,10 @@ private final class SystemDiagnosticViewController: UIViewController
         let isWifi = minimuxer.network.isWifiSatisfied
         updateStep(0, state: .success(isWifi ? "✅ Đã bật LocalDevVPN (Đang dùng Wi-Fi)" : "✅ Đã bật LocalDevVPN (Đang dùng 4G)"))
 
-        // ––––––––––––––––––––––––––––––––––
-        // 📱 BƯỚC 2: KIỂM TRA FILE PAIRING & ĐƯỜNG TRUYỀN NGẦM iOS (127.0.0.1)
-        // ––––––––––––––––––––––––––––––––––
+        // BƯỚC 2: KIỂM TRA FILE PAIRING & ĐƯỜNG TRUYỀN NGẦM iOS (127.0.0.1)
         updateStep(1, state: .running("Tầng 1: Đang kiểm tra cấu trúc File Pairing..."))
         try? await Task.sleep(nanoseconds: 200_000_000)
 
-        // Tầng 1: Kiểm tra File Pairing tồn tại và đúng chuẩn XML/Plist
         guard let pairingString = PairingFileManager.shared.fetchPairingFile(),
               let pairingData = pairingString.data(using: .utf8),
               let plist = try? PropertyListSerialization.propertyList(from: pairingData, options: [], format: nil) as? [String: Any],
@@ -1047,7 +1315,6 @@ private final class SystemDiagnosticViewController: UIViewController
             return
         }
 
-        // Tầng 2: Nếu KHÔNG CÓ WI-FI -> Phải tự động gọi Phím tắt TẮT 4G để giải phóng 127.0.0.1
         if !minimuxer.network.isWifiSatisfied
         {
             updateStep(1, state: .running("Không có Wi-Fi: Đang gọi Phím tắt TẮT 4G để kiểm tra đường truyền 127.0.0.1..."))
@@ -1068,20 +1335,15 @@ private final class SystemDiagnosticViewController: UIViewController
             remediationTips.append("Kẹt đường truyền ngầm / Lỗi ghép nối: Hãy Khởi động lại (Restart) iPhone/iPad rồi thử lại. Nếu vẫn báo lỗi này, hãy cắm máy tính để thiết lập lại Thiết bị đã ghép nối (Trust) và tạo lại Pairing File mới!")
         }
 
-        // 🔄 Tự động BẬT LẠI 4G ngay sau khi kiểm tra xong Bước 2 (nếu trước đó đã tắt 4G)
-        // để Bước 3 có mạng Internet kiểm tra Máy chủ Anisette và tránh hao pin!
         if didToggleOffCellularInStep2
         {
             updateStep(2, state: .running("Đang gọi Phím tắt BẬT LẠI 4G để kiểm tra Máy chủ Anisette..."))
             _ = await CellularRefreshManager.shared.turnOnDataIfNeeded(addOnDelay: 1.5)
             didToggleOffCellularInStep2 = false
-            // Chờ sóng 4G lên mạng ổn định
             try? await Task.sleep(nanoseconds: 1_500_000_000)
         }
 
-        // ––––––––––––––––––––––––––––––––––
-        // 🌐 BƯỚC 3: KIỂM TRA MÁY CHỦ ANISETTE (TEST DỮ LIỆU REFRESH THỰC TẾ)
-        // ––––––––––––––––––––––––––––––––––
+        // BƯỚC 3: KIỂM TRA MÁY CHỦ ANISETTE
         updateStep(2, state: .running("Đang kiểm tra gói dữ liệu bảo mật từ Máy chủ Anisette..."))
         let anisetteResult = await checkAnisetteServerHealth()
         switch anisetteResult
@@ -1098,9 +1360,7 @@ private final class SystemDiagnosticViewController: UIViewController
             break
         }
 
-        // ––––––––––––––––––––––––––––––––––
-        // 🔐 BƯỚC 4: KIỂM TRA CHỨNG CHỈ GỐC (CERTIFICATE)
-        // ––––––––––––––––––––––––––––––––––
+        // BƯỚC 4: KIỂM TRA CHỨNG CHỈ GỐC (CERTIFICATE)
         updateStep(3, state: .running("Đang kiểm tra Chứng chỉ phát triển và Tài khoản Apple ID..."))
         try? await Task.sleep(nanoseconds: 150_000_000)
 
@@ -1116,9 +1376,7 @@ private final class SystemDiagnosticViewController: UIViewController
 
         updateStep(3, state: .success(certCheck.message))
 
-        // ––––––––––––––––––––––––––––––––––
-        // 📦 BƯỚC 5: KIỂM TRA ĐỒNG BỘ CHỨNG CHỈ CỦA TỪNG APP ĐANG CÀI
-        // ––––––––––––––––––––––––––––––––––
+        // BƯỚC 5: KIỂM TRA ĐỒNG BỘ CHỨNG CHỈ CỦA TỪNG APP ĐANG CÀI
         updateStep(4, state: .running("Đang quét và đối chiếu chứng chỉ của toàn bộ ứng dụng đã cài..."))
         try? await Task.sleep(nanoseconds: 150_000_000)
 
@@ -1143,7 +1401,6 @@ private final class SystemDiagnosticViewController: UIViewController
     // MARK: - CÁC HÀM KIỂM TRA KỸ THUẬT CHI TIẾT
     // ========================================================================
 
-    /// Bước 1: Quét giao diện mạng tun/utun xem LocalDevVPN đã bật và cấp IP chưa
     private func checkLocalDevVPNActive() async -> Bool
     {
         #if targetEnvironment(simulator)
@@ -1217,7 +1474,6 @@ private final class SystemDiagnosticViewController: UIViewController
         return false
     }
 
-    /// Bước 2: Mở phiên kết nối thực tế tới lockdownd thông qua Minimuxer (Timeout 6.5s tránh treo)
     private func testMinimuxerLiveLockdownConnection() async -> Bool
     {
         #if targetEnvironment(simulator)
@@ -1231,7 +1487,6 @@ private final class SystemDiagnosticViewController: UIViewController
         #endif
     }
 
-    /// Bước 3: Kiểm tra Máy chủ Anisette xem gói JSON trả về có đầy đủ các trường bảo mật để Refresh/Login không
     private func checkAnisetteServerHealth() async -> CheckState
     {
         let defaults = UserDefaults.standard
@@ -1296,7 +1551,6 @@ private final class SystemDiagnosticViewController: UIViewController
         }
     }
 
-    /// Chuẩn hóa chuỗi Serial của chứng chỉ (bỏ khoảng trắng, dấu ':', tiền tố 0x và số 0 ở đầu) để so sánh chính xác
     private static func normalizeSerial(_ raw: String?) -> String
     {
         guard let raw else { return "" }
@@ -1314,7 +1568,6 @@ private final class SystemDiagnosticViewController: UIViewController
         return cleaned
     }
 
-    /// Bước 4: Kiểm tra Chứng chỉ gốc đang lưu trong Keychain / DatabaseManager
     private func checkActiveRootCertificate() -> (serialNumber: String?, message: String)
     {
         let context = DatabaseManager.shared.viewContext
@@ -1337,7 +1590,6 @@ private final class SystemDiagnosticViewController: UIViewController
         return (serial, "✅ Hợp lệ (\(accountNote) • Serial: \(shortSerial))")
     }
 
-    /// Bước 5: Quét toàn bộ InstalledApp trong DatabaseManager và đối chiếu chứng chỉ với Chứng chỉ gốc ở Bước 4
     private func checkInstalledAppsCertificateSync(activeRootSerial: String) -> (totalCount: Int, mismatchedAppNames: [String])
     {
         let context = DatabaseManager.shared.viewContext
@@ -1360,20 +1612,14 @@ private final class SystemDiagnosticViewController: UIViewController
 
             for app in allApps
             {
-                // 1. Lấy serial đã lưu trong DB
                 var resolvedSerial = app.certificateSerialNumber?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-                // 2. Nếu DB bị trống (do InstallAppOperation chỉ gán overrideSigningCertificate),
-                // đọc từ nơi SideStore thực sự lưu chứng chỉ đã ký của App:
-                // (a) CertificateManager.shared.getSigningCertificate(for: app) -> đọc file signing_certificate.der
-                // TUYỆT ĐỐI KHÔNG gọi getSigningCertificate(at: app.fileURL) vì app.fileURL là Payload IPA gốc chưa ký!
                 if resolvedSerial == nil || resolvedSerial!.isEmpty {
                     if let signedCert = CertificateManager.shared.getSigningCertificate(for: app) {
                         resolvedSerial = signedCert.serialNumber
                     }
                 }
 
-                // (b) Đọc từ Provisioning Profile (Resigned) của App (giống hệt AppInfoView.swift)
                 let resignedProfile = app.customProvisioningProfile
                 if resolvedSerial == nil || resolvedSerial!.isEmpty,
                    let profileCerts = resignedProfile?.certificates,
@@ -1398,8 +1644,6 @@ private final class SystemDiagnosticViewController: UIViewController
                         isMatchedWithRoot = true
                     }
                 } else {
-                    // 3. Nếu App không lưu file .der riêng và dùng chung Main Profile (useMainProfile == true)
-                    // hoặc có cùng Team ID và còn hạn sử dụng -> Đồng bộ chuẩn với Chứng chỉ gốc hiện tại
                     let effectiveExpiration = resignedProfile?.expirationDate ?? app.expirationDate
                     let sameTeam = (activeTeamID == nil) || (app.team?.identifier == activeTeamID) || (resignedProfile?.teamIdentifier == activeTeamID)
                     if effectiveExpiration > Date() && (app.useMainProfile || sameTeam) {
@@ -1409,7 +1653,6 @@ private final class SystemDiagnosticViewController: UIViewController
                 }
 
                 if isMatchedWithRoot {
-                    // Tự động điền lại certificateSerialNumber vào DB (để AppInfoView hiện luôn dòng Certificate Serial)
                     let finalSerial = (resolvedSerial?.isEmpty == false) ? resolvedSerial! : activeRootSerial
                     if app.certificateSerialNumber != finalSerial {
                         app.certificateSerialNumber = finalSerial
@@ -1433,3 +1676,5 @@ private final class SystemDiagnosticViewController: UIViewController
         return (total, mismatched)
     }
 }
+
+

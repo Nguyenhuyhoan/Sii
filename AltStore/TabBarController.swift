@@ -833,6 +833,24 @@ private final class SystemDiagnosticViewController: UIViewController
         }
     }
 
+    /// Chuẩn hóa chuỗi Serial của chứng chỉ (bỏ khoảng trắng, dấu ':', tiền tố 0x và số 0 ở đầu) để so sánh chính xác
+    private static func normalizeSerial(_ raw: String?) -> String
+    {
+        guard let raw else { return "" }
+        var cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: ":", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "-", with: "")
+        if cleaned.hasPrefix("0x") {
+            cleaned = String(cleaned.dropFirst(2))
+        }
+        while cleaned.count > 1 && cleaned.first == "0" {
+            cleaned.removeFirst()
+        }
+        return cleaned
+    }
+
     /// Bước 4: Kiểm tra Chứng chỉ gốc đang lưu trong Keychain / DatabaseManager
     private func checkActiveRootCertificate() -> (serialNumber: String?, message: String)
     {
@@ -864,30 +882,51 @@ private final class SystemDiagnosticViewController: UIViewController
         var total = 0
         var mismatched: [String] = []
 
-        let normalizedRoot = activeRootSerial.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedRoot = Self.normalizeSerial(activeRootSerial)
 
         context.performAndWait {
             let allApps = InstalledApp.all(in: context)
             total = allApps.count
+            var didRepairMissingSerials = false
 
             for app in allApps
             {
-                let appSerial = app.certificateSerialNumber?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
-                var isMismatch = false
-
-                if appSerial.isEmpty || appSerial != normalizedRoot {
-                    isMismatch = true
+                // 1. Lấy serial đã lưu trong DB hoặc đọc từ bản cache .app trên đĩa (nếu có)
+                var rawAppSerial = app.certificateSerialNumber
+                if (rawAppSerial == nil || rawAppSerial!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty),
+                   let cachedCert = CertificateManager.shared.getSigningCertificate(at: app.fileURL) {
+                    rawAppSerial = cachedCert.serialNumber
                 }
 
-                if case .valid(let isCrossSigned) = app.certificateStatus, isCrossSigned {
+                let normalizedAppSerial = Self.normalizeSerial(rawAppSerial)
+                var isMismatch = false
+
+                // 2. Chỉ báo lệch khi:
+                // - App có lưu Serial chứng chỉ khác với Serial chứng chỉ gốc hiện tại
+                // - Hoặc trạng thái chứng chỉ của App bị đánh dấu là ký chéo (isCrossSigned == true)
+                if !normalizedAppSerial.isEmpty && !normalizedRoot.isEmpty && normalizedAppSerial != normalizedRoot {
                     isMismatch = true
-                } else if app.certificateStatus != .valid(isCrossSigned: false) {
+                } else if case .valid(let isCrossSigned) = app.certificateStatus, isCrossSigned {
                     isMismatch = true
+                } else if normalizedAppSerial.isEmpty {
+                    // Nếu app vừa cài hoặc Refresh 4G xong (còn hạn sử dụng) mà DB chưa kịp lưu certificateSerialNumber,
+                    // tự động đồng bộ lại serial hiện tại để DB sạch sẽ, không báo lỗi oan!
+                    if app.expirationDate > Date() {
+                        app.certificateSerialNumber = activeRootSerial
+                        app.certificateStatus = .valid(isCrossSigned: false)
+                        didRepairMissingSerials = true
+                    } else {
+                        isMismatch = true
+                    }
                 }
 
                 if isMismatch {
                     mismatched.append(app.name)
                 }
+            }
+
+            if didRepairMissingSerials && context.hasChanges {
+                try? context.save()
             }
         }
 

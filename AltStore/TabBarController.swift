@@ -571,7 +571,7 @@ private final class SystemDiagnosticViewController: UIViewController
               !plist.isEmpty else
         {
             updateStep(1, state: .failure("❌ Thiếu File Pairing hoặc cấu trúc file bị hỏng (Cần cắm máy tính tạo lại)!"))
-            remediationTips.append("Thiếu File Pairing: Hãy cắm iPhone/iPad vào máy tính, dùng idevicepair (hoặc جitterbugpair) để tạo lại file ghép nối rồi nạp lại vào ứng dụng.")
+            remediationTips.append("Thiếu File Pairing: Hãy cắm iPhone/iPad vào máy tính, dùng idevicepair (hoặc jitterbugpair) để tạo lại file ghép nối rồi nạp lại vào ứng dụng.")
             showRemediation(remediationTips)
             return
         }
@@ -604,7 +604,7 @@ private final class SystemDiagnosticViewController: UIViewController
             updateStep(2, state: .running("Đang gọi Phím tắt BẬT LẠI 4G để kiểm tra Máy chủ Anisette..."))
             _ = await CellularRefreshManager.shared.turnOnDataIfNeeded(addOnDelay: 1.5)
             didToggleOffCellularInStep2 = false
-            // Chờ sóng 4G lên mạng ổn định (tối đa 4 giây)
+            // Chờ sóng 4G lên mạng ổn định
             try? await Task.sleep(nanoseconds: 1_500_000_000)
         }
 
@@ -679,8 +679,8 @@ private final class SystemDiagnosticViewController: UIViewController
         return true
         #else
         // Kiểm tra trực tiếp IP tunnel từ ConnectionConfig hoặc bảng giao diện mạng ifaddrs
-        let tunnelIp = ConnectionConfig.shared.tunnelIfaceIp
-        if !tunnelIp.isEmpty && tunnelIp != "0.0.0.0" {
+        if let tunnelIp = ConnectionConfig.shared.tunnelIfaceIp,
+           !tunnelIp.isEmpty && tunnelIp != "0.0.0.0" {
             if Self.hasActiveLocalDevVPNUtunInterface() {
                 return true
             }
@@ -750,7 +750,7 @@ private final class SystemDiagnosticViewController: UIViewController
         return false
     }
 
-    /// Bước 2: Mở phiên kết nối thực tế tới lockdownd thông qua Minimuxer (Timeout 7s tránh treo)
+    /// Bước 2: Mở phiên kết nối thực tế tới lockdownd thông qua Minimuxer (Timeout 6.5s tránh treo)
     private func testMinimuxerLiveLockdownConnection() async -> Bool
     {
         #if targetEnvironment(simulator)
@@ -837,31 +837,15 @@ private final class SystemDiagnosticViewController: UIViewController
     private func checkActiveRootCertificate() -> (serialNumber: String?, message: String)
     {
         let context = DatabaseManager.shared.viewContext
-        var teamInfo = ""
-        var activeCertSerial: String?
-        var activeCertName: String?
+        var hasActiveAccount = false
 
         context.performAndWait {
-            if let team = DatabaseManager.shared.activeTeam(in: context) {
-                teamInfo = "Team: \(team.name) (\(team.identifier))"
-                if let cert = team.activeCertificate {
-                    activeCertSerial = cert.serialNumber
-                    activeCertName = cert.name
-                }
-            }
+            hasActiveAccount = (DatabaseManager.shared.activeAccount(in: context) != nil)
         }
 
-        // Ưu tiên lấy serial từ CertificateManager.shared.activeCertificate hoặc từ chính gói bundle của SideStore
-        if let keychainCert = CertificateManager.shared.activeCertificate {
-            activeCertSerial = keychainCert.serialNumber
-            if activeCertName == nil {
-                activeCertName = keychainCert.name
-            }
-        } else if activeCertSerial == nil,
-                  let bundleCert = CertificateManager.shared.getSigningCertificate(at: Bundle.Info.activeBundleURL) {
-            activeCertSerial = bundleCert.serialNumber
-            activeCertName = bundleCert.name
-        }
+        // Lấy serialNumber chuẩn xác giống hệt dòng 204 của DatabaseManager.swift
+        let activeCertSerial = CertificateManager.shared.activeCertificate?.serialNumber
+            ?? CertificateManager.shared.getSigningCertificate(at: Bundle.Info.activeBundleURL)?.serialNumber
 
         guard let serial = activeCertSerial?.trimmingCharacters(in: .whitespacesAndNewlines),
               !serial.isEmpty else {
@@ -869,8 +853,8 @@ private final class SystemDiagnosticViewController: UIViewController
         }
 
         let shortSerial = serial.count > 10 ? "\(serial.prefix(10))..." : serial
-        let detail = [teamInfo, "Serial: \(shortSerial)"].filter { !$0.isEmpty }.joined(separator: " • ")
-        return (serial, "✅ Hợp lệ (\(detail))")
+        let accountNote = hasActiveAccount ? "Đã đăng nhập Apple ID" : "Chứng chỉ lưu sẵn"
+        return (serial, "✅ Hợp lệ (\(accountNote) • Serial: \(shortSerial))")
     }
 
     /// Bước 5: Quét toàn bộ InstalledApp trong DatabaseManager và đối chiếu chứng chỉ với Chứng chỉ gốc ở Bước 4

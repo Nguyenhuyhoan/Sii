@@ -1,5 +1,6 @@
+
 //  AltStore/TabBarController.swift
-//  TabBarController.swift
+//   TabBarController.swift
 //  AltStore
 //
 //  Created by Riley Testut on 9/19/19.
@@ -189,6 +190,7 @@ extension TabBarController
             presentedViewController.dismiss(animated: true) {
                 self.presentSources(sender)
             }
+
             return
         }
 
@@ -826,6 +828,9 @@ private final class SystemDiagnosticViewController: UIViewController
         case .running(let msg):
             card.symbolImageView.isHidden = true
             card.spinner.startAnimating()
+            card.badgeBox.backgroundColor = DiagnosticCSSTheme.blue.withAlphaComponent(0.14)
+            card.badgeBox.layer.borderColor = DiagnosticCSSTheme.blue.withAlphaComponent(0.28).cgColor
+
             card.pillLabel.text = "Đang khám..."
             card.pillLabel.textColor = DiagnosticCSSTheme.blue
             card.pillView.backgroundColor = DiagnosticCSSTheme.blue.withAlphaComponent(0.14)
@@ -841,11 +846,12 @@ private final class SystemDiagnosticViewController: UIViewController
         case .success(let msg):
             card.spinner.stopAnimating()
             card.symbolImageView.isHidden = false
-            if index == 3 {
-                card.badgeBox.backgroundColor = DiagnosticCSSTheme.blue.withAlphaComponent(0.14)
-                card.badgeBox.layer.borderColor = DiagnosticCSSTheme.blue.withAlphaComponent(0.28).cgColor
-                card.symbolImageView.tintColor = DiagnosticCSSTheme.blue
-            }
+            // Khi không bị lỗi, icon mục 4 (và các mục khác) hiển thị màu xanh đồng bộ
+            let successBadgeColor = (index == 3) ? DiagnosticCSSTheme.blue : card.accentColor
+            card.symbolImageView.tintColor = successBadgeColor
+            card.badgeBox.backgroundColor = successBadgeColor.withAlphaComponent(0.14)
+            card.badgeBox.layer.borderColor = successBadgeColor.withAlphaComponent(0.28).cgColor
+
             card.pillLabel.text = "Tốt • Ổn định"
             card.pillLabel.textColor = DiagnosticCSSTheme.green
             card.pillView.backgroundColor = DiagnosticCSSTheme.green.withAlphaComponent(0.15)
@@ -861,6 +867,10 @@ private final class SystemDiagnosticViewController: UIViewController
         case .warning(let msg):
             card.spinner.stopAnimating()
             card.symbolImageView.isHidden = false
+            card.symbolImageView.tintColor = DiagnosticCSSTheme.orange
+            card.badgeBox.backgroundColor = DiagnosticCSSTheme.orange.withAlphaComponent(0.14)
+            card.badgeBox.layer.borderColor = DiagnosticCSSTheme.orange.withAlphaComponent(0.28).cgColor
+
             card.pillLabel.text = "Cần chú ý"
             card.pillLabel.textColor = DiagnosticCSSTheme.orange
             card.pillView.backgroundColor = DiagnosticCSSTheme.orange.withAlphaComponent(0.16)
@@ -876,6 +886,10 @@ private final class SystemDiagnosticViewController: UIViewController
         case .failure(let msg):
             card.spinner.stopAnimating()
             card.symbolImageView.isHidden = false
+            card.symbolImageView.tintColor = DiagnosticCSSTheme.red
+            card.badgeBox.backgroundColor = DiagnosticCSSTheme.red.withAlphaComponent(0.14)
+            card.badgeBox.layer.borderColor = DiagnosticCSSTheme.red.withAlphaComponent(0.28).cgColor
+
             card.pillLabel.text = "Phát hiện lỗi"
             card.pillLabel.textColor = DiagnosticCSSTheme.red
             card.pillView.backgroundColor = DiagnosticCSSTheme.red.withAlphaComponent(0.15)
@@ -944,7 +958,7 @@ private final class SystemDiagnosticViewController: UIViewController
         isRunningDiagnostic = true
         startButton.isEnabled = false
         startButton.alpha = 0.75
-        startButton.setTitle("  ⏳ BÁC SĨ ĐANG KHÁM HỆ THỐNG…  ", for: .normal)
+        startButton.setTitle("  ⏳ BÁC SĨ ĐANG KHÁM HỆ THỐNG...  ", for: .normal)
 
         resetAllStepsToIdle()
 
@@ -1259,7 +1273,7 @@ private final class SystemDiagnosticViewController: UIViewController
         }
     }
 
-    /// Chuẩn hóa chuỗi Serial của chứng chỉ (bỏ khoảng trắng, dấu ':', tiền tố 0x và số 0 ở đầu) để so sánh chính xác
+    /// Chuẩn hóa chuỗi Serial của chứng chỉ (bỏ khoảng trắng, dấu ‘:’, tiền tố 0x và số 0 ở đầu) để so sánh chính xác
     private static func normalizeSerial(_ raw: String?) -> String
     {
         guard let raw else { return "" }

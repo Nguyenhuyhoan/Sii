@@ -812,7 +812,7 @@ private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableVie
         downloadedPillButton.translatesAutoresizingMaskIntoConstraints = false
         downloadedPillButton.setTitle("📥 Đã tải", for: .normal)
         downloadedPillButton.setTitleColor(FeaturedCSSTheme.blue, for: .normal)
-        downloadedPillButton.titleLabel?.font = UIFont.systemFont(ofSize: 12.5, weight: .extrabold)
+        downloadedPillButton.titleLabel?.font = UIFont.systemFont(ofSize: 12.5, weight: .heavy)
         downloadedPillButton.backgroundColor = FeaturedCSSTheme.white
         downloadedPillButton.layer.cornerRadius = 15
         downloadedPillButton.contentEdgeInsets = UIEdgeInsets(top: 5, left: 10, bottom: 5, right: 10)
@@ -1667,7 +1667,7 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
         addBtn.translatesAutoresizingMaskIntoConstraints = false
         addBtn.setTitle("+ Thêm", for: .normal)
         addBtn.setTitleColor(FeaturedCSSTheme.blue, for: .normal)
-        addBtn.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .extrabold)
+        addBtn.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .heavy)
         addBtn.backgroundColor = FeaturedCSSTheme.white
         addBtn.layer.cornerRadius = 14
         addBtn.contentEdgeInsets = UIEdgeInsets(top: 5, left: 11, bottom: 5, right: 11)

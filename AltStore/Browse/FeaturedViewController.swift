@@ -11,27 +11,32 @@
 import CoreData
 @preconcurrency import Nuke
 
-// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% TOÀN HỆ THỐNG)
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI SETTINGS & MY APPS)
 private struct FeaturedCSSTheme {
-    static let white = UIColor.white
-    static let pureBlack = UIColor.black                                                 // #000000
-    static let darkGray = UIColor(red: 55/255, green: 65/255, blue: 81/255, alpha: 1.0)
-    static let light = UIColor(red: 245/255, green: 248/255, blue: 255/255, alpha: 1.0)   // #f5f8ff
-    static let border = UIColor(red: 220/255, green: 226/255, blue: 236/255, alpha: 1.0)  // #dce2ec
-    static let innerBorder = UIColor(red: 222/255, green: 229/255, blue: 240/255, alpha: 1.0)
-    static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0)      // #007bff
-    static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0)   // #6f42c1
-    static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0)     // #28a745
-    static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0)       // #dc3545
+    static let primary = UIColor(red: 44/255, green: 62/255, blue: 80/255, alpha: 1.0)      // #2c3e50
+    static let secondary = UIColor(red: 52/255, green: 73/255, blue: 94/255, alpha: 1.0)    // #34495e
+    static let white = UIColor.white                                                        // #ffffff
+    static let pureBlack = UIColor.black                                                    // #000000
+    static let darkGray = UIColor(red: 55/255, green: 65/255, blue: 81/255, alpha: 1.0)     // #374151
+    static let light = UIColor(red: 245/255, green: 248/255, blue: 255/255, alpha: 1.0)     // #f5f8ff
+    static let border = UIColor(red: 220/255, green: 226/255, blue: 236/255, alpha: 1.0)    // #dce2ec
+    static let cardBorder = UIColor(red: 230/255, green: 235/255, blue: 242/255, alpha: 1.0)// #e6ebf2
+    static let innerBorder = UIColor(red: 222/255, green: 229/255, blue: 240/255, alpha: 1.0)// #dee5f0
+    static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0)        // #007bff
+    static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0)     // #6f42c1
+    static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0)       // #28a745
+    static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0)         // #dc3545
+    static let infoBg = UIColor(red: 238/255, green: 245/255, blue: 255/255, alpha: 1.0)    // #eef5ff
+    static let purplePillBg = UIColor(red: 243/255, green: 232/255, blue: 255/255, alpha: 1.0)
 
     static let bgGradientStart = UIColor(red: 243/255, green: 224/255, blue: 255/255, alpha: 1.0).cgColor
     static let bgGradientEnd = UIColor(red: 224/255, green: 247/255, blue: 255/255, alpha: 1.0).cgColor
 
-    static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.95).cgColor
-    static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.92).cgColor
+    static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.92).cgColor
+    static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.90).cgColor
 }
 
-// MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH
+// MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH CHUẨN CSS
 private final class FeaturedGradientBackgroundView: UIView {
     override class var layerClass: AnyClass { CAGradientLayer.self }
 
@@ -160,7 +165,6 @@ private enum FeaturedUniversalRepoParser {
             let versionsArray = dict["versions"] as? [[String: Any]]
             let latestVersionDict = versionsArray?.first
 
-            // 1. Lấy link tải IPA (hỗ trợ cả cấp ngoài, versions[0], trường "down", "url")
             let rawDownloadURL = Self.cleanLink(dict["downloadURL"] as? String)
                 ?? Self.cleanLink(latestVersionDict?["downloadURL"] as? String)
                 ?? Self.cleanLink(dict["down"] as? String)
@@ -171,14 +175,12 @@ private enum FeaturedUniversalRepoParser {
                 continue
             }
 
-            // 2. Lấy Bundle Identifier
             let rawBundleID = (dict["bundleIdentifier"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
                 ?? (dict["bundleID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
                 ?? (dict["appID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
                 ?? ""
             let bundleID = rawBundleID.isEmpty ? "app.sidestore.item.\(idx)" : rawBundleID
 
-            // 3. Lấy Tên App
             var appName = (dict["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if appName.isEmpty {
                 let lastComponent = downloadURL.deletingPathExtension().lastPathComponent.removingPercentEncoding ?? ""
@@ -192,32 +194,27 @@ private enum FeaturedUniversalRepoParser {
                 }
             }
 
-            // 4. Lấy Phiên bản
             let version = (dict["version"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
                 ?? (latestVersionDict?["version"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
                 ?? (dict["absoluteVersion"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
                 ?? (latestVersionDict?["absoluteVersion"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
                 ?? "1.0"
 
-            // 5. Lấy Ngày cập nhật
             let dateStr = (dict["versionDate"] as? String)
                 ?? (latestVersionDict?["date"] as? String)
                 ?? (dict["fullDate"] as? String)
                 ?? (dict["date"] as? String)
                 ?? ""
 
-            // 6. Lấy Dung lượng
             let sizeBytes: Int64 = Self.parseInt64(dict["size"])
                 ?? Self.parseInt64(latestVersionDict?["size"])
                 ?? 0
 
-            // 7. Lấy Icon App
             let rawIcon = Self.cleanLink(dict["iconURL"] as? String)
                 ?? Self.cleanLink(dict["icon"] as? String)
                 ?? repoIcon
             let iconURL = rawIcon != nil ? Self.makeSafeURL(from: rawIcon!) : nil
 
-            // 8. Lấy Nhà phát triển & Mô tả
             let devNameRaw = (dict["developerName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
                 ?? (dict["author"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
                 ?? ""
@@ -447,7 +444,6 @@ private final class FeaturedIPADownloadCenter: NSObject, URLSessionDownloadDeleg
         NotificationCenter.default.post(name: Self.stateDidChangeNotification, object: nil)
     }
 
-    // MARK: URLSessionDownloadDelegate
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         let taskID = downloadTask.taskIdentifier
         Task { @MainActor in
@@ -553,7 +549,6 @@ private final class FeaturedSmartRepoStoreManager {
     private(set) var sources: [FeaturedRepoSource] = []
     private var memoryCache: [String: [FeaturedAppItem]] = [:]
 
-    // ✅ 7 NGUỒN LỚN NHIỀU APP & GAME PHỔ BIẾN, CẬP NHẬT THƯỜNG XUYÊN
     static let defaultLightSources: [FeaturedRepoSource] = [
         FeaturedRepoSource(
             urlString: "https://wuxu1.github.io/wuxu-complete-plus.json",
@@ -752,13 +747,260 @@ private final class FeaturedSmartRepoStoreManager {
     }
 }
 
-// MARK: - 🃏 CELL HIỂN THỊ ỨNG DỤNG (3 TRẠNG THÁI: TẢI VỀ -> % ĐANG TẢI -> KÝ APP)
+// MARK: - 🏷️ HEADER BANNER (.hero + SEARCH BAR) LƯỚT THEO WEB (KHÔNG CỐ ĐỊNH CHIẾM CHỖ)
+private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableView {
+    static let reuseIdentifier = "FeaturedWebScrollHeaderReusableView"
+
+    private let heroCard = UIView()
+    private let heroGradient = CAGradientLayer()
+
+    private let downloadedPillButton = UIButton(type: .system)
+    private let sourcesPillButton = UIButton(type: .system)
+
+    private let centerTitleStack = UIStackView()
+    private let heroIconView = UIImageView()
+    private let heroTitleLabel = UILabel()
+    private let loadingSpinner = UIActivityIndicatorView(style: .medium)
+
+    private let filterStatusPillButton = UIButton(type: .system)
+
+    private let searchContainerCard = UIView()
+    let searchBar = UISearchBar()
+
+    private let sectionRowStack = UIStackView()
+    private let sectionTitleLabel = UILabel()
+    private let quickSwitchSourceButton = UIButton(type: .system)
+
+    var onOpenDownloadsTapped: (() -> Void)?
+    var onOpenSourcesTapped: (() -> Void)?
+    var onFilterPillTapped: (() -> Void)?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupViews()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupViews()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        heroGradient.frame = heroCard.bounds
+    }
+
+    private func setupViews() {
+        backgroundColor = .clear
+
+        // 1. Thẻ .hero Gradient đồng bộ 100% với Settings & MyApps
+        heroCard.translatesAutoresizingMaskIntoConstraints = false
+        heroCard.layer.cornerRadius = 16
+        heroCard.layer.shadowColor = FeaturedCSSTheme.blue.cgColor
+        heroCard.layer.shadowOffset = CGSize(width: 0, height: 6)
+        heroCard.layer.shadowRadius = 14
+        heroCard.layer.shadowOpacity = 0.22
+
+        heroGradient.colors = [FeaturedCSSTheme.heroStart, FeaturedCSSTheme.heroEnd]
+        heroGradient.startPoint = CGPoint(x: 0.0, y: 0.0)
+        heroGradient.endPoint = CGPoint(x: 1.0, y: 1.0)
+        heroGradient.cornerRadius = 16
+        heroCard.layer.insertSublayer(heroGradient, at: 0)
+        addSubview(heroCard)
+
+        // Nút Trái: Kho IPA đã tải về (Nền trắng chữ xanh giống nút + IPA bên MyApps)
+        downloadedPillButton.translatesAutoresizingMaskIntoConstraints = false
+        downloadedPillButton.setTitle("📥 Đã tải", for: .normal)
+        downloadedPillButton.setTitleColor(FeaturedCSSTheme.blue, for: .normal)
+        downloadedPillButton.titleLabel?.font = UIFont.systemFont(ofSize: 12.5, weight: .extrabold)
+        downloadedPillButton.backgroundColor = FeaturedCSSTheme.white
+        downloadedPillButton.layer.cornerRadius = 15
+        downloadedPillButton.contentEdgeInsets = UIEdgeInsets(top: 5, left: 10, bottom: 5, right: 10)
+        downloadedPillButton.addTarget(self, action: #selector(handleDownloadsTap), for: .touchUpInside)
+        heroCard.addSubview(downloadedPillButton)
+
+        // Nút Phải: Quản lý & Thêm nguồn JSON
+        sourcesPillButton.translatesAutoresizingMaskIntoConstraints = false
+        sourcesPillButton.setTitle("➕ Nguồn", for: .normal)
+        sourcesPillButton.setTitleColor(FeaturedCSSTheme.white, for: .normal)
+        sourcesPillButton.titleLabel?.font = UIFont.systemFont(ofSize: 12.5, weight: .bold)
+        sourcesPillButton.backgroundColor = UIColor.white.withAlphaComponent(0.20)
+        sourcesPillButton.layer.cornerRadius = 15
+        sourcesPillButton.layer.borderWidth = 1.0
+        sourcesPillButton.layer.borderColor = UIColor.white.withAlphaComponent(0.38).cgColor
+        sourcesPillButton.contentEdgeInsets = UIEdgeInsets(top: 5, left: 10, bottom: 5, right: 10)
+        sourcesPillButton.addTarget(self, action: #selector(handleSourcesTap), for: .touchUpInside)
+        heroCard.addSubview(sourcesPillButton)
+
+        // Cụm Tiêu đề chính giữa
+        centerTitleStack.translatesAutoresizingMaskIntoConstraints = false
+        centerTitleStack.axis = .horizontal
+        centerTitleStack.alignment = .center
+        centerTitleStack.spacing = 6
+        heroCard.addSubview(centerTitleStack)
+
+        let iconCfg = UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)
+        heroIconView.image = UIImage(systemName: "sparkles.rectangle.stack.fill", withConfiguration: iconCfg)
+        heroIconView.tintColor = .white
+        centerTitleStack.addArrangedSubview(heroIconView)
+
+        heroTitleLabel.text = "Kho App Game"
+        heroTitleLabel.font = UIFont.systemFont(ofSize: 17.5, weight: .heavy)
+        heroTitleLabel.textColor = .white
+        heroTitleLabel.adjustsFontSizeToFitWidth = true
+        heroTitleLabel.minimumScaleFactor = 0.82
+        centerTitleStack.addArrangedSubview(heroTitleLabel)
+
+        loadingSpinner.color = .white
+        loadingSpinner.transform = CGAffineTransform(scaleX: 0.78, y: 0.78)
+        loadingSpinner.hidesWhenStopped = true
+        centerTitleStack.addArrangedSubview(loadingSpinner)
+
+        // Viên thuốc trạng thái nguồn bên dưới tiêu đề (Giống nút Bác Sĩ Hệ Thống bên MyApps)
+        filterStatusPillButton.translatesAutoresizingMaskIntoConstraints = false
+        filterStatusPillButton.setTitle("🌐 Tất cả nguồn • Chạm để lọc nguồn", for: .normal)
+        filterStatusPillButton.setTitleColor(.white, for: .normal)
+        filterStatusPillButton.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .bold)
+        filterStatusPillButton.backgroundColor = UIColor.white.withAlphaComponent(0.18)
+        filterStatusPillButton.layer.cornerRadius = 13
+        filterStatusPillButton.layer.borderWidth = 1.0
+        filterStatusPillButton.layer.borderColor = UIColor.white.withAlphaComponent(0.35).cgColor
+        filterStatusPillButton.contentEdgeInsets = UIEdgeInsets(top: 4, left: 12, bottom: 4, right: 12)
+        filterStatusPillButton.addTarget(self, action: #selector(handleFilterPillTap), for: .touchUpInside)
+        heroCard.addSubview(filterStatusPillButton)
+
+        // 2. Thẻ Tìm kiếm trắng tinh chuẩn CSS Card (Cuộn theo trang web)
+        searchContainerCard.translatesAutoresizingMaskIntoConstraints = false
+        searchContainerCard.backgroundColor = FeaturedCSSTheme.white
+        searchContainerCard.layer.cornerRadius = 14
+        searchContainerCard.layer.borderWidth = 1.0
+        searchContainerCard.layer.borderColor = FeaturedCSSTheme.cardBorder.cgColor
+        searchContainerCard.layer.shadowColor = FeaturedCSSTheme.blue.cgColor
+        searchContainerCard.layer.shadowOffset = CGSize(width: 0, height: 3)
+        searchContainerCard.layer.shadowRadius = 8
+        searchContainerCard.layer.shadowOpacity = 0.05
+        addSubview(searchContainerCard)
+
+        searchBar.translatesAutoresizingMaskIntoConstraints = false
+        searchBar.placeholder = "Tìm tên App, Game, tác giả, Bundle ID..."
+        searchBar.searchBarStyle = .minimal
+        searchBar.returnKeyType = .done
+        if let tf = searchBar.value(forKey: "searchField") as? UITextField {
+            tf.backgroundColor = FeaturedCSSTheme.light
+            tf.textColor = FeaturedCSSTheme.pureBlack
+            tf.font = UIFont.systemFont(ofSize: 14, weight: .medium)
+            tf.layer.cornerRadius = 10
+            tf.layer.borderWidth = 0.8
+            tf.layer.borderColor = FeaturedCSSTheme.innerBorder.cgColor
+            tf.clipsToBounds = true
+        }
+        searchContainerCard.addSubview(searchBar)
+
+        // 3. Hàng tiêu đề danh sách (Đồng bộ style Section Header của MyApps)
+        sectionRowStack.translatesAutoresizingMaskIntoConstraints = false
+        sectionRowStack.axis = .horizontal
+        sectionRowStack.alignment = .center
+        sectionRowStack.distribution = .equalSpacing
+        addSubview(sectionRowStack)
+
+        sectionTitleLabel.font = UIFont.systemFont(ofSize: 13, weight: .heavy)
+        sectionTitleLabel.textColor = FeaturedCSSTheme.primary
+        sectionTitleLabel.text = "🔥 DANH SÁCH ỨNG DỤNG & TRÒ CHƠI"
+        sectionRowStack.addArrangedSubview(sectionTitleLabel)
+
+        quickSwitchSourceButton.setTitle("🗂️ Chọn nguồn", for: .normal)
+        quickSwitchSourceButton.setTitleColor(FeaturedCSSTheme.purple, for: .normal)
+        quickSwitchSourceButton.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .bold)
+        quickSwitchSourceButton.backgroundColor = FeaturedCSSTheme.purplePillBg
+        quickSwitchSourceButton.layer.cornerRadius = 12
+        quickSwitchSourceButton.layer.borderWidth = 0.8
+        quickSwitchSourceButton.layer.borderColor = FeaturedCSSTheme.purple.withAlphaComponent(0.28).cgColor
+        quickSwitchSourceButton.contentEdgeInsets = UIEdgeInsets(top: 4, left: 10, bottom: 4, right: 10)
+        quickSwitchSourceButton.addTarget(self, action: #selector(handleFilterPillTap), for: .touchUpInside)
+        sectionRowStack.addArrangedSubview(quickSwitchSourceButton)
+
+        NSLayoutConstraint.activate([
+            heroCard.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            heroCard.leadingAnchor.constraint(equalTo: leadingAnchor),
+            heroCard.trailingAnchor.constraint(equalTo: trailingAnchor),
+            heroCard.heightAnchor.constraint(equalToConstant: 86),
+
+            downloadedPillButton.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 10),
+            downloadedPillButton.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 10),
+            downloadedPillButton.heightAnchor.constraint(equalToConstant: 30),
+
+            sourcesPillButton.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -10),
+            sourcesPillButton.centerYAnchor.constraint(equalTo: downloadedPillButton.centerYAnchor),
+            sourcesPillButton.heightAnchor.constraint(equalToConstant: 30),
+
+            centerTitleStack.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
+            centerTitleStack.centerYAnchor.constraint(equalTo: downloadedPillButton.centerYAnchor),
+            centerTitleStack.leadingAnchor.constraint(greaterThanOrEqualTo: downloadedPillButton.trailingAnchor, constant: 6),
+            centerTitleStack.trailingAnchor.constraint(lessThanOrEqualTo: sourcesPillButton.leadingAnchor, constant: -6),
+
+            filterStatusPillButton.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
+            filterStatusPillButton.bottomAnchor.constraint(equalTo: heroCard.bottomAnchor, constant: -9),
+            filterStatusPillButton.heightAnchor.constraint(equalToConstant: 26),
+            filterStatusPillButton.leadingAnchor.constraint(greaterThanOrEqualTo: heroCard.leadingAnchor, constant: 12),
+            filterStatusPillButton.trailingAnchor.constraint(lessThanOrEqualTo: heroCard.trailingAnchor, constant: -12),
+
+            searchContainerCard.topAnchor.constraint(equalTo: heroCard.bottomAnchor, constant: 10),
+            searchContainerCard.leadingAnchor.constraint(equalTo: leadingAnchor),
+            searchContainerCard.trailingAnchor.constraint(equalTo: trailingAnchor),
+            searchContainerCard.heightAnchor.constraint(equalToConstant: 46),
+
+            searchBar.topAnchor.constraint(equalTo: searchContainerCard.topAnchor, constant: 2),
+            searchBar.bottomAnchor.constraint(equalTo: searchContainerCard.bottomAnchor, constant: -2),
+            searchBar.leadingAnchor.constraint(equalTo: searchContainerCard.leadingAnchor, constant: 4),
+            searchBar.trailingAnchor.constraint(equalTo: searchContainerCard.trailingAnchor, constant: -4),
+
+            sectionRowStack.topAnchor.constraint(equalTo: searchContainerCard.bottomAnchor, constant: 10),
+            sectionRowStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            sectionRowStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            sectionRowStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6)
+        ])
+    }
+
+    func updateHeaderState(
+        isLoading: Bool,
+        filterText: String,
+        totalAppsCount: Int,
+        downloadedCount: Int
+    ) {
+        if isLoading {
+            loadingSpinner.startAnimating()
+        } else {
+            loadingSpinner.stopAnimating()
+        }
+
+        let dlTitle = downloadedCount > 0 ? "📥 Đã tải (\(downloadedCount))" : "📥 Đã tải"
+        downloadedPillButton.setTitle(dlTitle, for: .normal)
+
+        filterStatusPillButton.setTitle(filterText, for: .normal)
+        sectionTitleLabel.text = "🔥 DANH SÁCH APP & GAME (\(totalAppsCount))"
+    }
+
+    @objc private func handleDownloadsTap() {
+        onOpenDownloadsTapped?()
+    }
+
+    @objc private func handleSourcesTap() {
+        onOpenSourcesTapped?()
+    }
+
+    @objc private func handleFilterPillTap() {
+        onFilterPillTapped?()
+    }
+}
+
+// MARK: - 🃏 CELL HIỂN THỊ ỨNG DỤNG CHUẨN THẺ TRẮNG VIỀN CSS (#e6ebf2)
 private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
     static let reuseIdentifier = "FeaturedHubAppCollectionViewCell"
 
     private let cardView = UIView()
     private let iconImageView = UIImageView()
     private let nameLabel = UILabel()
+    private let bundleIDLabel = UILabel()
     private let metaLabel = UILabel()
     private let sourceBadgeView = UIView()
     private let sourceBadgeLabel = UILabel()
@@ -787,19 +1029,19 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
 
         cardView.translatesAutoresizingMaskIntoConstraints = false
         cardView.backgroundColor = FeaturedCSSTheme.white
-        cardView.layer.cornerRadius = 15
+        cardView.layer.cornerRadius = 16
         cardView.layer.borderWidth = 1.0
-        cardView.layer.borderColor = FeaturedCSSTheme.border.cgColor
+        cardView.layer.borderColor = FeaturedCSSTheme.cardBorder.cgColor
         cardView.layer.shadowColor = FeaturedCSSTheme.blue.cgColor
         cardView.layer.shadowOffset = CGSize(width: 0, height: 3)
-        cardView.layer.shadowRadius = 8
-        cardView.layer.shadowOpacity = 0.06
+        cardView.layer.shadowRadius = 10
+        cardView.layer.shadowOpacity = 0.05
         contentView.addSubview(cardView)
 
         iconImageView.translatesAutoresizingMaskIntoConstraints = false
         iconImageView.backgroundColor = FeaturedCSSTheme.light
         iconImageView.contentMode = .scaleAspectFill
-        iconImageView.layer.cornerRadius = 12
+        iconImageView.layer.cornerRadius = 13
         iconImageView.layer.borderWidth = 0.8
         iconImageView.layer.borderColor = FeaturedCSSTheme.innerBorder.cgColor
         iconImageView.clipsToBounds = true
@@ -811,15 +1053,23 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
         nameLabel.numberOfLines = 1
         cardView.addSubview(nameLabel)
 
+        // Hiển thị Bundle ID bằng font Monospaced xanh dương đồng bộ với MyAppsViewController
+        bundleIDLabel.translatesAutoresizingMaskIntoConstraints = false
+        bundleIDLabel.font = UIFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
+        bundleIDLabel.textColor = FeaturedCSSTheme.blue
+        bundleIDLabel.numberOfLines = 1
+        bundleIDLabel.lineBreakMode = .byTruncatingMiddle
+        cardView.addSubview(bundleIDLabel)
+
         metaLabel.translatesAutoresizingMaskIntoConstraints = false
-        metaLabel.font = UIFont.systemFont(ofSize: 12, weight: .semibold)
+        metaLabel.font = UIFont.systemFont(ofSize: 11.5, weight: .semibold)
         metaLabel.textColor = FeaturedCSSTheme.darkGray
         metaLabel.numberOfLines = 1
         cardView.addSubview(metaLabel)
 
         sourceBadgeView.translatesAutoresizingMaskIntoConstraints = false
-        sourceBadgeView.backgroundColor = FeaturedCSSTheme.blue.withAlphaComponent(0.09)
-        sourceBadgeView.layer.cornerRadius = 5
+        sourceBadgeView.backgroundColor = FeaturedCSSTheme.infoBg
+        sourceBadgeView.layer.cornerRadius = 6
         sourceBadgeView.layer.borderWidth = 0.7
         sourceBadgeView.layer.borderColor = FeaturedCSSTheme.blue.withAlphaComponent(0.22).cgColor
         cardView.addSubview(sourceBadgeView)
@@ -862,39 +1112,42 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
             cardView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             cardView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
 
-            iconImageView.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 11),
+            iconImageView.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 12),
             iconImageView.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 11),
-            iconImageView.widthAnchor.constraint(equalToConstant: 50),
-            iconImageView.heightAnchor.constraint(equalToConstant: 50),
+            iconImageView.widthAnchor.constraint(equalToConstant: 54),
+            iconImageView.heightAnchor.constraint(equalToConstant: 54),
 
-            actionButton.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -11),
+            actionButton.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -12),
             actionButton.centerYAnchor.constraint(equalTo: iconImageView.centerYAnchor),
             actionButton.heightAnchor.constraint(equalToConstant: 30),
-            actionButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 90),
+            actionButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 92),
 
-            nameLabel.topAnchor.constraint(equalTo: iconImageView.topAnchor, constant: 0),
+            nameLabel.topAnchor.constraint(equalTo: iconImageView.topAnchor, constant: -1),
             nameLabel.leadingAnchor.constraint(equalTo: iconImageView.trailingAnchor, constant: 10),
             nameLabel.trailingAnchor.constraint(lessThanOrEqualTo: actionButton.leadingAnchor, constant: -8),
 
-            metaLabel.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: 2),
+            bundleIDLabel.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: 1),
+            bundleIDLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
+            bundleIDLabel.trailingAnchor.constraint(lessThanOrEqualTo: actionButton.leadingAnchor, constant: -8),
+
+            metaLabel.topAnchor.constraint(equalTo: bundleIDLabel.bottomAnchor, constant: 1),
             metaLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
             metaLabel.trailingAnchor.constraint(lessThanOrEqualTo: actionButton.leadingAnchor, constant: -8),
 
-            sourceBadgeView.topAnchor.constraint(equalTo: metaLabel.bottomAnchor, constant: 3),
-            sourceBadgeView.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
-            sourceBadgeView.trailingAnchor.constraint(lessThanOrEqualTo: actionButton.leadingAnchor, constant: -8),
-            sourceBadgeView.heightAnchor.constraint(equalToConstant: 16),
+            sourceBadgeView.topAnchor.constraint(equalTo: iconImageView.bottomAnchor, constant: 7),
+            sourceBadgeView.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 12),
+            sourceBadgeView.heightAnchor.constraint(equalToConstant: 18),
 
-            sourceBadgeLabel.leadingAnchor.constraint(equalTo: sourceBadgeView.leadingAnchor, constant: 5),
-            sourceBadgeLabel.trailingAnchor.constraint(equalTo: sourceBadgeView.trailingAnchor, constant: -5),
+            sourceBadgeLabel.leadingAnchor.constraint(equalTo: sourceBadgeView.leadingAnchor, constant: 6),
+            sourceBadgeLabel.trailingAnchor.constraint(equalTo: sourceBadgeView.trailingAnchor, constant: -6),
             sourceBadgeLabel.centerYAnchor.constraint(equalTo: sourceBadgeView.centerYAnchor),
 
-            descLabel.topAnchor.constraint(equalTo: iconImageView.bottomAnchor, constant: 7),
-            descLabel.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 11),
-            descLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -11),
+            descLabel.topAnchor.constraint(equalTo: sourceBadgeView.bottomAnchor, constant: 5),
+            descLabel.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 12),
+            descLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -12),
 
-            progressBarBg.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 11),
-            progressBarBg.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -11),
+            progressBarBg.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 12),
+            progressBarBg.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -12),
             progressBarBg.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -5),
             progressBarBg.heightAnchor.constraint(equalToConstant: 4),
 
@@ -926,6 +1179,7 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
         let targetKey = app.downloadURL.absoluteString
         currentDownloadKey = targetKey
         nameLabel.text = app.name
+        bundleIDLabel.text = app.bundleIdentifier
         metaLabel.text = "v\(app.version) • \(app.formattedSize) • \(app.developerName)"
         sourceBadgeLabel.text = "📦 \(app.sourceName)"
 
@@ -933,7 +1187,7 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
             .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "#", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        descLabel.text = cleanDesc.isEmpty ? app.bundleIdentifier : cleanDesc
+        descLabel.text = cleanDesc.isEmpty ? "Ứng dụng từ nguồn \(app.sourceName)" : cleanDesc
 
         iconImageView.image = UIImage(systemName: "app.badge.fill")?.withTintColor(FeaturedCSSTheme.blue.withAlphaComponent(0.35), renderingMode: .alwaysOriginal)
         if let iconURL = app.iconURL {
@@ -960,7 +1214,7 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
             actionButton.layer.borderColor = FeaturedCSSTheme.blue.withAlphaComponent(0.45).cgColor
 
             progressBarBg.isHidden = false
-            let maxWidth = max(bounds.width - 22, 100)
+            let maxWidth = max(bounds.width - 24, 100)
             progressWidthConstraint.constant = maxWidth * CGFloat(min(max(progress, 0.03), 1.0))
         } else if isDownloaded {
             actionButton.setTitle("✍️ KÝ APP", for: .normal)
@@ -978,11 +1232,12 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
     }
 }
 
-// MARK: - 📋 DATASOURCE RIÊNG CHO FEATURED SMART HUB
+// MARK: - 📋 DATASOURCE RIÊNG CHO FEATURED SMART HUB (KÈM HEADER LƯỚT THEO WEB)
 @MainActor
 private final class FeaturedSmartHubDataSource: NSObject, UICollectionViewDataSource {
     var items: [FeaturedAppItem] = []
     var onActionTapped: ((FeaturedAppItem) -> Void)?
+    var configureHeader: ((FeaturedWebScrollHeaderReusableView) -> Void)?
 
     func numberOfSections(in collectionView: UICollectionView) -> Int {
         return 1
@@ -990,6 +1245,16 @@ private final class FeaturedSmartHubDataSource: NSObject, UICollectionViewDataSo
 
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
         return items.count
+    }
+
+    func collectionView(_ collectionView: UICollectionView, viewForSupplementaryElementOfKind kind: String, at indexPath: IndexPath) -> UICollectionReusableView {
+        let header = collectionView.dequeueReusableSupplementaryView(
+            ofKind: kind,
+            withReuseIdentifier: FeaturedWebScrollHeaderReusableView.reuseIdentifier,
+            for: indexPath
+        ) as! FeaturedWebScrollHeaderReusableView
+        configureHeader?(header)
+        return header
     }
 
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
@@ -1010,19 +1275,17 @@ private final class FeaturedSmartHubDataSource: NSObject, UICollectionViewDataSo
     }
 }
 
-// MARK: - 🗂️ MÀN HÌNH QUẢN LÝ FILE ĐÃ TẢI VỀ (THANH BAR CÂN ĐỐI, DANH SÁCH ĐẨY SÁT LÊN TRÊN)
+// MARK: - 🗂️ MÀN HÌNH QUẢN LÝ FILE ĐÃ TẢI VỀ (ĐỒNG BỘ HEADER .HERO CUỘN THEO WEB)
 @MainActor
 private final class FeaturedDownloadedIPAsManagerViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
     var onSelectSignIPA: ((FeaturedDownloadedIPAEntry) -> Void)?
 
     private let backgroundView = FeaturedGradientBackgroundView(frame: .zero)
-    private let topBarContainer = UIView()
-    private let topTitleLabel = UILabel()
-    private let closeButton = UIButton(type: .system)
-    private let clearAllButton = UIButton(type: .system)
-    private let separatorLine = UIView()
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private let emptyLabel = UILabel()
+    private let heroGradientLayer = CAGradientLayer()
+    private weak var heroCardRef: UIView?
+    private weak var clearAllBtnRef: UIButton?
     private var entries: [FeaturedDownloadedIPAEntry] = []
 
     override func viewDidLoad() {
@@ -1033,52 +1296,18 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
         backgroundView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(backgroundView)
 
-        topBarContainer.translatesAutoresizingMaskIntoConstraints = false
-        topBarContainer.backgroundColor = UIColor.white.withAlphaComponent(0.92)
-        view.addSubview(topBarContainer)
-
-        closeButton.translatesAutoresizingMaskIntoConstraints = false
-        closeButton.setTitle("Đóng", for: .normal)
-        closeButton.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
-        closeButton.setTitleColor(FeaturedCSSTheme.blue, for: .normal)
-        closeButton.backgroundColor = FeaturedCSSTheme.blue.withAlphaComponent(0.1)
-        closeButton.layer.cornerRadius = 14
-        closeButton.contentEdgeInsets = UIEdgeInsets(top: 5, left: 12, bottom: 5, right: 12)
-        closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
-        topBarContainer.addSubview(closeButton)
-
-        topTitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        topTitleLabel.text = "📥 Quản Lý File IPA Đã Tải"
-        topTitleLabel.font = UIFont.systemFont(ofSize: 16, weight: .bold)
-        topTitleLabel.textColor = FeaturedCSSTheme.pureBlack
-        topTitleLabel.textAlignment = .center
-        topBarContainer.addSubview(topTitleLabel)
-
-        clearAllButton.translatesAutoresizingMaskIntoConstraints = false
-        clearAllButton.setTitle("Xóa hết", for: .normal)
-        clearAllButton.titleLabel?.font = UIFont.systemFont(ofSize: 14.5, weight: .semibold)
-        clearAllButton.setTitleColor(FeaturedCSSTheme.red, for: .normal)
-        clearAllButton.backgroundColor = FeaturedCSSTheme.red.withAlphaComponent(0.1)
-        clearAllButton.layer.cornerRadius = 14
-        clearAllButton.contentEdgeInsets = UIEdgeInsets(top: 5, left: 11, bottom: 5, right: 11)
-        clearAllButton.addTarget(self, action: #selector(clearAllTapped), for: .touchUpInside)
-        topBarContainer.addSubview(clearAllButton)
-
-        separatorLine.translatesAutoresizingMaskIntoConstraints = false
-        separatorLine.backgroundColor = FeaturedCSSTheme.border
-        topBarContainer.addSubview(separatorLine)
-
         tableView.translatesAutoresizingMaskIntoConstraints = false
         tableView.backgroundColor = .clear
         tableView.dataSource = self
         tableView.delegate = self
-        tableView.rowHeight = 66
+        tableView.rowHeight = 68
         if #available(iOS 15.0, *) {
-            tableView.sectionHeaderTopPadding = 4
+            tableView.sectionHeaderTopPadding = 6
         }
-        tableView.contentInset = UIEdgeInsets(top: 2, left: 0, bottom: 16, right: 0)
-        tableView.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: 0.01))
+        tableView.contentInset = UIEdgeInsets(top: 6, left: 0, bottom: 24, right: 0)
         view.addSubview(tableView)
+
+        setupScrollableHeroHeader()
 
         emptyLabel.translatesAutoresizingMaskIntoConstraints = false
         emptyLabel.text = "Chưa có file IPA nào được tải về.\nHãy bấm “⬇️ TẢI VỀ” ở ngoài để lưu IPA vào đây!"
@@ -1094,36 +1323,13 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
             backgroundView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             backgroundView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            topBarContainer.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            topBarContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            topBarContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            topBarContainer.heightAnchor.constraint(equalToConstant: 48),
-
-            closeButton.leadingAnchor.constraint(equalTo: topBarContainer.leadingAnchor, constant: 14),
-            closeButton.centerYAnchor.constraint(equalTo: topBarContainer.centerYAnchor),
-            closeButton.heightAnchor.constraint(equalToConstant: 28),
-
-            clearAllButton.trailingAnchor.constraint(equalTo: topBarContainer.trailingAnchor, constant: -14),
-            clearAllButton.centerYAnchor.constraint(equalTo: topBarContainer.centerYAnchor),
-            clearAllButton.heightAnchor.constraint(equalToConstant: 28),
-
-            topTitleLabel.centerXAnchor.constraint(equalTo: topBarContainer.centerXAnchor),
-            topTitleLabel.centerYAnchor.constraint(equalTo: topBarContainer.centerYAnchor),
-            topTitleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: closeButton.trailingAnchor, constant: 6),
-            topTitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: clearAllButton.leadingAnchor, constant: -6),
-
-            separatorLine.leadingAnchor.constraint(equalTo: topBarContainer.leadingAnchor),
-            separatorLine.trailingAnchor.constraint(equalTo: topBarContainer.trailingAnchor),
-            separatorLine.bottomAnchor.constraint(equalTo: topBarContainer.bottomAnchor),
-            separatorLine.heightAnchor.constraint(equalToConstant: 0.8),
-
-            tableView.topAnchor.constraint(equalTo: topBarContainer.bottomAnchor),
+            tableView.topAnchor.constraint(equalTo: view.topAnchor),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
             emptyLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            emptyLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            emptyLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: 20),
             emptyLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 28),
             emptyLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -28)
         ])
@@ -1137,12 +1343,96 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
         reloadDataEntries()
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        if let card = heroCardRef {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            heroGradientLayer.frame = card.bounds
+            CATransaction.commit()
+        }
+    }
+
+    private func setupScrollableHeroHeader() {
+        let headerContainer = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 70))
+        headerContainer.backgroundColor = .clear
+
+        let heroCard = UIView()
+        heroCard.translatesAutoresizingMaskIntoConstraints = false
+        heroCard.layer.cornerRadius = 16
+        heroCard.layer.shadowColor = FeaturedCSSTheme.blue.cgColor
+        heroCard.layer.shadowOffset = CGSize(width: 0, height: 5)
+        heroCard.layer.shadowRadius = 12
+        heroCard.layer.shadowOpacity = 0.20
+
+        heroGradientLayer.colors = [FeaturedCSSTheme.heroStart, FeaturedCSSTheme.heroEnd]
+        heroGradientLayer.startPoint = CGPoint(x: 0, y: 0)
+        heroGradientLayer.endPoint = CGPoint(x: 1, y: 1)
+        heroGradientLayer.cornerRadius = 16
+        heroCard.layer.insertSublayer(heroGradientLayer, at: 0)
+        headerContainer.addSubview(heroCard)
+        self.heroCardRef = heroCard
+
+        let closeBtn = UIButton(type: .system)
+        closeBtn.translatesAutoresizingMaskIntoConstraints = false
+        closeBtn.setTitle("Đóng", for: .normal)
+        closeBtn.setTitleColor(FeaturedCSSTheme.blue, for: .normal)
+        closeBtn.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .bold)
+        closeBtn.backgroundColor = FeaturedCSSTheme.white
+        closeBtn.layer.cornerRadius = 14
+        closeBtn.contentEdgeInsets = UIEdgeInsets(top: 5, left: 12, bottom: 5, right: 12)
+        closeBtn.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
+        heroCard.addSubview(closeBtn)
+
+        let titleLabel = UILabel()
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.text = "📥 File IPA Đã Tải"
+        titleLabel.font = UIFont.systemFont(ofSize: 16.5, weight: .heavy)
+        titleLabel.textColor = .white
+        titleLabel.textAlignment = .center
+        heroCard.addSubview(titleLabel)
+
+        let clearBtn = UIButton(type: .system)
+        clearBtn.translatesAutoresizingMaskIntoConstraints = false
+        clearBtn.setTitle("Xóa hết", for: .normal)
+        clearBtn.setTitleColor(.white, for: .normal)
+        clearBtn.titleLabel?.font = UIFont.systemFont(ofSize: 12.5, weight: .bold)
+        clearBtn.backgroundColor = FeaturedCSSTheme.red.withAlphaComponent(0.85)
+        clearBtn.layer.cornerRadius = 14
+        clearBtn.contentEdgeInsets = UIEdgeInsets(top: 5, left: 10, bottom: 5, right: 10)
+        clearBtn.addTarget(self, action: #selector(clearAllTapped), for: .touchUpInside)
+        heroCard.addSubview(clearBtn)
+        self.clearAllBtnRef = clearBtn
+
+        NSLayoutConstraint.activate([
+            heroCard.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 8),
+            heroCard.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor, constant: 16),
+            heroCard.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -16),
+            heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -6),
+
+            closeBtn.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
+            closeBtn.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
+            closeBtn.heightAnchor.constraint(equalToConstant: 28),
+
+            clearBtn.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
+            clearBtn.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
+            clearBtn.heightAnchor.constraint(equalToConstant: 28),
+
+            titleLabel.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
+            titleLabel.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
+            titleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: closeBtn.trailingAnchor, constant: 8),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: clearBtn.leadingAnchor, constant: -8)
+        ])
+
+        tableView.tableHeaderView = headerContainer
+    }
+
     @objc private func reloadDataEntries() {
         FeaturedIPADownloadCenter.shared.reloadDownloadedFiles()
         entries = FeaturedIPADownloadCenter.shared.downloadedEntries
         emptyLabel.isHidden = !entries.isEmpty
-        clearAllButton.isEnabled = !entries.isEmpty
-        clearAllButton.alpha = entries.isEmpty ? 0.35 : 1.0
+        clearAllBtnRef?.isEnabled = !entries.isEmpty
+        clearAllBtnRef?.alpha = entries.isEmpty ? 0.4 : 1.0
         tableView.reloadData()
     }
 
@@ -1177,9 +1467,9 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
         let container = UIView()
         let label = UILabel()
         label.translatesAutoresizingMaskIntoConstraints = false
-        label.text = "Đã lưu \(entries.count) file IPA • Tổng dung lượng: \(formatter.string(fromByteCount: totalBytes))"
-        label.font = UIFont.systemFont(ofSize: 12.5, weight: .bold)
-        label.textColor = FeaturedCSSTheme.darkGray
+        label.text = "ĐÃ LƯU \(entries.count) FILE IPA • TỔNG DUNG LƯỢNG: \(formatter.string(fromByteCount: totalBytes).uppercased())"
+        label.font = UIFont.systemFont(ofSize: 12, weight: .heavy)
+        label.textColor = FeaturedCSSTheme.primary
         container.addSubview(label)
 
         NSLayoutConstraint.activate([
@@ -1192,7 +1482,7 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
     }
 
     func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
-        entries.isEmpty ? 0.01 : 26
+        entries.isEmpty ? 0.01 : 28
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -1206,8 +1496,8 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
         cell.textLabel?.textColor = FeaturedCSSTheme.pureBlack
 
         cell.detailTextLabel?.text = "\(entry.formattedSize) • \(entry.bundleIdentifier)"
-        cell.detailTextLabel?.font = UIFont.systemFont(ofSize: 12.5, weight: .medium)
-        cell.detailTextLabel?.textColor = FeaturedCSSTheme.darkGray
+        cell.detailTextLabel?.font = UIFont.monospacedSystemFont(ofSize: 11.5, weight: .semibold)
+        cell.detailTextLabel?.textColor = FeaturedCSSTheme.blue
         cell.imageView?.image = UIImage(systemName: "doc.zipper")?.withTintColor(FeaturedCSSTheme.blue, renderingMode: .alwaysOriginal)
 
         let signBtn = UIButton(type: .system)
@@ -1248,28 +1538,6 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
         )
         sheet.view.tintColor = FeaturedCSSTheme.blue
 
-        let titleAttr = NSAttributedString(
-            string: titleText,
-            attributes: [
-                .font: UIFont.systemFont(ofSize: 15.5, weight: .bold),
-                .foregroundColor: FeaturedCSSTheme.pureBlack
-            ]
-        )
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = .center
-        paragraphStyle.lineSpacing = 3
-        let messageAttr = NSAttributedString(
-            string: "\n" + messageText,
-            attributes: [
-                .font: UIFont.systemFont(ofSize: 13, weight: .medium),
-                .foregroundColor: FeaturedCSSTheme.darkGray,
-                .paragraphStyle: paragraphStyle
-            ]
-        )
-        sheet.setValue(titleAttr, forKey: "attributedTitle")
-        sheet.setValue(messageAttr, forKey: "attributedMessage")
-
-        // Đã bỏ "Ký & Cài đặt ngay (Sang Tab Ứng dụng)", chỉ giữ lại Chia sẻ/Lưu vào Tệp và Xóa cân đối
         sheet.addAction(UIAlertAction(title: "📤 Chia sẻ / Lưu vào Tệp (Files)", style: .default) { [weak self] _ in
             guard let self else { return }
             let activityVC = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
@@ -1302,18 +1570,15 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
     }
 }
 
-// MARK: - ➕ MÀN HÌNH QUẢN LÝ & THÊM NGUỒN JSON (THANH BAR ĐẸP, DANH SÁCH SÁT LÊN TRÊN)
+// MARK: - ➕ MÀN HÌNH QUẢN LÝ & THÊM NGUỒN JSON (ĐỒNG BỘ HEADER .HERO CUỘN THEO WEB)
 @MainActor
 private final class FeaturedSourcesHubManagerViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
     var onSourcesChanged: ((FeaturedRepoSource?) -> Void)?
 
     private let backgroundView = FeaturedGradientBackgroundView(frame: .zero)
-    private let topBarContainer = UIView()
-    private let topTitleLabel = UILabel()
-    private let closeButton = UIButton(type: .system)
-    private let addPlusButton = UIButton(type: .system)
-    private let separatorLine = UIView()
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
+    private let heroGradientLayer = CAGradientLayer()
+    private weak var heroCardRef: UIView?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -1323,51 +1588,18 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
         backgroundView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(backgroundView)
 
-        topBarContainer.translatesAutoresizingMaskIntoConstraints = false
-        topBarContainer.backgroundColor = UIColor.white.withAlphaComponent(0.92)
-        view.addSubview(topBarContainer)
-
-        closeButton.translatesAutoresizingMaskIntoConstraints = false
-        closeButton.setTitle("Đóng", for: .normal)
-        closeButton.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
-        closeButton.setTitleColor(FeaturedCSSTheme.blue, for: .normal)
-        closeButton.backgroundColor = FeaturedCSSTheme.blue.withAlphaComponent(0.1)
-        closeButton.layer.cornerRadius = 14
-        closeButton.contentEdgeInsets = UIEdgeInsets(top: 5, left: 12, bottom: 5, right: 12)
-        closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
-        topBarContainer.addSubview(closeButton)
-
-        topTitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        topTitleLabel.text = "➕ Quản Lý & Thêm Nguồn App"
-        topTitleLabel.font = UIFont.systemFont(ofSize: 16, weight: .bold)
-        topTitleLabel.textColor = FeaturedCSSTheme.pureBlack
-        topTitleLabel.textAlignment = .center
-        topBarContainer.addSubview(topTitleLabel)
-
-        let plusCfg = UIImage.SymbolConfiguration(pointSize: 18, weight: .bold)
-        addPlusButton.translatesAutoresizingMaskIntoConstraints = false
-        addPlusButton.setImage(UIImage(systemName: "plus.circle.fill", withConfiguration: plusCfg), for: .normal)
-        addPlusButton.tintColor = FeaturedCSSTheme.blue
-        addPlusButton.backgroundColor = FeaturedCSSTheme.blue.withAlphaComponent(0.1)
-        addPlusButton.layer.cornerRadius = 15
-        addPlusButton.addTarget(self, action: #selector(promptAddSourceURL), for: .touchUpInside)
-        topBarContainer.addSubview(addPlusButton)
-
-        separatorLine.translatesAutoresizingMaskIntoConstraints = false
-        separatorLine.backgroundColor = FeaturedCSSTheme.border
-        topBarContainer.addSubview(separatorLine)
-
         tableView.translatesAutoresizingMaskIntoConstraints = false
         tableView.backgroundColor = .clear
         tableView.dataSource = self
         tableView.delegate = self
-        tableView.rowHeight = 64
+        tableView.rowHeight = 66
         if #available(iOS 15.0, *) {
-            tableView.sectionHeaderTopPadding = 4
+            tableView.sectionHeaderTopPadding = 6
         }
-        tableView.contentInset = UIEdgeInsets(top: 2, left: 0, bottom: 16, right: 0)
-        tableView.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: 0.01))
+        tableView.contentInset = UIEdgeInsets(top: 6, left: 0, bottom: 24, right: 0)
         view.addSubview(tableView)
+
+        setupScrollableHeroHeader()
 
         NSLayoutConstraint.activate([
             backgroundView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -1375,35 +1607,94 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
             backgroundView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             backgroundView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            topBarContainer.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            topBarContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            topBarContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            topBarContainer.heightAnchor.constraint(equalToConstant: 48),
-
-            closeButton.leadingAnchor.constraint(equalTo: topBarContainer.leadingAnchor, constant: 14),
-            closeButton.centerYAnchor.constraint(equalTo: topBarContainer.centerYAnchor),
-            closeButton.heightAnchor.constraint(equalToConstant: 28),
-
-            addPlusButton.trailingAnchor.constraint(equalTo: topBarContainer.trailingAnchor, constant: -14),
-            addPlusButton.centerYAnchor.constraint(equalTo: topBarContainer.centerYAnchor),
-            addPlusButton.widthAnchor.constraint(equalToConstant: 34),
-            addPlusButton.heightAnchor.constraint(equalToConstant: 30),
-
-            topTitleLabel.centerXAnchor.constraint(equalTo: topBarContainer.centerXAnchor),
-            topTitleLabel.centerYAnchor.constraint(equalTo: topBarContainer.centerYAnchor),
-            topTitleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: closeButton.trailingAnchor, constant: 6),
-            topTitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: addPlusButton.leadingAnchor, constant: -6),
-
-            separatorLine.leadingAnchor.constraint(equalTo: topBarContainer.leadingAnchor),
-            separatorLine.trailingAnchor.constraint(equalTo: topBarContainer.trailingAnchor),
-            separatorLine.bottomAnchor.constraint(equalTo: topBarContainer.bottomAnchor),
-            separatorLine.heightAnchor.constraint(equalToConstant: 0.8),
-
-            tableView.topAnchor.constraint(equalTo: topBarContainer.bottomAnchor),
+            tableView.topAnchor.constraint(equalTo: view.topAnchor),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        if let card = heroCardRef {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            heroGradientLayer.frame = card.bounds
+            CATransaction.commit()
+        }
+    }
+
+    private func setupScrollableHeroHeader() {
+        let headerContainer = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 70))
+        headerContainer.backgroundColor = .clear
+
+        let heroCard = UIView()
+        heroCard.translatesAutoresizingMaskIntoConstraints = false
+        heroCard.layer.cornerRadius = 16
+        heroCard.layer.shadowColor = FeaturedCSSTheme.blue.cgColor
+        heroCard.layer.shadowOffset = CGSize(width: 0, height: 5)
+        heroCard.layer.shadowRadius = 12
+        heroCard.layer.shadowOpacity = 0.20
+
+        heroGradientLayer.colors = [FeaturedCSSTheme.heroStart, FeaturedCSSTheme.heroEnd]
+        heroGradientLayer.startPoint = CGPoint(x: 0, y: 0)
+        heroGradientLayer.endPoint = CGPoint(x: 1, y: 1)
+        heroGradientLayer.cornerRadius = 16
+        heroCard.layer.insertSublayer(heroGradientLayer, at: 0)
+        headerContainer.addSubview(heroCard)
+        self.heroCardRef = heroCard
+
+        let closeBtn = UIButton(type: .system)
+        closeBtn.translatesAutoresizingMaskIntoConstraints = false
+        closeBtn.setTitle("Đóng", for: .normal)
+        closeBtn.setTitleColor(FeaturedCSSTheme.blue, for: .normal)
+        closeBtn.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .bold)
+        closeBtn.backgroundColor = FeaturedCSSTheme.white
+        closeBtn.layer.cornerRadius = 14
+        closeBtn.contentEdgeInsets = UIEdgeInsets(top: 5, left: 12, bottom: 5, right: 12)
+        closeBtn.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
+        heroCard.addSubview(closeBtn)
+
+        let titleLabel = UILabel()
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.text = "🗂️ Quản Lý Nguồn App"
+        titleLabel.font = UIFont.systemFont(ofSize: 16.5, weight: .heavy)
+        titleLabel.textColor = .white
+        titleLabel.textAlignment = .center
+        heroCard.addSubview(titleLabel)
+
+        let addBtn = UIButton(type: .system)
+        addBtn.translatesAutoresizingMaskIntoConstraints = false
+        addBtn.setTitle("+ Thêm", for: .normal)
+        addBtn.setTitleColor(FeaturedCSSTheme.blue, for: .normal)
+        addBtn.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .extrabold)
+        addBtn.backgroundColor = FeaturedCSSTheme.white
+        addBtn.layer.cornerRadius = 14
+        addBtn.contentEdgeInsets = UIEdgeInsets(top: 5, left: 11, bottom: 5, right: 11)
+        addBtn.addTarget(self, action: #selector(promptAddSourceURL), for: .touchUpInside)
+        heroCard.addSubview(addBtn)
+
+        NSLayoutConstraint.activate([
+            heroCard.topAnchor.constraint(equalTo: headerContainer.topAnchor, constant: 8),
+            heroCard.leadingAnchor.constraint(equalTo: headerContainer.leadingAnchor, constant: 16),
+            heroCard.trailingAnchor.constraint(equalTo: headerContainer.trailingAnchor, constant: -16),
+            heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -6),
+
+            closeBtn.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
+            closeBtn.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
+            closeBtn.heightAnchor.constraint(equalToConstant: 28),
+
+            addBtn.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
+            addBtn.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
+            addBtn.heightAnchor.constraint(equalToConstant: 28),
+
+            titleLabel.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
+            titleLabel.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
+            titleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: closeBtn.trailingAnchor, constant: 8),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: addBtn.leadingAnchor, constant: -8)
+        ])
+
+        tableView.tableHeaderView = headerContainer
     }
 
     @objc private func closeTapped() {
@@ -1476,17 +1767,14 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
         let container = UIView()
         let label = UILabel()
         label.translatesAutoresizingMaskIntoConstraints = false
-        label.text = "DANH SÁCH NGUỒN HIỆN CÓ (CHẠM ĐỂ XEM RIÊNG, GẠT NÚT ĐỂ GỘP CHUNG)"
-        label.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
-        label.textColor = FeaturedCSSTheme.darkGray
-        label.numberOfLines = 1
-        label.adjustsFontSizeToFitWidth = true
-        label.minimumScaleFactor = 0.85
+        label.text = "CHẠM ĐỂ XEM RIÊNG • BẬT CÔNG TẮC ĐỂ GỘP CHUNG"
+        label.font = UIFont.systemFont(ofSize: 12, weight: .heavy)
+        label.textColor = FeaturedCSSTheme.primary
         container.addSubview(label)
 
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
-            label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -4),
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 6),
+            label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -6),
             label.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -4),
             label.topAnchor.constraint(equalTo: container.topAnchor, constant: 4)
         ])
@@ -1494,7 +1782,7 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
     }
 
     func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
-        26
+        28
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -1547,7 +1835,7 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
 }
 
 // ============================================================================
-// MARK: - 🚀 FEATUREDVIEWCONTROLLER (MÀN HÌNH CHÍNH TỔNG HỢP APP GAME)
+// MARK: - 🚀 FEATUREDVIEWCONTROLLER (MÀN HÌNH CHÍNH ĐỒNG BỘ 100% CSS WEB THEME)
 // ============================================================================
 
 class FeaturedViewController: UICollectionViewController, UICollectionViewDelegateFlowLayout
@@ -1562,6 +1850,9 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
         ds.onActionTapped = { [weak self] app in
             self?.handleHubAppPrimaryAction(for: app)
         }
+        ds.configureHeader = { [weak self] header in
+            self?.bindScrollableHeaderView(header)
+        }
         return ds
     }()
 
@@ -1572,18 +1863,10 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
     private let pageSize: Int = 60
     private var currentDisplayLimit: Int = 60
     private var currentSearchText: String = ""
+    private var isFetchingSources: Bool = false
 
-    // Thành phần UI: Đưa "Tổng Hợp App Game" và 2 nút vào khung nền Gradient của "Kho App Tinh Gọn" cũ
     private let hubBackgroundView = FeaturedGradientBackgroundView(frame: .zero)
-    private let hubTopContainer = UIView()
-    private let hubHeroCard = UIView()
-    private let hubHeroGradient = CAGradientLayer()
-    private let hubTitleLabel = UILabel()
-    private let hubDownloadedButton = UIButton(type: .system)
-    private let hubAddSourceButton = UIButton(type: .system)
-    private let hubSearchBar = UISearchBar()
-    private let hubLoadingSpinner = UIActivityIndicatorView(style: .medium)
-    private let hubHeaderHeight: CGFloat = 94
+    private weak var activeHeaderView: FeaturedWebScrollHeaderReusableView?
 
     // MARK: - Lifecycle
 
@@ -1600,6 +1883,7 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
         self.overrideUserInterfaceStyle = .light
         self.navigationController?.setNavigationBarHidden(true, animated: false)
         self.configureCompactNavigationTitle()
+        self.refreshVisibleHeaderState()
         self.collectionView.reloadData()
     }
 
@@ -1608,24 +1892,18 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
         super.viewDidAppear(animated)
         self.navigationController?.setNavigationBarHidden(true, animated: false)
     }
-
-    override func viewDidLayoutSubviews()
-    {
-        super.viewDidLayoutSubviews()
-        self.hubHeroGradient.frame = self.hubHeroCard.bounds
-    }
 }
 
 // ============================================================================
-// MARK: - 🛠️ THIẾT LẬP GIAO DIỆN TỔNG HỢP APP GAME TINH GỌN
+// MARK: - 🛠️ THIẾT LẬP GIAO DIỆN WEB SCROLL (TIÊU ĐỀ + SEARCH LƯỚT THEO TRANG)
 // ============================================================================
 
 private extension FeaturedViewController
 {
     func configureCompactNavigationTitle()
     {
-        self.title = "Tổng Hợp App Game"
-        self.navigationItem.title = "Tổng Hợp App Game"
+        self.title = "Kho App Game"
+        self.navigationItem.title = "Kho App Game"
         self.tabBarItem.title = "Kho App"
     }
 
@@ -1639,18 +1917,29 @@ private extension FeaturedViewController
         self.navigationItem.largeTitleDisplayMode = .never
         #endif
 
-        // 1. FlowLayout mượt mà, đẩy sát danh sách lên ngay dưới thanh tìm kiếm
+        // 1. FlowLayout với Header cuộn theo trang web (sectionHeadersPinToVisibleBounds = false)
         let flowLayout = UICollectionViewFlowLayout()
         flowLayout.scrollDirection = .vertical
-        flowLayout.minimumLineSpacing = 9
-        flowLayout.sectionInset = UIEdgeInsets(top: hubHeaderHeight + 8, left: 14, bottom: 24, right: 14)
+        flowLayout.minimumLineSpacing = 10
+        flowLayout.sectionHeadersPinToVisibleBounds = false // Lướt theo web, KHÔNG cố định chiếm chỗ!
+        flowLayout.sectionInset = UIEdgeInsets(top: 4, left: 14, bottom: 28, right: 14)
         self.collectionView.setCollectionViewLayout(flowLayout, animated: false)
 
         self.collectionView.backgroundView = self.hubBackgroundView
         self.collectionView.backgroundColor = .clear
         self.collectionView.alwaysBounceVertical = true
         self.collectionView.keyboardDismissMode = .onDrag
-        self.collectionView.register(FeaturedHubAppCollectionViewCell.self, forCellWithReuseIdentifier: FeaturedHubAppCollectionViewCell.reuseIdentifier)
+
+        self.collectionView.register(
+            FeaturedWebScrollHeaderReusableView.self,
+            forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
+            withReuseIdentifier: FeaturedWebScrollHeaderReusableView.reuseIdentifier
+        )
+        self.collectionView.register(
+            FeaturedHubAppCollectionViewCell.self,
+            forCellWithReuseIdentifier: FeaturedHubAppCollectionViewCell.reuseIdentifier
+        )
+
         self.collectionView.dataSource = self.smartHubDataSource
         self.collectionView.delegate = self
         self.collectionView.prefetchDataSource = nil
@@ -1662,10 +1951,7 @@ private extension FeaturedViewController
         self.collectionView.refreshControl = refreshControl
         #endif
 
-        // 2. Xây dựng Khung Header: Khung nền Gradient chứa "Tổng Hợp App Game" + 2 nút 2 bên + Thanh tìm kiếm
-        setupSmartHubHeaderView()
-
-        // 3. Lắng nghe sự kiện tải % & hoàn tất IPA
+        // 2. Lắng nghe sự kiện tải % & hoàn tất IPA
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleDownloadStateChanged(_:)),
@@ -1679,127 +1965,85 @@ private extension FeaturedViewController
             object: nil
         )
 
-        // 4. Nạp danh sách ứng dụng từ 7 nguồn lớn
+        // 3. Nạp danh sách ứng dụng từ 7 nguồn lớn
         loadAppsForCurrentFilter(forceRefresh: false)
     }
 
-    func setupSmartHubHeaderView()
+    func bindScrollableHeaderView(_ header: FeaturedWebScrollHeaderReusableView)
     {
-        hubTopContainer.translatesAutoresizingMaskIntoConstraints = false
-        hubTopContainer.backgroundColor = UIColor(red: 243/255, green: 236/255, blue: 255/255, alpha: 0.96)
-        hubTopContainer.layer.cornerRadius = 16
-        hubTopContainer.layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-        hubTopContainer.layer.shadowColor = UIColor.black.cgColor
-        hubTopContainer.layer.shadowOffset = CGSize(width: 0, height: 2)
-        hubTopContainer.layer.shadowRadius = 6
-        hubTopContainer.layer.shadowOpacity = 0.05
-        self.view.addSubview(hubTopContainer)
-
-        // Lấy khung và nền Gradient của "Kho App Tinh Gọn" cho "Tổng Hợp App Game" và 2 nút
-        hubHeroCard.translatesAutoresizingMaskIntoConstraints = false
-        hubHeroCard.layer.cornerRadius = 14
-        hubHeroCard.layer.shadowColor = FeaturedCSSTheme.blue.cgColor
-        hubHeroCard.layer.shadowOffset = CGSize(width: 0, height: 3)
-        hubHeroCard.layer.shadowRadius = 8
-        hubHeroCard.layer.shadowOpacity = 0.16
-
-        hubHeroGradient.colors = [FeaturedCSSTheme.heroStart, FeaturedCSSTheme.heroEnd]
-        hubHeroGradient.startPoint = CGPoint(x: 0, y: 0)
-        hubHeroGradient.endPoint = CGPoint(x: 1, y: 1)
-        hubHeroGradient.cornerRadius = 14
-        hubHeroCard.layer.insertSublayer(hubHeroGradient, at: 0)
-        hubTopContainer.addSubview(hubHeroCard)
-
-        let btnIconConfig = UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)
-
-        // Nút bên trái: Quản lý IPA đã tải về
-        hubDownloadedButton.translatesAutoresizingMaskIntoConstraints = false
-        hubDownloadedButton.setImage(UIImage(systemName: "arrow.down.doc.fill", withConfiguration: btnIconConfig), for: .normal)
-        hubDownloadedButton.tintColor = .white
-        hubDownloadedButton.backgroundColor = UIColor.white.withAlphaComponent(0.20)
-        hubDownloadedButton.layer.cornerRadius = 16
-        hubDownloadedButton.layer.borderWidth = 0.8
-        hubDownloadedButton.layer.borderColor = UIColor.white.withAlphaComponent(0.35).cgColor
-        hubDownloadedButton.addTarget(self, action: #selector(openDownloadedIPAsManager), for: .touchUpInside)
-        hubHeroCard.addSubview(hubDownloadedButton)
-
-        // Nút bên phải: Quản lý & Thêm nguồn +
-        hubAddSourceButton.translatesAutoresizingMaskIntoConstraints = false
-        hubAddSourceButton.setImage(UIImage(systemName: "plus", withConfiguration: btnIconConfig), for: .normal)
-        hubAddSourceButton.tintColor = .white
-        hubAddSourceButton.backgroundColor = UIColor.white.withAlphaComponent(0.20)
-        hubAddSourceButton.layer.cornerRadius = 16
-        hubAddSourceButton.layer.borderWidth = 0.8
-        hubAddSourceButton.layer.borderColor = UIColor.white.withAlphaComponent(0.35).cgColor
-        hubAddSourceButton.addTarget(self, action: #selector(openSourcesHubManager), for: .touchUpInside)
-        hubHeroCard.addSubview(hubAddSourceButton)
-
-        // Tiêu đề chính giữa: "Tổng Hợp App Game"
-        hubTitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        hubTitleLabel.text = "Tổng Hợp App Game"
-        hubTitleLabel.font = UIFont.systemFont(ofSize: 16.5, weight: .heavy)
-        hubTitleLabel.textColor = .white
-        hubTitleLabel.textAlignment = .center
-        hubHeroCard.addSubview(hubTitleLabel)
-
-        // Spinner báo đang tải nhẹ nhàng cạnh tiêu đề
-        hubLoadingSpinner.translatesAutoresizingMaskIntoConstraints = false
-        hubLoadingSpinner.color = .white
-        hubLoadingSpinner.transform = CGAffineTransform(scaleX: 0.78, y: 0.78)
-        hubLoadingSpinner.hidesWhenStopped = true
-        hubHeroCard.addSubview(hubLoadingSpinner)
-
-        // Thanh Tìm Kiếm gọn gàng ngay bên dưới
-        hubSearchBar.translatesAutoresizingMaskIntoConstraints = false
-        hubSearchBar.placeholder = "Tìm tên ứng dụng, tác giả, Bundle ID..."
-        hubSearchBar.searchBarStyle = .minimal
-        hubSearchBar.delegate = self
-        hubSearchBar.returnKeyType = .done
-        if let tf = hubSearchBar.value(forKey: "searchField") as? UITextField {
-            tf.backgroundColor = FeaturedCSSTheme.white
-            tf.textColor = FeaturedCSSTheme.pureBlack
-            tf.font = UIFont.systemFont(ofSize: 13.5, weight: .medium)
-            tf.layer.cornerRadius = 10
-            tf.layer.borderWidth = 0.9
-            tf.layer.borderColor = FeaturedCSSTheme.border.cgColor
-            tf.clipsToBounds = true
+        self.activeHeaderView = header
+        header.searchBar.delegate = self
+        if header.searchBar.text != self.currentSearchText {
+            header.searchBar.text = self.currentSearchText
         }
-        hubTopContainer.addSubview(hubSearchBar)
 
-        NSLayoutConstraint.activate([
-            hubTopContainer.topAnchor.constraint(equalTo: self.view.safeAreaLayoutGuide.topAnchor),
-            hubTopContainer.leadingAnchor.constraint(equalTo: self.view.leadingAnchor),
-            hubTopContainer.trailingAnchor.constraint(equalTo: self.view.trailingAnchor),
-            hubTopContainer.heightAnchor.constraint(equalToConstant: hubHeaderHeight),
+        header.onOpenDownloadsTapped = { [weak self] in
+            self?.openDownloadedIPAsManager()
+        }
+        header.onOpenSourcesTapped = { [weak self] in
+            self?.openSourcesHubManager()
+        }
+        header.onFilterPillTapped = { [weak self] in
+            self?.presentQuickSourcePickerSheet()
+        }
 
-            hubHeroCard.topAnchor.constraint(equalTo: hubTopContainer.topAnchor, constant: 4),
-            hubHeroCard.leadingAnchor.constraint(equalTo: hubTopContainer.leadingAnchor, constant: 14),
-            hubHeroCard.trailingAnchor.constraint(equalTo: hubTopContainer.trailingAnchor, constant: -14),
-            hubHeroCard.heightAnchor.constraint(equalToConstant: 46),
+        refreshVisibleHeaderState()
+    }
 
-            hubDownloadedButton.leadingAnchor.constraint(equalTo: hubHeroCard.leadingAnchor, constant: 10),
-            hubDownloadedButton.centerYAnchor.constraint(equalTo: hubHeroCard.centerYAnchor),
-            hubDownloadedButton.widthAnchor.constraint(equalToConstant: 32),
-            hubDownloadedButton.heightAnchor.constraint(equalToConstant: 32),
+    func refreshVisibleHeaderState()
+    {
+        let dlCount = FeaturedIPADownloadCenter.shared.downloadedEntries.count
+        let filterText: String
+        switch currentFilter {
+        case .allEnabled:
+            let enabledCount = FeaturedSmartRepoStoreManager.shared.sources.filter { $0.isEnabledInAllTab }.count
+            filterText = "🌐 Đang gộp \(enabledCount) nguồn lớn • \(filteredHubApps.count) App/Game"
+        case .specificSource(let source):
+            filterText = "📌 Nguồn: \(source.displayName) (Chạm để đổi)"
+        }
 
-            hubAddSourceButton.trailingAnchor.constraint(equalTo: hubHeroCard.trailingAnchor, constant: -10),
-            hubAddSourceButton.centerYAnchor.constraint(equalTo: hubHeroCard.centerYAnchor),
-            hubAddSourceButton.widthAnchor.constraint(equalToConstant: 32),
-            hubAddSourceButton.heightAnchor.constraint(equalToConstant: 32),
+        activeHeaderView?.updateHeaderState(
+            isLoading: isFetchingSources,
+            filterText: filterText,
+            totalAppsCount: filteredHubApps.count,
+            downloadedCount: dlCount
+        )
+    }
 
-            hubTitleLabel.centerXAnchor.constraint(equalTo: hubHeroCard.centerXAnchor),
-            hubTitleLabel.centerYAnchor.constraint(equalTo: hubHeroCard.centerYAnchor),
-            hubTitleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: hubDownloadedButton.trailingAnchor, constant: 8),
-            hubTitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: hubAddSourceButton.leadingAnchor, constant: -24),
+    func presentQuickSourcePickerSheet()
+    {
+        let sheet = UIAlertController(
+            title: "🗂️ Chế Độ Hiển Thị Nguồn App",
+            message: "Chọn xem gộp tất cả các nguồn hoặc lọc riêng từng kho ứng dụng:",
+            preferredStyle: .actionSheet
+        )
+        sheet.view.tintColor = FeaturedCSSTheme.blue
 
-            hubLoadingSpinner.centerYAnchor.constraint(equalTo: hubHeroCard.centerYAnchor),
-            hubLoadingSpinner.leadingAnchor.constraint(equalTo: hubTitleLabel.trailingAnchor, constant: 6),
+        sheet.addAction(UIAlertAction(title: "🌐 Tất cả nguồn đang bật (Gộp chung)", style: .default) { [weak self] _ in
+            guard let self else { return }
+            self.currentFilter = .allEnabled
+            self.loadAppsForCurrentFilter(forceRefresh: false)
+        })
 
-            hubSearchBar.topAnchor.constraint(equalTo: hubHeroCard.bottomAnchor, constant: 4),
-            hubSearchBar.leadingAnchor.constraint(equalTo: hubTopContainer.leadingAnchor, constant: 8),
-            hubSearchBar.trailingAnchor.constraint(equalTo: hubTopContainer.trailingAnchor, constant: -8),
-            hubSearchBar.heightAnchor.constraint(equalToConstant: 34)
-        ])
+        for src in FeaturedSmartRepoStoreManager.shared.sources {
+            let prefix = (currentFilter == .specificSource(src)) ? "✅ " : "📦 "
+            sheet.addAction(UIAlertAction(title: "\(prefix)\(src.displayName)", style: .default) { [weak self] _ in
+                guard let self else { return }
+                self.currentFilter = .specificSource(src)
+                self.loadAppsForCurrentFilter(forceRefresh: false)
+            })
+        }
+
+        sheet.addAction(UIAlertAction(title: "➕ Quản lý / Thêm nguồn JSON mới...", style: .default) { [weak self] _ in
+            self?.openSourcesHubManager()
+        })
+
+        sheet.addAction(UIAlertAction(title: "Đóng", style: .cancel))
+        if let popover = sheet.popoverPresentationController {
+            popover.sourceView = self.view
+            popover.sourceRect = CGRect(x: self.view.bounds.midX, y: 100, width: 1, height: 1)
+        }
+        present(sheet, animated: true)
     }
 
     @objc func forceRefreshCurrentSelection()
@@ -1809,7 +2053,8 @@ private extension FeaturedViewController
 
     func loadAppsForCurrentFilter(forceRefresh: Bool)
     {
-        hubLoadingSpinner.startAnimating()
+        isFetchingSources = true
+        refreshVisibleHeaderState()
 
         switch currentFilter {
         case .allEnabled:
@@ -1823,7 +2068,7 @@ private extension FeaturedViewController
                 }
 
                 self.allLoadedHubApps = combined
-                self.hubLoadingSpinner.stopAnimating()
+                self.isFetchingSources = false
                 #if !os(tvOS)
                 self.collectionView.refreshControl?.endRefreshing()
                 #endif
@@ -1834,7 +2079,7 @@ private extension FeaturedViewController
             Task { @MainActor in
                 let apps = await FeaturedSmartRepoStoreManager.shared.fetchApps(for: source, forceRefresh: forceRefresh)
                 self.allLoadedHubApps = apps
-                self.hubLoadingSpinner.stopAnimating()
+                self.isFetchingSources = false
                 #if !os(tvOS)
                 self.collectionView.refreshControl?.endRefreshing()
                 #endif
@@ -1861,6 +2106,7 @@ private extension FeaturedViewController
         let count = min(currentDisplayLimit, filteredHubApps.count)
         displayedHubApps = Array(filteredHubApps.prefix(count))
         smartHubDataSource.items = displayedHubApps
+        refreshVisibleHeaderState()
         self.collectionView.reloadData()
     }
 
@@ -1871,6 +2117,7 @@ private extension FeaturedViewController
             alert.addAction(UIAlertAction(title: "Đóng", style: .cancel))
             present(alert, animated: true)
         }
+        refreshVisibleHeaderState()
         collectionView.reloadData()
     }
 
@@ -1921,7 +2168,6 @@ private extension FeaturedViewController
 
     func handleHubAppPrimaryAction(for app: FeaturedAppItem)
     {
-        // Trạng thái 1: Nếu đang tải -> Hỏi hủy tải
         if FeaturedIPADownloadCenter.shared.activeProgress(for: app) != nil {
             let alert = UIAlertController(
                 title: "Đang tải \(app.name)",
@@ -1936,17 +2182,14 @@ private extension FeaturedViewController
             return
         }
 
-        // Trạng thái 2: Nếu đã tải xong file .ipa -> Nút đang là "✍️ KÝ APP" -> Chuyển ngay sang Tab "Ứng dụng" (My Apps) để ký & cài đặt!
         if let localURL = FeaturedIPADownloadCenter.shared.localFileURL(for: app) {
             switchToMyAppsAndSignIPA(fileURL: localURL, appName: app.name)
             return
         }
 
-        // Trạng thái 3: Chưa tải -> Bắt đầu tải file IPA và hiện %
         FeaturedIPADownloadCenter.shared.startDownload(for: app)
     }
 
-    /// Chuyển giao diện sang Tab 3 ("Ứng dụng" - My Apps) và kích hoạt trình Ký & Cài đặt IPA chuẩn của SideStore
     func switchToMyAppsAndSignIPA(fileURL: URL, appName: String)
     {
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
@@ -1957,17 +2200,14 @@ private extension FeaturedViewController
             return
         }
 
-        // 1. Tạo bản sao tạm thời của file IPA để trình cài đặt SideStore xử lý mà không làm mất file gốc trong "File đã tải"
         let tempInstallURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileURL.lastPathComponent)
         try? FileManager.default.removeItem(at: tempInstallURL)
         try? FileManager.default.copyItem(at: fileURL, to: tempInstallURL)
         let targetURL = FileManager.default.fileExists(atPath: tempInstallURL.path) ? tempInstallURL : fileURL
 
-        // 2. Chuyển ngay lập tức sang Tab 3 ("Ứng dụng" - My Apps)
         self.tabBarController?.selectedIndex = 3
         NotificationCenter.default.post(name: AppDelegate.importAppDeepLinkNotification, object: nil)
 
-        // 3. Kích hoạt luồng mở file .ipa chuẩn của SideStore (tự động bật hộp thoại Ký & Cài đặt trong Tab Ứng dụng)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             if let appDelegate = UIApplication.shared.delegate {
                 _ = appDelegate.application?(UIApplication.shared, open: targetURL, options: [:])
@@ -2001,10 +2241,16 @@ extension FeaturedViewController: UISearchBarDelegate
 
 extension FeaturedViewController
 {
+    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, referenceSizeForHeaderInSection section: Int) -> CGSize
+    {
+        let width = max(collectionView.bounds.width - 28, 280)
+        return CGSize(width: width, height: 184)
+    }
+
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize
     {
         let width = max(collectionView.bounds.width - 28, 280)
-        return CGSize(width: width, height: 104)
+        return CGSize(width: width, height: 118)
     }
 
     override func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath)
@@ -2040,7 +2286,6 @@ extension FeaturedViewController
             preferredStyle: .actionSheet
         )
 
-        // Cỡ chữ rõ ràng, dễ đọc (Tiêu đề 16pt bold, Nội dung 13.5pt regular)
         let titleAttr = NSAttributedString(
             string: titleText,
             attributes: [
@@ -2062,7 +2307,6 @@ extension FeaturedViewController
         sheet.setValue(titleAttr, forKey: "attributedTitle")
         sheet.setValue(messageAttr, forKey: "attributedMessage")
 
-        // Đã bỏ hoàn toàn nút "Ký & Cài đặt ngay (Sang Tab Ứng dụng)" khi nhấn vào ứng dụng
         sheet.addAction(UIAlertAction(title: "Đóng", style: .cancel))
         if let popover = sheet.popoverPresentationController, let cell = collectionView.cellForItem(at: indexPath) {
             popover.sourceView = cell

@@ -1,4 +1,5 @@
 
+
 //
 //  FeaturedViewController.swift
 //  AltStore
@@ -825,7 +826,6 @@ private final class FeaturedSmartRepoStoreManager {
         }
     }
 
-    /// Trả về danh sách ứng dụng đã lưu sẵn trong RAM/Ổ cứng ngay lập tức (0ms等待)
     func instantCachedAppsForEnabledSources() -> [FeaturedAppItem] {
         let enabledSources = sources.filter { $0.isEnabledInAllTab }
         var combined: [FeaturedAppItem] = []
@@ -976,10 +976,8 @@ private final class FeaturedSmartRepoStoreManager {
     }
 }
 
-// MARK: - 🏷️ HEADER BANNER (.hero + THANH TÌM KIẾM ĐƠN GỌN ĐẸP KHÔNG ĐÈ KHUNG, KHÔNG TỤT BÀN PHÍM)
-private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableView, UITextFieldDelegate {
-    static let reuseIdentifier = "FeaturedWebScrollHeaderReusableView"
-
+// MARK: - 🏷️ HEADER BANNER ĐỘC LẬP (.hero + THANH TÌM KIẾM CỐ ĐỊNH TRONG SCROLLVIEW - BÀN PHÍM ĐỨNG IM 100%)
+private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
     private let heroCard = UIView()
     private let heroGradient = CAGradientLayer()
 
@@ -993,7 +991,7 @@ private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableVie
 
     private let filterStatusPillButton = UIButton(type: .system)
 
-    // 1 Khung tìm kiếm duy nhất (Đã xóa khung thừa đè bên dưới & thu nhỏ chiều cao còn 36pt)
+    // Khung tìm kiếm duy nhất (36pt) - Không bao giờ bị reloadData() huỷ Focus
     private let searchBoxView = UIView()
     private let searchIconView = UIImageView()
     let searchTextField = UITextField()
@@ -1019,7 +1017,10 @@ private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableVie
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         heroGradient.frame = heroCard.bounds
+        CATransaction.commit()
     }
 
     private func setupViews() {
@@ -1097,7 +1098,7 @@ private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableVie
         filterStatusPillButton.addTarget(self, action: #selector(handleFilterPillTap), for: .touchUpInside)
         heroCard.addSubview(filterStatusPillButton)
 
-        // 2. Thanh tìm kiếm đơn gọn (Cao 36pt, không có khung lồng đè phía dưới)
+        // 2. Thanh tìm kiếm đơn gọn (Cao 36pt)
         searchBoxView.translatesAutoresizingMaskIntoConstraints = false
         searchBoxView.backgroundColor = FeaturedCSSTheme.white
         searchBoxView.layer.cornerRadius = 11
@@ -1121,6 +1122,9 @@ private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableVie
         searchTextField.clearButtonMode = .whileEditing
         searchTextField.returnKeyType = .done
         searchTextField.autocorrectionType = .no
+        searchTextField.spellCheckingType = .no
+        searchTextField.smartQuotesType = .no
+        searchTextField.smartDashesType = .no
         searchTextField.autocapitalizationType = .none
         searchTextField.attributedPlaceholder = NSAttributedString(
             string: "Tìm tên App, Game, tác giả, Bundle ID...",
@@ -1479,12 +1483,11 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
     }
 }
 
-// MARK: - 📋 DATASOURCE RIÊNG CHO FEATURED SMART HUB
+// MARK: - 📋 DATASOURCE RIÊNG CHO FEATURED SMART HUB (CHỈ QUẢN LÝ CELL, KHÔNG ĐỤNG TỚI HEADER)
 @MainActor
 private final class FeaturedSmartHubDataSource: NSObject, UICollectionViewDataSource {
     var items: [FeaturedAppItem] = []
     var onActionTapped: ((FeaturedAppItem) -> Void)?
-    var configureHeader: ((FeaturedWebScrollHeaderReusableView) -> Void)?
 
     func numberOfSections(in collectionView: UICollectionView) -> Int {
         return 1
@@ -1492,16 +1495,6 @@ private final class FeaturedSmartHubDataSource: NSObject, UICollectionViewDataSo
 
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
         return items.count
-    }
-
-    func collectionView(_ collectionView: UICollectionView, viewForSupplementaryElementOfKind kind: String, at indexPath: IndexPath) -> UICollectionReusableView {
-        let header = collectionView.dequeueReusableSupplementaryView(
-            ofKind: kind,
-            withReuseIdentifier: FeaturedWebScrollHeaderReusableView.reuseIdentifier,
-            for: indexPath
-        ) as! FeaturedWebScrollHeaderReusableView
-        configureHeader?(header)
-        return header
     }
 
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
@@ -1650,7 +1643,6 @@ private final class FeaturedAppFullInfoPopupViewController: UIViewController {
             dimView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             dimView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            // Chiều rộng khung đúng 90% màn hình
             containerCard.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             containerCard.centerYAnchor.constraint(equalTo: view.centerYAnchor),
             containerCard.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.90),
@@ -1750,7 +1742,7 @@ private final class FeaturedAppFullInfoPopupViewController: UIViewController {
     }
 }
 
-// MARK: - 🗂️ MÀN HÌNH QUẢN LÝ FILE ĐÃ TẢI VỀ (CHỮ TÙY CHỌN FILE IPA NHỎ GỌN ĐẸP)
+// MARK: - 🗂️ MÀN HÌNH QUẢN LÝ FILE ĐÃ TẢI VỀ
 @MainActor
 private final class FeaturedDownloadedIPAsManagerViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
     var onSelectSignIPA: ((FeaturedDownloadedIPAEntry) -> Void)?
@@ -2139,7 +2131,7 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
     }
 }
 
-// MARK: - ➕ MÀN HÌNH QUẢN LÝ & THÊM NGUỒN JSON (BÊN PHẢI CHỈ ĐỂ DẤU +)
+// MARK: - ➕ MÀN HÌNH QUẢN LÝ & THÊM NGUỒN JSON
 @MainActor
 private final class FeaturedSourcesHubManagerViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
     var onSourcesChanged: ((FeaturedRepoSource?) -> Void)?
@@ -2404,7 +2396,7 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
 }
 
 // ============================================================================
-// MARK: - 🚀 FEATUREDVIEWCONTROLLER (MỞ LÀ HIỆN LUÔN + CẬP NHẬT TRONG NỀN)
+// MARK: - 🚀 FEATUREDVIEWCONTROLLER (MỞ LÀ HIỆN LUÔN + BÀN PHÍM ĐỨNG IM 100%)
 // ============================================================================
 
 class FeaturedViewController: UICollectionViewController, UICollectionViewDelegateFlowLayout
@@ -2418,9 +2410,6 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
         let ds = FeaturedSmartHubDataSource()
         ds.onActionTapped = { [weak self] app in
             self?.handleHubAppPrimaryAction(for: app)
-        }
-        ds.configureHeader = { [weak self] header in
-            self?.bindScrollableHeaderView(header)
         }
         return ds
     }()
@@ -2436,7 +2425,10 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
     private var backgroundSyncTask: Task<Void, Never>?
 
     private let hubBackgroundView = FeaturedGradientBackgroundView(frame: .zero)
-    private weak var activeHeaderView: FeaturedWebScrollHeaderReusableView?
+
+    // Header View độc lập gắn trực tiếp vào CollectionView (Không dùng SupplementaryView nên không bao giờ mất Focus bàn phím khi reloadData)
+    private let persistentHeaderView = FeaturedWebScrollHeaderView(frame: .zero)
+    private let headerHeight: CGFloat = 168
 
     // MARK: - Lifecycle
 
@@ -2462,10 +2454,20 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
         super.viewDidAppear(animated)
         self.navigationController?.setNavigationBarHidden(true, animated: false)
     }
+
+    override func viewDidLayoutSubviews()
+    {
+        super.viewDidLayoutSubviews()
+        let targetWidth = max(self.collectionView.bounds.width - 28, 280)
+        let targetFrame = CGRect(x: 14, y: 0, width: targetWidth, height: self.headerHeight)
+        if self.persistentHeaderView.frame != targetFrame {
+            self.persistentHeaderView.frame = targetFrame
+        }
+    }
 }
 
 // ============================================================================
-// MARK: - 🛠️ THIẾT LẬP GIAO DIỆN WEB SCROLL + HIỂN THỊ TỨC THÌ & CẬP NHẬT NỀN
+// MARK: - 🛠️ THIẾT LẬP GIAO DIỆN WEB SCROLL + BÀN PHÍM ĐỨNG IM TUYỆT ĐỐI
 // ============================================================================
 
 private extension FeaturedViewController
@@ -2491,23 +2493,24 @@ private extension FeaturedViewController
         flowLayout.scrollDirection = .vertical
         flowLayout.minimumLineSpacing = 10
         flowLayout.sectionHeadersPinToVisibleBounds = false
-        flowLayout.sectionInset = UIEdgeInsets(top: 4, left: 14, bottom: 28, right: 14)
+        // Chừa đúng khoảng trống phía trên (headerHeight + 4pt) cho persistentHeaderView cuộn mượt cùng trang
+        flowLayout.sectionInset = UIEdgeInsets(top: self.headerHeight + 4, left: 14, bottom: 28, right: 14)
         self.collectionView.setCollectionViewLayout(flowLayout, animated: false)
 
         self.collectionView.backgroundView = self.hubBackgroundView
         self.collectionView.backgroundColor = .clear
         self.collectionView.alwaysBounceVertical = true
-        self.collectionView.keyboardDismissMode = .onDrag
+        // Không dùng .onDrag tự động để tránh lỗi co rút contentSize làm sập bàn phím khi đang gõ
+        self.collectionView.keyboardDismissMode = .none
 
-        self.collectionView.register(
-            FeaturedWebScrollHeaderReusableView.self,
-            forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
-            withReuseIdentifier: FeaturedWebScrollHeaderReusableView.reuseIdentifier
-        )
         self.collectionView.register(
             FeaturedHubAppCollectionViewCell.self,
             forCellWithReuseIdentifier: FeaturedHubAppCollectionViewCell.reuseIdentifier
         )
+
+        // Gắn persistentHeaderView trực tiếp vào CollectionView
+        self.collectionView.addSubview(self.persistentHeaderView)
+        self.bindPersistentHeaderView()
 
         self.collectionView.dataSource = self.smartHubDataSource
         self.collectionView.delegate = self
@@ -2536,27 +2539,25 @@ private extension FeaturedViewController
         loadAppsForCurrentFilter(forceRefresh: false)
     }
 
-    func bindScrollableHeaderView(_ header: FeaturedWebScrollHeaderReusableView)
+    func bindPersistentHeaderView()
     {
-        self.activeHeaderView = header
-        if !header.searchTextField.isFirstResponder && header.searchTextField.text != self.currentSearchText {
-            header.searchTextField.text = self.currentSearchText
-        }
-
-        header.onSearchTextChanged = { [weak self] newText in
+        self.persistentHeaderView.onSearchTextChanged = { [weak self] newText in
             guard let self else { return }
             self.currentSearchText = newText
             self.currentDisplayLimit = self.pageSize
-            self.applySearchAndPagination(keepSearchFocus: true)
+            self.applySearchAndPagination()
         }
 
-        header.onOpenDownloadsTapped = { [weak self] in
+        self.persistentHeaderView.onOpenDownloadsTapped = { [weak self] in
+            self?.persistentHeaderView.searchTextField.resignFirstResponder()
             self?.openDownloadedIPAsManager()
         }
-        header.onOpenSourcesTapped = { [weak self] in
+        self.persistentHeaderView.onOpenSourcesTapped = { [weak self] in
+            self?.persistentHeaderView.searchTextField.resignFirstResponder()
             self?.openSourcesHubManager()
         }
-        header.onFilterPillTapped = { [weak self] in
+        self.persistentHeaderView.onFilterPillTapped = { [weak self] in
+            self?.persistentHeaderView.searchTextField.resignFirstResponder()
             self?.presentQuickSourcePickerSheet()
         }
 
@@ -2583,7 +2584,7 @@ private extension FeaturedViewController
             }
         }
 
-        activeHeaderView?.updateHeaderState(
+        persistentHeaderView.updateHeaderState(
             isLoading: isFetchingSources,
             filterText: filterText,
             totalAppsCount: filteredHubApps.count,
@@ -2632,19 +2633,16 @@ private extension FeaturedViewController
         loadAppsForCurrentFilter(forceRefresh: true)
     }
 
-    /// BƯỚC 1: Hiện ngay lập tức dữ liệu đã lưu sẵn trên máy (0 giây chờ)
-    /// BƯỚC 2: Tự động tải song song trong nền, nguồn nào xong trước hiện lên ngay
     func loadAppsForCurrentFilter(forceRefresh: Bool)
     {
         backgroundSyncTask?.cancel()
 
         switch currentFilter {
         case .allEnabled:
-            // 1. Hiện ngay dữ liệu lưu sẵn từ Ổ cứng / Seed
             let instantApps = FeaturedSmartRepoStoreManager.shared.instantCachedAppsForEnabledSources()
             if !instantApps.isEmpty {
                 self.allLoadedHubApps = instantApps
-                self.applySearchAndPagination(keepSearchFocus: false)
+                self.applySearchAndPagination()
             }
 
             let enabledSources = FeaturedSmartRepoStoreManager.shared.sources.filter { $0.isEnabledInAllTab }
@@ -2657,7 +2655,6 @@ private extension FeaturedViewController
                 return
             }
 
-            // 2. Chạy ngầm song song cập nhật từng nguồn và hiển thị tăng dần (Streaming)
             self.isFetchingSources = true
             self.refreshVisibleHeaderState()
 
@@ -2699,7 +2696,7 @@ private extension FeaturedViewController
                             }
                             if !combined.isEmpty {
                                 self.allLoadedHubApps = combined
-                                self.applySearchAndPagination(keepSearchFocus: self.activeHeaderView?.searchTextField.isFirstResponder == true)
+                                self.applySearchAndPagination()
                             }
                         }
                     }
@@ -2721,16 +2718,14 @@ private extension FeaturedViewController
                 #if !os(tvOS)
                 self.collectionView.refreshControl?.endRefreshing()
                 #endif
-                self.applySearchAndPagination(keepSearchFocus: self.activeHeaderView?.searchTextField.isFirstResponder == true)
+                self.applySearchAndPagination()
             }
 
         case .specificSource(let source):
-            // 1. Hiện ngay dữ liệu lưu sẵn của nguồn đang chọn
             let instantApps = FeaturedSmartRepoStoreManager.shared.instantCachedApps(for: source)
             self.allLoadedHubApps = instantApps
-            self.applySearchAndPagination(keepSearchFocus: false)
+            self.applySearchAndPagination()
 
-            // 2. Cập nhật trong nền và tự động làm mới khi tải xong
             self.isFetchingSources = true
             self.refreshVisibleHeaderState()
 
@@ -2747,15 +2742,14 @@ private extension FeaturedViewController
                 #if !os(tvOS)
                 self.collectionView.refreshControl?.endRefreshing()
                 #endif
-                self.applySearchAndPagination(keepSearchFocus: self.activeHeaderView?.searchTextField.isFirstResponder == true)
+                self.applySearchAndPagination()
             }
         }
     }
 
-    func applySearchAndPagination(keepSearchFocus: Bool)
+    /// Lọc & Phân trang mượt mà: Chỉ reload các Cell bên dưới, không đụng vào persistentHeaderView nên bàn phím đứng im 100%
+    func applySearchAndPagination()
     {
-        let wasEditing = keepSearchFocus || (activeHeaderView?.searchTextField.isFirstResponder == true)
-
         let query = currentSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if query.isEmpty {
             filteredHubApps = allLoadedHubApps
@@ -2776,13 +2770,6 @@ private extension FeaturedViewController
 
         UIView.performWithoutAnimation {
             self.collectionView.reloadData()
-            self.collectionView.layoutIfNeeded()
-        }
-
-        if wasEditing, let tf = self.activeHeaderView?.searchTextField {
-            if !tf.isFirstResponder {
-                tf.becomeFirstResponder()
-            }
         }
     }
 
@@ -2898,10 +2885,12 @@ private extension FeaturedViewController
 
 extension FeaturedViewController
 {
-    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, referenceSizeForHeaderInSection section: Int) -> CGSize
+    override func scrollViewWillBeginDragging(_ scrollView: UIScrollView)
     {
-        let width = max(collectionView.bounds.width - 28, 280)
-        return CGSize(width: width, height: 168)
+        // Chỉ hạ bàn phím khi chính ngón tay người dùng kéo cuộn trang
+        if scrollView.isTracking && self.persistentHeaderView.searchTextField.isFirstResponder {
+            self.persistentHeaderView.searchTextField.resignFirstResponder()
+        }
     }
 
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize
@@ -2918,7 +2907,9 @@ extension FeaturedViewController
             self.displayedHubApps = Array(self.filteredHubApps.prefix(newCount))
             self.smartHubDataSource.items = self.displayedHubApps
             DispatchQueue.main.async {
-                self.collectionView.reloadData()
+                UIView.performWithoutAnimation {
+                    self.collectionView.reloadData()
+                }
             }
         }
     }
@@ -2926,6 +2917,7 @@ extension FeaturedViewController
     override func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath)
     {
         guard indexPath.item < self.displayedHubApps.count else { return }
+        self.persistentHeaderView.searchTextField.resignFirstResponder()
         let app = self.displayedHubApps[indexPath.item]
 
         let popupVC = FeaturedAppFullInfoPopupViewController(app: app) { [weak self] in

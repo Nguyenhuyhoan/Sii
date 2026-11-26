@@ -22,9 +22,6 @@ private struct HubCSSTheme {
     static let innerBorder = UIColor(red: 222/255, green: 229/255, blue: 240/255, alpha: 1.0)
     static let blue = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 1.0)      // #007bff
     static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0)   // #6f42c1
-    static let indigo = UIColor(red: 88/255, green: 86/255, blue: 214/255, alpha: 1.0)    // #5856d6
-    static let teal = UIColor(red: 23/255, green: 162/255, blue: 184/255, alpha: 1.0)     // #17a2b8
-    static let orange = UIColor(red: 253/255, green: 126/255, blue: 20/255, alpha: 1.0)   // #fd7e14
     static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0)     // #28a745
     static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0)       // #dc3545
 
@@ -57,7 +54,7 @@ private final class HubGradientBackgroundView: UIView {
     }
 }
 
-// MARK: - 📦 CẤU TRÚC DỮ LIỆU NGUỒN & ỨNG DỤNG ĐA NĂNG (SENDABLE AN TOÀN 100%)
+// MARK: - 📦 CẤU TRÚC DỮ LIỆU NGUỒN & ỨNG DỤNG ĐA NĂNG (SENDABLE AN TOÀN)
 private struct HubRepoSource: Codable, Equatable, Sendable {
     let urlString: String
     var displayName: String
@@ -182,7 +179,7 @@ private enum UniversalRepoParser {
                 ?? ""
             let bundleID = rawBundleID.isEmpty ? "app.sidestore.item.\(idx)" : rawBundleID
 
-            // 3. Lấy Tên App (Nếu trống thì tự suy ra từ tên file IPA hoặc BundleID)
+            // 3. Lấy Tên App
             var appName = (dict["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if appName.isEmpty {
                 let lastComponent = downloadURL.deletingPathExtension().lastPathComponent.removingPercentEncoding ?? ""
@@ -210,7 +207,7 @@ private enum UniversalRepoParser {
                 ?? (dict["date"] as? String)
                 ?? ""
 
-            // 6. Lấy Dung lượng (Size)
+            // 6. Lấy Dung lượng
             let sizeBytes: Int64 = Self.parseInt64(dict["size"])
                 ?? Self.parseInt64(latestVersionDict?["size"])
                 ?? 0
@@ -557,7 +554,7 @@ private final class SmartRepoStoreManager {
     private(set) var sources: [HubRepoSource] = []
     private var memoryCache: [String: [HubAppItem]] = [:] // Key: normalizedID
 
-    // Danh sách các nguồn nặng bị loại bỏ hoàn toàn (kể cả khi từng lưu trong UserDefaults cũ)
+    // Danh sách các nguồn nặng bị loại bỏ hoàn toàn
     private static let bannedHeavyDomains: [String] = [
         "apptesters.org",
         "fastsign.dev",
@@ -616,7 +613,6 @@ private final class SmartRepoStoreManager {
         if let data = UserDefaults.standard.data(forKey: sourcesStorageKey),
            let decoded = try? JSONDecoder().decode([HubRepoSource].self, from: data),
            !decoded.isEmpty {
-            // Lọc bỏ mọi nguồn nặng nếu có
             var cleaned = decoded.filter { src in
                 !Self.bannedHeavyDomains.contains(where: { src.normalizedID.contains($0) })
             }
@@ -986,6 +982,38 @@ private final class HubAppCollectionViewCell: UICollectionViewCell {
             actionButton.layer.borderWidth = 0
             progressBarBg.isHidden = true
         }
+    }
+}
+
+// MARK: - 📋 DATASOURCE RIÊNG CHO SMART HUB (TRÁNH XUNG ĐỘT AMBIGUOUS VỚI COREDATA DATASOURCE)
+@MainActor
+private final class SmartHubCollectionDataSource: NSObject, UICollectionViewDataSource {
+    var items: [HubAppItem] = []
+    var onActionTapped: ((HubAppItem) -> Void)?
+
+    func numberOfSections(in collectionView: UICollectionView) -> Int {
+        return 1
+    }
+
+    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+        return items.count
+    }
+
+    func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+        let cell = collectionView.dequeueReusableCell(
+            withReuseIdentifier: HubAppCollectionViewCell.reuseIdentifier,
+            for: indexPath
+        ) as! HubAppCollectionViewCell
+
+        let app = items[indexPath.item]
+        let isDownloaded = (IPADownloadCenter.shared.localFileURL(for: app) != nil)
+        let progress = IPADownloadCenter.shared.activeProgress(for: app)
+
+        cell.configure(with: app, isDownloaded: isDownloaded, activeProgress: progress)
+        cell.onActionTapped = { [weak self] in
+            self?.onActionTapped?(app)
+        }
+        return cell
     }
 }
 
@@ -1474,6 +1502,14 @@ class BrowseViewController: UICollectionViewController
         case specificSource(HubRepoSource)
     }
 
+    private lazy var smartHubDataSource: SmartHubCollectionDataSource = {
+        let ds = SmartHubCollectionDataSource()
+        ds.onActionTapped = { [weak self] app in
+            self?.handleHubAppPrimaryAction(for: app)
+        }
+        return ds
+    }()
+
     private var currentFilter: HubFilterSelection = .allEnabled
     private var allLoadedHubApps: [HubAppItem] = []
     private var filteredHubApps: [HubAppItem] = []
@@ -1482,7 +1518,7 @@ class BrowseViewController: UICollectionViewController
     private var currentDisplayLimit: Int = 60
     private var currentSearchText: String = ""
 
-    // Thành phần UI của Kho App Thông Minh (Gắn cố định đầu màn hình, không bị trôi khi cuộn)
+    // Thành phần UI của Kho App Thông Minh
     private let hubBackgroundView = HubGradientBackgroundView(frame: .zero)
     private let hubTopContainer = UIView()
     private let hubHeroCard = UIView()
@@ -1510,7 +1546,7 @@ class BrowseViewController: UICollectionViewController
             return
         }
 
-        // Chế độ CoreData gốc (khi được gọi từ SourceDetailViewController hoặc SearchResultsViewController)
+        // Chế độ CoreData gốc
         self.collectionView.backgroundColor = .altBackground
         self.collectionView.alwaysBounceVertical = true
         
@@ -1668,13 +1704,13 @@ private extension BrowseViewController
         self.navigationItem.rightBarButtonItems = [addSourceBarBtn, refreshBarBtn]
         self.navigationItem.leftBarButtonItem = downloadsBarBtn
 
-        // 2. Cấu hình Nền Gradient & CollectionView
+        // 2. Cấu hình Nền Gradient & CollectionView với SmartHubCollectionDataSource riêng biệt
         self.collectionView.backgroundView = self.hubBackgroundView
         self.collectionView.backgroundColor = .clear
         self.collectionView.alwaysBounceVertical = true
         self.collectionView.keyboardDismissMode = .onDrag
         self.collectionView.register(HubAppCollectionViewCell.self, forCellWithReuseIdentifier: HubAppCollectionViewCell.reuseIdentifier)
-        self.collectionView.dataSource = self
+        self.collectionView.dataSource = self.smartHubDataSource
         self.collectionView.delegate = self
         self.collectionView.prefetchDataSource = nil
 
@@ -1713,7 +1749,6 @@ private extension BrowseViewController
 
     func setupSmartHubHeaderView()
     {
-        // Gắn cố định vào self.view (phía trên collectionView) để khi cuộn không bị trôi mất thanh tìm kiếm
         hubTopContainer.translatesAutoresizingMaskIntoConstraints = false
         hubTopContainer.backgroundColor = UIColor(red: 243/255, green: 236/255, blue: 255/255, alpha: 0.96)
         hubTopContainer.layer.cornerRadius = 18
@@ -1998,6 +2033,7 @@ private extension BrowseViewController
 
         let count = min(currentDisplayLimit, filteredHubApps.count)
         displayedHubApps = Array(filteredHubApps.prefix(count))
+        smartHubDataSource.items = displayedHubApps
 
         switch currentFilter {
         case .allEnabled:
@@ -2101,7 +2137,7 @@ private extension BrowseViewController
         IPADownloadCenter.shared.startDownload(for: app)
     }
 
-    /// Chuyển giao diện sang Tab 3 ("Ứng dụng" - My Apps) và kích hoạt ký cài đặt file .ipa
+    /// Chuyển giao diện sang Tab 3 ("Ứng dụng" - My Apps) và kích hoạt trình Ký & Cài đặt IPA chuẩn của SideStore
     func switchToMyAppsAndSignIPA(fileURL: URL, appName: String)
     {
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
@@ -2113,36 +2149,32 @@ private extension BrowseViewController
             return
         }
 
-        // 1. Chuyển sang Tab 3 ("Ứng dụng" - My Apps)
-        let targetTabBarController = self.tabBarController
-        targetTabBarController?.selectedIndex = 3
+        // 1. Tạo bản sao tạm thời của file IPA để trình cài đặt SideStore xử lý mà không làm mất file gốc trong "File đã tải"
+        let tempInstallURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileURL.lastPathComponent)
+        try? FileManager.default.removeItem(at: tempInstallURL)
+        try? FileManager.default.copyItem(at: fileURL, to: tempInstallURL)
+        let targetURL = FileManager.default.fileExists(atPath: tempInstallURL.path) ? tempInstallURL : fileURL
 
-        // 2. Lấy ViewController đang hiển thị ở Tab "Ứng dụng" để làm presentingViewController cho tiến trình Ký & Cài đặt
-        let presentingVC: UIViewController = {
-            if let nav = targetTabBarController?.selectedViewController as? UINavigationController,
-               let top = nav.topViewController {
-                return top
-            }
-            return targetTabBarController ?? self
-        }()
-
-        // Phát thông báo để TabBarController đảm bảo mở đúng tab Ứng dụng
+        // 2. Chuyển ngay lập tức sang Tab 3 ("Ứng dụng" - My Apps)
+        self.tabBarController?.selectedIndex = 3
         NotificationCenter.default.post(name: AppDelegate.importAppDeepLinkNotification, object: nil)
 
-        // 3. Gọi trực tiếp trình Ký & Cài đặt IPA của AppManager sau 0.25s (để hiệu ứng chuyển Tab hoàn tất mượt mà)
+        // 3. Kích hoạt luồng mở file .ipa chuẩn của SideStore (tự động bật hộp thoại Ký & Cài đặt trong Tab Ứng dụng)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            _ = AppManager.shared.install(.ipa(fileURL), presentingViewController: presentingVC) { result in
-                DispatchQueue.main.async {
-                    switch result {
-                    case .failure(let error) where error is CancellationError:
-                        break
-                    case .failure(let error):
-                        let toastView = ToastView(error: error, opensLog: true)
-                        toastView.show(in: presentingVC)
-                    case .success(let installedApp):
-                        debugLog("Successfully signed and installed IPA: \(installedApp.bundleIdentifier)")
-                    }
+            if let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
+               let sceneDelegate = scene.delegate {
+                let openContextClass = UIOpenURLContext.self
+                _ = openContextClass // Giữ tương thích iOS
+                if let appDelegate = UIApplication.shared.delegate,
+                   appDelegate.responds(to: #selector(UIApplicationDelegate.application(_:open:options:))) {
+                    _ = appDelegate.application?(UIApplication.shared, open: targetURL, options: [:])
+                    return
                 }
+                _ = sceneDelegate
+            }
+
+            if let appDelegate = UIApplication.shared.delegate {
+                _ = appDelegate.application?(UIApplication.shared, open: targetURL, options: [:])
             }
         }
     }
@@ -2169,49 +2201,11 @@ extension BrowseViewController: UISearchBarDelegate
 }
 
 // ============================================================================
-// MARK: - 📋 DATASOURCE & DELEGATE CHO KHO APP THÔNG MINH + TƯƠNG THÍCH GỐC
+// MARK: - 📋 INFINITE SCROLL CHO SMART HUB MODE
 // ============================================================================
 
 extension BrowseViewController
 {
-    override func numberOfSections(in collectionView: UICollectionView) -> Int
-    {
-        if self.isSmartHubMode {
-            return 1
-        }
-        return self.dataSource.numberOfSections(in: collectionView)
-    }
-
-    override func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int
-    {
-        if self.isSmartHubMode {
-            return self.displayedHubApps.count
-        }
-        return self.dataSource.collectionView(collectionView, numberOfItemsInSection: section)
-    }
-
-    override func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell
-    {
-        if self.isSmartHubMode {
-            let cell = collectionView.dequeueReusableCell(
-                withReuseIdentifier: HubAppCollectionViewCell.reuseIdentifier,
-                for: indexPath
-            ) as! HubAppCollectionViewCell
-
-            let app = self.displayedHubApps[indexPath.item]
-            let isDownloaded = (IPADownloadCenter.shared.localFileURL(for: app) != nil)
-            let progress = IPADownloadCenter.shared.activeProgress(for: app)
-
-            cell.configure(with: app, isDownloaded: isDownloaded, activeProgress: progress)
-            cell.onActionTapped = { [weak self] in
-                self?.handleHubAppPrimaryAction(for: app)
-            }
-            return cell
-        }
-
-        return self.dataSource.collectionView(collectionView, cellForItemAt: indexPath)
-    }
-
     override func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath)
     {
         guard self.isSmartHubMode else { return }
@@ -2219,6 +2213,7 @@ extension BrowseViewController
             self.currentDisplayLimit += self.pageSize
             let newCount = min(self.currentDisplayLimit, self.filteredHubApps.count)
             self.displayedHubApps = Array(self.filteredHubApps.prefix(newCount))
+            self.smartHubDataSource.items = self.displayedHubApps
             DispatchQueue.main.async {
                 self.collectionView.reloadData()
             }

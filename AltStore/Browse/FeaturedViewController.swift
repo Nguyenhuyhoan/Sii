@@ -1033,7 +1033,6 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
         backgroundView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(backgroundView)
 
-        // Thanh Header cân đối 1 hàng chuẩn iOS: Đóng (trái) - Tiêu đề (giữa, chữ 16pt bold) - Xóa hết (phải)
         topBarContainer.translatesAutoresizingMaskIntoConstraints = false
         topBarContainer.backgroundColor = UIColor.white.withAlphaComponent(0.92)
         view.addSubview(topBarContainer)
@@ -1069,7 +1068,6 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
         separatorLine.backgroundColor = FeaturedCSSTheme.border
         topBarContainer.addSubview(separatorLine)
 
-        // Đẩy sát danh sách lên ngay dưới thanh tiêu đề
         tableView.translatesAutoresizingMaskIntoConstraints = false
         tableView.backgroundColor = .clear
         tableView.dataSource = self
@@ -1240,18 +1238,38 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
         let entry = entries[indexPath.row]
         let fileURL = FeaturedIPADownloadCenter.shared.localFileURL(for: entry)
 
+        let titleText = "\(entry.appName) (v\(entry.version))"
+        let messageText = "Dung lượng: \(entry.formattedSize)\n\(entry.fileName)"
+
         let sheet = UIAlertController(
-            title: "\(entry.appName) (v\(entry.version))",
-            message: "Dung lượng: \(entry.formattedSize)\nFile: \(entry.fileName)",
+            title: titleText,
+            message: messageText,
             preferredStyle: .actionSheet
         )
+        sheet.view.tintColor = FeaturedCSSTheme.blue
 
-        sheet.addAction(UIAlertAction(title: "✍️ Ký & Cài đặt ngay (Sang Tab Ứng dụng)", style: .default) { [weak self] _ in
-            self?.dismiss(animated: true) {
-                self?.onSelectSignIPA?(entry)
-            }
-        })
+        let titleAttr = NSAttributedString(
+            string: titleText,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 15.5, weight: .bold),
+                .foregroundColor: FeaturedCSSTheme.pureBlack
+            ]
+        )
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        paragraphStyle.lineSpacing = 3
+        let messageAttr = NSAttributedString(
+            string: "\n" + messageText,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 13, weight: .medium),
+                .foregroundColor: FeaturedCSSTheme.darkGray,
+                .paragraphStyle: paragraphStyle
+            ]
+        )
+        sheet.setValue(titleAttr, forKey: "attributedTitle")
+        sheet.setValue(messageAttr, forKey: "attributedMessage")
 
+        // Đã bỏ "Ký & Cài đặt ngay (Sang Tab Ứng dụng)", chỉ giữ lại Chia sẻ/Lưu vào Tệp và Xóa cân đối
         sheet.addAction(UIAlertAction(title: "📤 Chia sẻ / Lưu vào Tệp (Files)", style: .default) { [weak self] _ in
             guard let self else { return }
             let activityVC = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
@@ -1305,7 +1323,6 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
         backgroundView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(backgroundView)
 
-        // Thanh Header chuẩn 1 hàng cân đối: Đóng (trái, 15pt) - Tiêu đề (giữa, 16pt bold) - Nút + (phải, rõ đẹp)
         topBarContainer.translatesAutoresizingMaskIntoConstraints = false
         topBarContainer.backgroundColor = UIColor.white.withAlphaComponent(0.92)
         view.addSubview(topBarContainer)
@@ -1340,7 +1357,6 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
         separatorLine.backgroundColor = FeaturedCSSTheme.border
         topBarContainer.addSubview(separatorLine)
 
-        // Đẩy sát danh sách nguồn lên ngay dưới thanh tiêu đề
         tableView.translatesAutoresizingMaskIntoConstraints = false
         tableView.backgroundColor = .clear
         tableView.dataSource = self
@@ -1557,15 +1573,17 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
     private var currentDisplayLimit: Int = 60
     private var currentSearchText: String = ""
 
-    // Thành phần UI tinh gọn & thanh thoát
+    // Thành phần UI: Đưa "Tổng Hợp App Game" và 2 nút vào khung nền Gradient của "Kho App Tinh Gọn" cũ
     private let hubBackgroundView = FeaturedGradientBackgroundView(frame: .zero)
     private let hubTopContainer = UIView()
     private let hubHeroCard = UIView()
     private let hubHeroGradient = CAGradientLayer()
-    private let hubHeroSubtitleLabel = UILabel()
+    private let hubTitleLabel = UILabel()
+    private let hubDownloadedButton = UIButton(type: .system)
+    private let hubAddSourceButton = UIButton(type: .system)
     private let hubSearchBar = UISearchBar()
     private let hubLoadingSpinner = UIActivityIndicatorView(style: .medium)
-    private let hubHeaderHeight: CGFloat = 104
+    private let hubHeaderHeight: CGFloat = 94
 
     // MARK: - Lifecycle
 
@@ -1580,6 +1598,7 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
     {
         super.viewWillAppear(animated)
         self.overrideUserInterfaceStyle = .light
+        self.navigationController?.setNavigationBarHidden(true, animated: false)
         self.configureCompactNavigationTitle()
         self.collectionView.reloadData()
     }
@@ -1587,7 +1606,7 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
     override func viewDidAppear(_ animated: Bool) 
     {
         super.viewDidAppear(animated)
-        self.navigationController?.navigationBar.tintColor = FeaturedCSSTheme.blue
+        self.navigationController?.setNavigationBarHidden(true, animated: false)
     }
 
     override func viewDidLayoutSubviews()
@@ -1608,45 +1627,19 @@ private extension FeaturedViewController
         self.title = "Tổng Hợp App Game"
         self.navigationItem.title = "Tổng Hợp App Game"
         self.tabBarItem.title = "Kho App"
-
-        let titleLabel = UILabel()
-        titleLabel.text = "Tổng Hợp App Game"
-        titleLabel.font = UIFont.systemFont(ofSize: 17, weight: .bold)
-        titleLabel.textColor = FeaturedCSSTheme.pureBlack
-        self.navigationItem.titleView = titleLabel
     }
 
     func setupSmartHubMode()
     {
         configureCompactNavigationTitle()
+        self.navigationController?.setNavigationBarHidden(true, animated: false)
 
         #if !os(tvOS)
         self.navigationItem.searchController = nil
         self.navigationItem.largeTitleDisplayMode = .never
         #endif
 
-        // 1. Cấu hình Navigation Bar: Icon Đã tải về (trái) và dấu + (phải) cân đối, sắc nét
-        let navIconConfig = UIImage.SymbolConfiguration(pointSize: 16.5, weight: .bold)
-
-        let addBtn = UIButton(type: .system)
-        addBtn.setImage(UIImage(systemName: "plus.circle.fill", withConfiguration: navIconConfig), for: .normal)
-        addBtn.tintColor = FeaturedCSSTheme.blue
-        addBtn.backgroundColor = FeaturedCSSTheme.blue.withAlphaComponent(0.1)
-        addBtn.layer.cornerRadius = 16
-        addBtn.frame = CGRect(x: 0, y: 0, width: 32, height: 32)
-        addBtn.addTarget(self, action: #selector(openSourcesHubManager), for: .touchUpInside)
-        self.navigationItem.rightBarButtonItems = [UIBarButtonItem(customView: addBtn)]
-
-        let dlBtn = UIButton(type: .system)
-        dlBtn.setImage(UIImage(systemName: "arrow.down.doc.fill", withConfiguration: navIconConfig), for: .normal)
-        dlBtn.tintColor = FeaturedCSSTheme.green
-        dlBtn.backgroundColor = FeaturedCSSTheme.green.withAlphaComponent(0.1)
-        dlBtn.layer.cornerRadius = 16
-        dlBtn.frame = CGRect(x: 0, y: 0, width: 32, height: 32)
-        dlBtn.addTarget(self, action: #selector(openDownloadedIPAsManager), for: .touchUpInside)
-        self.navigationItem.leftBarButtonItem = UIBarButtonItem(customView: dlBtn)
-
-        // 2. FlowLayout mượt mà, thanh thoát
+        // 1. FlowLayout mượt mà, đẩy sát danh sách lên ngay dưới thanh tìm kiếm
         let flowLayout = UICollectionViewFlowLayout()
         flowLayout.scrollDirection = .vertical
         flowLayout.minimumLineSpacing = 9
@@ -1669,10 +1662,10 @@ private extension FeaturedViewController
         self.collectionView.refreshControl = refreshControl
         #endif
 
-        // 3. Xây dựng Khung Header Đính Đầu Trang (Gọn gàng, sát lên trên)
+        // 2. Xây dựng Khung Header: Khung nền Gradient chứa "Tổng Hợp App Game" + 2 nút 2 bên + Thanh tìm kiếm
         setupSmartHubHeaderView()
 
-        // 4. Lắng nghe sự kiện tải % & hoàn tất IPA
+        // 3. Lắng nghe sự kiện tải % & hoàn tất IPA
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleDownloadStateChanged(_:)),
@@ -1686,7 +1679,7 @@ private extension FeaturedViewController
             object: nil
         )
 
-        // 5. Nạp danh sách ứng dụng từ 7 nguồn lớn
+        // 4. Nạp danh sách ứng dụng từ 7 nguồn lớn
         loadAppsForCurrentFilter(forceRefresh: false)
     }
 
@@ -1702,7 +1695,7 @@ private extension FeaturedViewController
         hubTopContainer.layer.shadowOpacity = 0.05
         self.view.addSubview(hubTopContainer)
 
-        // Hero Banner sát lên phía trên
+        // Lấy khung và nền Gradient của "Kho App Tinh Gọn" cho "Tổng Hợp App Game" và 2 nút
         hubHeroCard.translatesAutoresizingMaskIntoConstraints = false
         hubHeroCard.layer.cornerRadius = 14
         hubHeroCard.layer.shadowColor = FeaturedCSSTheme.blue.cgColor
@@ -1717,26 +1710,46 @@ private extension FeaturedViewController
         hubHeroCard.layer.insertSublayer(hubHeroGradient, at: 0)
         hubTopContainer.addSubview(hubHeroCard)
 
-        let heroTitleLabel = UILabel()
-        heroTitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        heroTitleLabel.text = "📦 Kho App Tinh Gọn"
-        heroTitleLabel.font = UIFont.systemFont(ofSize: 15.5, weight: .heavy)
-        heroTitleLabel.textColor = .white
-        hubHeroCard.addSubview(heroTitleLabel)
+        let btnIconConfig = UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)
 
-        hubHeroSubtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        hubHeroSubtitleLabel.text = "Tải IPA báo % trực tiếp • Tự động chuyển sang Ký App"
-        hubHeroSubtitleLabel.font = UIFont.systemFont(ofSize: 11.5, weight: .semibold)
-        hubHeroSubtitleLabel.textColor = UIColor.white.withAlphaComponent(0.92)
-        hubHeroCard.addSubview(hubHeroSubtitleLabel)
+        // Nút bên trái: Quản lý IPA đã tải về
+        hubDownloadedButton.translatesAutoresizingMaskIntoConstraints = false
+        hubDownloadedButton.setImage(UIImage(systemName: "arrow.down.doc.fill", withConfiguration: btnIconConfig), for: .normal)
+        hubDownloadedButton.tintColor = .white
+        hubDownloadedButton.backgroundColor = UIColor.white.withAlphaComponent(0.20)
+        hubDownloadedButton.layer.cornerRadius = 16
+        hubDownloadedButton.layer.borderWidth = 0.8
+        hubDownloadedButton.layer.borderColor = UIColor.white.withAlphaComponent(0.35).cgColor
+        hubDownloadedButton.addTarget(self, action: #selector(openDownloadedIPAsManager), for: .touchUpInside)
+        hubHeroCard.addSubview(hubDownloadedButton)
 
+        // Nút bên phải: Quản lý & Thêm nguồn +
+        hubAddSourceButton.translatesAutoresizingMaskIntoConstraints = false
+        hubAddSourceButton.setImage(UIImage(systemName: "plus", withConfiguration: btnIconConfig), for: .normal)
+        hubAddSourceButton.tintColor = .white
+        hubAddSourceButton.backgroundColor = UIColor.white.withAlphaComponent(0.20)
+        hubAddSourceButton.layer.cornerRadius = 16
+        hubAddSourceButton.layer.borderWidth = 0.8
+        hubAddSourceButton.layer.borderColor = UIColor.white.withAlphaComponent(0.35).cgColor
+        hubAddSourceButton.addTarget(self, action: #selector(openSourcesHubManager), for: .touchUpInside)
+        hubHeroCard.addSubview(hubAddSourceButton)
+
+        // Tiêu đề chính giữa: "Tổng Hợp App Game"
+        hubTitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        hubTitleLabel.text = "Tổng Hợp App Game"
+        hubTitleLabel.font = UIFont.systemFont(ofSize: 16.5, weight: .heavy)
+        hubTitleLabel.textColor = .white
+        hubTitleLabel.textAlignment = .center
+        hubHeroCard.addSubview(hubTitleLabel)
+
+        // Spinner báo đang tải nhẹ nhàng cạnh tiêu đề
         hubLoadingSpinner.translatesAutoresizingMaskIntoConstraints = false
         hubLoadingSpinner.color = .white
-        hubLoadingSpinner.transform = CGAffineTransform(scaleX: 0.85, y: 0.85)
+        hubLoadingSpinner.transform = CGAffineTransform(scaleX: 0.78, y: 0.78)
         hubLoadingSpinner.hidesWhenStopped = true
         hubHeroCard.addSubview(hubLoadingSpinner)
 
-        // Thanh Tìm Kiếm gọn gàng
+        // Thanh Tìm Kiếm gọn gàng ngay bên dưới
         hubSearchBar.translatesAutoresizingMaskIntoConstraints = false
         hubSearchBar.placeholder = "Tìm tên ứng dụng, tác giả, Bundle ID..."
         hubSearchBar.searchBarStyle = .minimal
@@ -1759,20 +1772,28 @@ private extension FeaturedViewController
             hubTopContainer.trailingAnchor.constraint(equalTo: self.view.trailingAnchor),
             hubTopContainer.heightAnchor.constraint(equalToConstant: hubHeaderHeight),
 
-            hubHeroCard.topAnchor.constraint(equalTo: hubTopContainer.topAnchor, constant: 2),
+            hubHeroCard.topAnchor.constraint(equalTo: hubTopContainer.topAnchor, constant: 4),
             hubHeroCard.leadingAnchor.constraint(equalTo: hubTopContainer.leadingAnchor, constant: 14),
             hubHeroCard.trailingAnchor.constraint(equalTo: hubTopContainer.trailingAnchor, constant: -14),
-            hubHeroCard.heightAnchor.constraint(equalToConstant: 56),
+            hubHeroCard.heightAnchor.constraint(equalToConstant: 46),
 
-            heroTitleLabel.topAnchor.constraint(equalTo: hubHeroCard.topAnchor, constant: 9),
-            heroTitleLabel.leadingAnchor.constraint(equalTo: hubHeroCard.leadingAnchor, constant: 13),
+            hubDownloadedButton.leadingAnchor.constraint(equalTo: hubHeroCard.leadingAnchor, constant: 10),
+            hubDownloadedButton.centerYAnchor.constraint(equalTo: hubHeroCard.centerYAnchor),
+            hubDownloadedButton.widthAnchor.constraint(equalToConstant: 32),
+            hubDownloadedButton.heightAnchor.constraint(equalToConstant: 32),
 
-            hubHeroSubtitleLabel.topAnchor.constraint(equalTo: heroTitleLabel.bottomAnchor, constant: 2),
-            hubHeroSubtitleLabel.leadingAnchor.constraint(equalTo: heroTitleLabel.leadingAnchor),
-            hubHeroSubtitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: hubLoadingSpinner.leadingAnchor, constant: -8),
+            hubAddSourceButton.trailingAnchor.constraint(equalTo: hubHeroCard.trailingAnchor, constant: -10),
+            hubAddSourceButton.centerYAnchor.constraint(equalTo: hubHeroCard.centerYAnchor),
+            hubAddSourceButton.widthAnchor.constraint(equalToConstant: 32),
+            hubAddSourceButton.heightAnchor.constraint(equalToConstant: 32),
+
+            hubTitleLabel.centerXAnchor.constraint(equalTo: hubHeroCard.centerXAnchor),
+            hubTitleLabel.centerYAnchor.constraint(equalTo: hubHeroCard.centerYAnchor),
+            hubTitleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: hubDownloadedButton.trailingAnchor, constant: 8),
+            hubTitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: hubAddSourceButton.leadingAnchor, constant: -24),
 
             hubLoadingSpinner.centerYAnchor.constraint(equalTo: hubHeroCard.centerYAnchor),
-            hubLoadingSpinner.trailingAnchor.constraint(equalTo: hubHeroCard.trailingAnchor, constant: -13),
+            hubLoadingSpinner.leadingAnchor.constraint(equalTo: hubTitleLabel.trailingAnchor, constant: 6),
 
             hubSearchBar.topAnchor.constraint(equalTo: hubHeroCard.bottomAnchor, constant: 4),
             hubSearchBar.leadingAnchor.constraint(equalTo: hubTopContainer.leadingAnchor, constant: 8),
@@ -2003,7 +2024,6 @@ extension FeaturedViewController
     {
         guard indexPath.item < self.displayedHubApps.count else { return }
         let app = self.displayedHubApps[indexPath.item]
-        let isDownloaded = (FeaturedIPADownloadCenter.shared.localFileURL(for: app) != nil)
 
         let titleText = "\(app.name) (v\(app.version))"
         let cleanDescription = app.localizedDescription
@@ -2020,11 +2040,11 @@ extension FeaturedViewController
             preferredStyle: .actionSheet
         )
 
-        // Cỡ chữ rõ ràng, dễ đọc (Tiêu đề 16.5pt bold, Nội dung 14pt regular)
+        // Cỡ chữ rõ ràng, dễ đọc (Tiêu đề 16pt bold, Nội dung 13.5pt regular)
         let titleAttr = NSAttributedString(
             string: titleText,
             attributes: [
-                .font: UIFont.systemFont(ofSize: 16.5, weight: .bold),
+                .font: UIFont.systemFont(ofSize: 16, weight: .bold),
                 .foregroundColor: FeaturedCSSTheme.pureBlack
             ]
         )
@@ -2034,7 +2054,7 @@ extension FeaturedViewController
         let messageAttr = NSAttributedString(
             string: "\n" + messageText,
             attributes: [
-                .font: UIFont.systemFont(ofSize: 14, weight: .regular),
+                .font: UIFont.systemFont(ofSize: 13.5, weight: .regular),
                 .foregroundColor: FeaturedCSSTheme.darkGray,
                 .paragraphStyle: paragraphStyle
             ]
@@ -2042,13 +2062,7 @@ extension FeaturedViewController
         sheet.setValue(titleAttr, forKey: "attributedTitle")
         sheet.setValue(messageAttr, forKey: "attributedMessage")
 
-        // Đã bỏ nút "Tải về file IPA (...)" khi chưa tải để bảng thông tin gọn gàng, chỉ hiện nút Ký khi đã tải xong
-        if isDownloaded, let localURL = FeaturedIPADownloadCenter.shared.localFileURL(for: app) {
-            sheet.addAction(UIAlertAction(title: "✍️ Ký & Cài đặt ngay (Sang Tab Ứng dụng)", style: .default) { [weak self] _ in
-                self?.switchToMyAppsAndSignIPA(fileURL: localURL, appName: app.name)
-            })
-        }
-
+        // Đã bỏ hoàn toàn nút "Ký & Cài đặt ngay (Sang Tab Ứng dụng)" khi nhấn vào ứng dụng
         sheet.addAction(UIAlertAction(title: "Đóng", style: .cancel))
         if let popover = sheet.popoverPresentationController, let cell = collectionView.cellForItem(at: indexPath) {
             popover.sourceView = cell

@@ -540,60 +540,20 @@ private final class FeaturedIPADownloadCenter: NSObject, URLSessionDownloadDeleg
     }
 }
 
-// MARK: - 🗂️ TRÌNH QUẢN LÝ NGUỒN (7 NGUỒN LỚN NHIỀU APP & GAME CẬP NHẬT LIÊN TỤC)
+// MARK: - 🗂️ TRÌNH QUẢN LÝ NGUỒN (14 NGUỒN MỚI ĐÃ THAY THẾ HOÀN TOÀN)
 @MainActor
 private final class FeaturedSmartRepoStoreManager {
     static let shared = FeaturedSmartRepoStoreManager()
 
-    private let sourcesStorageKey = "SideStore_VNSourcesOnly_v5"
+    private let sourcesStorageKey = "SideStore_VNSourcesOnly_v6"
     private(set) var sources: [FeaturedRepoSource] = []
     private var memoryCache: [String: [FeaturedAppItem]] = [:]
 
     static let defaultLightSources: [FeaturedRepoSource] = [
         FeaturedRepoSource(
-            urlString: "https://wuxu1.github.io/wuxu-complete-plus.json",
-            displayName: "Kho App Việt Hóa (WuXu++)",
-            subtitle: "Tổng hợp Youtube, Locket, Spotify, TikTok, Liên Quân & App Mod cập nhật hàng ngày",
-            iconURLString: "https://i.imgur.com/stTk5jP.jpeg",
-            isEnabledInAllTab: true,
-            isBuiltIn: true
-        ),
-        FeaturedRepoSource(
-            urlString: "https://ipa.cypwn.xyz/cypwn.json",
-            displayName: "Kho App & Game Lớn (CyPwn IPA)",
-            subtitle: "Kho hàng ngàn Game & Ứng dụng Mod mở khóa tính năng Pro cập nhật liên tục",
-            iconURLString: nil,
-            isEnabledInAllTab: true,
-            isBuiltIn: true
-        ),
-        FeaturedRepoSource(
-            urlString: "https://ipa.nabzclan.vip/repos/altstore.php",
-            displayName: "Kho IPA Tổng Hợp (NabzClan)",
-            subtitle: "Kho hàng trăm App & Game Mod iOS cập nhật liên tục mỗi ngày",
-            iconURLString: nil,
-            isEnabledInAllTab: true,
-            isBuiltIn: true
-        ),
-        FeaturedRepoSource(
-            urlString: "https://quarksources.github.io/quantumsource%2B%2B.json",
-            displayName: "Kho Game & Tweaked (Quantum++)",
-            subtitle: "Kho ứng dụng mở rộng, giải trí & công cụ tiện ích phong phú",
-            iconURLString: "https://quarksources.github.io/assets/ElementQ-Circled.png",
-            isEnabledInAllTab: true,
-            isBuiltIn: true
-        ),
-        FeaturedRepoSource(
-            urlString: "https://wuxu1.github.io/wuxu-complete.json",
-            displayName: "Kho Ứng Dụng Mở Rộng (WuXu Complete)",
-            subtitle: "Bộ sưu tập ứng dụng tiện ích, mạng xã hội & giải trí chuẩn ổn định",
-            iconURLString: "https://i.imgur.com/stTk5jP.jpeg",
-            isEnabledInAllTab: true,
-            isBuiltIn: true
-        ),
-        FeaturedRepoSource(
-            urlString: "https://burritosoftware.github.io/altstore/channels/burritosource.json",
-            displayName: "Kho App Tweaked & Mod (Burrito)",
-            subtitle: "Tổng hợp App chỉnh sửa, công cụ mạng xã hội & trò chơi chọn lọc",
+            urlString: "https://raw.githubusercontent.com/dvntm0/AltStore/main/repo.json",
+            displayName: "Kho App & Game (dvntm0)",
+            subtitle: "https://raw.githubusercontent.com/dvntm0/AltStore/main/repo.json",
             iconURLString: nil,
             isEnabledInAllTab: true,
             isBuiltIn: true
@@ -601,8 +561,104 @@ private final class FeaturedSmartRepoStoreManager {
         FeaturedRepoSource(
             urlString: "https://community-apps.sidestore.io/sidecommunity.json",
             displayName: "Kho Giả Lập & Công Cụ (SideStore)",
-            subtitle: "Tổng hợp trình giả lập Game PPSSPP, Delta, LiveContainer & tiện ích hệ thống",
+            subtitle: "https://community-apps.sidestore.io/sidecommunity.json",
             iconURLString: "https://sidestore.io/assets/icon.png",
+            isEnabledInAllTab: true,
+            isBuiltIn: true
+        ),
+        FeaturedRepoSource(
+            urlString: "https://wuxu1.github.io/wuxu-complete-plus.json",
+            displayName: "Kho App Tổng Hợp (WuXu++)",
+            subtitle: "https://wuxu1.github.io/wuxu-complete-plus.json",
+            iconURLString: "https://i.imgur.com/stTk5jP.jpeg",
+            isEnabledInAllTab: true,
+            isBuiltIn: true
+        ),
+        FeaturedRepoSource(
+            urlString: "https://repo.apptesters.org",
+            displayName: "Kho IPA AppTesters",
+            subtitle: "https://repo.apptesters.org",
+            iconURLString: nil,
+            isEnabledInAllTab: true,
+            isBuiltIn: true
+        ),
+        FeaturedRepoSource(
+            urlString: "https://ipa.cypwn.xyz/cypwn.json",
+            displayName: "Kho App & Game Lớn (CyPwn IPA)",
+            subtitle: "https://ipa.cypwn.xyz/cypwn.json",
+            iconURLString: nil,
+            isEnabledInAllTab: true,
+            isBuiltIn: true
+        ),
+        FeaturedRepoSource(
+            urlString: "https://raw.githubusercontent.com/swaggyP36000/TrollStore-IPAs/main/apps_esign.json",
+            displayName: "Kho TrollStore IPAs (SwaggyP36000)",
+            subtitle: "https://raw.githubusercontent.com/swaggyP36000/TrollStore-IPAs/main/apps_esign.json",
+            iconURLString: nil,
+            isEnabledInAllTab: true,
+            isBuiltIn: true
+        ),
+        FeaturedRepoSource(
+            urlString: "https://raw.githubusercontent.com/khcrysalis/Feather/main/app-repo.json",
+            displayName: "Kho Ứng Dụng Feather Repo",
+            subtitle: "https://raw.githubusercontent.com/khcrysalis/Feather/main/app-repo.json",
+            iconURLString: nil,
+            isEnabledInAllTab: true,
+            isBuiltIn: true
+        ),
+        FeaturedRepoSource(
+            urlString: "https://raw.githubusercontent.com/Neoncat-OG/TrollStore-IPAs/main/apps_esign.json",
+            displayName: "Kho TrollStore IPAs (Neoncat-OG)",
+            subtitle: "https://raw.githubusercontent.com/Neoncat-OG/TrollStore-IPAs/main/apps_esign.json",
+            iconURLString: nil,
+            isEnabledInAllTab: true,
+            isBuiltIn: true
+        ),
+        FeaturedRepoSource(
+            urlString: "https://fastsign.dev/repo.lite.json",
+            displayName: "Kho App FastSign Lite",
+            subtitle: "https://fastsign.dev/repo.lite.json",
+            iconURLString: nil,
+            isEnabledInAllTab: true,
+            isBuiltIn: true
+        ),
+        FeaturedRepoSource(
+            urlString: "https://raw.githubusercontent.com/vizunchik/AltStoreRus/master/apps.json",
+            displayName: "Kho App & Game (AltStoreRus)",
+            subtitle: "https://raw.githubusercontent.com/vizunchik/AltStoreRus/master/apps.json",
+            iconURLString: nil,
+            isEnabledInAllTab: true,
+            isBuiltIn: true
+        ),
+        FeaturedRepoSource(
+            urlString: "https://driftywinds.github.io/repos/esign.json",
+            displayName: "Kho IPA DriftyWinds",
+            subtitle: "https://driftywinds.github.io/repos/esign.json",
+            iconURLString: nil,
+            isEnabledInAllTab: true,
+            isBuiltIn: true
+        ),
+        FeaturedRepoSource(
+            urlString: "https://quarksources.github.io/quantumsource%2B%2B.json",
+            displayName: "Kho Game & Tweaked (Quantum++)",
+            subtitle: "https://quarksources.github.io/quantumsource%2B%2B.json",
+            iconURLString: "https://quarksources.github.io/assets/ElementQ-Circled.png",
+            isEnabledInAllTab: true,
+            isBuiltIn: true
+        ),
+        FeaturedRepoSource(
+            urlString: "https://wuxu1.github.io/wuxu-complete.json",
+            displayName: "Kho Ứng Dụng Mở Rộng (WuXu Complete)",
+            subtitle: "https://wuxu1.github.io/wuxu-complete.json",
+            iconURLString: "https://i.imgur.com/stTk5jP.jpeg",
+            isEnabledInAllTab: true,
+            isBuiltIn: true
+        ),
+        FeaturedRepoSource(
+            urlString: "https://burritosoftware.github.io/altstore/channels/burritosource.json",
+            displayName: "Kho App Tweaked & Mod (Burrito)",
+            subtitle: "https://burritosoftware.github.io/altstore/channels/burritosource.json",
+            iconURLString: nil,
             isEnabledInAllTab: true,
             isBuiltIn: true
         )
@@ -715,7 +771,7 @@ private final class FeaturedSmartRepoStoreManager {
 
         do {
             var request = URLRequest(url: url)
-            request.timeoutInterval = 18
+            request.timeoutInterval = 22
             request.cachePolicy = forceRefresh ? .reloadIgnoringLocalCacheData : .returnCacheDataElseLoad
             request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
 
@@ -731,9 +787,10 @@ private final class FeaturedSmartRepoStoreManager {
             if !parsed.apps.isEmpty {
                 memoryCache[id] = parsed.apps
                 if let idx = sources.firstIndex(where: { $0.normalizedID == id }) {
-                    if !parsed.repoName.isEmpty && sources[idx].displayName != parsed.repoName && !sources[idx].isBuiltIn {
+                    if !parsed.repoName.isEmpty {
                         sources[idx].displayName = parsed.repoName
                     }
+                    sources[idx].subtitle = "\(parsed.apps.count) ứng dụng • \(url.host ?? "Repo")"
                     if let icon = parsed.repoIcon, sources[idx].iconURLString == nil {
                         sources[idx].iconURLString = icon
                     }
@@ -747,8 +804,8 @@ private final class FeaturedSmartRepoStoreManager {
     }
 }
 
-// MARK: - 🏷️ HEADER BANNER (.hero + SEARCH BAR) LƯỚT THEO WEB (KHÔNG CỐ ĐỊNH CHIẾM CHỖ)
-private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableView {
+// MARK: - 🏷️ HEADER BANNER (.hero + THANH TÌM KIẾM ĐƠN GỌN ĐẸP KHÔNG ĐÈ KHUNG, KHÔNG TỤT BÀN PHÍM)
+private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableView, UITextFieldDelegate {
     static let reuseIdentifier = "FeaturedWebScrollHeaderReusableView"
 
     private let heroCard = UIView()
@@ -764,8 +821,10 @@ private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableVie
 
     private let filterStatusPillButton = UIButton(type: .system)
 
-    private let searchContainerCard = UIView()
-    let searchBar = UISearchBar()
+    // 1 Khung tìm kiếm duy nhất (Đã xóa khung thừa đè bên dưới & thu nhỏ chiều cao còn 36pt)
+    private let searchBoxView = UIView()
+    private let searchIconView = UIImageView()
+    let searchTextField = UITextField()
 
     private let sectionRowStack = UIStackView()
     private let sectionTitleLabel = UILabel()
@@ -774,6 +833,7 @@ private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableVie
     var onOpenDownloadsTapped: (() -> Void)?
     var onOpenSourcesTapped: (() -> Void)?
     var onFilterPillTapped: (() -> Void)?
+    var onSearchTextChanged: ((String) -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -793,7 +853,7 @@ private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableVie
     private func setupViews() {
         backgroundColor = .clear
 
-        // 1. Thẻ .hero Gradient đồng bộ 100% với Settings & MyApps
+        // 1. Thẻ .hero Gradient
         heroCard.translatesAutoresizingMaskIntoConstraints = false
         heroCard.layer.cornerRadius = 16
         heroCard.layer.shadowColor = FeaturedCSSTheme.blue.cgColor
@@ -808,7 +868,6 @@ private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableVie
         heroCard.layer.insertSublayer(heroGradient, at: 0)
         addSubview(heroCard)
 
-        // Nút Trái: Kho IPA đã tải về (Nền trắng chữ xanh giống nút + IPA bên MyApps)
         downloadedPillButton.translatesAutoresizingMaskIntoConstraints = false
         downloadedPillButton.setTitle("📥 Đã tải", for: .normal)
         downloadedPillButton.setTitleColor(FeaturedCSSTheme.blue, for: .normal)
@@ -819,7 +878,6 @@ private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableVie
         downloadedPillButton.addTarget(self, action: #selector(handleDownloadsTap), for: .touchUpInside)
         heroCard.addSubview(downloadedPillButton)
 
-        // Nút Phải: Quản lý & Thêm nguồn JSON
         sourcesPillButton.translatesAutoresizingMaskIntoConstraints = false
         sourcesPillButton.setTitle("➕ Nguồn", for: .normal)
         sourcesPillButton.setTitleColor(FeaturedCSSTheme.white, for: .normal)
@@ -832,7 +890,6 @@ private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableVie
         sourcesPillButton.addTarget(self, action: #selector(handleSourcesTap), for: .touchUpInside)
         heroCard.addSubview(sourcesPillButton)
 
-        // Cụm Tiêu đề chính giữa
         centerTitleStack.translatesAutoresizingMaskIntoConstraints = false
         centerTitleStack.axis = .horizontal
         centerTitleStack.alignment = .center
@@ -856,7 +913,6 @@ private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableVie
         loadingSpinner.hidesWhenStopped = true
         centerTitleStack.addArrangedSubview(loadingSpinner)
 
-        // Viên thuốc trạng thái nguồn bên dưới tiêu đề (Giống nút Bác Sĩ Hệ Thống bên MyApps)
         filterStatusPillButton.translatesAutoresizingMaskIntoConstraints = false
         filterStatusPillButton.setTitle("🌐 Tất cả nguồn • Chạm để lọc nguồn", for: .normal)
         filterStatusPillButton.setTitleColor(.white, for: .normal)
@@ -869,34 +925,40 @@ private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableVie
         filterStatusPillButton.addTarget(self, action: #selector(handleFilterPillTap), for: .touchUpInside)
         heroCard.addSubview(filterStatusPillButton)
 
-        // 2. Thẻ Tìm kiếm trắng tinh chuẩn CSS Card (Cuộn theo trang web)
-        searchContainerCard.translatesAutoresizingMaskIntoConstraints = false
-        searchContainerCard.backgroundColor = FeaturedCSSTheme.white
-        searchContainerCard.layer.cornerRadius = 14
-        searchContainerCard.layer.borderWidth = 1.0
-        searchContainerCard.layer.borderColor = FeaturedCSSTheme.cardBorder.cgColor
-        searchContainerCard.layer.shadowColor = FeaturedCSSTheme.blue.cgColor
-        searchContainerCard.layer.shadowOffset = CGSize(width: 0, height: 3)
-        searchContainerCard.layer.shadowRadius = 8
-        searchContainerCard.layer.shadowOpacity = 0.05
-        addSubview(searchContainerCard)
+        // 2. Thanh tìm kiếm đơn gọn (Cao 36pt, không có khung lồng đè phía dưới)
+        searchBoxView.translatesAutoresizingMaskIntoConstraints = false
+        searchBoxView.backgroundColor = FeaturedCSSTheme.white
+        searchBoxView.layer.cornerRadius = 11
+        searchBoxView.layer.borderWidth = 1.0
+        searchBoxView.layer.borderColor = FeaturedCSSTheme.cardBorder.cgColor
+        searchBoxView.layer.shadowColor = FeaturedCSSTheme.blue.cgColor
+        searchBoxView.layer.shadowOffset = CGSize(width: 0, height: 2)
+        searchBoxView.layer.shadowRadius = 6
+        searchBoxView.layer.shadowOpacity = 0.04
+        addSubview(searchBoxView)
 
-        searchBar.translatesAutoresizingMaskIntoConstraints = false
-        searchBar.placeholder = "Tìm tên App, Game, tác giả, Bundle ID..."
-        searchBar.searchBarStyle = .minimal
-        searchBar.returnKeyType = .done
-        if let tf = searchBar.value(forKey: "searchField") as? UITextField {
-            tf.backgroundColor = FeaturedCSSTheme.light
-            tf.textColor = FeaturedCSSTheme.pureBlack
-            tf.font = UIFont.systemFont(ofSize: 14, weight: .medium)
-            tf.layer.cornerRadius = 10
-            tf.layer.borderWidth = 0.8
-            tf.layer.borderColor = FeaturedCSSTheme.innerBorder.cgColor
-            tf.clipsToBounds = true
-        }
-        searchContainerCard.addSubview(searchBar)
+        searchIconView.translatesAutoresizingMaskIntoConstraints = false
+        searchIconView.image = UIImage(systemName: "magnifyingglass")
+        searchIconView.tintColor = FeaturedCSSTheme.blue
+        searchIconView.contentMode = .scaleAspectFit
+        searchBoxView.addSubview(searchIconView)
 
-        // 3. Hàng tiêu đề danh sách (Đồng bộ style Section Header của MyApps)
+        searchTextField.translatesAutoresizingMaskIntoConstraints = false
+        searchTextField.font = UIFont.systemFont(ofSize: 13.5, weight: .medium)
+        searchTextField.textColor = FeaturedCSSTheme.pureBlack
+        searchTextField.clearButtonMode = .whileEditing
+        searchTextField.returnKeyType = .done
+        searchTextField.autocorrectionType = .no
+        searchTextField.autocapitalizationType = .none
+        searchTextField.attributedPlaceholder = NSAttributedString(
+            string: "Tìm tên App, Game, tác giả, Bundle ID...",
+            attributes: [.foregroundColor: FeaturedCSSTheme.darkGray.withAlphaComponent(0.6)]
+        )
+        searchTextField.delegate = self
+        searchTextField.addTarget(self, action: #selector(handleTextFieldEditingChanged(_:)), for: .editingChanged)
+        searchBoxView.addSubview(searchTextField)
+
+        // 3. Hàng tiêu đề danh sách
         sectionRowStack.translatesAutoresizingMaskIntoConstraints = false
         sectionRowStack.axis = .horizontal
         sectionRowStack.alignment = .center
@@ -944,20 +1006,25 @@ private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableVie
             filterStatusPillButton.leadingAnchor.constraint(greaterThanOrEqualTo: heroCard.leadingAnchor, constant: 12),
             filterStatusPillButton.trailingAnchor.constraint(lessThanOrEqualTo: heroCard.trailingAnchor, constant: -12),
 
-            searchContainerCard.topAnchor.constraint(equalTo: heroCard.bottomAnchor, constant: 10),
-            searchContainerCard.leadingAnchor.constraint(equalTo: leadingAnchor),
-            searchContainerCard.trailingAnchor.constraint(equalTo: trailingAnchor),
-            searchContainerCard.heightAnchor.constraint(equalToConstant: 46),
+            searchBoxView.topAnchor.constraint(equalTo: heroCard.bottomAnchor, constant: 8),
+            searchBoxView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            searchBoxView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            searchBoxView.heightAnchor.constraint(equalToConstant: 36),
 
-            searchBar.topAnchor.constraint(equalTo: searchContainerCard.topAnchor, constant: 2),
-            searchBar.bottomAnchor.constraint(equalTo: searchContainerCard.bottomAnchor, constant: -2),
-            searchBar.leadingAnchor.constraint(equalTo: searchContainerCard.leadingAnchor, constant: 4),
-            searchBar.trailingAnchor.constraint(equalTo: searchContainerCard.trailingAnchor, constant: -4),
+            searchIconView.leadingAnchor.constraint(equalTo: searchBoxView.leadingAnchor, constant: 11),
+            searchIconView.centerYAnchor.constraint(equalTo: searchBoxView.centerYAnchor),
+            searchIconView.widthAnchor.constraint(equalToConstant: 15),
+            searchIconView.heightAnchor.constraint(equalToConstant: 15),
 
-            sectionRowStack.topAnchor.constraint(equalTo: searchContainerCard.bottomAnchor, constant: 10),
+            searchTextField.leadingAnchor.constraint(equalTo: searchIconView.trailingAnchor, constant: 8),
+            searchTextField.trailingAnchor.constraint(equalTo: searchBoxView.trailingAnchor, constant: -8),
+            searchTextField.topAnchor.constraint(equalTo: searchBoxView.topAnchor),
+            searchTextField.bottomAnchor.constraint(equalTo: searchBoxView.bottomAnchor),
+
+            sectionRowStack.topAnchor.constraint(equalTo: searchBoxView.bottomAnchor, constant: 8),
             sectionRowStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
             sectionRowStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
-            sectionRowStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6)
+            sectionRowStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4)
         ])
     }
 
@@ -978,6 +1045,15 @@ private final class FeaturedWebScrollHeaderReusableView: UICollectionReusableVie
 
         filterStatusPillButton.setTitle(filterText, for: .normal)
         sectionTitleLabel.text = "🔥 DANH SÁCH APP & GAME (\(totalAppsCount))"
+    }
+
+    @objc private func handleTextFieldEditingChanged(_ sender: UITextField) {
+        onSearchTextChanged?(sender.text ?? "")
+    }
+
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        textField.resignFirstResponder()
+        return true
     }
 
     @objc private func handleDownloadsTap() {
@@ -1053,7 +1129,6 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
         nameLabel.numberOfLines = 1
         cardView.addSubview(nameLabel)
 
-        // Hiển thị Bundle ID bằng font Monospaced xanh dương đồng bộ với MyAppsViewController
         bundleIDLabel.translatesAutoresizingMaskIntoConstraints = false
         bundleIDLabel.font = UIFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
         bundleIDLabel.textColor = FeaturedCSSTheme.blue
@@ -1232,7 +1307,7 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
     }
 }
 
-// MARK: - 📋 DATASOURCE RIÊNG CHO FEATURED SMART HUB (KÈM HEADER LƯỚT THEO WEB)
+// MARK: - 📋 DATASOURCE RIÊNG CHO FEATURED SMART HUB
 @MainActor
 private final class FeaturedSmartHubDataSource: NSObject, UICollectionViewDataSource {
     var items: [FeaturedAppItem] = []
@@ -1275,7 +1350,235 @@ private final class FeaturedSmartHubDataSource: NSObject, UICollectionViewDataSo
     }
 }
 
-// MARK: - 🗂️ MÀN HÌNH QUẢN LÝ FILE ĐÃ TẢI VỀ (ĐỒNG BỘ HEADER .HERO CUỘN THEO WEB)
+// MARK: - 🪟 KHUNG CHI TIẾT ĐẦY ĐỦ THÔNG TIN APP (CHIỀU RỘNG ĐÚNG 90% MÀN HÌNH)
+@MainActor
+private final class FeaturedAppFullInfoPopupViewController: UIViewController {
+    private let app: FeaturedAppItem
+    private let onPrimaryAction: () -> Void
+
+    private let dimView = UIView()
+    private let containerCard = UIView()
+    private let iconImageView = UIImageView()
+    private let nameLabel = UILabel()
+    private let versionBadgeLabel = UILabel()
+    private let infoBoxView = UIView()
+    private let infoLabel = UILabel()
+    private let descriptionTextView = UITextView()
+    private let buttonStack = UIStackView()
+    private let closeButton = UIButton(type: .system)
+    private let actionButton = UIButton(type: .system)
+
+    init(app: FeaturedAppItem, onPrimaryAction: @escaping () -> Void) {
+        self.app = app
+        self.onPrimaryAction = onPrimaryAction
+        super.init(nibName: nil, bundle: nil)
+        modalPresentationStyle = .overFullScreen
+        modalTransitionStyle = .crossDissolve
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        overrideUserInterfaceStyle = .light
+        setupViews()
+        populateAppData()
+    }
+
+    private func setupViews() {
+        view.backgroundColor = .clear
+
+        dimView.translatesAutoresizingMaskIntoConstraints = false
+        dimView.backgroundColor = UIColor.black.withAlphaComponent(0.45)
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(closeTapped))
+        dimView.addGestureRecognizer(tapGesture)
+        view.addSubview(dimView)
+
+        containerCard.translatesAutoresizingMaskIntoConstraints = false
+        containerCard.backgroundColor = FeaturedCSSTheme.white
+        containerCard.layer.cornerRadius = 20
+        containerCard.layer.borderWidth = 1.0
+        containerCard.layer.borderColor = FeaturedCSSTheme.cardBorder.cgColor
+        containerCard.layer.shadowColor = UIColor.black.cgColor
+        containerCard.layer.shadowOffset = CGSize(width: 0, height: 10)
+        containerCard.layer.shadowRadius = 24
+        containerCard.layer.shadowOpacity = 0.22
+        view.addSubview(containerCard)
+
+        iconImageView.translatesAutoresizingMaskIntoConstraints = false
+        iconImageView.backgroundColor = FeaturedCSSTheme.light
+        iconImageView.contentMode = .scaleAspectFill
+        iconImageView.layer.cornerRadius = 15
+        iconImageView.layer.borderWidth = 1.0
+        iconImageView.layer.borderColor = FeaturedCSSTheme.innerBorder.cgColor
+        iconImageView.clipsToBounds = true
+        containerCard.addSubview(iconImageView)
+
+        nameLabel.translatesAutoresizingMaskIntoConstraints = false
+        nameLabel.font = UIFont.systemFont(ofSize: 17, weight: .heavy)
+        nameLabel.textColor = FeaturedCSSTheme.pureBlack
+        nameLabel.numberOfLines = 2
+        containerCard.addSubview(nameLabel)
+
+        versionBadgeLabel.translatesAutoresizingMaskIntoConstraints = false
+        versionBadgeLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .bold)
+        versionBadgeLabel.textColor = FeaturedCSSTheme.blue
+        containerCard.addSubview(versionBadgeLabel)
+
+        infoBoxView.translatesAutoresizingMaskIntoConstraints = false
+        infoBoxView.backgroundColor = FeaturedCSSTheme.light
+        infoBoxView.layer.cornerRadius = 12
+        infoBoxView.layer.borderWidth = 1.0
+        infoBoxView.layer.borderColor = FeaturedCSSTheme.innerBorder.cgColor
+        containerCard.addSubview(infoBoxView)
+
+        infoLabel.translatesAutoresizingMaskIntoConstraints = false
+        infoLabel.numberOfLines = 0
+        infoBoxView.addSubview(infoLabel)
+
+        descriptionTextView.translatesAutoresizingMaskIntoConstraints = false
+        descriptionTextView.isEditable = false
+        descriptionTextView.isSelectable = true
+        descriptionTextView.backgroundColor = FeaturedCSSTheme.infoBg.withAlphaComponent(0.55)
+        descriptionTextView.layer.cornerRadius = 12
+        descriptionTextView.layer.borderWidth = 0.8
+        descriptionTextView.layer.borderColor = FeaturedCSSTheme.innerBorder.cgColor
+        descriptionTextView.textContainerInset = UIEdgeInsets(top: 10, left: 10, bottom: 10, right: 10)
+        descriptionTextView.font = UIFont.systemFont(ofSize: 13.5, weight: .regular)
+        descriptionTextView.textColor = FeaturedCSSTheme.darkGray
+        containerCard.addSubview(descriptionTextView)
+
+        buttonStack.translatesAutoresizingMaskIntoConstraints = false
+        buttonStack.axis = .horizontal
+        buttonStack.spacing = 10
+        buttonStack.distribution = .fillEqually
+        containerCard.addSubview(buttonStack)
+
+        closeButton.setTitle("Đóng", for: .normal)
+        closeButton.setTitleColor(FeaturedCSSTheme.darkGray, for: .normal)
+        closeButton.titleLabel?.font = UIFont.systemFont(ofSize: 14, weight: .bold)
+        closeButton.backgroundColor = FeaturedCSSTheme.light
+        closeButton.layer.cornerRadius = 12
+        closeButton.layer.borderWidth = 1.0
+        closeButton.layer.borderColor = FeaturedCSSTheme.border.cgColor
+        closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
+        buttonStack.addArrangedSubview(closeButton)
+
+        actionButton.titleLabel?.font = UIFont.systemFont(ofSize: 14, weight: .heavy)
+        actionButton.setTitleColor(.white, for: .normal)
+        actionButton.layer.cornerRadius = 12
+        actionButton.addTarget(self, action: #selector(primaryActionTapped), for: .touchUpInside)
+        buttonStack.addArrangedSubview(actionButton)
+
+        NSLayoutConstraint.activate([
+            dimView.topAnchor.constraint(equalTo: view.topAnchor),
+            dimView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            dimView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            dimView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            // Chiều rộng khung đúng 90% màn hình
+            containerCard.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            containerCard.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            containerCard.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.90),
+            containerCard.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor, multiplier: 0.82),
+
+            iconImageView.topAnchor.constraint(equalTo: containerCard.topAnchor, constant: 16),
+            iconImageView.leadingAnchor.constraint(equalTo: containerCard.leadingAnchor, constant: 16),
+            iconImageView.widthAnchor.constraint(equalToConstant: 62),
+            iconImageView.heightAnchor.constraint(equalToConstant: 62),
+
+            nameLabel.topAnchor.constraint(equalTo: iconImageView.topAnchor, constant: 2),
+            nameLabel.leadingAnchor.constraint(equalTo: iconImageView.trailingAnchor, constant: 12),
+            nameLabel.trailingAnchor.constraint(equalTo: containerCard.trailingAnchor, constant: -16),
+
+            versionBadgeLabel.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: 4),
+            versionBadgeLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
+            versionBadgeLabel.trailingAnchor.constraint(equalTo: nameLabel.trailingAnchor),
+
+            infoBoxView.topAnchor.constraint(equalTo: iconImageView.bottomAnchor, constant: 14),
+            infoBoxView.leadingAnchor.constraint(equalTo: containerCard.leadingAnchor, constant: 16),
+            infoBoxView.trailingAnchor.constraint(equalTo: containerCard.trailingAnchor, constant: -16),
+
+            infoLabel.topAnchor.constraint(equalTo: infoBoxView.topAnchor, constant: 10),
+            infoLabel.leadingAnchor.constraint(equalTo: infoBoxView.leadingAnchor, constant: 12),
+            infoLabel.trailingAnchor.constraint(equalTo: infoBoxView.trailingAnchor, constant: -12),
+            infoLabel.bottomAnchor.constraint(equalTo: infoBoxView.bottomAnchor, constant: -10),
+
+            descriptionTextView.topAnchor.constraint(equalTo: infoBoxView.bottomAnchor, constant: 12),
+            descriptionTextView.leadingAnchor.constraint(equalTo: containerCard.leadingAnchor, constant: 16),
+            descriptionTextView.trailingAnchor.constraint(equalTo: containerCard.trailingAnchor, constant: -16),
+            descriptionTextView.heightAnchor.constraint(equalToConstant: 165),
+
+            buttonStack.topAnchor.constraint(equalTo: descriptionTextView.bottomAnchor, constant: 14),
+            buttonStack.leadingAnchor.constraint(equalTo: containerCard.leadingAnchor, constant: 16),
+            buttonStack.trailingAnchor.constraint(equalTo: containerCard.trailingAnchor, constant: -16),
+            buttonStack.bottomAnchor.constraint(equalTo: containerCard.bottomAnchor, constant: -16),
+            buttonStack.heightAnchor.constraint(equalToConstant: 42)
+        ])
+    }
+
+    private func populateAppData() {
+        nameLabel.text = app.name
+        versionBadgeLabel.text = "Phiên bản v\(app.version) • \(app.formattedSize)"
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 4
+
+        let infoText = """
+        👤 Tác giả: \(app.developerName)
+        🆔 Bundle ID: \(app.bundleIdentifier)
+        💾 Dung lượng: \(app.formattedSize)
+        📦 Nguồn: \(app.sourceName)
+        """
+        infoLabel.attributedText = NSAttributedString(
+            string: infoText,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 13, weight: .semibold),
+                .foregroundColor: FeaturedCSSTheme.primary,
+                .paragraphStyle: paragraph
+            ]
+        )
+
+        let cleanDescription = app.localizedDescription
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        descriptionTextView.text = cleanDescription.isEmpty
+            ? "Ứng dụng được cung cấp bởi nguồn \(app.sourceName)."
+            : cleanDescription
+
+        iconImageView.image = UIImage(systemName: "app.badge.fill")?.withTintColor(FeaturedCSSTheme.blue.withAlphaComponent(0.35), renderingMode: .alwaysOriginal)
+        if let iconURL = app.iconURL {
+            Task { @MainActor [weak self] in
+                if let image = try? await ImagePipeline.shared.image(for: iconURL) {
+                    self?.iconImageView.image = image
+                }
+            }
+        }
+
+        let isDownloaded = (FeaturedIPADownloadCenter.shared.localFileURL(for: app) != nil)
+        if isDownloaded {
+            actionButton.setTitle("✍️ KÝ APP NGAY", for: .normal)
+            actionButton.backgroundColor = FeaturedCSSTheme.green
+        } else {
+            actionButton.setTitle("⬇️ TẢI VỀ IPA", for: .normal)
+            actionButton.backgroundColor = FeaturedCSSTheme.blue
+        }
+    }
+
+    @objc private func closeTapped() {
+        dismiss(animated: true)
+    }
+
+    @objc private func primaryActionTapped() {
+        dismiss(animated: true) { [weak self] in
+            self?.onPrimaryAction()
+        }
+    }
+}
+
+// MARK: - 🗂️ MÀN HÌNH QUẢN LÝ FILE ĐÃ TẢI VỀ (CHỮ TÙY CHỌN FILE IPA NHỎ GỌN ĐẸP)
 @MainActor
 private final class FeaturedDownloadedIPAsManagerViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
     var onSelectSignIPA: ((FeaturedDownloadedIPAEntry) -> Void)?
@@ -1526,38 +1829,132 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         let entry = entries[indexPath.row]
+        presentCompactFileActionsModal(for: entry)
+    }
+
+    private func presentCompactFileActionsModal(for entry: FeaturedDownloadedIPAEntry) {
         let fileURL = FeaturedIPADownloadCenter.shared.localFileURL(for: entry)
 
-        let titleText = "\(entry.appName) (v\(entry.version))"
-        let messageText = "Dung lượng: \(entry.formattedSize)\n\(entry.fileName)"
+        let modalVC = UIViewController()
+        modalVC.modalPresentationStyle = .overFullScreen
+        modalVC.modalTransitionStyle = .crossDissolve
 
-        let sheet = UIAlertController(
-            title: titleText,
-            message: messageText,
-            preferredStyle: .actionSheet
-        )
-        sheet.view.tintColor = FeaturedCSSTheme.blue
+        let dim = UIView()
+        dim.translatesAutoresizingMaskIntoConstraints = false
+        dim.backgroundColor = UIColor.black.withAlphaComponent(0.4)
+        modalVC.view.addSubview(dim)
 
-        sheet.addAction(UIAlertAction(title: "📤 Chia sẻ / Lưu vào Tệp (Files)", style: .default) { [weak self] _ in
-            guard let self else { return }
-            let activityVC = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
-            if let popover = activityVC.popoverPresentationController {
-                popover.sourceView = self.view
-                popover.sourceRect = CGRect(x: self.view.bounds.midX, y: self.view.bounds.midY, width: 1, height: 1)
+        let card = UIView()
+        card.translatesAutoresizingMaskIntoConstraints = false
+        card.backgroundColor = FeaturedCSSTheme.white
+        card.layer.cornerRadius = 18
+        card.layer.borderWidth = 1.0
+        card.layer.borderColor = FeaturedCSSTheme.cardBorder.cgColor
+        modalVC.view.addSubview(card)
+
+        let titleLbl = UILabel()
+        titleLbl.translatesAutoresizingMaskIntoConstraints = false
+        titleLbl.text = "\(entry.appName) (v\(entry.version))"
+        titleLbl.font = UIFont.systemFont(ofSize: 15, weight: .bold)
+        titleLbl.textColor = FeaturedCSSTheme.pureBlack
+        titleLbl.textAlignment = .center
+        titleLbl.numberOfLines = 2
+        card.addSubview(titleLbl)
+
+        let subLbl = UILabel()
+        subLbl.translatesAutoresizingMaskIntoConstraints = false
+        subLbl.text = "Dung lượng: \(entry.formattedSize)\n\(entry.fileName)"
+        subLbl.font = UIFont.systemFont(ofSize: 12, weight: .medium)
+        subLbl.textColor = FeaturedCSSTheme.darkGray
+        subLbl.textAlignment = .center
+        subLbl.numberOfLines = 2
+        card.addSubview(subLbl)
+
+        let shareBtn = UIButton(type: .system)
+        shareBtn.translatesAutoresizingMaskIntoConstraints = false
+        shareBtn.setTitle("📤 Chia sẻ / Lưu vào Tệp (Files)", for: .normal)
+        shareBtn.titleLabel?.font = UIFont.systemFont(ofSize: 13.5, weight: .semibold)
+        shareBtn.setTitleColor(FeaturedCSSTheme.blue, for: .normal)
+        shareBtn.backgroundColor = FeaturedCSSTheme.infoBg
+        shareBtn.layer.cornerRadius = 11
+        card.addSubview(shareBtn)
+
+        let deleteBtn = UIButton(type: .system)
+        deleteBtn.translatesAutoresizingMaskIntoConstraints = false
+        deleteBtn.setTitle("🗑️ Xóa file IPA này", for: .normal)
+        deleteBtn.titleLabel?.font = UIFont.systemFont(ofSize: 13.5, weight: .semibold)
+        deleteBtn.setTitleColor(FeaturedCSSTheme.red, for: .normal)
+        deleteBtn.backgroundColor = FeaturedCSSTheme.red.withAlphaComponent(0.1)
+        deleteBtn.layer.cornerRadius = 11
+        card.addSubview(deleteBtn)
+
+        let cancelBtn = UIButton(type: .system)
+        cancelBtn.translatesAutoresizingMaskIntoConstraints = false
+        cancelBtn.setTitle("Đóng", for: .normal)
+        cancelBtn.titleLabel?.font = UIFont.systemFont(ofSize: 13.5, weight: .bold)
+        cancelBtn.setTitleColor(FeaturedCSSTheme.darkGray, for: .normal)
+        cancelBtn.backgroundColor = FeaturedCSSTheme.light
+        cancelBtn.layer.cornerRadius = 11
+        card.addSubview(cancelBtn)
+
+        shareBtn.addAction(UIAction { [weak self, weak modalVC] _ in
+            modalVC?.dismiss(animated: true) {
+                guard let self else { return }
+                let activityVC = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
+                if let popover = activityVC.popoverPresentationController {
+                    popover.sourceView = self.view
+                    popover.sourceRect = CGRect(x: self.view.bounds.midX, y: self.view.bounds.midY, width: 1, height: 1)
+                }
+                self.present(activityVC, animated: true)
             }
-            self.present(activityVC, animated: true)
-        })
+        }, for: .touchUpInside)
 
-        sheet.addAction(UIAlertAction(title: "🗑️ Xóa file IPA này", style: .destructive) { _ in
-            FeaturedIPADownloadCenter.shared.deleteDownloadedFile(entry: entry)
-        })
+        deleteBtn.addAction(UIAction { [weak modalVC] _ in
+            modalVC?.dismiss(animated: true) {
+                FeaturedIPADownloadCenter.shared.deleteDownloadedFile(entry: entry)
+            }
+        }, for: .touchUpInside)
 
-        sheet.addAction(UIAlertAction(title: "Đóng", style: .cancel))
-        if let popover = sheet.popoverPresentationController, let cell = tableView.cellForRow(at: indexPath) {
-            popover.sourceView = cell
-            popover.sourceRect = cell.bounds
-        }
-        present(sheet, animated: true)
+        cancelBtn.addAction(UIAction { [weak modalVC] _ in
+            modalVC?.dismiss(animated: true)
+        }, for: .touchUpInside)
+
+        NSLayoutConstraint.activate([
+            dim.topAnchor.constraint(equalTo: modalVC.view.topAnchor),
+            dim.leadingAnchor.constraint(equalTo: modalVC.view.leadingAnchor),
+            dim.trailingAnchor.constraint(equalTo: modalVC.view.trailingAnchor),
+            dim.bottomAnchor.constraint(equalTo: modalVC.view.bottomAnchor),
+
+            card.centerXAnchor.constraint(equalTo: modalVC.view.centerXAnchor),
+            card.centerYAnchor.constraint(equalTo: modalVC.view.centerYAnchor),
+            card.widthAnchor.constraint(equalTo: modalVC.view.widthAnchor, multiplier: 0.86),
+
+            titleLbl.topAnchor.constraint(equalTo: card.topAnchor, constant: 16),
+            titleLbl.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
+            titleLbl.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
+
+            subLbl.topAnchor.constraint(equalTo: titleLbl.bottomAnchor, constant: 4),
+            subLbl.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
+            subLbl.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
+
+            shareBtn.topAnchor.constraint(equalTo: subLbl.bottomAnchor, constant: 14),
+            shareBtn.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
+            shareBtn.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
+            shareBtn.heightAnchor.constraint(equalToConstant: 38),
+
+            deleteBtn.topAnchor.constraint(equalTo: shareBtn.bottomAnchor, constant: 8),
+            deleteBtn.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
+            deleteBtn.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
+            deleteBtn.heightAnchor.constraint(equalToConstant: 38),
+
+            cancelBtn.topAnchor.constraint(equalTo: deleteBtn.bottomAnchor, constant: 8),
+            cancelBtn.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
+            cancelBtn.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
+            cancelBtn.heightAnchor.constraint(equalToConstant: 38),
+            cancelBtn.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -14)
+        ])
+
+        present(modalVC, animated: true)
     }
 
     func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
@@ -1570,7 +1967,7 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
     }
 }
 
-// MARK: - ➕ MÀN HÌNH QUẢN LÝ & THÊM NGUỒN JSON (ĐỒNG BỘ HEADER .HERO CUỘN THEO WEB)
+// MARK: - ➕ MÀN HÌNH QUẢN LÝ & THÊM NGUỒN JSON (BÊN PHẢI CHỈ ĐỂ DẤU +)
 @MainActor
 private final class FeaturedSourcesHubManagerViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
     var onSourcesChanged: ((FeaturedRepoSource?) -> Void)?
@@ -1665,12 +2062,11 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
 
         let addBtn = UIButton(type: .system)
         addBtn.translatesAutoresizingMaskIntoConstraints = false
-        addBtn.setTitle("+ Thêm", for: .normal)
+        addBtn.setTitle("+", for: .normal)
         addBtn.setTitleColor(FeaturedCSSTheme.blue, for: .normal)
-        addBtn.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .heavy)
+        addBtn.titleLabel?.font = UIFont.systemFont(ofSize: 18, weight: .heavy)
         addBtn.backgroundColor = FeaturedCSSTheme.white
         addBtn.layer.cornerRadius = 14
-        addBtn.contentEdgeInsets = UIEdgeInsets(top: 5, left: 11, bottom: 5, right: 11)
         addBtn.addTarget(self, action: #selector(promptAddSourceURL), for: .touchUpInside)
         heroCard.addSubview(addBtn)
 
@@ -1686,6 +2082,7 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
 
             addBtn.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
             addBtn.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
+            addBtn.widthAnchor.constraint(equalToConstant: 28),
             addBtn.heightAnchor.constraint(equalToConstant: 28),
 
             titleLabel.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
@@ -1917,11 +2314,10 @@ private extension FeaturedViewController
         self.navigationItem.largeTitleDisplayMode = .never
         #endif
 
-        // 1. FlowLayout với Header cuộn theo trang web (sectionHeadersPinToVisibleBounds = false)
         let flowLayout = UICollectionViewFlowLayout()
         flowLayout.scrollDirection = .vertical
         flowLayout.minimumLineSpacing = 10
-        flowLayout.sectionHeadersPinToVisibleBounds = false // Lướt theo web, KHÔNG cố định chiếm chỗ!
+        flowLayout.sectionHeadersPinToVisibleBounds = false
         flowLayout.sectionInset = UIEdgeInsets(top: 4, left: 14, bottom: 28, right: 14)
         self.collectionView.setCollectionViewLayout(flowLayout, animated: false)
 
@@ -1951,7 +2347,6 @@ private extension FeaturedViewController
         self.collectionView.refreshControl = refreshControl
         #endif
 
-        // 2. Lắng nghe sự kiện tải % & hoàn tất IPA
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleDownloadStateChanged(_:)),
@@ -1965,16 +2360,21 @@ private extension FeaturedViewController
             object: nil
         )
 
-        // 3. Nạp danh sách ứng dụng từ 7 nguồn lớn
         loadAppsForCurrentFilter(forceRefresh: false)
     }
 
     func bindScrollableHeaderView(_ header: FeaturedWebScrollHeaderReusableView)
     {
         self.activeHeaderView = header
-        header.searchBar.delegate = self
-        if header.searchBar.text != self.currentSearchText {
-            header.searchBar.text = self.currentSearchText
+        if !header.searchTextField.isFirstResponder && header.searchTextField.text != self.currentSearchText {
+            header.searchTextField.text = self.currentSearchText
+        }
+
+        header.onSearchTextChanged = { [weak self] newText in
+            guard let self else { return }
+            self.currentSearchText = newText
+            self.currentDisplayLimit = self.pageSize
+            self.applySearchAndPagination(keepSearchFocus: true)
         }
 
         header.onOpenDownloadsTapped = { [weak self] in
@@ -2072,7 +2472,7 @@ private extension FeaturedViewController
                 #if !os(tvOS)
                 self.collectionView.refreshControl?.endRefreshing()
                 #endif
-                self.applySearchAndPagination()
+                self.applySearchAndPagination(keepSearchFocus: false)
             }
 
         case .specificSource(let source):
@@ -2083,13 +2483,15 @@ private extension FeaturedViewController
                 #if !os(tvOS)
                 self.collectionView.refreshControl?.endRefreshing()
                 #endif
-                self.applySearchAndPagination()
+                self.applySearchAndPagination(keepSearchFocus: false)
             }
         }
     }
 
-    func applySearchAndPagination()
+    func applySearchAndPagination(keepSearchFocus: Bool)
     {
+        let wasEditing = keepSearchFocus || (activeHeaderView?.searchTextField.isFirstResponder == true)
+
         let query = currentSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if query.isEmpty {
             filteredHubApps = allLoadedHubApps
@@ -2107,7 +2509,17 @@ private extension FeaturedViewController
         displayedHubApps = Array(filteredHubApps.prefix(count))
         smartHubDataSource.items = displayedHubApps
         refreshVisibleHeaderState()
-        self.collectionView.reloadData()
+
+        UIView.performWithoutAnimation {
+            self.collectionView.reloadData()
+            self.collectionView.layoutIfNeeded()
+        }
+
+        if wasEditing, let tf = self.activeHeaderView?.searchTextField {
+            if !tf.isFirstResponder {
+                tf.becomeFirstResponder()
+            }
+        }
     }
 
     @objc func handleDownloadStateChanged(_ notification: Notification)
@@ -2217,25 +2629,6 @@ private extension FeaturedViewController
 }
 
 // ============================================================================
-// MARK: - 🔍 UISearchBarDelegate (TÌM KIẾM SIÊU TỐC TRONG KHO APP)
-// ============================================================================
-
-extension FeaturedViewController: UISearchBarDelegate
-{
-    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String)
-    {
-        self.currentSearchText = searchText
-        self.currentDisplayLimit = self.pageSize
-        self.applySearchAndPagination()
-    }
-
-    func searchBarSearchButtonClicked(_ searchBar: UISearchBar)
-    {
-        searchBar.resignFirstResponder()
-    }
-}
-
-// ============================================================================
 // MARK: - 📋 COLLECTIONVIEW DELEGATE & FLOW LAYOUT
 // ============================================================================
 
@@ -2244,7 +2637,7 @@ extension FeaturedViewController
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, referenceSizeForHeaderInSection section: Int) -> CGSize
     {
         let width = max(collectionView.bounds.width - 28, 280)
-        return CGSize(width: width, height: 184)
+        return CGSize(width: width, height: 168)
     }
 
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize
@@ -2271,48 +2664,10 @@ extension FeaturedViewController
         guard indexPath.item < self.displayedHubApps.count else { return }
         let app = self.displayedHubApps[indexPath.item]
 
-        let titleText = "\(app.name) (v\(app.version))"
-        let cleanDescription = app.localizedDescription
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let shortDesc = String(cleanDescription.prefix(340))
-
-        let infoBlock = "👤 Tác giả: \(app.developerName)\n🆔 Bundle ID: \(app.bundleIdentifier)\n💾 Dung lượng: \(app.formattedSize)"
-        let messageText = shortDesc.isEmpty ? infoBlock : "\(infoBlock)\n\n\(shortDesc)"
-
-        let sheet = UIAlertController(
-            title: titleText,
-            message: messageText,
-            preferredStyle: .actionSheet
-        )
-
-        let titleAttr = NSAttributedString(
-            string: titleText,
-            attributes: [
-                .font: UIFont.systemFont(ofSize: 16, weight: .bold),
-                .foregroundColor: FeaturedCSSTheme.pureBlack
-            ]
-        )
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = .center
-        paragraphStyle.lineSpacing = 4
-        let messageAttr = NSAttributedString(
-            string: "\n" + messageText,
-            attributes: [
-                .font: UIFont.systemFont(ofSize: 13.5, weight: .regular),
-                .foregroundColor: FeaturedCSSTheme.darkGray,
-                .paragraphStyle: paragraphStyle
-            ]
-        )
-        sheet.setValue(titleAttr, forKey: "attributedTitle")
-        sheet.setValue(messageAttr, forKey: "attributedMessage")
-
-        sheet.addAction(UIAlertAction(title: "Đóng", style: .cancel))
-        if let popover = sheet.popoverPresentationController, let cell = collectionView.cellForItem(at: indexPath) {
-            popover.sourceView = cell
-            popover.sourceRect = cell.bounds
+        let popupVC = FeaturedAppFullInfoPopupViewController(app: app) { [weak self] in
+            self?.handleHubAppPrimaryAction(for: app)
         }
-        present(sheet, animated: true)
+        present(popupVC, animated: true)
     }
 }
 

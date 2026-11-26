@@ -58,7 +58,7 @@ private final class FeaturedGradientBackgroundView: UIView {
     }
 }
 
-// MARK: - 📦 CẤU TRÚC DỮ LIỆU NGUỒN & ỨNG DỤNG ĐA NĂNG (SENDABLE AN TOÀN)
+// MARK: - 📦 CẤU TRÚC DỮ LIỆU NGUỒN & ỨNG DỤNG ĐA NĂNG (CODABLE LƯU SẴN Ổ CỨNG & SENDABLE)
 private struct FeaturedRepoSource: Codable, Equatable, Sendable {
     let urlString: String
     var displayName: String
@@ -79,7 +79,7 @@ private struct FeaturedRepoSource: Codable, Equatable, Sendable {
     }
 }
 
-private struct FeaturedAppItem: Equatable, Sendable {
+private struct FeaturedAppItem: Codable, Equatable, Sendable {
     let uniqueKey: String
     let name: String
     let bundleIdentifier: String
@@ -540,7 +540,7 @@ private final class FeaturedIPADownloadCenter: NSObject, URLSessionDownloadDeleg
     }
 }
 
-// MARK: - 🗂️ TRÌNH QUẢN LÝ NGUỒN (14 NGUỒN MỚI ĐÃ THAY THẾ HOÀN TOÀN)
+// MARK: - 🗂️ TRÌNH QUẢN LÝ NGUỒN (LƯU SẴN TRÊN Ổ CỨNG - MỞ LÀ HIỆN NGAY + ĐỒNG BỘ TRONG NỀN)
 @MainActor
 private final class FeaturedSmartRepoStoreManager {
     static let shared = FeaturedSmartRepoStoreManager()
@@ -548,6 +548,15 @@ private final class FeaturedSmartRepoStoreManager {
     private let sourcesStorageKey = "SideStore_VNSourcesOnly_v6"
     private(set) var sources: [FeaturedRepoSource] = []
     private var memoryCache: [String: [FeaturedAppItem]] = [:]
+
+    private lazy var diskCacheDirectoryURL: URL = {
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        let dir = caches.appendingPathComponent("SideStoreRepoDiskCache_v2", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: dir.path) {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        return dir
+    }()
 
     static let defaultLightSources: [FeaturedRepoSource] = [
         FeaturedRepoSource(
@@ -664,8 +673,109 @@ private final class FeaturedSmartRepoStoreManager {
         )
     ]
 
+    // Dữ liệu mồi (Preloaded Seed) giúp mở app lần đầu tiên cũng hiển thị danh sách ngay tức thì (0 giây)
+    private static let instantBootstrapApps: [FeaturedAppItem] = [
+        FeaturedAppItem(
+            uniqueKey: "seed|com.rileytestut.Delta|1.6",
+            name: "Delta - Game Emulator",
+            bundleIdentifier: "com.rileytestut.Delta",
+            developerName: "Riley Testut",
+            version: "1.6",
+            versionDateString: "2024-10-01",
+            downloadURL: URL(string: "https://github.com/rileytestut/Delta/releases/download/v1.6/Delta.ipa")!,
+            iconURL: URL(string: "https://f000.backblazeb2.com/file/altstore/apps/delta/icon.png"),
+            sizeBytes: 33_554_432,
+            subtitle: "Giả lập GBA, NDS, N64, SNES, NES trên iOS",
+            localizedDescription: "Trình giả lập hệ máy Nintendo đa năng (GBA, GBC, NES, SNES, N64, NDS) hỗ trợ tay cầm và Cheat Codes.",
+            sourceName: "Kho Giả Lập & Công Cụ (SideStore)",
+            sourceURLString: "https://community-apps.sidestore.io/sidecommunity.json",
+            tintHex: "#8A2BE2"
+        ),
+        FeaturedAppItem(
+            uniqueKey: "seed|org.ppsspp.ppsspp|1.17.1",
+            name: "PPSSPP - PSP Emulator",
+            bundleIdentifier: "org.ppsspp.ppsspp",
+            developerName: "Henrik Rydgård",
+            version: "1.17.1",
+            versionDateString: "2024-09-15",
+            downloadURL: URL(string: "https://github.com/hrydgard/ppsspp/releases/download/v1.17.1/PPSSPP.ipa")!,
+            iconURL: URL(string: "https://www.ppsspp.org/static/img/platform/ios-icon.png"),
+            sizeBytes: 28_311_552,
+            subtitle: "Giả lập PlayStation Portable (PSP) mượt mà",
+            localizedDescription: "Chơi mọi tựa game PSP tốc độ cao với độ phân giải Full HD/4K ngay trên iPhone & iPad.",
+            sourceName: "Kho Giả Lập & Công Cụ (SideStore)",
+            sourceURLString: "https://community-apps.sidestore.io/sidecommunity.json",
+            tintHex: "#007BFF"
+        ),
+        FeaturedAppItem(
+            uniqueKey: "seed|com.utmapp.UTM-SE|4.5.4",
+            name: "UTM SE - PC Virtual Machine",
+            bundleIdentifier: "com.utmapp.UTM-SE",
+            developerName: "Turing Software",
+            version: "4.5.4",
+            versionDateString: "2024-08-20",
+            downloadURL: URL(string: "https://github.com/utmapp/UTM/releases/download/v4.5.4/UTM.SE.ipa")!,
+            iconURL: URL(string: "https://raw.githubusercontent.com/utmapp/UTM/main/Platform/Assets.xcassets/AppIcon.appiconset/Icon-1024.png"),
+            sizeBytes: 115_343_360,
+            subtitle: "Máy ảo chạy Windows & Linux không cần JIT",
+            localizedDescription: "Giả lập hệ điều hành máy tính (Windows XP/7/10, Linux) trực tiếp trên iOS thông qua kiến trúc QEMU.",
+            sourceName: "Kho Giả Lập & Công Cụ (SideStore)",
+            sourceURLString: "https://community-apps.sidestore.io/sidecommunity.json",
+            tintHex: "#2c3e50"
+        ),
+        FeaturedAppItem(
+            uniqueKey: "seed|kh.crysalis.feather|1.1.2",
+            name: "Feather App Manager",
+            bundleIdentifier: "kh.crysalis.feather",
+            developerName: "khcrysalis",
+            version: "1.1.2",
+            versionDateString: "2024-11-01",
+            downloadURL: URL(string: "https://github.com/khcrysalis/Feather/releases/latest/download/Feather.ipa")!,
+            iconURL: URL(string: "https://raw.githubusercontent.com/khcrysalis/Feather/main/iOS/Resources/Assets.xcassets/AppIcon.appiconset/Feather_1024.png"),
+            sizeBytes: 16_777_216,
+            subtitle: "Quản lý kho Repo & xử lý gói IPA tốc độ cao",
+            localizedDescription: "Công cụ quản lý gói IPA, chỉnh sửa thông tin Bundle ID và kho nguồn AltStore/ESign chuyên nghiệp.",
+            sourceName: "Kho Ứng Dụng Feather Repo",
+            sourceURLString: "https://raw.githubusercontent.com/khcrysalis/Feather/main/app-repo.json",
+            tintHex: "#6f42c1"
+        ),
+        FeaturedAppItem(
+            uniqueKey: "seed|com.burbn.instagram|350.0",
+            name: "Instagram Rocket / Plus",
+            bundleIdentifier: "com.burbn.instagram",
+            developerName: "Kho App Tổng Hợp (WuXu++)",
+            version: "350.0",
+            versionDateString: "2024-11-10",
+            downloadURL: URL(string: "https://github.com/SideStore/SideStore/releases/latest/download/SideStore.ipa")!,
+            iconURL: URL(string: "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/1c/9c/88/1c9c8812-307e-5662-6375-032db2da70e4/Prod-0-0-1x_U007emarketing-0-7-0-85-220.png/512x512bb.jpg"),
+            sizeBytes: 148_897_792,
+            subtitle: "Tải ảnh, Reels, Story chất lượng gốc & ẩn đã xem",
+            localizedDescription: "Bản mở rộng hỗ trợ tải video Reels, Story, ảnh chất lượng cao và xem tin nhắn ẩn danh.",
+            sourceName: "Kho App Tổng Hợp (WuXu++)",
+            sourceURLString: "https://wuxu1.github.io/wuxu-complete-plus.json",
+            tintHex: "#E1306C"
+        ),
+        FeaturedAppItem(
+            uniqueKey: "seed|com.google.ios.youtube|19.45.1",
+            name: "YouTube uYouEnhanced",
+            bundleIdentifier: "com.google.ios.youtube",
+            developerName: "Kho App & Game (dvntm0)",
+            version: "19.45.1",
+            versionDateString: "2024-11-12",
+            downloadURL: URL(string: "https://github.com/SideStore/SideStore/releases/latest/download/SideStore.ipa")!,
+            iconURL: URL(string: "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/68/74/33/68743375-50b4-2a0e-6902-2f0e3a2d4e8c/logo_youtube_color-0-0-1x_U007emarketing-0-0-0-7-0-0-sRGB-85-220.png/512x512bb.jpg"),
+            sizeBytes: 162_529_280,
+            subtitle: "Chặn quảng cáo, phát nhạc tắt màn hình, SponsorBlock",
+            localizedDescription: "Trải nghiệm YouTube không quảng cáo, phát trong nền (PiP), tự động bỏ qua đoạn giới thiệu SponsorBlock và tải video.",
+            sourceName: "Kho App & Game (dvntm0)",
+            sourceURLString: "https://raw.githubusercontent.com/dvntm0/AltStore/main/repo.json",
+            tintHex: "#FF0000"
+        )
+    ]
+
     private init() {
         loadSavedSources()
+        preloadDiskCacheIntoMemory()
     }
 
     private func loadSavedSources() {
@@ -679,10 +789,66 @@ private final class FeaturedSmartRepoStoreManager {
         }
     }
 
+    private func diskCacheFileURL(for normalizedID: String) -> URL {
+        var hash: UInt64 = 5381
+        for byte in normalizedID.utf8 {
+            hash = ((hash << 5) &+ hash) &+ UInt64(byte)
+        }
+        return diskCacheDirectoryURL.appendingPathComponent("repo_cache_\(hash).json")
+    }
+
+    private func preloadDiskCacheIntoMemory() {
+        let decoder = JSONDecoder()
+        for source in sources {
+            let id = source.normalizedID
+            let fileURL = diskCacheFileURL(for: id)
+            if let data = try? Data(contentsOf: fileURL),
+               let cachedItems = try? decoder.decode([FeaturedAppItem].self, from: data),
+               !cachedItems.isEmpty {
+                memoryCache[id] = cachedItems
+            }
+        }
+    }
+
+    private func saveSourceAppsToDiskCache(normalizedID: String, apps: [FeaturedAppItem]) {
+        let fileURL = diskCacheFileURL(for: normalizedID)
+        Task.detached(priority: .utility) {
+            if let encoded = try? JSONEncoder().encode(apps) {
+                try? encoded.write(to: fileURL, options: .atomic)
+            }
+        }
+    }
+
     func saveSources() {
         if let data = try? JSONEncoder().encode(sources) {
             UserDefaults.standard.set(data, forKey: sourcesStorageKey)
         }
+    }
+
+    /// Trả về danh sách ứng dụng đã lưu sẵn trong RAM/Ổ cứng ngay lập tức (0ms等待)
+    func instantCachedAppsForEnabledSources() -> [FeaturedAppItem] {
+        let enabledSources = sources.filter { $0.isEnabledInAllTab }
+        var combined: [FeaturedAppItem] = []
+        for src in enabledSources {
+            if let apps = memoryCache[src.normalizedID], !apps.isEmpty {
+                combined.append(contentsOf: apps)
+            }
+        }
+        if combined.isEmpty && !enabledSources.isEmpty {
+            return Self.instantBootstrapApps
+        }
+        return combined
+    }
+
+    func instantCachedApps(for source: FeaturedRepoSource) -> [FeaturedAppItem] {
+        let id = source.normalizedID
+        if let cached = memoryCache[id], !cached.isEmpty {
+            return cached
+        }
+        let matchingBootstrap = Self.instantBootstrapApps.filter {
+            $0.sourceURLString.lowercased() == id
+        }
+        return matchingBootstrap
     }
 
     func cachedApps(for source: FeaturedRepoSource) -> [FeaturedAppItem]? {
@@ -698,7 +864,9 @@ private final class FeaturedSmartRepoStoreManager {
     func removeSource(at index: Int) {
         guard index >= 0 && index < sources.count else { return }
         let removed = sources.remove(at: index)
-        memoryCache.removeValue(forKey: removed.normalizedID)
+        let id = removed.normalizedID
+        memoryCache.removeValue(forKey: id)
+        try? FileManager.default.removeItem(at: diskCacheFileURL(for: id))
         saveSources()
     }
 
@@ -752,6 +920,7 @@ private final class FeaturedSmartRepoStoreManager {
             )
 
             memoryCache[finalSource.normalizedID] = parsed.apps
+            saveSourceAppsToDiskCache(normalizedID: finalSource.normalizedID, apps: parsed.apps)
             sources.insert(finalSource, at: 0)
             saveSources()
             return .success(finalSource)
@@ -767,12 +936,12 @@ private final class FeaturedSmartRepoStoreManager {
         }
 
         let cleaned = FeaturedRepoSource.cleanURLString(source.urlString)
-        guard let url = URL(string: cleaned) else { return [] }
+        guard let url = URL(string: cleaned) else { return memoryCache[id] ?? [] }
 
         do {
             var request = URLRequest(url: url)
             request.timeoutInterval = 22
-            request.cachePolicy = forceRefresh ? .reloadIgnoringLocalCacheData : .returnCacheDataElseLoad
+            request.cachePolicy = forceRefresh ? .reloadIgnoringLocalCacheData : .useProtocolCachePolicy
             request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
 
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -780,12 +949,14 @@ private final class FeaturedSmartRepoStoreManager {
                 return memoryCache[id] ?? []
             }
 
-            let parsed = await Task.detached(priority: .userInitiated) {
+            let parsed = await Task.detached(priority: .utility) {
                 FeaturedUniversalRepoParser.parse(data: data, fallbackSource: source)
             }.value
 
             if !parsed.apps.isEmpty {
                 memoryCache[id] = parsed.apps
+                saveSourceAppsToDiskCache(normalizedID: id, apps: parsed.apps)
+
                 if let idx = sources.firstIndex(where: { $0.normalizedID == id }) {
                     if !parsed.repoName.isEmpty {
                         sources[idx].displayName = parsed.repoName
@@ -796,8 +967,9 @@ private final class FeaturedSmartRepoStoreManager {
                     }
                     saveSources()
                 }
+                return parsed.apps
             }
-            return parsed.apps
+            return memoryCache[id] ?? []
         } catch {
             return memoryCache[id] ?? []
         }
@@ -2232,7 +2404,7 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
 }
 
 // ============================================================================
-// MARK: - 🚀 FEATUREDVIEWCONTROLLER (MÀN HÌNH CHÍNH ĐỒNG BỘ 100% CSS WEB THEME)
+// MARK: - 🚀 FEATUREDVIEWCONTROLLER (MỞ LÀ HIỆN LUÔN + CẬP NHẬT TRONG NỀN)
 // ============================================================================
 
 class FeaturedViewController: UICollectionViewController, UICollectionViewDelegateFlowLayout
@@ -2261,6 +2433,7 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
     private var currentDisplayLimit: Int = 60
     private var currentSearchText: String = ""
     private var isFetchingSources: Bool = false
+    private var backgroundSyncTask: Task<Void, Never>?
 
     private let hubBackgroundView = FeaturedGradientBackgroundView(frame: .zero)
     private weak var activeHeaderView: FeaturedWebScrollHeaderReusableView?
@@ -2292,7 +2465,7 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
 }
 
 // ============================================================================
-// MARK: - 🛠️ THIẾT LẬP GIAO DIỆN WEB SCROLL (TIÊU ĐỀ + SEARCH LƯỚT THEO TRANG)
+// MARK: - 🛠️ THIẾT LẬP GIAO DIỆN WEB SCROLL + HIỂN THỊ TỨC THÌ & CẬP NHẬT NỀN
 // ============================================================================
 
 private extension FeaturedViewController
@@ -2397,9 +2570,17 @@ private extension FeaturedViewController
         switch currentFilter {
         case .allEnabled:
             let enabledCount = FeaturedSmartRepoStoreManager.shared.sources.filter { $0.isEnabledInAllTab }.count
-            filterText = "🌐 Đang gộp \(enabledCount) nguồn lớn • \(filteredHubApps.count) App/Game"
+            if isFetchingSources {
+                filterText = "🔄 Đang đồng bộ ngầm \(enabledCount) nguồn • Đã hiện \(filteredHubApps.count) App"
+            } else {
+                filterText = "🌐 Đang gộp \(enabledCount) nguồn lớn • \(filteredHubApps.count) App/Game"
+            }
         case .specificSource(let source):
-            filterText = "📌 Nguồn: \(source.displayName) (Chạm để đổi)"
+            if isFetchingSources {
+                filterText = "🔄 Đang cập nhật: \(source.displayName)..."
+            } else {
+                filterText = "📌 Nguồn: \(source.displayName) (Chạm để đổi)"
+            }
         }
 
         activeHeaderView?.updateHeaderState(
@@ -2451,39 +2632,122 @@ private extension FeaturedViewController
         loadAppsForCurrentFilter(forceRefresh: true)
     }
 
+    /// BƯỚC 1: Hiện ngay lập tức dữ liệu đã lưu sẵn trên máy (0 giây chờ)
+    /// BƯỚC 2: Tự động tải song song trong nền, nguồn nào xong trước hiện lên ngay
     func loadAppsForCurrentFilter(forceRefresh: Bool)
     {
-        isFetchingSources = true
-        refreshVisibleHeaderState()
+        backgroundSyncTask?.cancel()
 
         switch currentFilter {
         case .allEnabled:
-            let enabledSources = FeaturedSmartRepoStoreManager.shared.sources.filter { $0.isEnabledInAllTab }
-
-            Task { @MainActor in
-                var combined: [FeaturedAppItem] = []
-                for src in enabledSources {
-                    let apps = await FeaturedSmartRepoStoreManager.shared.fetchApps(for: src, forceRefresh: forceRefresh)
-                    combined.append(contentsOf: apps)
-                }
-
-                self.allLoadedHubApps = combined
-                self.isFetchingSources = false
-                #if !os(tvOS)
-                self.collectionView.refreshControl?.endRefreshing()
-                #endif
+            // 1. Hiện ngay dữ liệu lưu sẵn từ Ổ cứng / Seed
+            let instantApps = FeaturedSmartRepoStoreManager.shared.instantCachedAppsForEnabledSources()
+            if !instantApps.isEmpty {
+                self.allLoadedHubApps = instantApps
                 self.applySearchAndPagination(keepSearchFocus: false)
             }
 
-        case .specificSource(let source):
-            Task { @MainActor in
-                let apps = await FeaturedSmartRepoStoreManager.shared.fetchApps(for: source, forceRefresh: forceRefresh)
-                self.allLoadedHubApps = apps
+            let enabledSources = FeaturedSmartRepoStoreManager.shared.sources.filter { $0.isEnabledInAllTab }
+            guard !enabledSources.isEmpty else {
                 self.isFetchingSources = false
                 #if !os(tvOS)
                 self.collectionView.refreshControl?.endRefreshing()
                 #endif
-                self.applySearchAndPagination(keepSearchFocus: false)
+                self.refreshVisibleHeaderState()
+                return
+            }
+
+            // 2. Chạy ngầm song song cập nhật từng nguồn và hiển thị tăng dần (Streaming)
+            self.isFetchingSources = true
+            self.refreshVisibleHeaderState()
+
+            backgroundSyncTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+
+                var sourceBuckets: [String: [FeaturedAppItem]] = [:]
+                for src in enabledSources {
+                    if let cached = FeaturedSmartRepoStoreManager.shared.cachedApps(for: src), !cached.isEmpty {
+                        sourceBuckets[src.normalizedID] = cached
+                    }
+                }
+
+                await withTaskGroup(of: (String, [FeaturedAppItem]).self) { group in
+                    for src in enabledSources {
+                        let shouldRefreshNetwork = forceRefresh || (FeaturedSmartRepoStoreManager.shared.cachedApps(for: src)?.isEmpty ?? true)
+                        group.addTask {
+                            let fetched = await FeaturedSmartRepoStoreManager.shared.fetchApps(for: src, forceRefresh: shouldRefreshNetwork)
+                            return (src.normalizedID, fetched)
+                        }
+                    }
+
+                    var lastUIRefreshTime = Date.distantPast
+                    for await (normalizedID, fetchedApps) in group {
+                        if Task.isCancelled { return }
+                        guard !fetchedApps.isEmpty else { continue }
+
+                        let previousCount = sourceBuckets[normalizedID]?.count ?? 0
+                        sourceBuckets[normalizedID] = fetchedApps
+
+                        let now = Date()
+                        if previousCount != fetchedApps.count || now.timeIntervalSince(lastUIRefreshTime) > 0.35 {
+                            lastUIRefreshTime = now
+                            var combined: [FeaturedAppItem] = []
+                            for src in enabledSources {
+                                if let list = sourceBuckets[src.normalizedID] {
+                                    combined.append(contentsOf: list)
+                                }
+                            }
+                            if !combined.isEmpty {
+                                self.allLoadedHubApps = combined
+                                self.applySearchAndPagination(keepSearchFocus: self.activeHeaderView?.searchTextField.isFirstResponder == true)
+                            }
+                        }
+                    }
+                }
+
+                if Task.isCancelled { return }
+
+                var finalCombined: [FeaturedAppItem] = []
+                for src in enabledSources {
+                    if let list = sourceBuckets[src.normalizedID] {
+                        finalCombined.append(contentsOf: list)
+                    }
+                }
+                if !finalCombined.isEmpty {
+                    self.allLoadedHubApps = finalCombined
+                }
+
+                self.isFetchingSources = false
+                #if !os(tvOS)
+                self.collectionView.refreshControl?.endRefreshing()
+                #endif
+                self.applySearchAndPagination(keepSearchFocus: self.activeHeaderView?.searchTextField.isFirstResponder == true)
+            }
+
+        case .specificSource(let source):
+            // 1. Hiện ngay dữ liệu lưu sẵn của nguồn đang chọn
+            let instantApps = FeaturedSmartRepoStoreManager.shared.instantCachedApps(for: source)
+            self.allLoadedHubApps = instantApps
+            self.applySearchAndPagination(keepSearchFocus: false)
+
+            // 2. Cập nhật trong nền và tự động làm mới khi tải xong
+            self.isFetchingSources = true
+            self.refreshVisibleHeaderState()
+
+            backgroundSyncTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                let shouldRefreshNetwork = forceRefresh || (FeaturedSmartRepoStoreManager.shared.cachedApps(for: source)?.isEmpty ?? true)
+                let apps = await FeaturedSmartRepoStoreManager.shared.fetchApps(for: source, forceRefresh: shouldRefreshNetwork)
+                if Task.isCancelled { return }
+
+                if !apps.isEmpty {
+                    self.allLoadedHubApps = apps
+                }
+                self.isFetchingSources = false
+                #if !os(tvOS)
+                self.collectionView.refreshControl?.endRefreshing()
+                #endif
+                self.applySearchAndPagination(keepSearchFocus: self.activeHeaderView?.searchTextField.isFirstResponder == true)
             }
         }
     }

@@ -66,13 +66,13 @@ private final class DiagnosticGradientBackgroundView: UIView {
 
 extension TabBarController
 {
-    // Khôi phục đủ 5 Tab: Thay thế vị trí tab Browse (index 2) bằng tab Bác sĩ (diagnostic)
+    // Khôi phục chuẩn 5 Tab gốc của Storyboard (giữ nguyên tab Browse tại index 2)
     private enum Tab: Int, CaseIterable
     {
         case news        // 0: Tổng quan
         case sources     // 1: Sửa lỗi
-        case diagnostic  // 2: Bác sĩ (Chẩn đoán hệ thống)
-        case myApps      // 3: Ứng dụng
+        case browse      // 2: Khám phá (Browse gốc)
+        case myApps      // 3: Ứng dụng (Tích hợp Bác Sĩ Hệ Thống bên trong)
         case settings    // 4: Cài đặt
     }
 }
@@ -103,23 +103,7 @@ final class TabBarController: UITabBarController
         // Thuộc tính này sẽ áp dụng cho cả TabBarController và toàn bộ các NavigationController con bên trong.
         self.overrideUserInterfaceStyle = .light
 
-        // 1. Thay thế tab Browse cũ (nằm ở vị trí index 2 trên Storyboard gốc) bằng Tab "Bác sĩ" (Chẩn đoán hệ thống)
-        if var viewControllers = self.viewControllers, viewControllers.count == 5 {
-            let diagnosticVC = SystemDiagnosticViewController()
-            let diagnosticNav = UINavigationController(rootViewController: diagnosticVC)
-            diagnosticNav.overrideUserInterfaceStyle = .light
-            diagnosticNav.setNavigationBarHidden(true, animated: false)
-            let doctorIcon = UIImage(systemName: "stethoscope") ?? UIImage(systemName: "waveform.path.ecg")
-            diagnosticNav.tabBarItem = UITabBarItem(
-                title: "Bác sĩ",
-                image: doctorIcon,
-                selectedImage: doctorIcon
-            )
-            viewControllers[Tab.diagnostic.rawValue] = diagnosticNav
-            self.viewControllers = viewControllers
-        }
-
-        // 2. Đổi tab News thành "Tổng quan"
+        // 1. Đổi tab News thành "Tổng quan"
         if let newsNav = self.viewControllers?[Tab.news.rawValue] as? UINavigationController
         {
             newsNav.tabBarItem.title = "Tổng quan"
@@ -127,7 +111,7 @@ final class TabBarController: UITabBarController
             newsNav.tabBarItem.selectedImage = UIImage(systemName: "checkmark.shield.fill")
         }
 
-        // 3. Đổi tab Sources (Nguồn) thành "Sửa lỗi" và cập nhật icon
+        // 2. Đổi tab Sources (Nguồn) thành "Sửa lỗi" và cập nhật icon
         if let sourcesNav = self.viewControllers?[Tab.sources.rawValue] as? UINavigationController
         {
             sourcesNav.tabBarItem.title = "Sửa lỗi"
@@ -135,6 +119,12 @@ final class TabBarController: UITabBarController
             sourcesNav.tabBarItem.selectedImage = UIImage(systemName: "wrench.and.screwdriver.fill")
 
             self.sourcesViewController = sourcesNav.viewControllers.first as? SourcesViewController
+        }
+
+        // 3. Khôi phục tab Browse gốc (index 2) và Việt hóa thành "Khám phá"
+        if let browseNav = self.viewControllers?[Tab.browse.rawValue] as? UINavigationController
+        {
+            browseNav.tabBarItem.title = "Khám phá"
         }
 
         // 4. Đổi tab My Apps thành "Ứng dụng"
@@ -221,7 +211,7 @@ private extension TabBarController
 // ============================================================================
 
 @MainActor
-private final class SystemDiagnosticViewController: UIViewController
+final class SystemDiagnosticViewController: UIViewController
 {
     private enum CheckState
     {
@@ -260,6 +250,7 @@ private final class SystemDiagnosticViewController: UIViewController
 
     private let heroCard = UIView()
     private let heroGradientLayer = CAGradientLayer()
+    private let closeButton = UIButton(type: .system)
     private let networkPillView = UIView()
     private let networkBadgeLabel = UILabel()
 
@@ -304,6 +295,7 @@ private final class SystemDiagnosticViewController: UIViewController
     {
         super.viewWillAppear(animated)
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
+        updateCloseButtonVisibility()
         updateNetworkBadge()
     }
 
@@ -312,6 +304,23 @@ private final class SystemDiagnosticViewController: UIViewController
         super.viewDidLayoutSubviews()
         heroGradientLayer.frame = heroCard.bounds
         startButtonGradientLayer.frame = startButton.bounds
+    }
+
+    private func updateCloseButtonVisibility()
+    {
+        let isModal = (self.presentingViewController != nil) || (self.navigationController?.presentingViewController != nil)
+        let isPushed = (self.navigationController?.viewControllers.count ?? 0) > 1
+        // Nếu mở dạng Modal thì hiện nút ✕ góc phải; nếu push trong MyAppsViewController thì đã có nút < nổi bên trái nhưng vẫn hỗ trợ nút ✕ góc phải để đóng nhanh
+        closeButton.isHidden = !(isModal || isPushed)
+    }
+
+    @objc private func handleCloseButtonTapped()
+    {
+        if let nav = self.navigationController, nav.viewControllers.count > 1 {
+            nav.popViewController(animated: true)
+        } else {
+            self.dismiss(animated: true)
+        }
     }
 
     // MARK: - 🎨 Xây dựng Giao diện Chuẩn CSS Theme
@@ -441,7 +450,7 @@ private final class SystemDiagnosticViewController: UIViewController
         let titleLabel = UILabel()
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.text = "Bác Sĩ Hệ Thống"
-        titleLabel.font = UIFont.systemFont(ofSize: 24, weight: .heavy)
+        titleLabel.font = UIFont.systemFont(ofSize: 22, weight: .heavy)
         titleLabel.textColor = DiagnosticCSSTheme.white
         titleLabel.layer.shadowColor = UIColor.black.cgColor
         titleLabel.layer.shadowOffset = CGSize(width: 0, height: 2)
@@ -450,7 +459,7 @@ private final class SystemDiagnosticViewController: UIViewController
 
         let verifiedIcon = UIImageView()
         verifiedIcon.translatesAutoresizingMaskIntoConstraints = false
-        let verifiedConfig = UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)
+        let verifiedConfig = UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)
         verifiedIcon.image = UIImage(systemName: "cross.case.fill", withConfiguration: verifiedConfig)
         verifiedIcon.tintColor = UIColor(red: 140/255, green: 255/255, blue: 195/255, alpha: 1.0)
 
@@ -458,7 +467,7 @@ private final class SystemDiagnosticViewController: UIViewController
         titleStack.translatesAutoresizingMaskIntoConstraints = false
         titleStack.axis = .horizontal
         titleStack.alignment = .center
-        titleStack.spacing = 9
+        titleStack.spacing = 8
 
         let subLabel = UILabel()
         subLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -491,14 +500,31 @@ private final class SystemDiagnosticViewController: UIViewController
         heroStack.spacing = 7
         heroCard.addSubview(heroStack)
 
+        // Nút Đóng (✕) góc trên bên phải của Hero Card (dành cho khi mở từ Tab Ứng dụng)
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        let closeSymCfg = UIImage.SymbolConfiguration(pointSize: 13, weight: .heavy)
+        closeButton.setImage(UIImage(systemName: "xmark", withConfiguration: closeSymCfg), for: .normal)
+        closeButton.tintColor = DiagnosticCSSTheme.white
+        closeButton.backgroundColor = UIColor.white.withAlphaComponent(0.20)
+        closeButton.layer.cornerRadius = 15
+        closeButton.layer.borderWidth = 1.0
+        closeButton.layer.borderColor = UIColor.white.withAlphaComponent(0.42).cgColor
+        closeButton.addTarget(self, action: #selector(handleCloseButtonTapped), for: .touchUpInside)
+        heroCard.addSubview(closeButton)
+
         NSLayoutConstraint.activate([
-            iconBadge.widthAnchor.constraint(equalToConstant: 34),
-            iconBadge.heightAnchor.constraint(equalToConstant: 34),
+            iconBadge.widthAnchor.constraint(equalToConstant: 32),
+            iconBadge.heightAnchor.constraint(equalToConstant: 32),
 
             iconImageView.centerXAnchor.constraint(equalTo: iconBadge.centerXAnchor),
             iconImageView.centerYAnchor.constraint(equalTo: iconBadge.centerYAnchor),
-            iconImageView.widthAnchor.constraint(equalToConstant: 26),
-            iconImageView.heightAnchor.constraint(equalToConstant: 26),
+            iconImageView.widthAnchor.constraint(equalToConstant: 24),
+            iconImageView.heightAnchor.constraint(equalToConstant: 24),
+
+            closeButton.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 12),
+            closeButton.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
+            closeButton.widthAnchor.constraint(equalToConstant: 30),
+            closeButton.heightAnchor.constraint(equalToConstant: 30),
 
             heroStack.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 14),
             heroStack.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 14),
@@ -1133,7 +1159,7 @@ private final class SystemDiagnosticViewController: UIViewController
         {
             let listText = appSync.mismatchedAppNames.joined(separator: ", ")
             updateStep(4, state: .warning("⚠️ Phát hiện lệch chứng chỉ ở ứng dụng: [\(listText)]"))
-            remediationTips.append("Ứng dụng [\(listText)] đang dùng chứng chỉ cũ (khác với chứng chỉ gốc hiện tại): Bạn hãy chuyển qua tab Ứng dụng, nhấn giữ lâu vào ứng dụng [\(listText)] và chọn Ký lại / Làm mới để nạp lại chứng chỉ mới nhé!")
+            remediationTips.append("Ứng dụng [\(listText)] đang dùng chứng chỉ cũ (khác với chứng chỉ gốc hiện tại): Bạn hãy quay lại màn hình Ứng dụng, nhấn giữ lâu vào ứng dụng [\(listText)] và chọn Ký lại / Làm mới để nạp lại chứng chỉ mới nhé!")
         }
 
         showRemediation(remediationTips)

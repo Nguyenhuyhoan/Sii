@@ -1,5 +1,4 @@
 
-
 //
 //  BrowseViewController.swift
 //  AltStore
@@ -34,8 +33,6 @@ private struct HubCSSTheme {
 
     static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.95).cgColor
     static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.92).cgColor
-
-    static let cornerRadius: CGFloat = 18.0
 }
 
 // MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH
@@ -60,13 +57,12 @@ private final class HubGradientBackgroundView: UIView {
     }
 }
 
-// MARK: - 📦 CẤU TRÚC DỮ LIỆU NGUỒN & ỨNG DỤNG ĐA NĂNG
-private struct HubRepoSource: Codable, Equatable {
+// MARK: - 📦 CẤU TRÚC DỮ LIỆU NGUỒN & ỨNG DỤNG ĐA NĂNG (SENDABLE AN TOÀN 100%)
+private struct HubRepoSource: Codable, Equatable, Sendable {
     let urlString: String
     var displayName: String
     var subtitle: String
     var iconURLString: String?
-    var isHeavySource: Bool
     var isEnabledInAllTab: Bool
     var isBuiltIn: Bool
 
@@ -82,7 +78,7 @@ private struct HubRepoSource: Codable, Equatable {
     }
 }
 
-private struct HubAppItem: Equatable {
+private struct HubAppItem: Equatable, Sendable {
     let uniqueKey: String
     let name: String
     let bundleIdentifier: String
@@ -111,11 +107,11 @@ private struct HubAppItem: Equatable {
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._-"))
         let sanitized = rawName.components(separatedBy: allowed.inverted).joined(separator: "_")
         let trimmed = String(sanitized.prefix(90))
-        return trimmed.isEmpty ? "App_\( abs(uniqueKey.hashValue) ).ipa" : "\(trimmed).ipa"
+        return trimmed.isEmpty ? "App_\(abs(uniqueKey.hashValue)).ipa" : "\(trimmed).ipa"
     }
 }
 
-private struct DownloadedIPAEntry: Codable, Equatable {
+private struct DownloadedIPAEntry: Codable, Equatable, Sendable {
     let fileName: String
     let appName: String
     let bundleIdentifier: String
@@ -134,7 +130,7 @@ private struct DownloadedIPAEntry: Codable, Equatable {
     }
 }
 
-// MARK: - 🧠 BỘ GIẢI MÃ ĐA NĂNG (UNIVERSAL JSON PARSER CHO MỌI CHUẨN REPO)
+// MARK: - 🧠 BỘ GIẢI MÃ ĐA NĂNG (UNIVERSAL JSON PARSER CHO MỌI CHUẨN REPO JSON)
 private enum UniversalRepoParser {
     static func parse(data: Data, fallbackSource: HubRepoSource) -> (repoName: String, repoIcon: String?, apps: [HubAppItem]) {
         guard let jsonObject = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]),
@@ -162,7 +158,7 @@ private enum UniversalRepoParser {
         }
 
         var parsedApps: [HubAppItem] = []
-        parsedApps.reserveCapacity(min(rawApps.count, 1500))
+        parsedApps.reserveCapacity(min(rawApps.count, 800))
 
         for (idx, dict) in rawApps.enumerated() {
             let versionsArray = dict["versions"] as? [[String: Any]]
@@ -186,7 +182,7 @@ private enum UniversalRepoParser {
                 ?? ""
             let bundleID = rawBundleID.isEmpty ? "app.sidestore.item.\(idx)" : rawBundleID
 
-            // 3. Lấy Tên App (Nếu trống như một số mục trong AppTesters thì tự suy ra từ tên file IPA hoặc BundleID)
+            // 3. Lấy Tên App (Nếu trống thì tự suy ra từ tên file IPA hoặc BundleID)
             var appName = (dict["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if appName.isEmpty {
                 let lastComponent = downloadURL.deletingPathExtension().lastPathComponent.removingPercentEncoding ?? ""
@@ -287,7 +283,7 @@ private enum UniversalRepoParser {
     }
 }
 
-// MARK: - 📥 TRÌNH QUẢN LÝ TẢI IPA (% REALTIME) & KHO LƯU TRỮ OFFLINE
+// MARK: - 📥 TRÌNH QUẢN LÝ TẢI IPA (% REALTIME) & KHO LƯU TRỮ FILE ĐÃ TẢI
 @MainActor
 private final class IPADownloadCenter: NSObject, URLSessionDownloadDelegate {
     static let shared = IPADownloadCenter()
@@ -307,7 +303,7 @@ private final class IPADownloadCenter: NSObject, URLSessionDownloadDelegate {
     private var taskKeyMap: [Int: String] = [:]                      // taskIdentifier -> downloadURL.absoluteString
     private(set) var downloadedEntries: [DownloadedIPAEntry] = []
 
-    private let metadataStorageKey = "SideStore_Hub_DownloadedIPAs_v1"
+    private let metadataStorageKey = "SideStore_Hub_DownloadedIPAs_v2"
     private lazy var urlSession: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
@@ -338,7 +334,6 @@ private final class IPADownloadCenter: NSObject, URLSessionDownloadDelegate {
             savedEntries = decoded
         }
 
-        // Chỉ giữ lại các entry thực sự còn file trên ổ cứng
         var validEntries: [DownloadedIPAEntry] = []
         for entry in savedEntries {
             let fileURL = dir.appendingPathComponent(entry.fileName)
@@ -347,7 +342,6 @@ private final class IPADownloadCenter: NSObject, URLSessionDownloadDelegate {
             }
         }
 
-        // Quét thêm nếu có file .ipa nào trong thư mục chưa có metadata
         if let fileURLs = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.fileSizeKey, .creationDateKey], options: [.skipsHiddenFiles]) {
             for url in fileURLs where url.pathExtension.lowercased() == "ipa" {
                 let fileName = url.lastPathComponent
@@ -362,7 +356,7 @@ private final class IPADownloadCenter: NSObject, URLSessionDownloadDelegate {
                             appName: fallbackName,
                             bundleIdentifier: "unknown.bundle.id",
                             version: "1.0",
-                            sourceName: "File IPA Nội bộ",
+                            sourceName: "File IPA Đã Tải",
                             downloadURLString: fileName,
                             fileSize: size,
                             downloadedDate: date,
@@ -467,7 +461,6 @@ private final class IPADownloadCenter: NSObject, URLSessionDownloadDelegate {
             if expected > 0 {
                 ratio = min(max(Double(totalBytesWritten) / Double(expected), 0.01), 0.99)
             } else {
-                // Nếu server không trả Content-Length, ước lượng theo từng mốc 50MB
                 ratio = min(Double(totalBytesWritten) / Double(60 * 1024 * 1024), 0.95)
             }
             active.progress = ratio
@@ -555,24 +548,29 @@ private final class IPADownloadCenter: NSObject, URLSessionDownloadDelegate {
     }
 }
 
-// MARK: - 🗂️ TRÌNH QUẢN LÝ NGUỒN THÔNG MINH 2 TẦNG (NHẸ MẶC ĐỊNH + KHO LỚN ON-DEMAND)
+// MARK: - 🗂️ TRÌNH QUẢN LÝ NGUỒN TINH GỌN (ĐÃ XOÁ HẲN CÁC NGUỒN NẶNG RA KHỎI MÃ)
 @MainActor
 private final class SmartRepoStoreManager {
     static let shared = SmartRepoStoreManager()
 
-    private let sourcesStorageKey = "SideStore_SmartHubSources_v2"
+    private let sourcesStorageKey = "SideStore_LightSourcesOnly_v3"
     private(set) var sources: [HubRepoSource] = []
     private var memoryCache: [String: [HubAppItem]] = [:] // Key: normalizedID
-    private var loadingIDs = Set<String>()
 
-    static let defaultPresetSources: [HubRepoSource] = [
-        // 🟢 TẦNG 1: NGUỒN TINH GỌN MẶC ĐỊNH (Siêu nhẹ, nạp tức thì khi mở tab Kho App)
+    // Danh sách các nguồn nặng bị loại bỏ hoàn toàn (kể cả khi từng lưu trong UserDefaults cũ)
+    private static let bannedHeavyDomains: [String] = [
+        "apptesters.org",
+        "fastsign.dev",
+        "cypwn.xyz"
+    ]
+
+    // ✅ CHỈ GIỮ LẠI 5 NGUỒN NHẸ, TỐC ĐỘ CAO, CHẤT LƯỢNG NHẤT
+    static let defaultLightSources: [HubRepoSource] = [
         HubRepoSource(
             urlString: "https://community-apps.sidestore.io/sidecommunity.json",
             displayName: "SideStore Picks",
             subtitle: "Kho ứng dụng chọn lọc chính thức của SideStore",
             iconURLString: "https://sidestore.io/assets/icon.png",
-            isHeavySource: false,
             isEnabledInAllTab: true,
             isBuiltIn: true
         ),
@@ -581,7 +579,6 @@ private final class SmartRepoStoreManager {
             displayName: "Quantum Source",
             subtitle: "Giả lập, công cụ & tiện ích chuẩn AltStore v2",
             iconURLString: "https://quarksources.github.io/assets/ElementQ-Circled.png",
-            isHeavySource: false,
             isEnabledInAllTab: true,
             isBuiltIn: true
         ),
@@ -590,7 +587,6 @@ private final class SmartRepoStoreManager {
             displayName: "Quantum++",
             subtitle: "Ứng dụng tinh chỉnh, giải trí & tiện ích mở rộng",
             iconURLString: "https://quarksources.github.io/assets/ElementQ-Circled.png",
-            isHeavySource: false,
             isEnabledInAllTab: true,
             isBuiltIn: true
         ),
@@ -599,7 +595,6 @@ private final class SmartRepoStoreManager {
             displayName: "Accretion",
             subtitle: "Kho ứng dụng & trình giả lập gọn nhẹ",
             iconURLString: nil,
-            isHeavySource: false,
             isEnabledInAllTab: true,
             isBuiltIn: true
         ),
@@ -608,37 +603,7 @@ private final class SmartRepoStoreManager {
             displayName: "WuXu's Library++",
             subtitle: "Tổng hợp LiveContainer, uYouEnhanced & Tweaked Apps",
             iconURLString: "https://i.imgur.com/stTk5jP.jpeg",
-            isHeavySource: false,
             isEnabledInAllTab: true,
-            isBuiltIn: true
-        ),
-
-        // 🟠 TẦNG 2: SIÊU KHO MỞ RỘNG (Nặng hàng ngàn App -> Chỉ tải khi người dùng chạm chọn tab hoặc bật trong dấu +)
-        HubRepoSource(
-            urlString: "https://ipa.cypwn.xyz/cypwn.json",
-            displayName: "CyPwn Library",
-            subtitle: "Kho lớn • Hàng trăm IPA Game & App Mod độc quyền",
-            iconURLString: "https://repo.cypwn.xyz/assets/images/cypwn_small.png",
-            isHeavySource: true,
-            isEnabledInAllTab: false,
-            isBuiltIn: true
-        ),
-        HubRepoSource(
-            urlString: "https://repository.apptesters.org",
-            displayName: "AppTesters Repo",
-            subtitle: "Kho siêu lớn • Hàng ngàn IPA Premium cập nhật mỗi ngày",
-            iconURLString: "https://apptesters.org/apptesters-512x512.png",
-            isHeavySource: true,
-            isEnabledInAllTab: false,
-            isBuiltIn: true
-        ),
-        HubRepoSource(
-            urlString: "https://fastsign.dev/repo.json",
-            displayName: "Alan's Gigantic",
-            subtitle: "Siêu kho khổng lồ • YouTube, Spotify & hàng ngàn IPA",
-            iconURLString: "https://fastsign.dev/icon.png",
-            isHeavySource: true,
-            isEnabledInAllTab: false,
             isBuiltIn: true
         )
     ]
@@ -651,16 +616,19 @@ private final class SmartRepoStoreManager {
         if let data = UserDefaults.standard.data(forKey: sourcesStorageKey),
            let decoded = try? JSONDecoder().decode([HubRepoSource].self, from: data),
            !decoded.isEmpty {
-            var merged = decoded
-            // Đảm bảo luôn có đủ 8 nguồn chuẩn bạn yêu cầu
-            for preset in Self.defaultPresetSources {
-                if !merged.contains(where: { $0.normalizedID == preset.normalizedID }) {
-                    merged.append(preset)
+            // Lọc bỏ mọi nguồn nặng nếu có
+            var cleaned = decoded.filter { src in
+                !Self.bannedHeavyDomains.contains(where: { src.normalizedID.contains($0) })
+            }
+            for preset in Self.defaultLightSources {
+                if !cleaned.contains(where: { $0.normalizedID == preset.normalizedID }) {
+                    cleaned.append(preset)
                 }
             }
-            self.sources = merged
+            self.sources = cleaned
+            saveSources()
         } else {
-            self.sources = Self.defaultPresetSources
+            self.sources = Self.defaultLightSources
             saveSources()
         }
     }
@@ -673,10 +641,6 @@ private final class SmartRepoStoreManager {
 
     func cachedApps(for source: HubRepoSource) -> [HubAppItem]? {
         memoryCache[source.normalizedID]
-    }
-
-    func isLoading(_ source: HubRepoSource) -> Bool {
-        loadingIDs.contains(source.normalizedID)
     }
 
     func toggleSourceInAllTab(at index: Int, enabled: Bool) {
@@ -693,7 +657,8 @@ private final class SmartRepoStoreManager {
     }
 
     func resetToDefaults() {
-        sources = Self.defaultPresetSources
+        memoryCache.removeAll()
+        sources = Self.defaultLightSources
         saveSources()
     }
 
@@ -716,7 +681,6 @@ private final class SmartRepoStoreManager {
             displayName: url.host ?? "Nguồn Mới",
             subtitle: cleaned,
             iconURLString: nil,
-            isHeavySource: false,
             isEnabledInAllTab: true,
             isBuiltIn: false
         )
@@ -738,14 +702,12 @@ private final class SmartRepoStoreManager {
                 throw NSError(domain: "SmartRepo", code: 422, userInfo: [NSLocalizedDescriptionKey: "Không tìm thấy ứng dụng hợp lệ trong đường dẫn JSON này."])
             }
 
-            let isHeavy = parsed.apps.count > 250 || data.count > 1_500_000
             let finalSource = HubRepoSource(
                 urlString: cleaned,
                 displayName: parsed.repoName,
                 subtitle: "\(parsed.apps.count) ứng dụng • \(url.host ?? "Custom Repo")",
                 iconURLString: parsed.repoIcon,
-                isHeavySource: isHeavy,
-                isEnabledInAllTab: !isHeavy,
+                isEnabledInAllTab: true,
                 isBuiltIn: false
             )
 
@@ -767,12 +729,9 @@ private final class SmartRepoStoreManager {
         let cleaned = HubRepoSource.cleanURLString(source.urlString)
         guard let url = URL(string: cleaned) else { return [] }
 
-        loadingIDs.insert(id)
-        defer { loadingIDs.remove(id) }
-
         do {
             var request = URLRequest(url: url)
-            request.timeoutInterval = source.isHeavySource ? 35 : 18
+            request.timeoutInterval = 18
             request.cachePolicy = forceRefresh ? .reloadIgnoringLocalCacheData : .returnCacheDataElseLoad
             request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
 
@@ -975,7 +934,8 @@ private final class HubAppCollectionViewCell: UICollectionViewCell {
     }
 
     func configure(with app: HubAppItem, isDownloaded: Bool, activeProgress: Double?) {
-        currentDownloadKey = app.downloadURL.absoluteString
+        let targetKey = app.downloadURL.absoluteString
+        currentDownloadKey = targetKey
         nameLabel.text = app.name
         metaLabel.text = "v\(app.version) • \(app.formattedSize) • \(app.developerName)"
         sourceBadgeLabel.text = "📦 \(app.sourceName)"
@@ -988,10 +948,10 @@ private final class HubAppCollectionViewCell: UICollectionViewCell {
 
         iconImageView.image = UIImage(systemName: "app.badge.fill")?.withTintColor(HubCSSTheme.blue.withAlphaComponent(0.35), renderingMode: .alwaysOriginal)
         if let iconURL = app.iconURL {
-            Task { [weak self] in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let image = try? await ImagePipeline.shared.image(for: iconURL) {
-                    if self.currentDownloadKey == app.downloadURL.absoluteString {
+                    if self.currentDownloadKey == targetKey {
                         self.iconImageView.image = image
                     }
                 }
@@ -1262,7 +1222,7 @@ private final class SourcesHubManagerViewController: UIViewController, UITableVi
         tableView.backgroundColor = .clear
         tableView.dataSource = self
         tableView.delegate = self
-        tableView.rowHeight = 68
+        tableView.rowHeight = 66
         view.addSubview(tableView)
 
         NSLayoutConstraint.activate([
@@ -1285,7 +1245,7 @@ private final class SourcesHubManagerViewController: UIViewController, UITableVi
     @objc private func promptAddSourceURL() {
         let alert = UIAlertController(
             title: "➕ Thêm Nguồn JSON Mới",
-            message: "Hỗ trợ mọi định dạng JSON: AltStore v1/v2, SideStore, ESign, Scarlet, Feather, WuXu, CyPwn, AppTesters...",
+            message: "Hỗ trợ mọi định dạng JSON: AltStore v1/v2, SideStore, ESign, Scarlet, Feather, WuXu...",
             preferredStyle: .alert
         )
         alert.addTextField { tf in
@@ -1310,7 +1270,7 @@ private final class SourcesHubManagerViewController: UIViewController, UITableVi
         let loadingAlert = UIAlertController(title: "⏳ Đang kiểm tra nguồn...", message: rawURL, preferredStyle: .alert)
         present(loadingAlert, animated: true)
 
-        Task {
+        Task { @MainActor in
             let result = await SmartRepoStoreManager.shared.addAndVerifyCustomSource(rawURLString: rawURL)
             loadingAlert.dismiss(animated: true) { [weak self] in
                 guard let self else { return }
@@ -1349,12 +1309,12 @@ private final class SourcesHubManagerViewController: UIViewController, UITableVi
         if section == 0 {
             return "THÊM NGUỒN MỚI"
         }
-        return "DANH SÁCH NGUỒN HIỆN CÓ (BẬT ĐỂ GỘP VÀO CHỌN LỌC NHANH)"
+        return "DANH SÁCH NGUỒN HIỆN CÓ (CHẠM ĐỂ XEM RIÊNG, GẠT NÚT ĐỂ GỘP CHUNG)"
     }
 
     func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
         if section == 1 {
-            return "💡 Mẹo thông minh: Các kho siêu lớn (CyPwn, AppTesters, Alan's Gigantic) được để chế độ Tải Theo Yêu Cầu (chạm vào tên nguồn ở ngoài Kho App là xem được ngay mà không làm nặng máy lúc khởi động)."
+            return "✨ Đã tối ưu hóa: Chỉ giữ các nguồn tinh gọn tốc độ cao giúp ứng dụng hoạt động mượt mà, không gây tốn RAM."
         }
         return nil
     }
@@ -1370,10 +1330,10 @@ private final class SourcesHubManagerViewController: UIViewController, UITableVi
                 cell.detailTextLabel?.text = "Tự động nhận diện mọi chuẩn Repo JSON"
                 cell.accessoryType = .disclosureIndicator
             } else {
-                cell.textLabel?.text = "🔄 Khôi phục 8 Nguồn Mặc Định Chuẩn"
+                cell.textLabel?.text = "🔄 Khôi phục 5 Nguồn Tinh Gọn Mặc Định"
                 cell.textLabel?.font = UIFont.systemFont(ofSize: 14.5, weight: .semibold)
                 cell.textLabel?.textColor = HubCSSTheme.purple
-                cell.detailTextLabel?.text = "SideStore, Quantum, Quantum++, Accretion, WuXu, CyPwn, AppTesters, FastSign"
+                cell.detailTextLabel?.text = "SideStore Picks, Quantum, Quantum++, Accretion, WuXu++"
             }
             return cell
         }
@@ -1383,8 +1343,7 @@ private final class SourcesHubManagerViewController: UIViewController, UITableVi
         let source = SmartRepoStoreManager.shared.sources[indexPath.row]
 
         cell.backgroundColor = HubCSSTheme.white
-        let badge = source.isHeavySource ? " [Kho Lớn]" : " [Nhẹ]"
-        cell.textLabel?.text = "\(source.displayName)\(badge)"
+        cell.textLabel?.text = source.displayName
         cell.textLabel?.font = UIFont.systemFont(ofSize: 15, weight: .bold)
         cell.textLabel?.textColor = HubCSSTheme.pureBlack
 
@@ -1506,27 +1465,24 @@ class BrowseViewController: UICollectionViewController
     @IBOutlet private var sourcesBarButtonItem: UIBarButtonItem!
 
     // MARK: - 🌟 Trạng thái Kho App Thông Minh (Smart Hub Mode)
-    /// Khi mở trực tiếp ở Tab 2 ("Kho App"), `source == nil && category == nil` -> Kích hoạt giao diện Kho App Đa Năng.
-    /// Khi được push từ màn hình khác để xem 1 CoreData Source/Category cụ thể -> Giữ nguyên chế độ tương thích gốc.
     private var isSmartHubMode: Bool {
         return self.source == nil && self.category == nil && self.searchPredicate == nil
     }
 
     private enum HubFilterSelection: Equatable {
-        case curatedFast // Chỉ gộp các nguồn đang bật (Mặc định là 5 nguồn nhẹ)
+        case allEnabled
         case specificSource(HubRepoSource)
     }
 
-    private var currentFilter: HubFilterSelection = .curatedFast
+    private var currentFilter: HubFilterSelection = .allEnabled
     private var allLoadedHubApps: [HubAppItem] = []
     private var filteredHubApps: [HubAppItem] = []
     private var displayedHubApps: [HubAppItem] = []
     private let pageSize: Int = 60
     private var currentDisplayLimit: Int = 60
     private var currentSearchText: String = ""
-    private var isFetchingHubSources: Bool = false
 
-    // Thành phần UI của Kho App Thông Minh
+    // Thành phần UI của Kho App Thông Minh (Gắn cố định đầu màn hình, không bị trôi khi cuộn)
     private let hubBackgroundView = HubGradientBackgroundView(frame: .zero)
     private let hubTopContainer = UIView()
     private let hubHeroCard = UIView()
@@ -1684,7 +1640,7 @@ private extension BrowseViewController
         self.tabBarItem.title = "Kho App"
         self.navigationItem.largeTitleDisplayMode = .never
 
-        // 1. Cấu hình Navigation Bar: Nút "+" bên phải để thêm nguồn & Nút "File đã tải" bên trái
+        // 1. Cấu hình Navigation Bar: Dấu "+" góc trên bên phải để thêm nguồn & Nút "File đã tải" bên trái
         let addSourceBarBtn = UIBarButtonItem(
             image: UIImage(systemName: "plus.circle.fill"),
             style: .plain,
@@ -1732,7 +1688,7 @@ private extension BrowseViewController
         })
         self.collectionView.refreshControl = refreshControl
 
-        // 3. Xây dựng Khung Header Đính Đầu Trang (Hero Banner + Quản lý IPA + Tìm kiếm + Thanh Chọn Nguồn)
+        // 3. Xây dựng Khung Header Đính Đầu Trang
         setupSmartHubHeaderView()
 
         // 4. Lắng nghe sự kiện tải % & hoàn tất IPA
@@ -1749,7 +1705,7 @@ private extension BrowseViewController
             object: nil
         )
 
-        // 5. Nạp danh sách Chip nguồn & tải các nguồn nhẹ mặc định
+        // 5. Nạp danh sách Chip nguồn & tải 5 nguồn nhẹ mặc định
         rebuildSourceChipsBar()
         refreshDownloadedFilesCountBadge()
         loadAppsForCurrentFilter(forceRefresh: false)
@@ -1757,17 +1713,24 @@ private extension BrowseViewController
 
     func setupSmartHubHeaderView()
     {
+        // Gắn cố định vào self.view (phía trên collectionView) để khi cuộn không bị trôi mất thanh tìm kiếm
         hubTopContainer.translatesAutoresizingMaskIntoConstraints = false
-        hubTopContainer.backgroundColor = .clear
-        self.collectionView.addSubview(hubTopContainer)
+        hubTopContainer.backgroundColor = UIColor(red: 243/255, green: 236/255, blue: 255/255, alpha: 0.96)
+        hubTopContainer.layer.cornerRadius = 18
+        hubTopContainer.layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        hubTopContainer.layer.shadowColor = UIColor.black.cgColor
+        hubTopContainer.layer.shadowOffset = CGSize(width: 0, height: 3)
+        hubTopContainer.layer.shadowRadius = 8
+        hubTopContainer.layer.shadowOpacity = 0.06
+        self.view.addSubview(hubTopContainer)
 
         // Hero Banner đồng bộ CSS Theme
         hubHeroCard.translatesAutoresizingMaskIntoConstraints = false
         hubHeroCard.layer.cornerRadius = 16
         hubHeroCard.layer.shadowColor = HubCSSTheme.blue.cgColor
-        hubHeroCard.layer.shadowOffset = CGSize(width: 0, height: 5)
-        hubHeroCard.layer.shadowRadius = 12
-        hubHeroCard.layer.shadowOpacity = 0.22
+        hubHeroCard.layer.shadowOffset = CGSize(width: 0, height: 4)
+        hubHeroCard.layer.shadowRadius = 10
+        hubHeroCard.layer.shadowOpacity = 0.20
 
         hubHeroGradient.colors = [HubCSSTheme.heroStart, HubCSSTheme.heroEnd]
         hubHeroGradient.startPoint = CGPoint(x: 0, y: 0)
@@ -1778,13 +1741,13 @@ private extension BrowseViewController
 
         let heroTitleLabel = UILabel()
         heroTitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        heroTitleLabel.text = "📦 Kho App Đa Nguồn"
-        heroTitleLabel.font = UIFont.systemFont(ofSize: 17.5, weight: .heavy)
+        heroTitleLabel.text = "📦 Kho App Tinh Gọn"
+        heroTitleLabel.font = UIFont.systemFont(ofSize: 17, weight: .heavy)
         heroTitleLabel.textColor = .white
         hubHeroCard.addSubview(heroTitleLabel)
 
         hubHeroSubtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        hubHeroSubtitleLabel.text = "Tải IPA tốc độ cao • Tự động chuyển sang Ký App"
+        hubHeroSubtitleLabel.text = "Tải IPA báo % trực tiếp • Tự động chuyển sang Ký App"
         hubHeroSubtitleLabel.font = UIFont.systemFont(ofSize: 11.5, weight: .semibold)
         hubHeroSubtitleLabel.textColor = UIColor.white.withAlphaComponent(0.92)
         hubHeroCard.addSubview(hubHeroSubtitleLabel)
@@ -1802,9 +1765,9 @@ private extension BrowseViewController
         hubDownloadedFilesButton.addTarget(self, action: #selector(openDownloadedIPAsManager), for: .touchUpInside)
         hubHeroCard.addSubview(hubDownloadedFilesButton)
 
-        // Nút + Nguồn nhanh trên Hero Card
+        // Nút + Thêm nguồn nhanh trên Hero Card
         hubQuickAddSourceButton.translatesAutoresizingMaskIntoConstraints = false
-        hubQuickAddSourceButton.setTitle(" ➕ Nguồn ", for: .normal)
+        hubQuickAddSourceButton.setTitle(" ➕ Thêm nguồn ", for: .normal)
         hubQuickAddSourceButton.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .heavy)
         hubQuickAddSourceButton.setTitleColor(.white, for: .normal)
         hubQuickAddSourceButton.backgroundColor = UIColor.white.withAlphaComponent(0.22)
@@ -1857,17 +1820,17 @@ private extension BrowseViewController
         hubTopContainer.addSubview(hubLoadingSpinner)
 
         NSLayoutConstraint.activate([
-            hubTopContainer.topAnchor.constraint(equalTo: self.collectionView.topAnchor, constant: 6),
-            hubTopContainer.leadingAnchor.constraint(equalTo: self.view.leadingAnchor, constant: 14),
-            hubTopContainer.trailingAnchor.constraint(equalTo: self.view.trailingAnchor, constant: -14),
+            hubTopContainer.topAnchor.constraint(equalTo: self.view.safeAreaLayoutGuide.topAnchor),
+            hubTopContainer.leadingAnchor.constraint(equalTo: self.view.leadingAnchor),
+            hubTopContainer.trailingAnchor.constraint(equalTo: self.view.trailingAnchor),
             hubTopContainer.heightAnchor.constraint(equalToConstant: hubHeaderHeight),
 
-            hubHeroCard.topAnchor.constraint(equalTo: hubTopContainer.topAnchor),
-            hubHeroCard.leadingAnchor.constraint(equalTo: hubTopContainer.leadingAnchor),
-            hubHeroCard.trailingAnchor.constraint(equalTo: hubTopContainer.trailingAnchor),
+            hubHeroCard.topAnchor.constraint(equalTo: hubTopContainer.topAnchor, constant: 6),
+            hubHeroCard.leadingAnchor.constraint(equalTo: hubTopContainer.leadingAnchor, constant: 14),
+            hubHeroCard.trailingAnchor.constraint(equalTo: hubTopContainer.trailingAnchor, constant: -14),
             hubHeroCard.heightAnchor.constraint(equalToConstant: 82),
 
-            heroTitleLabel.topAnchor.constraint(equalTo: hubHeroCard.topAnchor, constant: 11),
+            heroTitleLabel.topAnchor.constraint(equalTo: hubHeroCard.topAnchor, constant: 10),
             heroTitleLabel.leadingAnchor.constraint(equalTo: hubHeroCard.leadingAnchor, constant: 14),
 
             hubHeroSubtitleLabel.topAnchor.constraint(equalTo: heroTitleLabel.bottomAnchor, constant: 2),
@@ -1882,14 +1845,14 @@ private extension BrowseViewController
             hubQuickAddSourceButton.centerYAnchor.constraint(equalTo: hubDownloadedFilesButton.centerYAnchor),
             hubQuickAddSourceButton.heightAnchor.constraint(equalToConstant: 24),
 
-            hubSearchBar.topAnchor.constraint(equalTo: hubHeroCard.bottomAnchor, constant: 4),
-            hubSearchBar.leadingAnchor.constraint(equalTo: hubTopContainer.leadingAnchor, constant: -6),
-            hubSearchBar.trailingAnchor.constraint(equalTo: hubTopContainer.trailingAnchor, constant: 6),
-            hubSearchBar.heightAnchor.constraint(equalToConstant: 44),
+            hubSearchBar.topAnchor.constraint(equalTo: hubHeroCard.bottomAnchor, constant: 3),
+            hubSearchBar.leadingAnchor.constraint(equalTo: hubTopContainer.leadingAnchor, constant: 8),
+            hubSearchBar.trailingAnchor.constraint(equalTo: hubTopContainer.trailingAnchor, constant: -8),
+            hubSearchBar.heightAnchor.constraint(equalToConstant: 42),
 
             hubChipsScrollView.topAnchor.constraint(equalTo: hubSearchBar.bottomAnchor, constant: 2),
-            hubChipsScrollView.leadingAnchor.constraint(equalTo: hubTopContainer.leadingAnchor),
-            hubChipsScrollView.trailingAnchor.constraint(equalTo: hubTopContainer.trailingAnchor),
+            hubChipsScrollView.leadingAnchor.constraint(equalTo: hubTopContainer.leadingAnchor, constant: 14),
+            hubChipsScrollView.trailingAnchor.constraint(equalTo: hubTopContainer.trailingAnchor, constant: -14),
             hubChipsScrollView.heightAnchor.constraint(equalToConstant: 36),
 
             hubChipsStackView.topAnchor.constraint(equalTo: hubChipsScrollView.topAnchor),
@@ -1898,11 +1861,11 @@ private extension BrowseViewController
             hubChipsStackView.trailingAnchor.constraint(equalTo: hubChipsScrollView.trailingAnchor, constant: -2),
             hubChipsStackView.heightAnchor.constraint(equalTo: hubChipsScrollView.heightAnchor),
 
-            hubStatusBannerLabel.topAnchor.constraint(equalTo: hubChipsScrollView.bottomAnchor, constant: 6),
-            hubStatusBannerLabel.leadingAnchor.constraint(equalTo: hubTopContainer.leadingAnchor, constant: 4),
+            hubStatusBannerLabel.topAnchor.constraint(equalTo: hubChipsScrollView.bottomAnchor, constant: 5),
+            hubStatusBannerLabel.leadingAnchor.constraint(equalTo: hubTopContainer.leadingAnchor, constant: 16),
 
             hubLoadingSpinner.centerYAnchor.constraint(equalTo: hubStatusBannerLabel.centerYAnchor),
-            hubLoadingSpinner.trailingAnchor.constraint(equalTo: hubTopContainer.trailingAnchor, constant: -4)
+            hubLoadingSpinner.trailingAnchor.constraint(equalTo: hubTopContainer.trailingAnchor, constant: -16)
         ])
     }
 
@@ -1913,28 +1876,25 @@ private extension BrowseViewController
             sub.removeFromSuperview()
         }
 
-        // Chip 0: Chọn lọc nhanh (Chỉ gộp các nguồn nhẹ đang bật -> Siêu tốc)
-        let isCuratedSelected = (currentFilter == .curatedFast)
-        let curatedBtn = makeChipButton(
-            title: "⚡ Chọn lọc nhanh",
-            isSelected: isCuratedSelected,
-            isHeavy: false,
+        // Chip 0: Tất cả nguồn đang bật
+        let isAllSelected = (currentFilter == .allEnabled)
+        let allBtn = makeChipButton(
+            title: "⚡ Tất cả nguồn",
+            isSelected: isAllSelected,
             tag: -1
         )
-        curatedBtn.addTarget(self, action: #selector(handleChipButtonTapped(_:)), for: .touchUpInside)
-        hubChipsStackView.addArrangedSubview(curatedBtn)
+        allBtn.addTarget(self, action: #selector(handleChipButtonTapped(_:)), for: .touchUpInside)
+        hubChipsStackView.addArrangedSubview(allBtn)
 
-        // Các Chip từng nguồn (Gồm cả 5 nguồn nhẹ và 3 siêu kho lớn On-Demand)
+        // Các Chip từng nguồn nhẹ
         let sources = SmartRepoStoreManager.shared.sources
         for (idx, src) in sources.enumerated() {
             let isSelected = (currentFilter == .specificSource(src))
             let cachedCount = SmartRepoStoreManager.shared.cachedApps(for: src)?.count
-            let countSuffix = cachedCount != nil ? " (\(cachedCount!))" : (src.isHeavySource ? " [Kho Lớn]" : "")
-            let prefix = src.isHeavySource ? "🔥 " : "📦 "
+            let countSuffix = cachedCount != nil ? " (\(cachedCount!))" : ""
             let btn = makeChipButton(
-                title: "\(prefix)\(src.displayName)\(countSuffix)",
+                title: "📦 \(src.displayName)\(countSuffix)",
                 isSelected: isSelected,
-                isHeavy: src.isHeavySource,
                 tag: idx
             )
             btn.addTarget(self, action: #selector(handleChipButtonTapped(_:)), for: .touchUpInside)
@@ -1942,7 +1902,7 @@ private extension BrowseViewController
         }
     }
 
-    func makeChipButton(title: String, isSelected: Bool, isHeavy: Bool, tag: Int) -> UIButton
+    func makeChipButton(title: String, isSelected: Bool, tag: Int) -> UIButton
     {
         let btn = UIButton(type: .system)
         btn.tag = tag
@@ -1952,14 +1912,14 @@ private extension BrowseViewController
         btn.contentEdgeInsets = UIEdgeInsets(top: 6, left: 12, bottom: 6, right: 12)
 
         if isSelected {
-            btn.backgroundColor = isHeavy ? HubCSSTheme.orange : HubCSSTheme.blue
+            btn.backgroundColor = HubCSSTheme.blue
             btn.setTitleColor(.white, for: .normal)
             btn.layer.borderWidth = 0
         } else {
             btn.backgroundColor = HubCSSTheme.white
-            btn.setTitleColor(isHeavy ? HubCSSTheme.orange : HubCSSTheme.pureBlack, for: .normal)
+            btn.setTitleColor(HubCSSTheme.pureBlack, for: .normal)
             btn.layer.borderWidth = 1.0
-            btn.layer.borderColor = (isHeavy ? HubCSSTheme.orange.withAlphaComponent(0.45) : HubCSSTheme.border).cgColor
+            btn.layer.borderColor = HubCSSTheme.border.cgColor
         }
         return btn
     }
@@ -1968,7 +1928,7 @@ private extension BrowseViewController
     {
         let tag = sender.tag
         if tag == -1 {
-            currentFilter = .curatedFast
+            currentFilter = .allEnabled
         } else {
             let sources = SmartRepoStoreManager.shared.sources
             guard tag >= 0 && tag < sources.count else { return }
@@ -1989,21 +1949,15 @@ private extension BrowseViewController
         hubLoadingSpinner.startAnimating()
 
         switch currentFilter {
-        case .curatedFast:
+        case .allEnabled:
             let enabledSources = SmartRepoStoreManager.shared.sources.filter { $0.isEnabledInAllTab }
-            hubStatusBannerLabel.text = "⏳ Đang nạp \(enabledSources.count) nguồn chọn lọc..."
+            hubStatusBannerLabel.text = "⏳ Đang nạp \(enabledSources.count) nguồn ứng dụng..."
 
             Task { @MainActor in
                 var combined: [HubAppItem] = []
-                await withTaskGroup(of: [HubAppItem].self) { group in
-                    for src in enabledSources {
-                        group.addTask {
-                            await SmartRepoStoreManager.shared.fetchApps(for: src, forceRefresh: forceRefresh)
-                        }
-                    }
-                    for await apps in group {
-                        combined.append(contentsOf: apps)
-                    }
+                for src in enabledSources {
+                    let apps = await SmartRepoStoreManager.shared.fetchApps(for: src, forceRefresh: forceRefresh)
+                    combined.append(contentsOf: apps)
                 }
 
                 self.allLoadedHubApps = combined
@@ -2014,8 +1968,7 @@ private extension BrowseViewController
             }
 
         case .specificSource(let source):
-            let note = source.isHeavySource ? " (Kho lớn • Đang tải & giải mã thông minh...)" : "..."
-            hubStatusBannerLabel.text = "⏳ Đang nạp nguồn \(source.displayName)\(note)"
+            hubStatusBannerLabel.text = "⏳ Đang nạp nguồn \(source.displayName)..."
 
             Task { @MainActor in
                 let apps = await SmartRepoStoreManager.shared.fetchApps(for: source, forceRefresh: forceRefresh)
@@ -2047,8 +2000,8 @@ private extension BrowseViewController
         displayedHubApps = Array(filteredHubApps.prefix(count))
 
         switch currentFilter {
-        case .curatedFast:
-            hubStatusBannerLabel.text = "✨ Hiển thị \(displayedHubApps.count) / \(filteredHubApps.count) ứng dụng (Chạm nguồn Kho Lớn bên trên để mở thêm)"
+        case .allEnabled:
+            hubStatusBannerLabel.text = "✨ Hiển thị \(displayedHubApps.count) / \(filteredHubApps.count) ứng dụng từ các nguồn tinh gọn"
         case .specificSource(let src):
             hubStatusBannerLabel.text = "📦 \(src.displayName): Hiển thị \(displayedHubApps.count) / \(filteredHubApps.count) ứng dụng"
         }
@@ -2262,7 +2215,6 @@ extension BrowseViewController
     override func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath)
     {
         guard self.isSmartHubMode else { return }
-        // Phân trang thông minh: Khi cuộn gần cuối danh sách hiện tại thì tự động mở thêm 60 app tiếp theo
         if indexPath.item >= self.displayedHubApps.count - 6 && self.displayedHubApps.count < self.filteredHubApps.count {
             self.currentDisplayLimit += self.pageSize
             let newCount = min(self.currentDisplayLimit, self.filteredHubApps.count)

@@ -1,6 +1,7 @@
 
+
 //  AltStore/TabBarController.swift
-//   TabBarController.swift
+//  TabBarController.swift
 //  AltStore
 //
 //  Created by Riley Testut on 9/19/19.
@@ -66,18 +67,48 @@ private final class DiagnosticGradientBackgroundView: UIView {
 
 extension TabBarController
 {
-    // Khôi phục chuẩn 5 Tab gốc của Storyboard (giữ nguyên tab Browse tại index 2)
+    // Chuẩn 5 Tab của Storyboard
     private enum Tab: Int, CaseIterable
     {
         case news        // 0: Tổng quan
         case sources     // 1: Sửa lỗi
-        case browse      // 2: Khám phá (Browse gốc)
+        case browse      // 2: Kho App (Browse gốc)
         case myApps      // 3: Ứng dụng (Tích hợp Bác Sĩ Hệ Thống bên trong)
         case settings    // 4: Cài đặt
+
+        var vietnameseTitle: String {
+            switch self {
+            case .news:     return "Tổng quan"
+            case .sources:  return "Sửa lỗi"
+            case .browse:   return "Kho App"
+            case .myApps:   return "Ứng dụng"
+            case .settings: return "Cài đặt"
+            }
+        }
+
+        var normalSymbolName: String {
+            switch self {
+            case .news:     return "checkmark.shield"
+            case .sources:  return "wrench.and.screwdriver"
+            case .browse:   return "square.grid.2x2"
+            case .myApps:   return "square.stack.3d.up"
+            case .settings: return "gearshape"
+            }
+        }
+
+        var selectedSymbolName: String {
+            switch self {
+            case .news:     return "checkmark.shield.fill"
+            case .sources:  return "wrench.and.screwdriver.fill"
+            case .browse:   return "square.grid.2x2.fill"
+            case .myApps:   return "square.stack.3d.up.fill"
+            case .settings: return "gearshape.fill"
+            }
+        }
     }
 }
 
-final class TabBarController: UITabBarController
+final class TabBarController: UITabBarController, UITabBarControllerDelegate
 {
     private var initialSegue: (identifier: String, sender: Any?)?
 
@@ -99,48 +130,28 @@ final class TabBarController: UITabBarController
         super.viewDidLoad()
         debugLog("[TabBarController] viewDidLoad()")
 
-        // 0. CỐ ĐỊNH GIAO DIỆN SÁNG (Light Mode)
-        // Thuộc tính này sẽ áp dụng cho cả TabBarController và toàn bộ các NavigationController con bên trong.
+        // 0. CỐ ĐỊNH GIAO DIỆN SÁNG (Light Mode) & Gán Delegate để giữ cố định tên/icon tab
         self.overrideUserInterfaceStyle = .light
+        self.tabBar.overrideUserInterfaceStyle = .light
+        self.delegate = self
 
-        // 1. Đổi tab News thành "Tổng quan"
-        if let newsNav = self.viewControllers?[Tab.news.rawValue] as? UINavigationController
-        {
-            newsNav.tabBarItem.title = "Tổng quan"
-            newsNav.tabBarItem.image = UIImage(systemName: "checkmark.shield")
-            newsNav.tabBarItem.selectedImage = UIImage(systemName: "checkmark.shield.fill")
-        }
-
-        // 2. Đổi tab Sources (Nguồn) thành "Sửa lỗi" và cập nhật icon
+        // 1. Lấy tham chiếu SourcesViewController cho tính năng DeepLink thêm nguồn
         if let sourcesNav = self.viewControllers?[Tab.sources.rawValue] as? UINavigationController
         {
-            sourcesNav.tabBarItem.title = "Sửa lỗi"
-            sourcesNav.tabBarItem.image = UIImage(systemName: "wrench.and.screwdriver")
-            sourcesNav.tabBarItem.selectedImage = UIImage(systemName: "wrench.and.screwdriver.fill")
-
             self.sourcesViewController = sourcesNav.viewControllers.first as? SourcesViewController
         }
 
-        // 3. Khôi phục tab Browse gốc (index 2) và Việt hóa thành "Khám phá"
-        if let browseNav = self.viewControllers?[Tab.browse.rawValue] as? UINavigationController
-        {
-            browseNav.tabBarItem.title = "Khám phá"
-        }
+        // 2. Áp dụng đồng bộ Tên tiếng Việt + Icon SF Symbols cho toàn bộ 5 Tab
+        self.applyVietnameseTabBarItems()
 
-        // 4. Đổi tab My Apps thành "Ứng dụng"
-        if let myAppsNav = self.viewControllers?[Tab.myApps.rawValue] as? UINavigationController
-        {
-            myAppsNav.tabBarItem.title = "Ứng dụng"
-        }
-
-        // 5. Đổi tab Settings thành "Cài đặt"
-        if let settingsNav = self.viewControllers?[Tab.settings.rawValue] as? UINavigationController
-        {
-            settingsNav.tabBarItem.title = "Cài đặt"
-        }
-
-        // 6. Đặt tab My Apps ("Ứng dụng") làm tab active mặc định khi mở app
+        // 3. Đặt tab My Apps ("Ứng dụng") làm tab active mặc định khi mở app
         self.selectedIndex = Tab.myApps.rawValue
+    }
+
+    override func viewWillAppear(_ animated: Bool)
+    {
+        super.viewWillAppear(animated)
+        self.applyVietnameseTabBarItems()
     }
 
     override func viewDidAppear(_ animated: Bool)
@@ -150,6 +161,7 @@ final class TabBarController: UITabBarController
 
         // Đảm bảo toàn bộ cửa sổ ứng dụng (bao gồm cả các Alert, Toast, Popup...) cũng luôn ở giao diện sáng
         self.view.window?.overrideUserInterfaceStyle = .light
+        self.applyVietnameseTabBarItems()
 
         _viewDidAppear = true
 
@@ -168,6 +180,59 @@ final class TabBarController: UITabBarController
         }
 
         super.performSegue(withIdentifier: identifier, sender: sender)
+    }
+
+    // MARK: - 🔒 KHÓA CỨNG TÊN TAB ("Kho App") & ICON KHÔNG BAO GIỜ BỊ STORYBOARD GHI ĐÈ
+    private func applyVietnameseTabBarItems()
+    {
+        guard let viewControllers = self.viewControllers else { return }
+
+        let normalConfig = UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)
+        let selectedConfig = UIImage.SymbolConfiguration(pointSize: 18, weight: .bold)
+
+        for tab in Tab.allCases
+        {
+            guard tab.rawValue < viewControllers.count else { continue }
+            let vc = viewControllers[tab.rawValue]
+
+            let title = tab.vietnameseTitle
+            let normalImage = UIImage(systemName: tab.normalSymbolName, withConfiguration: normalConfig)
+            let selectedImage = UIImage(systemName: tab.selectedSymbolName, withConfiguration: selectedConfig)
+
+            // 1. Gán trực tiếp lên tabBarItem của NavigationController
+            vc.tabBarItem.title = title
+            vc.tabBarItem.image = normalImage
+            vc.tabBarItem.selectedImage = selectedImage
+
+            // 2. Gán đồng bộ vào ViewController gốc bên trong NavigationController
+            //    (Chặn triệt để lỗi iOS tự lấy rootVC.title = "Browse" trong Storyboard đè ngược lên TabBar khi bấm vào tab!)
+            if let nav = vc as? UINavigationController, let rootVC = nav.viewControllers.first
+            {
+                rootVC.tabBarItem.title = title
+                rootVC.tabBarItem.image = normalImage
+                rootVC.tabBarItem.selectedImage = selectedImage
+
+                // Riêng tab Kho App (Browse) và các tab có title tiếng Anh mặc định trong Storyboard:
+                // Đổi luôn title gốc sang tiếng Việt để khi BrowseViewController nạp xong không biến lại thành "Browse"
+                if tab == .browse
+                {
+                    rootVC.title = title
+                    rootVC.navigationItem.title = title
+                }
+                else if let currentTitle = rootVC.title,
+                        ["News", "Sources", "Browse", "My Apps", "Settings"].contains(currentTitle)
+                {
+                    rootVC.title = title
+                }
+            }
+        }
+    }
+
+    // Mỗi khi người dùng chạm chuyển sang bất kỳ Tab nào (đặc biệt là lần đầu chạm vào tab Kho App),
+    // khóa lại tên & icon ngay lập tức để không bao giờ bị nhảy về "Browse" hay mất icon.
+    func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController)
+    {
+        self.applyVietnameseTabBarItems()
     }
 }
 
@@ -190,6 +255,7 @@ extension TabBarController
         }
 
         self.selectedIndex = Tab.sources.rawValue
+        self.applyVietnameseTabBarItems()
     }
 }
 
@@ -198,11 +264,13 @@ private extension TabBarController
     @objc func importApp(_ notification: Notification)
     {
         self.selectedIndex = Tab.myApps.rawValue
+        self.applyVietnameseTabBarItems()
     }
 
     @objc func openErrorLog(_ notification: Notification)
     {
         self.selectedIndex = Tab.settings.rawValue
+        self.applyVietnameseTabBarItems()
     }
 }
 

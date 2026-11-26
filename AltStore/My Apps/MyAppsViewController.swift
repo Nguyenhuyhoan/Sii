@@ -1,4 +1,3 @@
-
 //
 //  MyAppsViewController.swift
 //  AltStore
@@ -30,6 +29,8 @@ private struct CSSTheme {
     static let pillBg = UIColor(red: 238/255, green: 245/255, blue: 255/255, alpha: 1.0) // #eef5ff
     static let pillBorder = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.22)
     static let purple = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 1.0) // #6f42c1
+    static let purplePillBg = UIColor(red: 244/255, green: 238/255, blue: 255/255, alpha: 1.0)
+    static let purplePillBorder = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.28)
     static let green = UIColor(red: 40/255, green: 167/255, blue: 69/255, alpha: 1.0) // #28a745
     static let red = UIColor(red: 220/255, green: 53/255, blue: 69/255, alpha: 1.0) // #dc3545
     static let redBg = UIColor(red: 255/255, green: 240/255, blue: 242/255, alpha: 1.0)
@@ -120,8 +121,9 @@ class MyAppsViewController: UICollectionViewController
     private var heroSideloadButton: UIButton?
     private var heroSideloadSpinner: UIActivityIndicatorView?
     private var heroLiveContainerButton: UIButton?
+    private var heroDoctorButton: UIButton?
     private var floatingBackButton: UIButton?
-    private let heroTopSpace: CGFloat = 104.0
+    private let heroTopSpace: CGFloat = 136.0
     
     private var _imagePickerInstalledApp: InstalledApp?
     private var _viewDidAppear = false
@@ -411,7 +413,9 @@ extension MyAppsViewController: UINavigationControllerDelegate, UIGestureRecogni
         #endif
         
         let isRoot = (viewController === navigationController.viewControllers.first)
-        updateFloatingBackButton(in: navigationController, show: !isRoot)
+        // Nếu là màn hình Bác Sĩ Hệ Thống (đã có nút ✕ trên Hero Card riêng) thì không cần đè nút < lên góc trái Hero Card
+        let isDiagnosticScreen = (viewController is SystemDiagnosticViewController)
+        updateFloatingBackButton(in: navigationController, show: !isRoot && !isDiagnosticScreen)
     }
     
     private func updateFloatingBackButton(in nav: UINavigationController, show: Bool) {
@@ -482,7 +486,7 @@ private extension MyAppsViewController {
         self.collectionView.contentInset.top = self.heroTopSpace
         self.collectionView.contentInset.bottom = 40
         
-        // 3. Khởi tạo khối .hero Banner kèm App Icon, nút "+ IPA" và nút Icon LiveContainer
+        // 3. Khởi tạo khối .hero Banner kèm App Icon, nút "+ IPA", nút LiveContainer & nút Bác Sĩ Hệ Thống
         setupCSSHeroBanner()
         
         // 4. Đồng bộ màu Badge trên TabBar
@@ -517,6 +521,8 @@ private extension MyAppsViewController {
         gradient.startPoint = CGPoint(x: 0, y: 0)
         gradient.endPoint = CGPoint(x: 1, y: 1)
         gradient.cornerRadius = CSSTheme.cornerRadius
+        gradient.borderWidth = 1.1
+        gradient.borderColor = UIColor.white.withAlphaComponent(0.32).cgColor
         heroCard.layer.insertSublayer(gradient, at: 0)
         self.heroGradientLayer = gradient
         
@@ -572,7 +578,7 @@ private extension MyAppsViewController {
         let subLabel = UILabel()
         subLabel.translatesAutoresizingMaskIntoConstraints = false
         subLabel.text = "Quản lý, cài đặt tệp .ipa & gia hạn ứng dụng dễ dàng"
-        subLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .medium)
+        subLabel.font = UIFont.systemFont(ofSize: 12.2, weight: .medium)
         subLabel.textColor = CSSTheme.white.withAlphaComponent(0.95)
         subLabel.textAlignment = .center
         subLabel.numberOfLines = 1
@@ -625,6 +631,25 @@ private extension MyAppsViewController {
         lcBtn.addTarget(self, action: #selector(handleHeroLiveContainerTap(_:)), for: .touchUpInside)
         self.heroLiveContainerButton = lcBtn
         
+        // 🩺 Nút Pill "Bác Sĩ Hệ Thống" cân đối ngay dưới phụ đề trong Hero Card
+        let doctorBtn = UIButton(type: .system)
+        doctorBtn.translatesAutoresizingMaskIntoConstraints = false
+        let docIconCfg = UIImage.SymbolConfiguration(pointSize: 12, weight: .bold)
+        doctorBtn.setImage(UIImage(systemName: "stethoscope", withConfiguration: docIconCfg), for: .normal)
+        doctorBtn.setTitle("  Bác Sĩ Hệ Thống • Khám lỗi VPN, Pairing & Chứng chỉ  ", for: .normal)
+        doctorBtn.titleLabel?.font = UIFont.systemFont(ofSize: 11.5, weight: .bold)
+        doctorBtn.titleLabel?.adjustsFontSizeToFitWidth = true
+        doctorBtn.titleLabel?.minimumScaleFactor = 0.8
+        doctorBtn.tintColor = CSSTheme.white
+        doctorBtn.setTitleColor(CSSTheme.white, for: .normal)
+        doctorBtn.backgroundColor = CSSTheme.white.withAlphaComponent(0.20)
+        doctorBtn.layer.cornerRadius = 13.5
+        doctorBtn.layer.borderWidth = 1.0
+        doctorBtn.layer.borderColor = CSSTheme.white.withAlphaComponent(0.48).cgColor
+        doctorBtn.contentEdgeInsets = UIEdgeInsets(top: 5, left: 10, bottom: 5, right: 10)
+        doctorBtn.addTarget(self, action: #selector(openSystemDiagnostic(_:)), for: .touchUpInside)
+        self.heroDoctorButton = doctorBtn
+        
         // Gắn thanh tiến trình cài đặt vào cạnh dưới Hero Card
         self.sideloadingProgressView.layer.cornerRadius = 2
         self.sideloadingProgressView.clipsToBounds = true
@@ -633,6 +658,7 @@ private extension MyAppsViewController {
         heroCard.addSubview(subLabel)
         heroCard.addSubview(addBtn)
         heroCard.addSubview(lcBtn)
+        heroCard.addSubview(doctorBtn)
         heroCard.addSubview(self.sideloadingProgressView)
         headerContainer.addSubview(heroCard)
         self.collectionView.addSubview(headerContainer)
@@ -644,7 +670,7 @@ private extension MyAppsViewController {
             heroCard.bottomAnchor.constraint(equalTo: headerContainer.bottomAnchor, constant: -6),
             
             addBtn.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 10),
-            addBtn.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 12),
+            addBtn.topAnchor.constraint(equalTo: heroCard.topAnchor, constant: 11),
             addBtn.heightAnchor.constraint(equalToConstant: 28),
             
             spinner.centerXAnchor.constraint(equalTo: addBtn.centerXAnchor),
@@ -660,9 +686,15 @@ private extension MyAppsViewController {
             titleStack.leadingAnchor.constraint(greaterThanOrEqualTo: addBtn.trailingAnchor, constant: 8),
             titleStack.trailingAnchor.constraint(lessThanOrEqualTo: lcBtn.leadingAnchor, constant: -8),
             
-            subLabel.topAnchor.constraint(equalTo: addBtn.bottomAnchor, constant: 12),
+            subLabel.topAnchor.constraint(equalTo: addBtn.bottomAnchor, constant: 8),
             subLabel.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
             subLabel.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
+            
+            doctorBtn.topAnchor.constraint(equalTo: subLabel.bottomAnchor, constant: 8),
+            doctorBtn.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
+            doctorBtn.leadingAnchor.constraint(greaterThanOrEqualTo: heroCard.leadingAnchor, constant: 12),
+            doctorBtn.trailingAnchor.constraint(lessThanOrEqualTo: heroCard.trailingAnchor, constant: -12),
+            doctorBtn.heightAnchor.constraint(equalToConstant: 27),
             
             self.sideloadingProgressView.leadingAnchor.constraint(equalTo: heroCard.leadingAnchor, constant: 12),
             self.sideloadingProgressView.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
@@ -699,6 +731,18 @@ private extension MyAppsViewController {
         animateButtonBounce(sender)
         let barButton = self.navigationItem.leftBarButtonItem ?? UIBarButtonItem()
         self.sideloadApp(barButton)
+    }
+    
+    @objc func openSystemDiagnostic(_ sender: UIButton) {
+        animateButtonBounce(sender)
+        let diagnosticVC = SystemDiagnosticViewController()
+        if let nav = self.navigationController {
+            nav.pushViewController(diagnosticVC, animated: true)
+        } else {
+            let nav = UINavigationController(rootViewController: diagnosticVC)
+            nav.modalPresentationStyle = .pageSheet
+            self.present(nav, animated: true)
+        }
     }
     
     // Kích hoạt chuyển sang LiveContainer tương thích 100% với SideStoreHooks.m mà không gây lỗi khi build IPA độc lập
@@ -1092,7 +1136,7 @@ private extension MyAppsViewController {
     }
     
     // Gắn thanh gạch chân màu xanh (.features h2::after) dưới tiêu đề các mục giống hệt Tab Cài đặt
-    func styleSectionHeader(_ headerView: InstalledAppsCollectionHeaderView) {
+    func styleSectionHeader(_ headerView: InstalledAppsCollectionHeaderView, showDoctorShortcut: Bool = false) {
         headerView.overrideUserInterfaceStyle = .light
         headerView.textLabel.textColor = CSSTheme.blue
         headerView.textLabel.font = UIFont.systemFont(ofSize: 16, weight: .heavy)
@@ -1113,6 +1157,31 @@ private extension MyAppsViewController {
             underline.widthAnchor.constraint(equalToConstant: 38),
             underline.heightAnchor.constraint(equalToConstant: 3)
         ])
+        
+        let doctorHeaderTag = 9995
+        headerView.viewWithTag(doctorHeaderTag)?.removeFromSuperview()
+        
+        if showDoctorShortcut {
+            let docBtn = UIButton(type: .system)
+            docBtn.tag = doctorHeaderTag
+            docBtn.translatesAutoresizingMaskIntoConstraints = false
+            docBtn.setTitle("  🩺 Bác Sĩ  ", for: .normal)
+            docBtn.setTitleColor(CSSTheme.purple, for: .normal)
+            docBtn.titleLabel?.font = UIFont.systemFont(ofSize: 12.0, weight: .bold)
+            docBtn.backgroundColor = CSSTheme.purplePillBg
+            docBtn.layer.cornerRadius = 12
+            docBtn.layer.borderWidth = 1.0
+            docBtn.layer.borderColor = CSSTheme.purplePillBorder.cgColor
+            docBtn.addTarget(self, action: #selector(openSystemDiagnostic(_:)), for: .touchUpInside)
+            headerView.addSubview(docBtn)
+            
+            NSLayoutConstraint.activate([
+                docBtn.trailingAnchor.constraint(equalTo: headerView.button.leadingAnchor, constant: -6),
+                docBtn.centerYAnchor.constraint(equalTo: headerView.button.centerYAnchor),
+                docBtn.heightAnchor.constraint(equalTo: headerView.button.heightAnchor),
+                docBtn.leadingAnchor.constraint(greaterThanOrEqualTo: headerView.textLabel.trailingAnchor, constant: 8)
+            ])
+        }
     }
     
     // ✨ VIỆT HÓA "View App IDs" & LÀM KHUNG CHỨA NHỎ GỌN HƠN ✨
@@ -2819,8 +2888,6 @@ extension MyAppsViewController
                     headerView.textLabel.text = "ĐANG HOẠT ĐỘNG"
                 }
                 
-                self.styleSectionHeader(headerView)
-                
                 headerView.button.isIndicatingActivity = false
                 headerView.button.activityIndicatorView.color = CSSTheme.blue
                 headerView.button.setTitle("  Làm mới tất cả  ", for: .normal)
@@ -2831,6 +2898,8 @@ extension MyAppsViewController
                 headerView.button.layer.borderWidth = 1.0
                 headerView.button.layer.borderColor = CSSTheme.pillBorder.cgColor
                 headerView.button.addTarget(self, action: #selector(MyAppsViewController.refreshAllApps(_:)), for: .primaryActionTriggered)
+                
+                self.styleSectionHeader(headerView, showDoctorShortcut: true)
                 
                 headerView.button.layoutIfNeeded()
                 
@@ -2857,7 +2926,7 @@ extension MyAppsViewController
                 headerView.layoutMargins.right = self.view.layoutMargins.right
                 
                 headerView.textLabel.text = "KHÔNG HOẠT ĐỘNG"
-                self.styleSectionHeader(headerView)
+                self.styleSectionHeader(headerView, showDoctorShortcut: false)
                 
                 headerView.button.setTitle(nil, for: .normal)
                 headerView.button.setImage(UIImage(systemName: "questionmark.circle.fill"), for: .normal)

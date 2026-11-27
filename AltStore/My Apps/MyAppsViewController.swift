@@ -132,8 +132,11 @@ class MyAppsViewController: UICollectionViewController
     
     private var minimuxerStatusCheckTask: Task<Void, Never>?
     
-    // Cache
+    // Cache & Cooldown đồng bộ máy chủ Apple (Giới hạn 15 phút)
     private var cachedUpdateSizes = [String: CGSize]()
+    private var lastAppIDsFetchDate: Date?
+    private var isFetchingAppIDs = false
+    private let appIDsFetchCooldown: TimeInterval = 15 * 60 // 15 phút (900 giây)
     
     private var activeTeam: ALTTeam?
     
@@ -273,14 +276,24 @@ class MyAppsViewController: UICollectionViewController
         
         self.navigationController?.setNavigationBarHidden(true, animated: false)
         
-        Task { @MainActor [weak self] in
-            guard let self = self else { return }
-            let team = try? await AuthManager.shared.getAuthenticatedTeam()
-            if self.activeTeam != team
-            {
-                self.activeTeam = team
-                self.collectionView.collectionViewLayout.invalidateLayout()
-                self.collectionView.reloadData()
+        // Chỉ kiểm tra lại Team nếu chưa có hoặc đã qua thời gian cooldown 15 phút
+        let shouldVerifyTeam: Bool = {
+            guard self.activeTeam != nil else { return true }
+            guard let lastFetch = self.lastAppIDsFetchDate else { return true }
+            return Date().timeIntervalSince(lastFetch) >= self.appIDsFetchCooldown
+        }()
+        
+        if shouldVerifyTeam
+        {
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                let team = try? await AuthManager.shared.getAuthenticatedTeam()
+                if self.activeTeam != team
+                {
+                    self.activeTeam = team
+                    self.collectionView.collectionViewLayout.invalidateLayout()
+                    self.collectionView.reloadData()
+                }
             }
         }
         
@@ -289,7 +302,8 @@ class MyAppsViewController: UICollectionViewController
         
         self.update()
         
-        self.fetchAppIDs()
+        // Đồng bộ danh sách App ID với máy chủ Apple (tự động giới hạn 15 phút/lần khi chuyển tab)
+        self.fetchAppIDs(force: false)
         
         self.previousInactiveAppsCount = self.inactiveAppsDataSource.itemCount
     }
@@ -1629,14 +1643,28 @@ private extension MyAppsViewController
         self.unsupportedUpdates = Set(unsupportedUpdates)
     }
     
-    func fetchAppIDs()
+    func fetchAppIDs(force: Bool = false)
     {
+        // Ngăn gọi chồng chéo nếu đang có 1 tiến trình đồng bộ App ID đang chạy
+        guard !self.isFetchingAppIDs else { return }
+        
+        // Nếu không phải ép buộc (force) và chưa đủ 15 phút từ lần đồng bộ thành công trước đó thì bỏ qua
+        if !force, let lastFetch = self.lastAppIDsFetchDate, Date().timeIntervalSince(lastFetch) < self.appIDsFetchCooldown
+        {
+            return
+        }
+        
+        self.isFetchingAppIDs = true
+        
         AppManager.shared.syncAppIDs { [weak self] (result) in
             do
             {
                 _ = try result.get()
                 Task { @MainActor [weak self] in
                     guard let self = self else { return }
+                    self.isFetchingAppIDs = false
+                    self.lastAppIDsFetchDate = Date()
+                    
                     if self.activeTeam == nil
                     {
                         self.activeTeam = try? await AuthManager.shared.getAuthenticatedTeam()
@@ -1647,6 +1675,9 @@ private extension MyAppsViewController
             }
             catch
             {
+                Task { @MainActor [weak self] in
+                    self?.isFetchingAppIDs = false
+                }
                 debugLog("Failed to fetch App IDs. \(error)")
             }
         }
@@ -1657,7 +1688,7 @@ private extension MyAppsViewController
         DispatchQueue.main.async {
             self.collectionView.collectionViewLayout.invalidateLayout()
             self.collectionView.reloadData()
-            self.fetchAppIDs()
+            self.fetchAppIDs(force: true)
         }
     }
     
@@ -1945,7 +1976,8 @@ private extension MyAppsViewController
                     installedApp.managedObjectContext?.perform {
                         debugLog("Successfully installed app: \(installedApp.bundleIdentifier)")
                     }
-                    self?.fetchAppIDs()
+                    // Ép buộc cập nhật lại số lượng App ID ngay sau khi cài đặt thành công ứng dụng mới
+                    self?.fetchAppIDs(force: true)
                 case .failure(let error):
                     if error is CancellationError {
                         completion(.failure(OperationError.cancelled))

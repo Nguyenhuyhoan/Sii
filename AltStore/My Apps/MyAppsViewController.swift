@@ -1,3 +1,4 @@
+
 //
 //  MyAppsViewController.swift
 //  AltStore
@@ -166,9 +167,8 @@ class MyAppsViewController: UICollectionViewController
     }
     
     deinit {
-        if !(minimuxerStatusCheckTask?.isCancelled == true) {
-            minimuxerStatusCheckTask?.cancel()
-        }
+        minimuxerStatusCheckTask?.cancel()
+        minimuxerStatusCheckTask = nil
     }
     
     override func viewDidLoad()
@@ -246,18 +246,6 @@ class MyAppsViewController: UICollectionViewController
         
         NotificationCenter.default.addObserver(self, selector: #selector(MyAppsViewController.didChangeAppIcon(_:)), name: UIApplication.didChangeAppIconNotification, object: nil)
         
-        if minimuxerStatusCheckTask == nil {
-            minimuxerStatusCheckTask = Task {
-                let status = await isMinimuxerReady()
-                updateStatusDot(isReady: status.isSuccess)
-                // Lắng nghe trạng thái minimuxer theo thời gian thực
-                for await result in minimuxerStatusPublisher.values {
-                    guard !Task.isCancelled else { break }
-                    updateStatusDot(isReady: result.isSuccess)
-                }
-            }
-        }
-        
         Task { @MainActor [weak self] in
             guard let self = self else { return }
             let team = try? await AuthManager.shared.getAuthenticatedTeam()
@@ -274,6 +262,9 @@ class MyAppsViewController: UICollectionViewController
     {
         super.viewWillAppear(animated)
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
+        
+        // Chỉ bật luồng lắng nghe chấm trạng thái khi mở tab Ứng dụng
+        self.startMinimuxerStatusMonitoring()
     }
     
     override func viewIsAppearing(_ animated: Bool)
@@ -329,6 +320,32 @@ class MyAppsViewController: UICollectionViewController
     override func viewWillDisappear(_ animated: Bool)
     {
         super.viewWillDisappear(animated)
+        
+        // Hủy ngay luồng kiểm tra chấm trạng thái khi rời khỏi tab Ứng dụng để tránh chạy ngầm vô tận
+        self.stopMinimuxerStatusMonitoring()
+    }
+    
+    private func startMinimuxerStatusMonitoring()
+    {
+        guard minimuxerStatusCheckTask == nil else { return }
+        
+        minimuxerStatusCheckTask = Task { [weak self] in
+            let status = await isMinimuxerReady()
+            guard !Task.isCancelled else { return }
+            self?.updateStatusDot(isReady: status.isSuccess)
+            
+            // Lắng nghe trạng thái minimuxer theo thời gian thực khi đang ở tab Ứng dụng
+            for await result in minimuxerStatusPublisher.values {
+                guard !Task.isCancelled, let self = self else { break }
+                self.updateStatusDot(isReady: result.isSuccess)
+            }
+        }
+    }
+    
+    private func stopMinimuxerStatusMonitoring()
+    {
+        minimuxerStatusCheckTask?.cancel()
+        minimuxerStatusCheckTask = nil
     }
     
     private func updateStatusDot(isReady: Bool)

@@ -1569,9 +1569,7 @@ final class SystemDiagnosticViewController: UIViewController
             for app in allApps
             {
                 // Bỏ qua bản thân SideStore / LiveContainer+SideStore vì hệ thống quản lý theo cơ chế riêng
-                if app.bundleIdentifier == InstalledApp.altstoreAppBundleID ||
-                   app.bundleIdentifier == StoreApp.altstoreAppID ||
-                   app.bundleIdentifier.isAltStoreAppID
+                if app.bundleIdentifier == StoreApp.altstoreAppID || app.bundleIdentifier.isAltStoreAppID
                 {
                     continue
                 }

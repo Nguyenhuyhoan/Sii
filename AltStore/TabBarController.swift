@@ -1569,7 +1569,10 @@ final class SystemDiagnosticViewController: UIViewController
             for app in allApps
             {
                 // Bỏ qua bản thân SideStore / LiveContainer+SideStore vì hệ thống quản lý theo cơ chế riêng
-                if app.isAltStoreApp || app.bundleIdentifier == StoreApp.altstoreAppID || app.bundleIdentifier.isAltStoreAppID {
+                if app.bundleIdentifier == InstalledApp.altstoreAppBundleID ||
+                   app.bundleIdentifier == StoreApp.altstoreAppID ||
+                   app.bundleIdentifier.isAltStoreAppID
+                {
                     continue
                 }
 
@@ -1578,6 +1581,9 @@ final class SystemDiagnosticViewController: UIViewController
                 // Kiểm tra thực tế xem bản lưu của ứng dụng (app.fileURL) có còn chứa phần mở rộng (.appex) nào không
                 let hasExtensionsInBundle: Bool = {
                     if let cachedBundle = ALTApplication(fileURL: app.fileURL) {
+                        if cachedBundle.isAltStoreApp {
+                            return false
+                        }
                         return !cachedBundle.appExtensions.isEmpty
                     }
                     let plugInsURL = app.fileURL.appendingPathComponent("PlugIns")

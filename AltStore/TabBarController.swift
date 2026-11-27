@@ -1,5 +1,4 @@
 
-
 //  AltStore/TabBarController.swift
 //  TabBarController.swift
 //  AltStore
@@ -338,7 +337,8 @@ final class SystemDiagnosticViewController: UIViewController
         StepSpec(title: "2. Đường truyền ngầm & File Pairing", symbol: "cable.connector.horizontal", accentColor: DiagnosticCSSTheme.purple),
         StepSpec(title: "3. Máy chủ Anisette (Đăng nhập / Làm mới)", symbol: "server.rack", accentColor: DiagnosticCSSTheme.teal),
         StepSpec(title: "4. Chứng chỉ gốc (Certificate)", symbol: "checkmark.seal.fill", accentColor: DiagnosticCSSTheme.purple),
-        StepSpec(title: "5. Đồng bộ Chứng chỉ các App đang cài", symbol: "square.stack.3d.up.badge.a.fill", accentColor: DiagnosticCSSTheme.indigo)
+        StepSpec(title: "5. Đồng bộ Chứng chỉ các App đang cài", symbol: "square.stack.3d.up.badge.a.fill", accentColor: DiagnosticCSSTheme.indigo),
+        StepSpec(title: "6. Chuẩn Gộp ID Mở rộng (Tối ưu Làm mới)", symbol: "puzzlepiece.extension.fill", accentColor: DiagnosticCSSTheme.orange)
     ]
 
     #if !os(tvOS)
@@ -450,15 +450,15 @@ final class SystemDiagnosticViewController: UIViewController
         // 3. Nút bấm Gradient "NHẤP VÀO ĐÂY ĐỂ KHÁM BỆNH"
         setupStartActionCard()
 
-        // 4. Tiêu đề Section "KẾT QUẢ CHẨN ĐOÁN 5 HẠNG MỤC" chuẩn SettingsSkySectionCard
+        // 4. Tiêu đề Section "KẾT QUẢ CHẨN ĐOÁN 6 HẠNG MỤC" chuẩn SettingsSkySectionCard
         let checklistHeader = makeSectionHeader(
-            title: "KẾT QUẢ CHẨN ĐOÁN 5 HẠNG MỤC",
+            title: "KẾT QUẢ CHẨN ĐOÁN 6 HẠNG MỤC",
             icon: "stethoscope",
             accentColor: DiagnosticCSSTheme.blue
         )
         contentStack.addArrangedSubview(checklistHeader)
 
-        // 5. Danh sách 5 thẻ hạng mục khám bệnh (Nền trắng #FFFFFF, chữ đen tuyền #000000, viền #dce2ec)
+        // 5. Danh sách 6 thẻ hạng mục khám bệnh (Nền trắng #FFFFFF, chữ đen tuyền #000000, viền #dce2ec)
         let cardsStack = UIStackView()
         cardsStack.axis = .vertical
         cardsStack.spacing = 10
@@ -539,7 +539,7 @@ final class SystemDiagnosticViewController: UIViewController
 
         let subLabel = UILabel()
         subLabel.translatesAutoresizingMaskIntoConstraints = false
-        subLabel.text = "✨ Khám bệnh toàn diện VPN, đường truyền 127.0.0.1, File Pairing, Anisette & Chứng chỉ"
+        subLabel.text = "✨ Khám bệnh toàn diện VPN, đường truyền 127.0.0.1, File Pairing, Anisette, Chứng chỉ & Chuẩn ID"
         subLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .semibold)
         subLabel.textColor = DiagnosticCSSTheme.white.withAlphaComponent(0.96)
         subLabel.textAlignment = .center
@@ -1023,6 +1023,7 @@ final class SystemDiagnosticViewController: UIViewController
     {
         for i in 0..<stepCards.count
         {
+            stepCards[i].titleLabel.text = stepSpecs[i].title
             updateStep(i, state: .idle)
         }
         remediationSectionWrapper.isHidden = true
@@ -1089,7 +1090,7 @@ final class SystemDiagnosticViewController: UIViewController
     }
 
     // ========================================================================
-    // MARK: - QUY TRÌNH 5 BƯỚC “KHÁM BỆNH THỰC CHIẾN”
+    // MARK: - QUY TRÌNH 6 BƯỚC “KHÁM BỆNH THỰC CHIẾN”
     // ========================================================================
 
     private func runFullDiagnosticFlow() async
@@ -1199,35 +1200,57 @@ final class SystemDiagnosticViewController: UIViewController
         try? await Task.sleep(nanoseconds: 150_000_000)
 
         let certCheck = checkActiveRootCertificate()
-        guard let rootSerial = certCheck.serialNumber else
+        if let rootSerial = certCheck.serialNumber
+        {
+            updateStep(3, state: .success(certCheck.message))
+
+            // ––––––––––––––––––––––––––––––––––
+            // 📦 BƯỚC 5: KIỂM TRA ĐỒNG BỘ CHỨNG CHỈ CỦA TỪNG APP ĐANG CÀI
+            // ––––––––––––––––––––––––––––––––––
+            updateStep(4, state: .running("Đang quét và đối chiếu chứng chỉ của toàn bộ ứng dụng đã cài..."))
+            try? await Task.sleep(nanoseconds: 150_000_000)
+
+            let appSync = checkInstalledAppsCertificateSync(activeRootSerial: rootSerial)
+            stepCards[4].titleLabel.text = "5. App đang cài (\(appSync.totalCount) ứng dụng)"
+
+            if appSync.mismatchedAppNames.isEmpty
+            {
+                updateStep(4, state: .success("✅ Đồng bộ ứng dụng: Tất cả \(appSync.totalCount) app đều dùng đúng chứng chỉ hiện tại."))
+            }
+            else
+            {
+                let listText = appSync.mismatchedAppNames.joined(separator: ", ")
+                updateStep(4, state: .warning("⚠️ Phát hiện lệch chứng chỉ ở ứng dụng: [\(listText)]"))
+                remediationTips.append("Ứng dụng [\(listText)] đang dùng chứng chỉ cũ (khác với chứng chỉ gốc hiện tại): Bạn hãy quay lại màn hình Ứng dụng, nhấn giữ lâu vào ứng dụng [\(listText)] và chọn Ký lại / Làm mới để nạp lại chứng chỉ mới nhé!")
+            }
+        }
+        else
         {
             updateStep(3, state: .failure(certCheck.message))
             remediationTips.append("Lỗi Chứng chỉ gốc: Chưa có chứng chỉ hợp lệ hoặc bạn chưa đăng nhập Apple ID. Hãy vào tab Cài đặt -> Tài khoản để đăng nhập lại và làm mới ứng dụng.")
             updateStep(4, state: .warning("⚠️ Không thể đối chiếu do chưa có Chứng chỉ gốc ở Bước 4."))
-            showRemediation(remediationTips)
-            return
         }
 
-        updateStep(3, state: .success(certCheck.message))
-
         // ––––––––––––––––––––––––––––––––––
-        // 📦 BƯỚC 5: KIỂM TRA ĐỒNG BỘ CHỨNG CHỈ CỦA TỪNG APP ĐANG CÀI
+        // 🧩 BƯỚC 6: KIỂM TRA CHUẨN GỘP ID MỞ RỘNG (1 ID CHÍNH - TỐI ƯU LÀM MỚI)
         // ––––––––––––––––––––––––––––––––––
-        updateStep(4, state: .running("Đang quét và đối chiếu chứng chỉ của toàn bộ ứng dụng đã cài..."))
+        updateStep(5, state: .running("Đang kiểm tra cấu trúc ID và Phần mở rộng (App Extensions) của các ứng dụng..."))
         try? await Task.sleep(nanoseconds: 150_000_000)
 
-        let appSync = checkInstalledAppsCertificateSync(activeRootSerial: rootSerial)
-        stepCards[4].titleLabel.text = "5. App đang cài (\(appSync.totalCount) ứng dụng)"
-
-        if appSync.mismatchedAppNames.isEmpty
+        let idProfileCheck = checkInstalledAppsMainProfileStandard()
+        if idProfileCheck.legacyMultiIDAppNames.isEmpty
         {
-            updateStep(4, state: .success("✅ Đồng bộ ứng dụng: Tất cả \(appSync.totalCount) app đều dùng đúng chứng chỉ hiện tại."))
+            if idProfileCheck.checkedCount == 0 {
+                updateStep(5, state: .success("✅ Hệ thống đang dùng chuẩn gộp 1 ID chính mới nhất (Tối ưu làm mới & Tiết kiệm App ID)."))
+            } else {
+                updateStep(5, state: .success("✅ Chuẩn ID mới: Tất cả ứng dụng đều dùng 1 ID chính duy nhất (Giữ mở rộng ăn theo, làm mới siêu ổn định)."))
+            }
         }
         else
         {
-            let listText = appSync.mismatchedAppNames.joined(separator: ", ")
-            updateStep(4, state: .warning("⚠️ Phát hiện lệch chứng chỉ ở ứng dụng: [\(listText)]"))
-            remediationTips.append("Ứng dụng [\(listText)] đang dùng chứng chỉ cũ (khác với chứng chỉ gốc hiện tại): Bạn hãy quay lại màn hình Ứng dụng, nhấn giữ lâu vào ứng dụng [\(listText)] và chọn Ký lại / Làm mới để nạp lại chứng chỉ mới nhé!")
+            let legacyListText = idProfileCheck.legacyMultiIDAppNames.joined(separator: ", ")
+            updateStep(5, state: .warning("⚠️ Phát hiện ứng dụng cài theo cấu trúc tách nhiều ID cũ: [\(legacyListText)]"))
+            remediationTips.append("Chuẩn hóa cấu trúc ID cho ứng dụng [\(legacyListText)]: Các ứng dụng này có chứa phần mở rộng nhưng được cài từ bản cũ (đăng ký tách nhiều ID riêng), dễ gây lỗi hoặc kẹt hạn mức 10 ID khi Làm mới trên phiên bản mới. Bạn hãy quay lại màn hình Ứng dụng, nhấn giữ lâu vào ứng dụng [\(legacyListText)] và chọn Ký lại (hoặc tải file .ipa cài đè lên) để chuyển sang chuẩn 1 ID chính mới nhất mà không mất dữ liệu nhé!")
         }
 
         showRemediation(remediationTips)
@@ -1525,5 +1548,67 @@ final class SystemDiagnosticViewController: UIViewController
 
         mismatched.sort()
         return (total, mismatched)
+    }
+
+    /// Bước 6: Kiểm tra xem các ứng dụng đang cài có chứa phần mở rộng (.appex) mà vẫn dùng chuẩn đa ID cũ (useMainProfile == false) hay không
+    private func checkInstalledAppsMainProfileStandard() -> (checkedCount: Int, legacyMultiIDAppNames: [String])
+    {
+        let context = DatabaseManager.shared.viewContext
+        var checkedCount = 0
+        var legacyApps: [String] = []
+
+        // Đảm bảo cấu hình mặc định của hệ thống luôn hướng về chuẩn gộp 1 ID chính (.useMainProfile)
+        if UserDefaults.standard.customizeAppExtensions == .keepAll {
+            UserDefaults.standard.customizeAppExtensions = .useMainProfile
+        }
+
+        context.performAndWait {
+            let allApps = InstalledApp.all(in: context)
+            var didSyncSafeApps = false
+
+            for app in allApps
+            {
+                // Bỏ qua bản thân SideStore / LiveContainer+SideStore vì hệ thống quản lý theo cơ chế riêng
+                if app.isAltStoreApp || app.bundleIdentifier == StoreApp.altstoreAppID || app.bundleIdentifier.isAltStoreAppID {
+                    continue
+                }
+
+                checkedCount += 1
+
+                // Kiểm tra thực tế xem bản lưu của ứng dụng (app.fileURL) có còn chứa phần mở rộng (.appex) nào không
+                let hasExtensionsInBundle: Bool = {
+                    if let cachedBundle = ALTApplication(fileURL: app.fileURL) {
+                        return !cachedBundle.appExtensions.isEmpty
+                    }
+                    let plugInsURL = app.fileURL.appendingPathComponent("PlugIns")
+                    if let items = try? FileManager.default.contentsOfDirectory(at: plugInsURL, includingPropertiesForKeys: nil) {
+                        return items.contains { $0.pathExtension.lowercased() == "appex" }
+                    }
+                    return false
+                }()
+
+                if !hasExtensionsInBundle {
+                    // Ứng dụng không có phần mở rộng (hoặc đã chọn Remove Extensions lúc cài):
+                    // Thực tế chỉ dùng đúng 1 ID chính -> An toàn 100%, tự động đồng bộ cờ useMainProfile = true
+                    if !app.useMainProfile {
+                        app.useMainProfile = true
+                        didSyncSafeApps = true
+                    }
+                } else {
+                    // Ứng dụng CÓ chứa phần mở rộng (.appex):
+                    // Nếu cờ useMainProfile == false -> Chắc chắn được cài từ bản cũ theo kiểu đăng ký tách lẻ nhiều ID mở rộng!
+                    if !app.useMainProfile {
+                        legacyApps.append(app.name)
+                    }
+                }
+            }
+
+            if didSyncSafeApps && context.hasChanges {
+                try? context.save()
+            }
+        }
+
+        legacyApps.sort()
+        return (checkedCount, legacyApps)
     }
 }

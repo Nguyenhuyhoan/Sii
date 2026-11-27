@@ -181,8 +181,8 @@ final class TabBarController: UITabBarController, UITabBarControllerDelegate
         super.performSegue(withIdentifier: identifier, sender: sender)
     }
 
-    // MARK: - 🔒 KHÓA CỨNG TÊN TAB ("Kho App") & ICON KHÔNG BAO GIỜ BỊ STORYBOARD GHI ĐÈ
-    private func applyVietnameseTabBarItems()
+    // MARK: - 🔒 KHÓA CỨNG TÊN TAB & ICON KHÔNG BAO GIỜ BỊ GHI ĐÈ KHI CHUYỂN TAB LẦN ĐẦU
+    fileprivate func applyVietnameseTabBarItems()
     {
         guard let viewControllers = self.viewControllers else { return }
 
@@ -204,15 +204,11 @@ final class TabBarController: UITabBarController, UITabBarControllerDelegate
             vc.tabBarItem.selectedImage = selectedImage
 
             // 2. Gán đồng bộ vào ViewController gốc bên trong NavigationController
-            //    (Chặn triệt để lỗi iOS tự lấy rootVC.title = "Browse" trong Storyboard đè ngược lên TabBar khi bấm vào tab!)
+            //    (Chặn triệt để lỗi iOS tự lấy rootVC.title = nil hoặc "Browse" trong Storyboard/viewDidLoad đè ngược lên TabBar!)
             if let nav = vc as? UINavigationController, let rootVC = nav.viewControllers.first
             {
-                rootVC.tabBarItem.title = title
-                rootVC.tabBarItem.image = normalImage
-                rootVC.tabBarItem.selectedImage = selectedImage
-
                 // Riêng tab Kho App (Browse) và các tab có title tiếng Anh mặc định trong Storyboard:
-                // Đổi luôn title gốc sang tiếng Việt để khi BrowseViewController nạp xong không biến lại thành "Browse"
+                // Đổi trước rồi khóa lại tabBarItem.title ở cuối để không bao giờ bị mất chữ dưới TabBar
                 if tab == .browse
                 {
                     rootVC.title = title
@@ -223,15 +219,29 @@ final class TabBarController: UITabBarController, UITabBarControllerDelegate
                 {
                     rootVC.title = title
                 }
+
+                rootVC.tabBarItem.title = title
+                rootVC.tabBarItem.image = normalImage
+                rootVC.tabBarItem.selectedImage = selectedImage
             }
+
+            // Khóa lại một lần nữa lên NavigationController sau khi đã chỉnh sửa rootVC
+            vc.tabBarItem.title = title
+            vc.tabBarItem.image = normalImage
+            vc.tabBarItem.selectedImage = selectedImage
         }
     }
 
-    // Mỗi khi người dùng chạm chuyển sang bất kỳ Tab nào (đặc biệt là lần đầu chạm vào tab Kho App),
-    // khóa lại tên & icon ngay lập tức để không bao giờ bị nhảy về "Browse" hay mất icon.
+    // Mỗi khi người dùng chạm chuyển sang bất kỳ Tab nào (đặc biệt là lần đầu chạm vào tab Sửa lỗi / Kho App),
+    // khóa lại tên & icon ngay lập tức VÀ sau khi viewDidLoad/viewWillAppear của tab đó chạy xong.
     func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController)
     {
         self.applyVietnameseTabBarItems()
+
+        // Đảm bảo chạy SAU khi viewDidLoad() / viewWillAppear() của tab mới vừa khởi tạo lần đầu
+        DispatchQueue.main.async { [weak self] in
+            self?.applyVietnameseTabBarItems()
+        }
     }
 }
 
@@ -351,12 +361,15 @@ final class SystemDiagnosticViewController: UIViewController
     {
         super.viewDidLoad()
         self.overrideUserInterfaceStyle = .light
-        self.title = nil
+        // TUYỆT ĐỐI KHÔNG gán `self.title = nil` vì UIKit sẽ xóa luôn `tabBarItem.title` của tab "Sửa lỗi"!
+        // Chỉ ẩn tiêu đề trên NavigationBar thông qua `navigationItem.title = nil`.
         self.navigationItem.title = nil
         self.navigationController?.setNavigationBarHidden(true, animated: false)
 
         setupUI()
         resetAllStepsToIdle()
+
+        (self.tabBarController as? TabBarController)?.applyVietnameseTabBarItems()
     }
 
     override func viewWillAppear(_ animated: Bool)
@@ -365,6 +378,7 @@ final class SystemDiagnosticViewController: UIViewController
         self.navigationController?.setNavigationBarHidden(true, animated: animated)
         updateCloseButtonVisibility()
         updateNetworkBadge()
+        (self.tabBarController as? TabBarController)?.applyVietnameseTabBarItems()
     }
 
     override func viewDidLayoutSubviews()

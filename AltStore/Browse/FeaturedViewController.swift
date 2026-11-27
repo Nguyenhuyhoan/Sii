@@ -1,5 +1,4 @@
 
-
 //
 //  FeaturedViewController.swift
 //  AltStore
@@ -976,7 +975,7 @@ private final class FeaturedSmartRepoStoreManager {
     }
 }
 
-// MARK: - 🏷️ HEADER BANNER ĐỘC LẬP (.hero + THANH TÌM KIẾM CỐ ĐỊNH TRONG SCROLLVIEW - BÀN PHÍM ĐỨNG IM 100%)
+// MARK: - 🏷️ HEADER BANNER ĐỘC LẬP (.hero + THANH TÌM KIẾM TRONG SCROLLVIEW)
 private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
     private let heroCard = UIView()
     private let heroGradient = CAGradientLayer()
@@ -991,7 +990,7 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
 
     private let filterStatusPillButton = UIButton(type: .system)
 
-    // Khung tìm kiếm duy nhất (36pt) - Không bao giờ bị reloadData() huỷ Focus
+    // Khung tìm kiếm chính (36pt)
     private let searchBoxView = UIView()
     private let searchIconView = UIImageView()
     let searchTextField = UITextField()
@@ -1041,25 +1040,31 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
         heroCard.layer.insertSublayer(heroGradient, at: 0)
         addSubview(heroCard)
 
+        // Nút Đã tải (Nền trắng, chữ xanh)
         downloadedPillButton.translatesAutoresizingMaskIntoConstraints = false
         downloadedPillButton.setTitle("📥 Đã tải", for: .normal)
         downloadedPillButton.setTitleColor(FeaturedCSSTheme.blue, for: .normal)
         downloadedPillButton.titleLabel?.font = UIFont.systemFont(ofSize: 12.5, weight: .heavy)
+        downloadedPillButton.titleLabel?.lineBreakMode = .byClipping
         downloadedPillButton.backgroundColor = FeaturedCSSTheme.white
         downloadedPillButton.layer.cornerRadius = 15
         downloadedPillButton.contentEdgeInsets = UIEdgeInsets(top: 5, left: 10, bottom: 5, right: 10)
+        downloadedPillButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        downloadedPillButton.setContentHuggingPriority(.required, for: .horizontal)
         downloadedPillButton.addTarget(self, action: #selector(handleDownloadsTap), for: .touchUpInside)
         heroCard.addSubview(downloadedPillButton)
 
+        // Nút Nguồn (Nền trắng đồng bộ 100% với nút Đã tải theo đúng yêu cầu)
         sourcesPillButton.translatesAutoresizingMaskIntoConstraints = false
         sourcesPillButton.setTitle("➕ Nguồn", for: .normal)
-        sourcesPillButton.setTitleColor(FeaturedCSSTheme.white, for: .normal)
-        sourcesPillButton.titleLabel?.font = UIFont.systemFont(ofSize: 12.5, weight: .bold)
-        sourcesPillButton.backgroundColor = UIColor.white.withAlphaComponent(0.20)
+        sourcesPillButton.setTitleColor(FeaturedCSSTheme.blue, for: .normal)
+        sourcesPillButton.titleLabel?.font = UIFont.systemFont(ofSize: 12.5, weight: .heavy)
+        sourcesPillButton.titleLabel?.lineBreakMode = .byClipping
+        sourcesPillButton.backgroundColor = FeaturedCSSTheme.white
         sourcesPillButton.layer.cornerRadius = 15
-        sourcesPillButton.layer.borderWidth = 1.0
-        sourcesPillButton.layer.borderColor = UIColor.white.withAlphaComponent(0.38).cgColor
         sourcesPillButton.contentEdgeInsets = UIEdgeInsets(top: 5, left: 10, bottom: 5, right: 10)
+        sourcesPillButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        sourcesPillButton.setContentHuggingPriority(.required, for: .horizontal)
         sourcesPillButton.addTarget(self, action: #selector(handleSourcesTap), for: .touchUpInside)
         heroCard.addSubview(sourcesPillButton)
 
@@ -1078,7 +1083,7 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
         heroTitleLabel.font = UIFont.systemFont(ofSize: 17.5, weight: .heavy)
         heroTitleLabel.textColor = .white
         heroTitleLabel.adjustsFontSizeToFitWidth = true
-        heroTitleLabel.minimumScaleFactor = 0.82
+        heroTitleLabel.minimumScaleFactor = 0.78
         centerTitleStack.addArrangedSubview(heroTitleLabel)
 
         loadingSpinner.color = .white
@@ -1216,7 +1221,9 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
             loadingSpinner.stopAnimating()
         }
 
-        let dlTitle = downloadedCount > 0 ? "📥 Đã tải (\(downloadedCount))" : "📥 Đã tải"
+        // Khi đã tải >= 1 app: Bỏ chữ "Đã tải", chỉ để icon + con số như "📥 (3)" để không bao giờ bị "...ải (3)"
+        // Khi chưa tải app nào: Giữ nguyên chữ "📥 Đã tải"
+        let dlTitle = downloadedCount > 0 ? "📥 (\(downloadedCount))" : "📥 Đã tải"
         downloadedPillButton.setTitle(dlTitle, for: .normal)
 
         filterStatusPillButton.setTitle(filterText, for: .normal)
@@ -1245,7 +1252,163 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
     }
 }
 
-// MARK: - 🃏 CELL HIỂN THỊ ỨNG DỤNG CHUẨN THẺ TRẮNG VIỀN CSS (#e6ebf2)
+// MARK: - 📌 THANH NỔI THÔNG MINH KHI LƯỚT XUỐNG (CHỈ CÓ NÚT ICON ĐÃ TẢI + KHUNG TÌM KIẾM CÓ ICON KÍNH LÚP, KHÔNG CHỮ RƯỜM RÀ)
+private final class FeaturedCompactFloatingBarView: UIView, UITextFieldDelegate {
+    private let downloadButtonContainer = UIView()
+    private let downloadIconButton = UIButton(type: .system)
+    private let badgeLabel = UILabel()
+
+    private let searchContainer = UIView()
+    private let searchIconView = UIImageView()
+    let searchTextField = UITextField()
+
+    var onOpenDownloadsTapped: (() -> Void)?
+    var onSearchTextChanged: ((String) -> Void)?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupViews()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupViews()
+    }
+
+    private func setupViews() {
+        backgroundColor = .clear
+
+        // 1. Nút nổi Icon Đã tải (Tròn 38x38pt, nền trắng tinh tế, có bóng nổi, không chữ)
+        downloadButtonContainer.translatesAutoresizingMaskIntoConstraints = false
+        downloadButtonContainer.backgroundColor = FeaturedCSSTheme.white.withAlphaComponent(0.96)
+        downloadButtonContainer.layer.cornerRadius = 19
+        downloadButtonContainer.layer.borderWidth = 1.0
+        downloadButtonContainer.layer.borderColor = FeaturedCSSTheme.cardBorder.cgColor
+        downloadButtonContainer.layer.shadowColor = FeaturedCSSTheme.primary.cgColor
+        downloadButtonContainer.layer.shadowOffset = CGSize(width: 0, height: 4)
+        downloadButtonContainer.layer.shadowRadius = 10
+        downloadButtonContainer.layer.shadowOpacity = 0.14
+        addSubview(downloadButtonContainer)
+
+        downloadIconButton.translatesAutoresizingMaskIntoConstraints = false
+        let iconConfig = UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)
+        downloadIconButton.setImage(UIImage(systemName: "tray.and.arrow.down.fill", withConfiguration: iconConfig), for: .normal)
+        downloadIconButton.tintColor = FeaturedCSSTheme.blue
+        downloadIconButton.addTarget(self, action: #selector(handleDownloadTap), for: .touchUpInside)
+        downloadButtonContainer.addSubview(downloadIconButton)
+
+        // Chấm số nhỏ gọn góc trên phải của nút Icon Đã tải (chỉ hiện số khi có file đã tải)
+        badgeLabel.translatesAutoresizingMaskIntoConstraints = false
+        badgeLabel.backgroundColor = FeaturedCSSTheme.blue
+        badgeLabel.textColor = .white
+        badgeLabel.font = UIFont.systemFont(ofSize: 10, weight: .heavy)
+        badgeLabel.textAlignment = .center
+        badgeLabel.layer.cornerRadius = 8.5
+        badgeLabel.layer.masksToBounds = true
+        badgeLabel.layer.borderWidth = 1.5
+        badgeLabel.layer.borderColor = UIColor.white.cgColor
+        badgeLabel.isHidden = true
+        downloadButtonContainer.addSubview(badgeLabel)
+
+        // 2. Thanh tìm kiếm nổi (Cao 38pt, chỉ có Icon tìm kiếm trong khung, không chữ placeholder)
+        searchContainer.translatesAutoresizingMaskIntoConstraints = false
+        searchContainer.backgroundColor = FeaturedCSSTheme.white.withAlphaComponent(0.96)
+        searchContainer.layer.cornerRadius = 19
+        searchContainer.layer.borderWidth = 1.0
+        searchContainer.layer.borderColor = FeaturedCSSTheme.cardBorder.cgColor
+        searchContainer.layer.shadowColor = FeaturedCSSTheme.primary.cgColor
+        searchContainer.layer.shadowOffset = CGSize(width: 0, height: 4)
+        searchContainer.layer.shadowRadius = 10
+        searchContainer.layer.shadowOpacity = 0.14
+        addSubview(searchContainer)
+
+        searchIconView.translatesAutoresizingMaskIntoConstraints = false
+        let searchSymbolCfg = UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)
+        searchIconView.image = UIImage(systemName: "magnifyingglass", withConfiguration: searchSymbolCfg)
+        searchIconView.tintColor = FeaturedCSSTheme.blue
+        searchIconView.contentMode = .scaleAspectFit
+        searchContainer.addSubview(searchIconView)
+
+        searchTextField.translatesAutoresizingMaskIntoConstraints = false
+        searchTextField.font = UIFont.systemFont(ofSize: 13.5, weight: .semibold)
+        searchTextField.textColor = FeaturedCSSTheme.pureBlack
+        searchTextField.clearButtonMode = .whileEditing
+        searchTextField.returnKeyType = .done
+        searchTextField.autocorrectionType = .no
+        searchTextField.spellCheckingType = .no
+        searchTextField.smartQuotesType = .no
+        searchTextField.smartDashesType = .no
+        searchTextField.autocapitalizationType = .none
+        // Không để chữ placeholder bên trong thanh tìm kiếm nổi theo đúng yêu cầu
+        searchTextField.placeholder = nil
+        searchTextField.delegate = self
+        searchTextField.addTarget(self, action: #selector(handleTextChanged(_:)), for: .editingChanged)
+        searchContainer.addSubview(searchTextField)
+
+        NSLayoutConstraint.activate([
+            downloadButtonContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
+            downloadButtonContainer.centerYAnchor.constraint(equalTo: centerYAnchor),
+            downloadButtonContainer.widthAnchor.constraint(equalToConstant: 38),
+            downloadButtonContainer.heightAnchor.constraint(equalToConstant: 38),
+
+            downloadIconButton.topAnchor.constraint(equalTo: downloadButtonContainer.topAnchor),
+            downloadIconButton.leadingAnchor.constraint(equalTo: downloadButtonContainer.leadingAnchor),
+            downloadIconButton.trailingAnchor.constraint(equalTo: downloadButtonContainer.trailingAnchor),
+            downloadIconButton.bottomAnchor.constraint(equalTo: downloadButtonContainer.bottomAnchor),
+
+            badgeLabel.topAnchor.constraint(equalTo: downloadButtonContainer.topAnchor, constant: -3),
+            badgeLabel.trailingAnchor.constraint(equalTo: downloadButtonContainer.trailingAnchor, constant: 4),
+            badgeLabel.heightAnchor.constraint(equalToConstant: 17),
+            badgeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 17),
+
+            searchContainer.leadingAnchor.constraint(equalTo: downloadButtonContainer.trailingAnchor, constant: 8),
+            searchContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
+            searchContainer.centerYAnchor.constraint(equalTo: centerYAnchor),
+            searchContainer.heightAnchor.constraint(equalToConstant: 38),
+
+            searchIconView.leadingAnchor.constraint(equalTo: searchContainer.leadingAnchor, constant: 13),
+            searchIconView.centerYAnchor.constraint(equalTo: searchContainer.centerYAnchor),
+            searchIconView.widthAnchor.constraint(equalToConstant: 16),
+            searchIconView.heightAnchor.constraint(equalToConstant: 16),
+
+            searchTextField.leadingAnchor.constraint(equalTo: searchIconView.trailingAnchor, constant: 8),
+            searchTextField.trailingAnchor.constraint(equalTo: searchContainer.trailingAnchor, constant: -10),
+            searchTextField.topAnchor.constraint(equalTo: searchContainer.topAnchor),
+            searchTextField.bottomAnchor.constraint(equalTo: searchContainer.bottomAnchor)
+        ])
+    }
+
+    func updateDownloadedCount(_ count: Int) {
+        if count > 0 {
+            badgeLabel.isHidden = false
+            badgeLabel.text = count > 99 ? "99+" : "\(count)"
+        } else {
+            badgeLabel.isHidden = true
+        }
+    }
+
+    @objc private func handleDownloadTap() {
+        UIView.animate(withDuration: 0.1, animations: {
+            self.downloadButtonContainer.transform = CGAffineTransform(scaleX: 0.92, y: 0.92)
+        }) { _ in
+            UIView.animate(withDuration: 0.15) {
+                self.downloadButtonContainer.transform = .identity
+            }
+        }
+        onOpenDownloadsTapped?()
+    }
+
+    @objc private func handleTextChanged(_ sender: UITextField) {
+        onSearchTextChanged?(sender.text ?? "")
+    }
+
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        textField.resignFirstResponder()
+        return true
+    }
+}
+
+// MARK: - 🃏 CELL HIỂN THỊ ỨNG DỤNG CHUẨN THẺ TRẮNG VIỀN CSS (#e6ebf2) - XỬ LÝ TỐT HÀNG 1 & HÀNG 2 KHÔNG BAO GIỜ ĐÈ KHUNG
 private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
     static let reuseIdentifier = "FeaturedHubAppCollectionViewCell"
 
@@ -1288,6 +1451,7 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
         cardView.layer.shadowOffset = CGSize(width: 0, height: 3)
         cardView.layer.shadowRadius = 10
         cardView.layer.shadowOpacity = 0.05
+        cardView.clipsToBounds = true
         contentView.addSubview(cardView)
 
         iconImageView.translatesAutoresizingMaskIntoConstraints = false
@@ -1328,12 +1492,15 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
         sourceBadgeLabel.translatesAutoresizingMaskIntoConstraints = false
         sourceBadgeLabel.font = UIFont.systemFont(ofSize: 10.5, weight: .bold)
         sourceBadgeLabel.textColor = FeaturedCSSTheme.blue
+        sourceBadgeLabel.numberOfLines = 1
         sourceBadgeView.addSubview(sourceBadgeLabel)
 
         descLabel.translatesAutoresizingMaskIntoConstraints = false
-        descLabel.font = UIFont.systemFont(ofSize: 12.5, weight: .regular)
+        descLabel.font = UIFont.systemFont(ofSize: 12, weight: .regular)
         descLabel.textColor = FeaturedCSSTheme.darkGray
         descLabel.numberOfLines = 2
+        descLabel.lineBreakMode = .byTruncatingTail
+        descLabel.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         cardView.addSubview(descLabel)
 
         actionButton.translatesAutoresizingMaskIntoConstraints = false
@@ -1364,9 +1531,9 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
             cardView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
 
             iconImageView.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 12),
-            iconImageView.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 11),
-            iconImageView.widthAnchor.constraint(equalToConstant: 54),
-            iconImageView.heightAnchor.constraint(equalToConstant: 54),
+            iconImageView.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 10),
+            iconImageView.widthAnchor.constraint(equalToConstant: 52),
+            iconImageView.heightAnchor.constraint(equalToConstant: 52),
 
             actionButton.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -12),
             actionButton.centerYAnchor.constraint(equalTo: iconImageView.centerYAnchor),
@@ -1385,8 +1552,9 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
             metaLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
             metaLabel.trailingAnchor.constraint(lessThanOrEqualTo: actionButton.leadingAnchor, constant: -8),
 
-            sourceBadgeView.topAnchor.constraint(equalTo: iconImageView.bottomAnchor, constant: 7),
+            sourceBadgeView.topAnchor.constraint(equalTo: iconImageView.bottomAnchor, constant: 6),
             sourceBadgeView.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 12),
+            sourceBadgeView.trailingAnchor.constraint(lessThanOrEqualTo: cardView.trailingAnchor, constant: -12),
             sourceBadgeView.heightAnchor.constraint(equalToConstant: 18),
 
             sourceBadgeLabel.leadingAnchor.constraint(equalTo: sourceBadgeView.leadingAnchor, constant: 6),
@@ -1396,11 +1564,12 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
             descLabel.topAnchor.constraint(equalTo: sourceBadgeView.bottomAnchor, constant: 5),
             descLabel.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 12),
             descLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -12),
+            descLabel.bottomAnchor.constraint(lessThanOrEqualTo: cardView.bottomAnchor, constant: -10),
 
             progressBarBg.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 12),
             progressBarBg.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -12),
-            progressBarBg.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -5),
-            progressBarBg.heightAnchor.constraint(equalToConstant: 4),
+            progressBarBg.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -4),
+            progressBarBg.heightAnchor.constraint(equalToConstant: 3.5),
 
             progressBarFill.leadingAnchor.constraint(equalTo: progressBarBg.leadingAnchor),
             progressBarFill.topAnchor.constraint(equalTo: progressBarBg.topAnchor),
@@ -1434,11 +1603,29 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
         metaLabel.text = "v\(app.version) • \(app.formattedSize) • \(app.developerName)"
         sourceBadgeLabel.text = "📦 \(app.sourceName)"
 
-        let cleanDesc = app.localizedDescription
+        // Làm sạch các ký tự xuống dòng phức tạp (\r, \n, bullet list...) để hàng 1 và hàng 2 hiển thị mượt mà trong khung
+        let normalizedDesc = app.localizedDescription
+            .replacingOccurrences(of: "\r\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
             .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "#", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        descLabel.text = cleanDesc.isEmpty ? "Ứng dụng từ nguồn \(app.sourceName)" : cleanDesc
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+
+        let displayDesc = normalizedDesc.isEmpty ? "Ứng dụng từ nguồn \(app.sourceName)" : normalizedDesc
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 1.5
+        paragraphStyle.lineBreakMode = .byTruncatingTail
+
+        descLabel.attributedText = NSAttributedString(
+            string: displayDesc,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 12, weight: .regular),
+                .foregroundColor: FeaturedCSSTheme.darkGray,
+                .paragraphStyle: paragraphStyle
+            ]
+        )
 
         iconImageView.image = UIImage(systemName: "app.badge.fill")?.withTintColor(FeaturedCSSTheme.blue.withAlphaComponent(0.35), renderingMode: .alwaysOriginal)
         if let iconURL = app.iconURL {
@@ -2396,7 +2583,7 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
 }
 
 // ============================================================================
-// MARK: - 🚀 FEATUREDVIEWCONTROLLER (MỞ LÀ HIỆN LUÔN + BÀN PHÍM ĐỨNG IM 100%)
+// MARK: - 🚀 FEATUREDVIEWCONTROLLER (MỞ LÀ HIỆN LUÔN + THANH NỔI THÔNG MINH KHI CUỘN)
 // ============================================================================
 
 class FeaturedViewController: UICollectionViewController, UICollectionViewDelegateFlowLayout
@@ -2426,9 +2613,13 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
 
     private let hubBackgroundView = FeaturedGradientBackgroundView(frame: .zero)
 
-    // Header View độc lập gắn trực tiếp vào CollectionView (Không dùng SupplementaryView nên không bao giờ mất Focus bàn phím khi reloadData)
+    // Header View chính ở đầu trang (cuộn tự nhiên theo danh sách)
     private let persistentHeaderView = FeaturedWebScrollHeaderView(frame: .zero)
     private let headerHeight: CGFloat = 168
+
+    // Thanh nổi siêu gọn cố định trên cùng khi người dùng lướt xuống (Chỉ có Icon Đã tải + Khung tìm kiếm có Icon kính lúp)
+    private let compactFloatingBar = FeaturedCompactFloatingBarView(frame: .zero)
+    private var isFloatingBarVisible: Bool = false
 
     // MARK: - Lifecycle
 
@@ -2467,7 +2658,7 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
 }
 
 // ============================================================================
-// MARK: - 🛠️ THIẾT LẬP GIAO DIỆN WEB SCROLL + BÀN PHÍM ĐỨNG IM TUYỆT ĐỐI
+// MARK: - 🛠️ THIẾT LẬP GIAO DIỆN WEB SCROLL + THANH NỔI THÔNG MINH
 // ============================================================================
 
 private extension FeaturedViewController
@@ -2493,14 +2684,13 @@ private extension FeaturedViewController
         flowLayout.scrollDirection = .vertical
         flowLayout.minimumLineSpacing = 10
         flowLayout.sectionHeadersPinToVisibleBounds = false
-        // Chừa đúng khoảng trống phía trên (headerHeight + 4pt) cho persistentHeaderView cuộn mượt cùng trang
+        // Chừa khoảng trống phía trên (headerHeight + 4pt) cho persistentHeaderView cuộn mượt cùng trang
         flowLayout.sectionInset = UIEdgeInsets(top: self.headerHeight + 4, left: 14, bottom: 28, right: 14)
         self.collectionView.setCollectionViewLayout(flowLayout, animated: false)
 
         self.collectionView.backgroundView = self.hubBackgroundView
         self.collectionView.backgroundColor = .clear
         self.collectionView.alwaysBounceVertical = true
-        // Không dùng .onDrag tự động để tránh lỗi co rút contentSize làm sập bàn phím khi đang gõ
         self.collectionView.keyboardDismissMode = .none
 
         self.collectionView.register(
@@ -2508,9 +2698,12 @@ private extension FeaturedViewController
             forCellWithReuseIdentifier: FeaturedHubAppCollectionViewCell.reuseIdentifier
         )
 
-        // Gắn persistentHeaderView trực tiếp vào CollectionView
+        // 1. Gắn persistentHeaderView trực tiếp vào CollectionView
         self.collectionView.addSubview(self.persistentHeaderView)
         self.bindPersistentHeaderView()
+
+        // 2. Gắn Thanh nổi thông minh (Compact Floating Bar) cố định trên cùng của View chính
+        self.setupCompactFloatingBar()
 
         self.collectionView.dataSource = self.smartHubDataSource
         self.collectionView.delegate = self
@@ -2539,29 +2732,117 @@ private extension FeaturedViewController
         loadAppsForCurrentFilter(forceRefresh: false)
     }
 
+    func setupCompactFloatingBar()
+    {
+        compactFloatingBar.translatesAutoresizingMaskIntoConstraints = false
+        compactFloatingBar.alpha = 0
+        compactFloatingBar.isHidden = true
+        compactFloatingBar.transform = CGAffineTransform(translationX: 0, y: -14)
+        self.view.addSubview(compactFloatingBar)
+
+        NSLayoutConstraint.activate([
+            compactFloatingBar.topAnchor.constraint(equalTo: self.view.safeAreaLayoutGuide.topAnchor, constant: 4),
+            compactFloatingBar.leadingAnchor.constraint(equalTo: self.view.leadingAnchor, constant: 14),
+            compactFloatingBar.trailingAnchor.constraint(equalTo: self.view.trailingAnchor, constant: -14),
+            compactFloatingBar.heightAnchor.constraint(equalToConstant: 42)
+        ])
+
+        compactFloatingBar.onOpenDownloadsTapped = { [weak self] in
+            self?.dismissActiveKeyboards()
+            self?.openDownloadedIPAsManager()
+        }
+
+        compactFloatingBar.onSearchTextChanged = { [weak self] newText in
+            guard let self else { return }
+            if self.persistentHeaderView.searchTextField.text != newText {
+                self.persistentHeaderView.searchTextField.text = newText
+            }
+            self.currentSearchText = newText
+            self.currentDisplayLimit = self.pageSize
+            self.applySearchAndPagination()
+        }
+    }
+
     func bindPersistentHeaderView()
     {
         self.persistentHeaderView.onSearchTextChanged = { [weak self] newText in
             guard let self else { return }
+            if self.compactFloatingBar.searchTextField.text != newText {
+                self.compactFloatingBar.searchTextField.text = newText
+            }
             self.currentSearchText = newText
             self.currentDisplayLimit = self.pageSize
             self.applySearchAndPagination()
         }
 
         self.persistentHeaderView.onOpenDownloadsTapped = { [weak self] in
-            self?.persistentHeaderView.searchTextField.resignFirstResponder()
+            self?.dismissActiveKeyboards()
             self?.openDownloadedIPAsManager()
         }
         self.persistentHeaderView.onOpenSourcesTapped = { [weak self] in
-            self?.persistentHeaderView.searchTextField.resignFirstResponder()
+            self?.dismissActiveKeyboards()
             self?.openSourcesHubManager()
         }
         self.persistentHeaderView.onFilterPillTapped = { [weak self] in
-            self?.persistentHeaderView.searchTextField.resignFirstResponder()
+            self?.dismissActiveKeyboards()
             self?.presentQuickSourcePickerSheet()
         }
 
         refreshVisibleHeaderState()
+    }
+
+    func dismissActiveKeyboards()
+    {
+        if self.persistentHeaderView.searchTextField.isFirstResponder {
+            self.persistentHeaderView.searchTextField.resignFirstResponder()
+        }
+        if self.compactFloatingBar.searchTextField.isFirstResponder {
+            self.compactFloatingBar.searchTextField.resignFirstResponder()
+        }
+    }
+
+    /// Ẩn/hiện thông minh khung Kho App Game và Thanh nổi khi người dùng lướt xuống / lướt lên
+    func updateFloatingBarVisibility(for scrollView: UIScrollView)
+    {
+        let topInset = scrollView.adjustedContentInset.top
+        let offsetY = scrollView.contentOffset.y + topInset
+
+        // Khi lướt xuống qua ngưỡng 115pt (khung Kho App Game đã cuộn lên): Hiện thanh nổi gọn đẹp và ẩn hẳn persistentHeaderView
+        let shouldShowFloating = offsetY > 115
+
+        guard shouldShowFloating != isFloatingBarVisible else { return }
+        isFloatingBarVisible = shouldShowFloating
+
+        if shouldShowFloating {
+            // Nếu đang gõ ở thanh tìm kiếm chính mà cuộn xuống thì chuyển mượt sang thanh nổi
+            if self.persistentHeaderView.searchTextField.isFirstResponder {
+                self.compactFloatingBar.isHidden = false
+                self.compactFloatingBar.searchTextField.becomeFirstResponder()
+            } else {
+                self.compactFloatingBar.isHidden = false
+            }
+
+            UIView.animate(withDuration: 0.22, delay: 0, options: [.curveEaseOut, .beginFromCurrentState]) {
+                self.compactFloatingBar.alpha = 1.0
+                self.compactFloatingBar.transform = .identity
+                self.persistentHeaderView.alpha = 0.0
+            }
+        } else {
+            // Khi lướt ngược lên đầu trang: Ẩn thanh nổi và hiện lại khung Kho App Game
+            if self.compactFloatingBar.searchTextField.isFirstResponder {
+                self.persistentHeaderView.searchTextField.becomeFirstResponder()
+            }
+
+            UIView.animate(withDuration: 0.20, delay: 0, options: [.curveEaseIn, .beginFromCurrentState], animations: {
+                self.compactFloatingBar.alpha = 0.0
+                self.compactFloatingBar.transform = CGAffineTransform(translationX: 0, y: -14)
+                self.persistentHeaderView.alpha = 1.0
+            }) { finished in
+                if finished && !self.isFloatingBarVisible {
+                    self.compactFloatingBar.isHidden = true
+                }
+            }
+        }
     }
 
     func refreshVisibleHeaderState()
@@ -2590,6 +2871,7 @@ private extension FeaturedViewController
             totalAppsCount: filteredHubApps.count,
             downloadedCount: dlCount
         )
+        compactFloatingBar.updateDownloadedCount(dlCount)
     }
 
     func presentQuickSourcePickerSheet()
@@ -2747,7 +3029,7 @@ private extension FeaturedViewController
         }
     }
 
-    /// Lọc & Phân trang mượt mà: Chỉ reload các Cell bên dưới, không đụng vào persistentHeaderView nên bàn phím đứng im 100%
+    /// Lọc & Phân trang mượt mà: Chỉ reload các Cell bên dưới, không đụng vào Header hay Thanh nổi nên bàn phím đứng im 100%
     func applySearchAndPagination()
     {
         let query = currentSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -2885,18 +3167,24 @@ private extension FeaturedViewController
 
 extension FeaturedViewController
 {
+    override func scrollViewDidScroll(_ scrollView: UIScrollView)
+    {
+        updateFloatingBarVisibility(for: scrollView)
+    }
+
     override func scrollViewWillBeginDragging(_ scrollView: UIScrollView)
     {
         // Chỉ hạ bàn phím khi chính ngón tay người dùng kéo cuộn trang
-        if scrollView.isTracking && self.persistentHeaderView.searchTextField.isFirstResponder {
-            self.persistentHeaderView.searchTextField.resignFirstResponder()
+        if scrollView.isTracking {
+            dismissActiveKeyboards()
         }
     }
 
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize
     {
         let width = max(collectionView.bounds.width - 28, 280)
-        return CGSize(width: width, height: 118)
+        // Chiều cao 132pt đảm bảo cả 1 hàng và 2 hàng mô tả đều nằm gọn trong khung, không bao giờ chạm viền đáy
+        return CGSize(width: width, height: 132)
     }
 
     override func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath)
@@ -2917,7 +3205,7 @@ extension FeaturedViewController
     override func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath)
     {
         guard indexPath.item < self.displayedHubApps.count else { return }
-        self.persistentHeaderView.searchTextField.resignFirstResponder()
+        self.dismissActiveKeyboards()
         let app = self.displayedHubApps[indexPath.item]
 
         let popupVC = FeaturedAppFullInfoPopupViewController(app: app) { [weak self] in

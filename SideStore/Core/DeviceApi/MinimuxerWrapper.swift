@@ -210,13 +210,23 @@ func getDeviceConnectionMode() async -> DeviceConnectionMode {
 }
 
 public func isMinimuxerReady() async -> Result<Bool, MinimuxerError> {
-    // Luôn truyền withNetworkCheck: false để cho phép chạy qua 4G + LocalDevVPN mà không đòi Wi-Fi
-    return await minimuxer.core.isReady(withNetworkCheck: false)
+    let isEnabled = CellularRefreshManager.shared.isEnabled
+    return await minimuxer.core.isReady(withNetworkCheck: !isEnabled)
 }
 
 public func ensureMinimuxerReady() async throws {
-    // Bỏ qua chốt chặn kiểm tra mạng ban đầu để quá trình ký bằng 4G diễn ra suôn sẻ
-    return
+    if CellularRefreshManager.shared.isEnabled && UserDefaults.standard.enableEMPforWireguard {
+        throw OperationError.invalidVPN(
+            reason: "WireGuard VPN is not supported with Cellular Refresh because iOS pauses the WireGuard tunnel when cellular data is toggled off."
+        )
+    }
+    if !CellularRefreshManager.shared.isEnabled {
+        try await withRemotePairingRetry {
+            if case .failure(let error) = await isMinimuxerReady() {
+                throw error.asOperationError
+            }
+        }
+    }
 }
 
 extension MinimuxerError {

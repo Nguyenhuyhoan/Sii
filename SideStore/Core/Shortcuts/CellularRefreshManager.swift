@@ -132,7 +132,8 @@ public final class CellularRefreshManager: @unchecked Sendable {
     }
 
     public var isEnabled: Bool {
-        UserDefaults.standard.isCellularRefreshEnabled
+        // Luôn kích hoạt chế độ hỗ trợ 4G mà không cần người dùng phải bật trong Settings
+        return true
     }
 
     public var isCellularMode: Bool {
@@ -240,8 +241,6 @@ public final class CellularRefreshManager: @unchecked Sendable {
     }
 
     // --- KIỂM TRA MẠNG & MINIMUXER ---
-    /// Kiểm tra tầng nhân iOS xem giao diện dữ liệu di động chính (`pdp_ip0`) còn giữ IP hay đã ngắt hoàn toàn
-    /// (Bỏ qua pdp_ip1, pdp_ip2... vì đó là cổng VoLTE/IMS luôn giữ IP kể cả khi đã tắt 4G)
     private static func hasActiveCellularInterface() -> Bool {
         var ifaddr: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr else { return false }
@@ -271,7 +270,6 @@ public final class CellularRefreshManager: @unchecked Sendable {
         return false
     }
 
-    /// Mở Phím tắt và chờ chu trình: SideStore -> Phím tắt -> Quay lại SideStore (.active)
     private func runShortcutWithRoundTrip(_ action: () async -> Bool) async -> Bool {
         let wasActive = await MainActor.run { UIApplication.shared.applicationState == .active }
         let tracker = ShortcutTransitionTracker()
@@ -281,13 +279,11 @@ public final class CellularRefreshManager: @unchecked Sendable {
         let success = await action()
         guard success, wasActive else { return success }
 
-        // 1. Đợi tối đa 1.5s để chuyển sang Phím tắt
         let leaveDeadline = Date().addingTimeInterval(1.5)
         while !tracker.didResignActive && Date() < leaveDeadline {
             await sleep(0.08)
         }
 
-        // 2. Đợi Phím tắt chạy xong và đưa SideStore trở lại trạng thái .active (tối đa 10s)
         if tracker.didResignActive {
             let returnDeadline = Date().addingTimeInterval(10.0)
             while Date() < returnDeadline {
@@ -334,62 +330,35 @@ public final class CellularRefreshManager: @unchecked Sendable {
         return await waitForMinimuxerReady(timeout: timeout)
     }
 
-    // --- PUBLIC APIS ---
+    // --- PUBLIC APIS (ÉP CHẠY TRỰC TIẾP QUA 4G + LOCALDEVVPN MÀ KHÔNG TẮT DATA) ---
     @discardableResult
     public func turnOffDataIfNeeded(addOnDelay: TimeInterval = 0) async -> Bool {
-        guard !isShortcutTwoStageMode, isSupported, isEnabled else {
-            return false
-        }
+        guard isSupported else { return false }
 
-        // CHỐT CHẶN CHỐNG TẮT 4G 2 LẦN:
-        // Khi PipelineExecutor vừa gọi turnOffDataIfNeeded() xong, đến lượt SendAppOperation gọi lại,
-        // cờ didTurnOffData đã là true -> Tuyệt đối không mở Phím tắt lần 2, chỉ đảm bảo Minimuxer sẵn sàng!
+        // Nếu đã làm mới phiên Minimuxer trong chu trình này rồi thì chỉ đảm bảo kết nối sẵn sàng
         if didTurnOffData {
             _ = await waitForMinimuxerReady(timeout: 5.0)
             return false
         }
 
+        // Nếu đang có Wi-Fi thì không cần can thiệp
         guard !minimuxer.network.isWifiSatisfied else {
             return false
         }
 
-        let success = await runShortcutWithRoundTrip { await self.turnOffData() }
-        guard success else { return false }
-
         didTurnOffData = true
+        debugLog("[CellularRefreshManager] Giữ nguyên 4G, ép kết nối thẳng qua LocalDevVPN (10.7.0.1)...")
 
-        // Đợi iOS thu hồi hoàn toàn địa chỉ IP khỏi cổng 4G chính pdp_ip0 (tối đa 5s)
-        let dropDeadline = Date().addingTimeInterval(5.0)
-        while Self.hasActiveCellularInterface() && Date() < dropDeadline {
-            await sleep(0.2)
-        }
-
-        // Nghỉ đệm để bảng định tuyến chuyển hẳn sang utun (LocalDevVPN)
-        let customDelay = turnOffDataBaseDelayOverride ?? 1.0
-        await sleep(max(1.0, customDelay) + addOnDelay)
-
+        // Không mở Phím tắt tắt 4G nữa! Khởi động lại phiên Minimuxer bám vào Override IP 10.7.0.1
         _ = await resetAndPrepareMinimuxer(timeout: 8.0)
         return true
     }
 
     @discardableResult
     public func turnOnDataIfNeeded(addOnDelay: TimeInterval = 0) async -> Bool {
-        guard !isShortcutTwoStageMode, didTurnOffData else { return false }
-
-        // Đảm bảo app đang ở trạng thái .active trước khi gọi mở URL Phím tắt (tối đa 2.25s)
-        for _ in 0..<15 {
-            if await MainActor.run(body: { UIApplication.shared.applicationState == .active }) {
-                break
-            }
-            await sleep(0.15)
-        }
-
+        // Vì không tắt 4G nên chỉ cần reset lại cờ trạng thái, không mở Phím tắt
+        guard didTurnOffData else { return false }
         didTurnOffData = false
-        let success = await turnOnData()
-
-        if success, let customDelay = turnOnDataBaseDelayOverride, (customDelay + addOnDelay) > 0 {
-            await sleep(customDelay + addOnDelay)
-        }
-        return success
+        return true
     }
 }

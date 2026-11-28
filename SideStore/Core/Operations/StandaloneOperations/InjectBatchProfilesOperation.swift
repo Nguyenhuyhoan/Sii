@@ -1,4 +1,3 @@
-
 //
 //  InjectBatchProfilesOperation.swift
 //  SideStore
@@ -52,10 +51,13 @@ final class InjectBatchProfilesOperation: BaseStandaloneOperation<StandaloneOper
 
         debugLog("[InjectBatchProfilesOperation] Running batch injection for \(sortedBatches.count) app(s)")
 
-        // Làm mới phiên Minimuxer thẳng qua LocalDevVPN (10.7.0.1) ngay trên nền 4G (không mở Phím tắt)
-        let didPrepareOnCellular = await CellularRefreshManager.shared.turnOffDataIfNeeded()
+        // Tắt 4G đúng 1 lần duy nhất.
+        // Lưu ý: Nếu hàm này trả về true, nó ĐÃ tự gọi resetAndPrepareMinimuxer() bên trong.
+        let didTurnOffAndReset = await CellularRefreshManager.shared.turnOffDataIfNeeded()
         
-        if !didPrepareOnCellular {
+        if !didTurnOffAndReset {
+            // Trường hợp chạy qua Shortcut 2 giai đoạn (4G đã tắt sẵn từ bên ngoài) hoặc Wi-Fi:
+            // Reset sạch Minimuxer (Stop -> Sleep -> Start -> Wait) để tránh lỗi MinimuxerError 35
             let isReady = await CellularRefreshManager.shared.resetAndPrepareMinimuxer(timeout: 6.0)
             if !isReady {
                 try? await ensureMinimuxerReady()
@@ -91,7 +93,7 @@ final class InjectBatchProfilesOperation: BaseStandaloneOperation<StandaloneOper
                 }
 
                 // Cập nhật Database cho cả trường hợp chạy trong App (batch.app != nil)
-                // VÀ trường hợp đọc từ JSON (batch.app == nil)
+                // VÀ trường hợp chạy từ Shortcut Giai đoạn 2 đọc từ JSON (batch.app == nil)
                 let dbContext = batch.app?.managedObjectContext ?? self.context.dbBackgroundContext
                 let targetBundleID = batch.bundleID
                 let certStatus = batch.certStatus
@@ -131,10 +133,10 @@ final class InjectBatchProfilesOperation: BaseStandaloneOperation<StandaloneOper
                 debugLog("[InjectBatchProfilesOperation] Successfully processed \(batch.bundleID)")
             }
             
-            // Reset cờ trạng thái sau khi tiêm xong tất cả
+            // Bật lại 4G ngay sau khi tiêm xong tất cả
             await CellularRefreshManager.shared.turnOnDataIfNeeded()
         } catch {
-            // Đảm bảo luôn reset cờ trạng thái nếu có lỗi bất ngờ
+            // Đảm bảo luôn bật lại 4G nếu có lỗi bất ngờ
             await CellularRefreshManager.shared.turnOnDataIfNeeded()
             throw error
         }

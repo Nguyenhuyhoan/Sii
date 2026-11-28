@@ -1349,8 +1349,6 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
             loadingSpinner.stopAnimating()
         }
 
-        // Khi đã tải >= 1 app: Bỏ chữ "Đã tải", chỉ để icon + con số như "📥 (3)" để không bao giờ bị "...ải (3)"
-        // Khi chưa tải app nào: Giữ nguyên chữ "📥 Đã tải"
         let dlTitle = downloadedCount > 0 ? "📥 (\(downloadedCount))" : "📥 Đã tải"
         downloadedPillButton.setTitle(dlTitle, for: .normal)
 
@@ -1380,15 +1378,25 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
     }
 }
 
-// MARK: - 📌 THANH NỔI THÔNG MINH KHI LƯỚT XUỐNG (CHỈ CÓ NÚT ICON ĐÃ TẢI + KHUNG TÌM KIẾM CÓ ICON KÍNH LÚP, KHÔNG CHỮ RƯỜM RÀ)
+// MARK: - 📌 THANH NỔI THÔNG MINH KHI LƯỚT (MẶC ĐỊNH: ICON ĐÃ TẢI TRÁI + ICON TÌM KIẾM PHẢI ĐỒNG ĐIỆU; NHẤN ICON TÌM KIẾM -> MỞ KHUNG NHẬP; LƯỚT -> THU VỀ ICON)
 private final class FeaturedCompactFloatingBarView: UIView, UITextFieldDelegate {
     private let downloadButtonContainer = UIView()
     private let downloadIconButton = UIButton(type: .system)
     private let badgeLabel = UILabel()
 
+    // Nút Icon Tìm kiếm bên phải (đồng điệu 100% với nút Icon Đã tải bên trái)
+    private let searchButtonContainer = UIView()
+    private let searchIconButton = UIButton(type: .system)
+    private let activeQueryDot = UIView()
+
+    // Khung nhập tìm kiếm mở rộng khi nhấn vào Icon Tìm kiếm
     private let searchContainer = UIView()
     private let searchIconView = UIImageView()
     let searchTextField = UITextField()
+
+    private var searchExpandedLeadingConstraint: NSLayoutConstraint!
+    private var searchCollapsedWidthConstraint: NSLayoutConstraint!
+    private(set) var isSearchExpanded: Bool = false
 
     var onOpenDownloadsTapped: (() -> Void)?
     var onSearchTextChanged: ((String) -> Void)?
@@ -1403,10 +1411,34 @@ private final class FeaturedCompactFloatingBarView: UIView, UITextFieldDelegate 
         setupViews()
     }
 
+    // Cho phép chạm xuyên qua khoảng trống ở giữa 2 icon để người dùng cuộn/bấm vào danh sách app bên dưới bình thường
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard !isHidden, alpha > 0.01 else { return nil }
+
+        let downloadPoint = convert(point, to: downloadButtonContainer)
+        if downloadButtonContainer.bounds.insetBy(dx: -6, dy: -6).contains(downloadPoint) {
+            return super.hitTest(point, with: event) ?? downloadIconButton
+        }
+
+        if isSearchExpanded {
+            let searchBoxPoint = convert(point, to: searchContainer)
+            if searchContainer.bounds.insetBy(dx: -4, dy: -4).contains(searchBoxPoint) {
+                return super.hitTest(point, with: event)
+            }
+        } else {
+            let searchBtnPoint = convert(point, to: searchButtonContainer)
+            if searchButtonContainer.bounds.insetBy(dx: -6, dy: -6).contains(searchBtnPoint) {
+                return super.hitTest(point, with: event) ?? searchIconButton
+            }
+        }
+
+        return nil
+    }
+
     private func setupViews() {
         backgroundColor = .clear
 
-        // 1. Nút nổi Icon Đã tải (Tròn 38x38pt, nền trắng tinh tế, có bóng nổi, không chữ)
+        // 1. Nút nổi Icon Đã tải bên trái (Tròn 38x38pt, nền trắng tinh tế, có bóng nổi)
         downloadButtonContainer.translatesAutoresizingMaskIntoConstraints = false
         downloadButtonContainer.backgroundColor = FeaturedCSSTheme.white.withAlphaComponent(0.96)
         downloadButtonContainer.layer.cornerRadius = 19
@@ -1425,7 +1457,6 @@ private final class FeaturedCompactFloatingBarView: UIView, UITextFieldDelegate 
         downloadIconButton.addTarget(self, action: #selector(handleDownloadTap), for: .touchUpInside)
         downloadButtonContainer.addSubview(downloadIconButton)
 
-        // Chấm số nhỏ gọn góc trên phải của nút Icon Đã tải (chỉ hiện số khi có file đã tải)
         badgeLabel.translatesAutoresizingMaskIntoConstraints = false
         badgeLabel.backgroundColor = FeaturedCSSTheme.blue
         badgeLabel.textColor = .white
@@ -1438,7 +1469,35 @@ private final class FeaturedCompactFloatingBarView: UIView, UITextFieldDelegate 
         badgeLabel.isHidden = true
         downloadButtonContainer.addSubview(badgeLabel)
 
-        // 2. Thanh tìm kiếm nổi (Cao 38pt, chỉ có Icon tìm kiếm trong khung, không chữ placeholder)
+        // 2. Nút nổi Icon Tìm kiếm bên phải (Đồng điệu 100% với nút Icon Đã tải: Tròn 38x38pt, nền trắng 0.96, viền & bóng giống hệt)
+        searchButtonContainer.translatesAutoresizingMaskIntoConstraints = false
+        searchButtonContainer.backgroundColor = FeaturedCSSTheme.white.withAlphaComponent(0.96)
+        searchButtonContainer.layer.cornerRadius = 19
+        searchButtonContainer.layer.borderWidth = 1.0
+        searchButtonContainer.layer.borderColor = FeaturedCSSTheme.cardBorder.cgColor
+        searchButtonContainer.layer.shadowColor = FeaturedCSSTheme.primary.cgColor
+        searchButtonContainer.layer.shadowOffset = CGSize(width: 0, height: 4)
+        searchButtonContainer.layer.shadowRadius = 10
+        searchButtonContainer.layer.shadowOpacity = 0.14
+        addSubview(searchButtonContainer)
+
+        searchIconButton.translatesAutoresizingMaskIntoConstraints = false
+        searchIconButton.setImage(UIImage(systemName: "magnifyingglass", withConfiguration: iconConfig), for: .normal)
+        searchIconButton.tintColor = FeaturedCSSTheme.blue
+        searchIconButton.addTarget(self, action: #selector(handleSearchIconTap), for: .touchUpInside)
+        searchButtonContainer.addSubview(searchIconButton)
+
+        // Chấm tròn nhỏ góc trên phải báo hiệu đang có từ khóa lọc (ví dụ đang lọc "Youtube")
+        activeQueryDot.translatesAutoresizingMaskIntoConstraints = false
+        activeQueryDot.backgroundColor = FeaturedCSSTheme.blue
+        activeQueryDot.layer.cornerRadius = 5
+        activeQueryDot.layer.borderWidth = 1.5
+        activeQueryDot.layer.borderColor = UIColor.white.cgColor
+        activeQueryDot.isHidden = true
+        activeQueryDot.isUserInteractionEnabled = false
+        searchButtonContainer.addSubview(activeQueryDot)
+
+        // 3. Khung tìm kiếm mở rộng (chỉ hiện khi bấm vào Icon Tìm kiếm, thu gọn lại thành Icon khi lướt)
         searchContainer.translatesAutoresizingMaskIntoConstraints = false
         searchContainer.backgroundColor = FeaturedCSSTheme.white.withAlphaComponent(0.96)
         searchContainer.layer.cornerRadius = 19
@@ -1448,6 +1507,8 @@ private final class FeaturedCompactFloatingBarView: UIView, UITextFieldDelegate 
         searchContainer.layer.shadowOffset = CGSize(width: 0, height: 4)
         searchContainer.layer.shadowRadius = 10
         searchContainer.layer.shadowOpacity = 0.14
+        searchContainer.alpha = 0.0
+        searchContainer.isHidden = true
         addSubview(searchContainer)
 
         searchIconView.translatesAutoresizingMaskIntoConstraints = false
@@ -1467,13 +1528,19 @@ private final class FeaturedCompactFloatingBarView: UIView, UITextFieldDelegate 
         searchTextField.smartQuotesType = .no
         searchTextField.smartDashesType = .no
         searchTextField.autocapitalizationType = .none
-        // Không để chữ placeholder bên trong thanh tìm kiếm nổi theo đúng yêu cầu
-        searchTextField.placeholder = nil
+        searchTextField.attributedPlaceholder = NSAttributedString(
+            string: "Tìm tên App, Game, tác giả, Bundle ID...",
+            attributes: [.foregroundColor: FeaturedCSSTheme.darkGray.withAlphaComponent(0.6)]
+        )
         searchTextField.delegate = self
         searchTextField.addTarget(self, action: #selector(handleTextChanged(_:)), for: .editingChanged)
         searchContainer.addSubview(searchTextField)
 
+        searchExpandedLeadingConstraint = searchContainer.leadingAnchor.constraint(equalTo: downloadButtonContainer.trailingAnchor, constant: 8)
+        searchCollapsedWidthConstraint = searchContainer.widthAnchor.constraint(equalToConstant: 38)
+
         NSLayoutConstraint.activate([
+            // Nút Đã tải bên trái
             downloadButtonContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
             downloadButtonContainer.centerYAnchor.constraint(equalTo: centerYAnchor),
             downloadButtonContainer.widthAnchor.constraint(equalToConstant: 38),
@@ -1489,10 +1556,27 @@ private final class FeaturedCompactFloatingBarView: UIView, UITextFieldDelegate 
             badgeLabel.heightAnchor.constraint(equalToConstant: 17),
             badgeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 17),
 
-            searchContainer.leadingAnchor.constraint(equalTo: downloadButtonContainer.trailingAnchor, constant: 8),
+            // Nút Icon Tìm kiếm bên phải
+            searchButtonContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
+            searchButtonContainer.centerYAnchor.constraint(equalTo: centerYAnchor),
+            searchButtonContainer.widthAnchor.constraint(equalToConstant: 38),
+            searchButtonContainer.heightAnchor.constraint(equalToConstant: 38),
+
+            searchIconButton.topAnchor.constraint(equalTo: searchButtonContainer.topAnchor),
+            searchIconButton.leadingAnchor.constraint(equalTo: searchButtonContainer.leadingAnchor),
+            searchIconButton.trailingAnchor.constraint(equalTo: searchButtonContainer.trailingAnchor),
+            searchIconButton.bottomAnchor.constraint(equalTo: searchButtonContainer.bottomAnchor),
+
+            activeQueryDot.topAnchor.constraint(equalTo: searchButtonContainer.topAnchor, constant: 2),
+            activeQueryDot.trailingAnchor.constraint(equalTo: searchButtonContainer.trailingAnchor, constant: -2),
+            activeQueryDot.widthAnchor.constraint(equalToConstant: 10),
+            activeQueryDot.heightAnchor.constraint(equalToConstant: 10),
+
+            // Khung nhập tìm kiếm (mặc định thu gọn ở bên phải)
             searchContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
             searchContainer.centerYAnchor.constraint(equalTo: centerYAnchor),
             searchContainer.heightAnchor.constraint(equalToConstant: 38),
+            searchCollapsedWidthConstraint,
 
             searchIconView.leadingAnchor.constraint(equalTo: searchContainer.leadingAnchor, constant: 13),
             searchIconView.centerYAnchor.constraint(equalTo: searchContainer.centerYAnchor),
@@ -1515,6 +1599,80 @@ private final class FeaturedCompactFloatingBarView: UIView, UITextFieldDelegate 
         }
     }
 
+    private func refreshActiveQueryDot() {
+        let hasQuery = !(searchTextField.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        activeQueryDot.isHidden = !hasQuery
+    }
+
+    /// Mở rộng khung nhập tìm kiếm khi nhấn vào Icon Tìm kiếm bên phải
+    func expandSearchBox(animated: Bool = true, focusKeyboard: Bool = true) {
+        guard !isSearchExpanded else {
+            if focusKeyboard && !searchTextField.isFirstResponder {
+                searchTextField.becomeFirstResponder()
+            }
+            return
+        }
+        isSearchExpanded = true
+        searchContainer.isHidden = false
+
+        searchCollapsedWidthConstraint.isActive = false
+        searchExpandedLeadingConstraint.isActive = true
+
+        let updates = {
+            self.searchButtonContainer.alpha = 0.0
+            self.searchButtonContainer.transform = CGAffineTransform(scaleX: 0.85, y: 0.85)
+            self.searchContainer.alpha = 1.0
+            self.layoutIfNeeded()
+        }
+
+        if animated {
+            UIView.animate(withDuration: 0.22, delay: 0, options: [.curveEaseOut, .beginFromCurrentState], animations: updates) { _ in
+                if self.isSearchExpanded {
+                    self.searchButtonContainer.isHidden = true
+                }
+            }
+        } else {
+            updates()
+            searchButtonContainer.isHidden = true
+        }
+
+        if focusKeyboard {
+            searchTextField.becomeFirstResponder()
+        }
+    }
+
+    /// Thu gọn khung nhập tìm kiếm trở về lại Icon Tìm kiếm bên phải (khi người dùng lướt lên/xuống)
+    func collapseToIconsOnly(animated: Bool = true) {
+        refreshActiveQueryDot()
+        if searchTextField.isFirstResponder {
+            searchTextField.resignFirstResponder()
+        }
+        guard isSearchExpanded else { return }
+        isSearchExpanded = false
+
+        searchButtonContainer.isHidden = false
+        searchExpandedLeadingConstraint.isActive = false
+        searchCollapsedWidthConstraint.isActive = true
+
+        let updates = {
+            self.searchContainer.alpha = 0.0
+            self.searchButtonContainer.alpha = 1.0
+            self.searchButtonContainer.transform = .identity
+            self.layoutIfNeeded()
+        }
+
+        if animated {
+            UIView.animate(withDuration: 0.20, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState], animations: updates) { _ in
+                if !self.isSearchExpanded {
+                    self.searchContainer.isHidden = true
+                }
+            }
+        } else {
+            updates()
+            searchContainer.isHidden = true
+        }
+    }
+
     @objc private func handleDownloadTap() {
         UIView.animate(withDuration: 0.1, animations: {
             self.downloadButtonContainer.transform = CGAffineTransform(scaleX: 0.92, y: 0.92)
@@ -1526,8 +1684,24 @@ private final class FeaturedCompactFloatingBarView: UIView, UITextFieldDelegate 
         onOpenDownloadsTapped?()
     }
 
+    @objc private func handleSearchIconTap() {
+        UIView.animate(withDuration: 0.1, animations: {
+            self.searchButtonContainer.transform = CGAffineTransform(scaleX: 0.92, y: 0.92)
+        }) { _ in
+            self.expandSearchBox(animated: true, focusKeyboard: true)
+        }
+    }
+
     @objc private func handleTextChanged(_ sender: UITextField) {
+        refreshActiveQueryDot()
         onSearchTextChanged?(sender.text ?? "")
+    }
+
+    func syncTextSilently(_ text: String) {
+        if searchTextField.text != text {
+            searchTextField.text = text
+        }
+        refreshActiveQueryDot()
     }
 
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
@@ -1739,7 +1913,6 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
         metaLabel.text = "v\(app.version) • \(app.formattedSize) • \(app.developerName)"
         sourceBadgeLabel.text = "📦 \(app.sourceName)"
 
-        // Làm sạch các ký tự xuống dòng phức tạp (\r, \n, bullet list...) để hàng 1 và hàng 2 hiển thị mượt mà trong khung
         let normalizedDesc = app.localizedDescription
             .replacingOccurrences(of: "\r\n", with: " ")
             .replacingOccurrences(of: "\r", with: " ")
@@ -2763,7 +2936,7 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
 }
 
 // ============================================================================
-// MARK: - 🚀 FEATUREDVIEWCONTROLLER (MỞ LÀ HIỆN LUÔN + THANH NỔI THÔNG MINH KHI CUỘN)
+// MARK: - 🚀 FEATUREDVIEWCONTROLLER (MỞ LÀ HIỆN LUÔN + 2 ICON NỔI THÔNG MINH KHI CUỘN)
 // ============================================================================
 
 class FeaturedViewController: UICollectionViewController, UICollectionViewDelegateFlowLayout
@@ -2797,7 +2970,7 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
     private let persistentHeaderView = FeaturedWebScrollHeaderView(frame: .zero)
     private let headerHeight: CGFloat = 168
 
-    // Thanh nổi siêu gọn cố định trên cùng khi người dùng lướt xuống (Chỉ có Icon Đã tải + Khung tìm kiếm có Icon kính lúp)
+    // Thanh nổi thông minh cố định trên cùng khi lướt (Mặc định hiện 2 Icon: Đã tải bên trái + Tìm kiếm bên phải)
     private let compactFloatingBar = FeaturedCompactFloatingBarView(frame: .zero)
     private var isFloatingBarVisible: Bool = false
 
@@ -2815,7 +2988,7 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
         self.overrideUserInterfaceStyle = .light
         self.setupSmartHubMode()
     }
-    
+
     override func viewWillAppear(_ animated: Bool)
     {
         super.viewWillAppear(animated)
@@ -2825,7 +2998,6 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
         self.refreshVisibleHeaderState()
         self.collectionView.reloadData()
 
-        // Nếu có nguồn đang bật mà chưa được nạp vào cache (do lần trước rời tab sớm), tự động đồng bộ nhẹ nhàng
         self.resumeSyncIfAnySourceUncached()
     }
 
@@ -2840,7 +3012,6 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
         super.viewWillDisappear(animated)
         self.dismissActiveKeyboards()
 
-        // Nếu rời sang Tab khác (không phải đang mở popup nội bộ của FeaturedViewController), dừng ngay việc tải 14 nguồn JSON ngầm
         if self.presentedViewController == nil {
             self.pauseBackgroundSyncIfNeeded()
         }
@@ -2858,7 +3029,7 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
 }
 
 // ============================================================================
-// MARK: - 🛠️ THIẾT LẬP GIAO DIỆN WEB SCROLL + THANH NỔI THÔNG MINH
+// MARK: - 🛠️ THIẾT LẬP GIAO DIỆN WEB SCROLL + 2 ICON NỔI THÔNG MINH
 // ============================================================================
 
 private extension FeaturedViewController
@@ -2884,7 +3055,6 @@ private extension FeaturedViewController
         flowLayout.scrollDirection = .vertical
         flowLayout.minimumLineSpacing = 10
         flowLayout.sectionHeadersPinToVisibleBounds = false
-        // Chừa khoảng trống phía trên (headerHeight + 4pt) cho persistentHeaderView cuộn mượt cùng trang
         flowLayout.sectionInset = UIEdgeInsets(top: self.headerHeight + 4, left: 14, bottom: 28, right: 14)
         self.collectionView.setCollectionViewLayout(flowLayout, animated: false)
 
@@ -3023,9 +3193,7 @@ private extension FeaturedViewController
     {
         self.persistentHeaderView.onSearchTextChanged = { [weak self] newText in
             guard let self else { return }
-            if self.compactFloatingBar.searchTextField.text != newText {
-                self.compactFloatingBar.searchTextField.text = newText
-            }
+            self.compactFloatingBar.syncTextSilently(newText)
             self.currentSearchText = newText
             self.currentDisplayLimit = self.pageSize
             self.applySearchAndPagination()
@@ -3057,26 +3225,26 @@ private extension FeaturedViewController
         }
     }
 
-    /// Ẩn/hiện thông minh khung Kho App Game và Thanh nổi khi người dùng lướt xuống / lướt lên
+    /// Ẩn/hiện thông minh:
+    /// - Khi lướt xuống hoặc lướt lên (ngoài vùng đầu trang): Hiện 2 Icon (Đã tải bên trái + Tìm kiếm bên phải).
+    /// - Khi lướt lên trên cùng: Hiện toàn diện Header gốc như mã cũ và ẩn 2 Icon.
     func updateFloatingBarVisibility(for scrollView: UIScrollView)
     {
         let topInset = scrollView.adjustedContentInset.top
         let offsetY = scrollView.contentOffset.y + topInset
 
-        // Khi lướt xuống qua ngưỡng 115pt (khung Kho App Game đã cuộn lên): Hiện thanh nổi gọn đẹp và ẩn hẳn persistentHeaderView
         let shouldShowFloating = offsetY > 115
 
         guard shouldShowFloating != isFloatingBarVisible else { return }
         isFloatingBarVisible = shouldShowFloating
 
         if shouldShowFloating {
-            // Nếu đang gõ ở thanh tìm kiếm chính mà cuộn xuống thì chuyển mượt sang thanh nổi
+            // Nếu đang gõ ở thanh tìm kiếm trên cùng mà người dùng lướt xuống thì hạ bàn phím và hiển thị ở chế độ 2 Icon gọn gàng
             if self.persistentHeaderView.searchTextField.isFirstResponder {
-                self.compactFloatingBar.isHidden = false
-                self.compactFloatingBar.searchTextField.becomeFirstResponder()
-            } else {
-                self.compactFloatingBar.isHidden = false
+                self.persistentHeaderView.searchTextField.resignFirstResponder()
             }
+            self.compactFloatingBar.collapseToIconsOnly(animated: false)
+            self.compactFloatingBar.isHidden = false
 
             UIView.animate(withDuration: 0.22, delay: 0, options: [.curveEaseOut, .beginFromCurrentState]) {
                 self.compactFloatingBar.alpha = 1.0
@@ -3084,10 +3252,8 @@ private extension FeaturedViewController
                 self.persistentHeaderView.alpha = 0.0
             }
         } else {
-            // Khi lướt ngược lên đầu trang: Ẩn thanh nổi và hiện lại khung Kho App Game
-            if self.compactFloatingBar.searchTextField.isFirstResponder {
-                self.persistentHeaderView.searchTextField.becomeFirstResponder()
-            }
+            // Khi lướt lên trên cùng: Thu gọn khung tìm kiếm nổi (nếu đang mở), ẩn 2 icon và hiện lại toàn diện Header gốc
+            self.compactFloatingBar.collapseToIconsOnly(animated: false)
 
             UIView.animate(withDuration: 0.20, delay: 0, options: [.curveEaseIn, .beginFromCurrentState], animations: {
                 self.compactFloatingBar.alpha = 0.0
@@ -3194,7 +3360,6 @@ private extension FeaturedViewController
                 return
             }
 
-            // Nếu không ép làm mới (forceRefresh == false) và tất cả nguồn đang bật đã có sẵn trong RAM cache, không cần tạo Task mạng chạy ngầm
             let needsNetworkSync = forceRefresh || enabledSources.contains {
                 FeaturedSmartRepoStoreManager.shared.cachedApps(for: $0)?.isEmpty ?? true
             }
@@ -3315,7 +3480,6 @@ private extension FeaturedViewController
         }
     }
 
-    /// Lọc & Phân trang mượt mà: Chỉ reload các Cell bên dưới, không đụng vào Header hay Thanh nổi nên bàn phím đứng im 100%
     func applySearchAndPagination()
     {
         let query = currentSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -3459,21 +3623,28 @@ extension FeaturedViewController
 {
     override func scrollViewDidScroll(_ scrollView: UIScrollView)
     {
+        // Nếu người dùng đang kéo tay lướt lên/lướt xuống trong khi khung tìm kiếm nổi đang mở -> thu gọn ngay về lại Icon Tìm kiếm
+        if scrollView.isTracking && self.compactFloatingBar.isSearchExpanded {
+            self.compactFloatingBar.collapseToIconsOnly(animated: true)
+        }
         updateFloatingBarVisibility(for: scrollView)
     }
 
     override func scrollViewWillBeginDragging(_ scrollView: UIScrollView)
     {
-        // Chỉ hạ bàn phím khi chính ngón tay người dùng kéo cuộn trang
+        // Khi người dùng bắt đầu chạm tay lướt lên hoặc lướt xuống tìm app:
+        // Hạ bàn phím và nếu khung tìm kiếm nổi đang mở thì thu về lại Icon Tìm kiếm bên phải
         if scrollView.isTracking {
             dismissActiveKeyboards()
+            if self.compactFloatingBar.isSearchExpanded {
+                self.compactFloatingBar.collapseToIconsOnly(animated: true)
+            }
         }
     }
 
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize
     {
         let width = max(collectionView.bounds.width - 28, 280)
-        // Chiều cao 132pt đảm bảo cả 1 hàng và 2 hàng mô tả đều nằm gọn trong khung, không bao giờ chạm viền đáy
         return CGSize(width: width, height: 132)
     }
 
@@ -3496,6 +3667,9 @@ extension FeaturedViewController
     {
         guard indexPath.item < self.displayedHubApps.count else { return }
         self.dismissActiveKeyboards()
+        if self.compactFloatingBar.isSearchExpanded {
+            self.compactFloatingBar.collapseToIconsOnly(animated: true)
+        }
         let app = self.displayedHubApps[indexPath.item]
 
         let popupVC = FeaturedAppFullInfoPopupViewController(app: app) { [weak self] in
@@ -3530,7 +3704,7 @@ private extension FeaturedViewController
             return browseViewController
         }
     }
-    
+
     @IBSegueAction
     func makeSourceDetailViewController(_ coder: NSCoder, sender: Any?) -> UIViewController?
     {

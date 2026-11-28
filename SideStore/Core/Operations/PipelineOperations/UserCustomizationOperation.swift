@@ -90,7 +90,7 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         self.context.useMainProfile = true
 
         // Nếu chính gói IPA đang cài là SideStore / AltStore thì cài luôn không hỏi
-        if targetAppBundle.isAltStoreApp || targetAppBundle.bundleIdentifier.isAltStoreApp || targetAppBundle.bundleIdentifier.isAltStoreAppID {
+        if targetAppBundle.isAltStoreApp || targetAppBundle.bundleIdentifier.isAltStoreAppID {
             self.setProgress(100)
             return context.customBundleIdentifier != nil ? context.targetBundleIdentifier : nil
         }

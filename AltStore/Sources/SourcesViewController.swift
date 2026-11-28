@@ -997,7 +997,7 @@ private final class GuidesHeroHeaderView: UIView {
 
         let titleLabel = UILabel()
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.text = "Tin Tức Và Sửa Lỗi"
+        titleLabel.text = "Tin tức & Sửa lỗi"
         if let roundedDesc = UIFont.systemFont(ofSize: 23, weight: .heavy).fontDescriptor.withDesign(.rounded) {
             titleLabel.font = UIFont(descriptor: roundedDesc, size: 23)
         } else {

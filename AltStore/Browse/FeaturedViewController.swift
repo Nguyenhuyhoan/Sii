@@ -11,7 +11,7 @@
 import CoreData
 @preconcurrency import Nuke
 
-// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI SETTINGS & MY APPS)
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI SOURCES, SETTINGS & MY APPS)
 private struct FeaturedCSSTheme {
     static let primary = UIColor(red: 44/255, green: 62/255, blue: 80/255, alpha: 1.0)      // #2c3e50
     static let secondary = UIColor(red: 52/255, green: 73/255, blue: 94/255, alpha: 1.0)    // #34495e
@@ -34,6 +34,10 @@ private struct FeaturedCSSTheme {
 
     static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.92).cgColor
     static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.90).cgColor
+
+    // Dải màu Hồng Gradient cho khung Icon tiêu đề (Đồng bộ 100% với SourcesCSSTheme)
+    static let pinkGradientStart = UIColor(red: 255/255, green: 90/255, blue: 165/255, alpha: 1.0).cgColor
+    static let pinkGradientEnd = UIColor(red: 236/255, green: 38/255, blue: 143/255, alpha: 1.0).cgColor
 }
 
 // MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH CHUẨN CSS
@@ -1009,6 +1013,8 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
     private let sourcesPillButton = UIButton(type: .system)
 
     private let centerTitleStack = UIStackView()
+    private let heroIconBadge = UIView()
+    private let heroIconGradient = CAGradientLayer()
     private let heroIconView = UIImageView()
     private let heroTitleLabel = UILabel()
     private let loadingSpinner = UIActivityIndicatorView(style: .medium)
@@ -1021,6 +1027,9 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
     let searchTextField = UITextField()
 
     private let sectionRowStack = UIStackView()
+    private let sectionLeftStack = UIStackView()
+    private let sectionIconBox = UIView()
+    private let sectionIconView = UIImageView()
     private let sectionTitleLabel = UILabel()
     private let quickSwitchSourceButton = UIButton(type: .system)
 
@@ -1044,6 +1053,7 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         heroGradient.frame = heroCard.bounds
+        heroIconGradient.frame = heroIconBadge.bounds
         CATransaction.commit()
     }
 
@@ -1079,7 +1089,7 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
         downloadedPillButton.addTarget(self, action: #selector(handleDownloadsTap), for: .touchUpInside)
         heroCard.addSubview(downloadedPillButton)
 
-        // Nút Nguồn (Nền trắng đồng bộ 100% với nút Đã tải theo đúng yêu cầu)
+        // Nút Nguồn (Nền trắng đồng bộ 100% với nút Đã tải)
         sourcesPillButton.translatesAutoresizingMaskIntoConstraints = false
         sourcesPillButton.setTitle("➕ Nguồn", for: .normal)
         sourcesPillButton.setTitleColor(FeaturedCSSTheme.blue, for: .normal)
@@ -1096,13 +1106,29 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
         centerTitleStack.translatesAutoresizingMaskIntoConstraints = false
         centerTitleStack.axis = .horizontal
         centerTitleStack.alignment = .center
-        centerTitleStack.spacing = 6
+        centerTitleStack.spacing = 7
         heroCard.addSubview(centerTitleStack)
 
-        let iconCfg = UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)
+        // Khung tròn chứa icon bên cạnh chữ "Kho App Game" (Màu nền Gradient Hồng giống SourcesViewController)
+        heroIconBadge.translatesAutoresizingMaskIntoConstraints = false
+        heroIconBadge.layer.cornerRadius = 14
+        heroIconBadge.layer.masksToBounds = true
+        heroIconBadge.layer.borderWidth = 1.2
+        heroIconBadge.layer.borderColor = UIColor.white.withAlphaComponent(0.65).cgColor
+
+        heroIconGradient.colors = [FeaturedCSSTheme.pinkGradientStart, FeaturedCSSTheme.pinkGradientEnd]
+        heroIconGradient.startPoint = CGPoint(x: 0, y: 0)
+        heroIconGradient.endPoint = CGPoint(x: 1, y: 1)
+        heroIconBadge.layer.insertSublayer(heroIconGradient, at: 0)
+
+        heroIconView.translatesAutoresizingMaskIntoConstraints = false
+        let iconCfg = UIImage.SymbolConfiguration(pointSize: 13.5, weight: .bold)
         heroIconView.image = UIImage(systemName: "sparkles.rectangle.stack.fill", withConfiguration: iconCfg)
+            ?? UIImage(systemName: "square.stack.3d.up.fill", withConfiguration: iconCfg)
         heroIconView.tintColor = .white
-        centerTitleStack.addArrangedSubview(heroIconView)
+        heroIconView.contentMode = .scaleAspectFit
+        heroIconBadge.addSubview(heroIconView)
+        centerTitleStack.addArrangedSubview(heroIconBadge)
 
         heroTitleLabel.text = "Kho App Game"
         heroTitleLabel.font = UIFont.systemFont(ofSize: 17.5, weight: .heavy)
@@ -1164,17 +1190,36 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
         searchTextField.addTarget(self, action: #selector(handleTextFieldEditingChanged(_:)), for: .editingChanged)
         searchBoxView.addSubview(searchTextField)
 
-        // 3. Hàng tiêu đề danh sách
+        // 3. Hàng tiêu đề danh sách (Đồng bộ hộp vuông sectionIconBox màu xanh dương nhạt + icon xanh dương đậm)
         sectionRowStack.translatesAutoresizingMaskIntoConstraints = false
         sectionRowStack.axis = .horizontal
         sectionRowStack.alignment = .center
         sectionRowStack.distribution = .equalSpacing
         addSubview(sectionRowStack)
 
+        sectionLeftStack.translatesAutoresizingMaskIntoConstraints = false
+        sectionLeftStack.axis = .horizontal
+        sectionLeftStack.alignment = .center
+        sectionLeftStack.spacing = 7
+
+        sectionIconBox.translatesAutoresizingMaskIntoConstraints = false
+        sectionIconBox.backgroundColor = FeaturedCSSTheme.blue.withAlphaComponent(0.14)
+        sectionIconBox.layer.cornerRadius = 7
+
+        sectionIconView.translatesAutoresizingMaskIntoConstraints = false
+        let secIconConfig = UIImage.SymbolConfiguration(pointSize: 12.5, weight: .heavy)
+        sectionIconView.image = UIImage(systemName: "flame.fill", withConfiguration: secIconConfig)
+        sectionIconView.tintColor = FeaturedCSSTheme.blue
+        sectionIconView.contentMode = .scaleAspectFit
+        sectionIconBox.addSubview(sectionIconView)
+
         sectionTitleLabel.font = UIFont.systemFont(ofSize: 13, weight: .heavy)
         sectionTitleLabel.textColor = FeaturedCSSTheme.primary
-        sectionTitleLabel.text = "🔥 DANH SÁCH ỨNG DỤNG & TRÒ CHƠI"
-        sectionRowStack.addArrangedSubview(sectionTitleLabel)
+        sectionTitleLabel.text = "DANH SÁCH ỨNG DỤNG & TRÒ CHƠI"
+
+        sectionLeftStack.addArrangedSubview(sectionIconBox)
+        sectionLeftStack.addArrangedSubview(sectionTitleLabel)
+        sectionRowStack.addArrangedSubview(sectionLeftStack)
 
         quickSwitchSourceButton.setTitle("🗂️ Chọn nguồn", for: .normal)
         quickSwitchSourceButton.setTitleColor(FeaturedCSSTheme.purple, for: .normal)
@@ -1200,6 +1245,11 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
             sourcesPillButton.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -10),
             sourcesPillButton.centerYAnchor.constraint(equalTo: downloadedPillButton.centerYAnchor),
             sourcesPillButton.heightAnchor.constraint(equalToConstant: 30),
+
+            heroIconBadge.widthAnchor.constraint(equalToConstant: 28),
+            heroIconBadge.heightAnchor.constraint(equalToConstant: 28),
+            heroIconView.centerXAnchor.constraint(equalTo: heroIconBadge.centerXAnchor),
+            heroIconView.centerYAnchor.constraint(equalTo: heroIconBadge.centerYAnchor),
 
             centerTitleStack.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
             centerTitleStack.centerYAnchor.constraint(equalTo: downloadedPillButton.centerYAnchor),
@@ -1227,6 +1277,11 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
             searchTextField.topAnchor.constraint(equalTo: searchBoxView.topAnchor),
             searchTextField.bottomAnchor.constraint(equalTo: searchBoxView.bottomAnchor),
 
+            sectionIconBox.widthAnchor.constraint(equalToConstant: 24),
+            sectionIconBox.heightAnchor.constraint(equalToConstant: 24),
+            sectionIconView.centerXAnchor.constraint(equalTo: sectionIconBox.centerXAnchor),
+            sectionIconView.centerYAnchor.constraint(equalTo: sectionIconBox.centerYAnchor),
+
             sectionRowStack.topAnchor.constraint(equalTo: searchBoxView.bottomAnchor, constant: 8),
             sectionRowStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
             sectionRowStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
@@ -1252,7 +1307,7 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
         downloadedPillButton.setTitle(dlTitle, for: .normal)
 
         filterStatusPillButton.setTitle(filterText, for: .normal)
-        sectionTitleLabel.text = "🔥 DANH SÁCH APP & GAME (\(totalAppsCount))"
+        sectionTitleLabel.text = "DANH SÁCH APP & GAME (\(totalAppsCount))"
     }
 
     @objc private func handleTextFieldEditingChanged(_ sender: UITextField) {
@@ -1985,7 +2040,9 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private let emptyLabel = UILabel()
     private let heroGradientLayer = CAGradientLayer()
+    private let heroIconGradientLayer = CAGradientLayer()
     private weak var heroCardRef: UIView?
+    private weak var heroIconBadgeRef: UIView?
     private weak var clearAllBtnRef: UIButton?
     private var entries: [FeaturedDownloadedIPAEntry] = []
 
@@ -2050,12 +2107,15 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         if let card = heroCardRef {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
             heroGradientLayer.frame = card.bounds
-            CATransaction.commit()
         }
+        if let badge = heroIconBadgeRef {
+            heroIconGradientLayer.frame = badge.bounds
+        }
+        CATransaction.commit()
     }
 
     private func setupScrollableHeroHeader() {
@@ -2089,13 +2149,41 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
         closeBtn.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
         heroCard.addSubview(closeBtn)
 
+        let titleStack = UIStackView()
+        titleStack.translatesAutoresizingMaskIntoConstraints = false
+        titleStack.axis = .horizontal
+        titleStack.alignment = .center
+        titleStack.spacing = 7
+        heroCard.addSubview(titleStack)
+
+        let iconBadge = UIView()
+        iconBadge.translatesAutoresizingMaskIntoConstraints = false
+        iconBadge.layer.cornerRadius = 13
+        iconBadge.layer.masksToBounds = true
+        iconBadge.layer.borderWidth = 1.2
+        iconBadge.layer.borderColor = UIColor.white.withAlphaComponent(0.65).cgColor
+        self.heroIconBadgeRef = iconBadge
+
+        heroIconGradientLayer.colors = [FeaturedCSSTheme.pinkGradientStart, FeaturedCSSTheme.pinkGradientEnd]
+        heroIconGradientLayer.startPoint = CGPoint(x: 0, y: 0)
+        heroIconGradientLayer.endPoint = CGPoint(x: 1, y: 1)
+        iconBadge.layer.insertSublayer(heroIconGradientLayer, at: 0)
+
+        let iconView = UIImageView()
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        let symCfg = UIImage.SymbolConfiguration(pointSize: 12.5, weight: .bold)
+        iconView.image = UIImage(systemName: "tray.and.arrow.down.fill", withConfiguration: symCfg)
+        iconView.tintColor = .white
+        iconBadge.addSubview(iconView)
+
         let titleLabel = UILabel()
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.text = "📥 File IPA Đã Tải"
+        titleLabel.text = "File IPA Đã Tải"
         titleLabel.font = UIFont.systemFont(ofSize: 16.5, weight: .heavy)
         titleLabel.textColor = .white
         titleLabel.textAlignment = .center
-        heroCard.addSubview(titleLabel)
+
+        titleStack.addArrangedSubview(iconBadge)
+        titleStack.addArrangedSubview(titleLabel)
 
         let clearBtn = UIButton(type: .system)
         clearBtn.translatesAutoresizingMaskIntoConstraints = false
@@ -2123,10 +2211,15 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
             clearBtn.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
             clearBtn.heightAnchor.constraint(equalToConstant: 28),
 
-            titleLabel.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
-            titleLabel.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
-            titleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: closeBtn.trailingAnchor, constant: 8),
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: clearBtn.leadingAnchor, constant: -8)
+            iconBadge.widthAnchor.constraint(equalToConstant: 26),
+            iconBadge.heightAnchor.constraint(equalToConstant: 26),
+            iconView.centerXAnchor.constraint(equalTo: iconBadge.centerXAnchor),
+            iconView.centerYAnchor.constraint(equalTo: iconBadge.centerYAnchor),
+
+            titleStack.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
+            titleStack.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
+            titleStack.leadingAnchor.constraint(greaterThanOrEqualTo: closeBtn.trailingAnchor, constant: 8),
+            titleStack.trailingAnchor.constraint(lessThanOrEqualTo: clearBtn.leadingAnchor, constant: -8)
         ])
 
         tableView.tableHeaderView = headerContainer
@@ -2377,7 +2470,9 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
     private let backgroundView = FeaturedGradientBackgroundView(frame: .zero)
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private let heroGradientLayer = CAGradientLayer()
+    private let heroIconGradientLayer = CAGradientLayer()
     private weak var heroCardRef: UIView?
+    private weak var heroIconBadgeRef: UIView?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -2415,12 +2510,15 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         if let card = heroCardRef {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
             heroGradientLayer.frame = card.bounds
-            CATransaction.commit()
         }
+        if let badge = heroIconBadgeRef {
+            heroIconGradientLayer.frame = badge.bounds
+        }
+        CATransaction.commit()
     }
 
     private func setupScrollableHeroHeader() {
@@ -2454,13 +2552,42 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
         closeBtn.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
         heroCard.addSubview(closeBtn)
 
+        let titleStack = UIStackView()
+        titleStack.translatesAutoresizingMaskIntoConstraints = false
+        titleStack.axis = .horizontal
+        titleStack.alignment = .center
+        titleStack.spacing = 7
+        heroCard.addSubview(titleStack)
+
+        let iconBadge = UIView()
+        iconBadge.translatesAutoresizingMaskIntoConstraints = false
+        iconBadge.layer.cornerRadius = 13
+        iconBadge.layer.masksToBounds = true
+        iconBadge.layer.borderWidth = 1.2
+        iconBadge.layer.borderColor = UIColor.white.withAlphaComponent(0.65).cgColor
+        self.heroIconBadgeRef = iconBadge
+
+        heroIconGradientLayer.colors = [FeaturedCSSTheme.pinkGradientStart, FeaturedCSSTheme.pinkGradientEnd]
+        heroIconGradientLayer.startPoint = CGPoint(x: 0, y: 0)
+        heroIconGradientLayer.endPoint = CGPoint(x: 1, y: 1)
+        iconBadge.layer.insertSublayer(heroIconGradientLayer, at: 0)
+
+        let iconView = UIImageView()
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        let symCfg = UIImage.SymbolConfiguration(pointSize: 12.5, weight: .bold)
+        iconView.image = UIImage(systemName: "externaldrive.badge.plus", withConfiguration: symCfg)
+            ?? UIImage(systemName: "folder.fill.badge.plus", withConfiguration: symCfg)
+        iconView.tintColor = .white
+        iconBadge.addSubview(iconView)
+
         let titleLabel = UILabel()
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.text = "🗂️ Quản Lý Nguồn App"
+        titleLabel.text = "Quản Lý Nguồn App"
         titleLabel.font = UIFont.systemFont(ofSize: 16.5, weight: .heavy)
         titleLabel.textColor = .white
         titleLabel.textAlignment = .center
-        heroCard.addSubview(titleLabel)
+
+        titleStack.addArrangedSubview(iconBadge)
+        titleStack.addArrangedSubview(titleLabel)
 
         let addBtn = UIButton(type: .system)
         addBtn.translatesAutoresizingMaskIntoConstraints = false
@@ -2487,10 +2614,15 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
             addBtn.widthAnchor.constraint(equalToConstant: 28),
             addBtn.heightAnchor.constraint(equalToConstant: 28),
 
-            titleLabel.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
-            titleLabel.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
-            titleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: closeBtn.trailingAnchor, constant: 8),
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: addBtn.leadingAnchor, constant: -8)
+            iconBadge.widthAnchor.constraint(equalToConstant: 26),
+            iconBadge.heightAnchor.constraint(equalToConstant: 26),
+            iconView.centerXAnchor.constraint(equalTo: iconBadge.centerXAnchor),
+            iconView.centerYAnchor.constraint(equalTo: iconBadge.centerYAnchor),
+
+            titleStack.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
+            titleStack.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
+            titleStack.leadingAnchor.constraint(greaterThanOrEqualTo: closeBtn.trailingAnchor, constant: 8),
+            titleStack.trailingAnchor.constraint(lessThanOrEqualTo: addBtn.leadingAnchor, constant: -8)
         ])
 
         tableView.tableHeaderView = headerContainer

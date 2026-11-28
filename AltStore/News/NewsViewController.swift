@@ -27,9 +27,9 @@ private enum CSSTheme {
     static let red = SwiftUI.Color(red: 220/255, green: 53/255, blue: 69/255)          // #dc3545 (--primary-red)
     static let magenta = SwiftUI.Color(red: 255/255, green: 0/255, blue: 255/255)      // #ff00ff
 
-    /// Màu Hồng Phấn nổi bật cho icon tiêu đề SideStore
-    static let pastelPink = SwiftUI.Color(red: 255/255, green: 168/255, blue: 216/255) // #ffa8d8
-    static let pastelPinkGlow = SwiftUI.Color(red: 255/255, green: 105/255, blue: 180/255) // #ff69b4
+    /// Màu Gradient Hồng cho Icon tiêu đề "Tổng quan & Tính năng" (Đồng bộ 100% với SourcesViewController)
+    static let pinkGradientStart = SwiftUI.Color(red: 255/255, green: 90/255, blue: 165/255) // #ff5aa5
+    static let pinkGradientEnd = SwiftUI.Color(red: 236/255, green: 38/255, blue: 143/255)   // #ec268f
 
     /// Màu Đen Tuyền (#000000) cho toàn bộ chữ chính và chữ nhỏ giúp độ tương phản tuyệt đối, cực kỳ dễ đọc
     static let pureBlack = SwiftUI.Color(red: 0/255, green: 0/255, blue: 0/255)        // #000000
@@ -129,7 +129,7 @@ private struct CSSBounceButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - 🌟 HERO BANNER ĐẦU TRANG (ICON HỒNG PHẤN NỔI BẬT)
+// MARK: - 🌟 HERO BANNER ĐẦU TRANG (ĐỒNG BỘ MÀU ICON VỚI SOURCESVIEWCONTROLLER)
 private struct CSSHeroBannerView: SwiftUI.View {
     let title: String
     let subtitle: String
@@ -143,37 +143,29 @@ private struct CSSHeroBannerView: SwiftUI.View {
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    SwiftUI.Color.white.opacity(0.96),
-                                    CSSTheme.pastelPink.opacity(0.38)
+                                    CSSTheme.pinkGradientStart,
+                                    CSSTheme.pinkGradientEnd
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
-                        .frame(width: 34, height: 34)
+                        .frame(width: 32, height: 32)
                         .overlay(
                             Circle()
-                                .stroke(CSSTheme.pastelPink, lineWidth: 1.5)
+                                .stroke(SwiftUI.Color.white.opacity(0.65), lineWidth: 1.2)
                         )
-                        .shadow(color: CSSTheme.pastelPinkGlow.opacity(0.55), radius: 6, x: 0, y: 2)
 
                     SwiftUI.Image(systemName: "shield.lefthalf.filled.badge.checkmark")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [
-                                    CSSTheme.pastelPinkGlow,
-                                    SwiftUI.Color(red: 236/255, green: 64/255, blue: 152/255)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+                        .font(.system(size: 14.5, weight: .bold))
+                        .foregroundColor(.white)
                 }
 
                 SwiftUI.Text(title)
-                    .font(.system(size: 25, weight: .heavy, design: .rounded))
+                    .font(.system(size: 23, weight: .heavy, design: .rounded))
                     .foregroundColor(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                     .multilineTextAlignment(.center)
                     .shadow(color: .black.opacity(0.28), radius: 4, x: 0, y: 2)
             }
@@ -539,7 +531,7 @@ struct SystemCheckDashboardView: SwiftUI.View {
             VStack(spacing: 20) {
                 // Khối Hero Banner đồng bộ 100% với các màn hình trước
                 CSSHeroBannerView(
-                    title: "SideStore",
+                    title: "Tổng quan & Tính năng",
                     subtitle: "Tự động làm mới ứng dụng qua 4G/5G & Hướng dẫn Phím tắt"
                 )
                 .padding(.top, 4)

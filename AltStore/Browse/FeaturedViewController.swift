@@ -134,6 +134,10 @@ private struct FeaturedDownloadedIPAEntry: Codable, Equatable, Sendable {
 // MARK: - 🧠 BỘ GIẢI MÃ ĐA NĂNG (UNIVERSAL JSON PARSER CHO MỌI CHUẨN REPO JSON)
 private enum FeaturedUniversalRepoParser {
     static func parse(data: Data, fallbackSource: FeaturedRepoSource) -> (repoName: String, repoIcon: String?, apps: [FeaturedAppItem]) {
+        guard !Task.isCancelled else {
+            return (fallbackSource.displayName, fallbackSource.iconURLString, [])
+        }
+
         guard let jsonObject = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]),
               let rootDict = jsonObject as? [String: Any] else {
             return (fallbackSource.displayName, fallbackSource.iconURLString, [])
@@ -162,6 +166,10 @@ private enum FeaturedUniversalRepoParser {
         parsedApps.reserveCapacity(min(rawApps.count, 1200))
 
         for (idx, dict) in rawApps.enumerated() {
+            if idx % 100 == 0 && Task.isCancelled {
+                return (repoName, repoIcon, [])
+            }
+
             let versionsArray = dict["versions"] as? [[String: Any]]
             let latestVersionDict = versionsArray?.first
 
@@ -813,6 +821,7 @@ private final class FeaturedSmartRepoStoreManager {
     private func saveSourceAppsToDiskCache(normalizedID: String, apps: [FeaturedAppItem]) {
         let fileURL = diskCacheFileURL(for: normalizedID)
         Task.detached(priority: .utility) {
+            guard !Task.isCancelled else { return }
             if let encoded = try? JSONEncoder().encode(apps) {
                 try? encoded.write(to: fileURL, options: .atomic)
             }
@@ -930,6 +939,10 @@ private final class FeaturedSmartRepoStoreManager {
 
     func fetchApps(for source: FeaturedRepoSource, forceRefresh: Bool = false) async -> [FeaturedAppItem] {
         let id = source.normalizedID
+        if Task.isCancelled {
+            return memoryCache[id] ?? []
+        }
+
         if !forceRefresh, let cached = memoryCache[id], !cached.isEmpty {
             return cached
         }
@@ -944,13 +957,25 @@ private final class FeaturedSmartRepoStoreManager {
             request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
 
             let (data, response) = try await URLSession.shared.data(for: request)
+            if Task.isCancelled {
+                return memoryCache[id] ?? []
+            }
             if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
                 return memoryCache[id] ?? []
             }
 
-            let parsed = await Task.detached(priority: .utility) {
+            let parseTask = Task.detached(priority: .utility) {
                 FeaturedUniversalRepoParser.parse(data: data, fallbackSource: source)
-            }.value
+            }
+            let parsed = await withTaskCancellationHandler {
+                await parseTask.value
+            } onCancel: {
+                parseTask.cancel()
+            }
+
+            if Task.isCancelled {
+                return memoryCache[id] ?? []
+            }
 
             if !parsed.apps.isEmpty {
                 memoryCache[id] = parsed.apps
@@ -1426,6 +1451,7 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
     private var progressWidthConstraint: NSLayoutConstraint!
 
     private var currentDownloadKey: String?
+    private var imageLoadTask: Task<Void, Never>?
     var onActionTapped: (() -> Void)?
 
     override init(frame: CGRect) {
@@ -1436,6 +1462,10 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         setupViews()
+    }
+
+    deinit {
+        imageLoadTask?.cancel()
     }
 
     private func setupViews() {
@@ -1580,6 +1610,8 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        imageLoadTask?.cancel()
+        imageLoadTask = nil
         iconImageView.image = UIImage(systemName: "app.fill")?.withTintColor(FeaturedCSSTheme.blue.withAlphaComponent(0.35), renderingMode: .alwaysOriginal)
         currentDownloadKey = nil
     }
@@ -1596,6 +1628,7 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
     }
 
     func configure(with app: FeaturedAppItem, isDownloaded: Bool, activeProgress: Double?) {
+        imageLoadTask?.cancel()
         let targetKey = app.downloadURL.absoluteString
         currentDownloadKey = targetKey
         nameLabel.text = app.name
@@ -1629,10 +1662,10 @@ private final class FeaturedHubAppCollectionViewCell: UICollectionViewCell {
 
         iconImageView.image = UIImage(systemName: "app.badge.fill")?.withTintColor(FeaturedCSSTheme.blue.withAlphaComponent(0.35), renderingMode: .alwaysOriginal)
         if let iconURL = app.iconURL {
-            Task { @MainActor [weak self] in
-                guard let self else { return }
+            imageLoadTask = Task { @MainActor [weak self] in
+                guard let self, !Task.isCancelled else { return }
                 if let image = try? await ImagePipeline.shared.image(for: iconURL) {
-                    if self.currentDownloadKey == targetKey {
+                    if !Task.isCancelled && self.currentDownloadKey == targetKey {
                         self.iconImageView.image = image
                     }
                 }
@@ -1719,6 +1752,7 @@ private final class FeaturedAppFullInfoPopupViewController: UIViewController {
     private let buttonStack = UIStackView()
     private let closeButton = UIButton(type: .system)
     private let actionButton = UIButton(type: .system)
+    private var iconLoadTask: Task<Void, Never>?
 
     init(app: FeaturedAppItem, onPrimaryAction: @escaping () -> Void) {
         self.app = app
@@ -1732,11 +1766,21 @@ private final class FeaturedAppFullInfoPopupViewController: UIViewController {
         fatalError("init(coder:) has not been implemented")
     }
 
+    deinit {
+        iconLoadTask?.cancel()
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         overrideUserInterfaceStyle = .light
         setupViews()
         populateAppData()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        iconLoadTask?.cancel()
+        iconLoadTask = nil
     }
 
     private func setupViews() {
@@ -1901,9 +1945,12 @@ private final class FeaturedAppFullInfoPopupViewController: UIViewController {
 
         iconImageView.image = UIImage(systemName: "app.badge.fill")?.withTintColor(FeaturedCSSTheme.blue.withAlphaComponent(0.35), renderingMode: .alwaysOriginal)
         if let iconURL = app.iconURL {
-            Task { @MainActor [weak self] in
+            iconLoadTask = Task { @MainActor [weak self] in
+                guard let self, !Task.isCancelled else { return }
                 if let image = try? await ImagePipeline.shared.image(for: iconURL) {
-                    self?.iconImageView.image = image
+                    if !Task.isCancelled {
+                        self.iconImageView.image = image
+                    }
                 }
             }
         }
@@ -1941,6 +1988,10 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
     private weak var heroCardRef: UIView?
     private weak var clearAllBtnRef: UIButton?
     private var entries: [FeaturedDownloadedIPAEntry] = []
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -2623,6 +2674,12 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
 
     // MARK: - Lifecycle
 
+    deinit
+    {
+        self.backgroundSyncTask?.cancel()
+        NotificationCenter.default.removeObserver(self)
+    }
+
     override func viewDidLoad()
     {
         super.viewDidLoad()
@@ -2638,12 +2695,26 @@ class FeaturedViewController: UICollectionViewController, UICollectionViewDelega
         self.configureCompactNavigationTitle()
         self.refreshVisibleHeaderState()
         self.collectionView.reloadData()
+
+        // Nếu có nguồn đang bật mà chưa được nạp vào cache (do lần trước rời tab sớm), tự động đồng bộ nhẹ nhàng
+        self.resumeSyncIfAnySourceUncached()
     }
 
     override func viewDidAppear(_ animated: Bool) 
     {
         super.viewDidAppear(animated)
         self.navigationController?.setNavigationBarHidden(true, animated: false)
+    }
+
+    override func viewWillDisappear(_ animated: Bool)
+    {
+        super.viewWillDisappear(animated)
+        self.dismissActiveKeyboards()
+
+        // Nếu rời sang Tab khác (không phải đang mở popup nội bộ của FeaturedViewController), dừng ngay việc tải 14 nguồn JSON ngầm
+        if self.presentedViewController == nil {
+            self.pauseBackgroundSyncIfNeeded()
+        }
     }
 
     override func viewDidLayoutSubviews()
@@ -2728,8 +2799,64 @@ private extension FeaturedViewController
             name: FeaturedIPADownloadCenter.progressDidChangeNotification,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppWillEnterForeground),
+            name: UIApplication.willEnterForegroundNotification,
+            object: nil
+        )
 
         loadAppsForCurrentFilter(forceRefresh: false)
+    }
+
+    @objc func handleAppDidEnterBackground()
+    {
+        pauseBackgroundSyncIfNeeded()
+    }
+
+    @objc func handleAppWillEnterForeground()
+    {
+        guard self.isViewLoaded && self.view.window != nil else { return }
+        resumeSyncIfAnySourceUncached()
+    }
+
+    func pauseBackgroundSyncIfNeeded()
+    {
+        self.backgroundSyncTask?.cancel()
+        self.backgroundSyncTask = nil
+        if self.isFetchingSources {
+            self.isFetchingSources = false
+            #if !os(tvOS)
+            self.collectionView.refreshControl?.endRefreshing()
+            #endif
+            self.refreshVisibleHeaderState()
+        }
+    }
+
+    func resumeSyncIfAnySourceUncached()
+    {
+        guard !self.isFetchingSources, self.backgroundSyncTask == nil else { return }
+
+        switch self.currentFilter {
+        case .allEnabled:
+            let enabledSources = FeaturedSmartRepoStoreManager.shared.sources.filter { $0.isEnabledInAllTab }
+            let hasUncachedSource = enabledSources.contains {
+                (FeaturedSmartRepoStoreManager.shared.cachedApps(for: $0)?.isEmpty ?? true)
+            }
+            if hasUncachedSource {
+                self.loadAppsForCurrentFilter(forceRefresh: false)
+            }
+        case .specificSource(let source):
+            if FeaturedSmartRepoStoreManager.shared.cachedApps(for: source)?.isEmpty ?? true {
+                self.loadAppsForCurrentFilter(forceRefresh: false)
+            }
+        }
     }
 
     func setupCompactFloatingBar()
@@ -2918,6 +3045,7 @@ private extension FeaturedViewController
     func loadAppsForCurrentFilter(forceRefresh: Bool)
     {
         backgroundSyncTask?.cancel()
+        backgroundSyncTask = nil
 
         switch currentFilter {
         case .allEnabled:
@@ -2937,11 +3065,24 @@ private extension FeaturedViewController
                 return
             }
 
+            // Nếu không ép làm mới (forceRefresh == false) và tất cả nguồn đang bật đã có sẵn trong RAM cache, không cần tạo Task mạng chạy ngầm
+            let needsNetworkSync = forceRefresh || enabledSources.contains {
+                FeaturedSmartRepoStoreManager.shared.cachedApps(for: $0)?.isEmpty ?? true
+            }
+            guard needsNetworkSync else {
+                self.isFetchingSources = false
+                #if !os(tvOS)
+                self.collectionView.refreshControl?.endRefreshing()
+                #endif
+                self.refreshVisibleHeaderState()
+                return
+            }
+
             self.isFetchingSources = true
             self.refreshVisibleHeaderState()
 
             backgroundSyncTask = Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, !Task.isCancelled else { return }
 
                 var sourceBuckets: [String: [FeaturedAppItem]] = [:]
                 for src in enabledSources {
@@ -2952,8 +3093,10 @@ private extension FeaturedViewController
 
                 await withTaskGroup(of: (String, [FeaturedAppItem]).self) { group in
                     for src in enabledSources {
+                        if Task.isCancelled { break }
                         let shouldRefreshNetwork = forceRefresh || (FeaturedSmartRepoStoreManager.shared.cachedApps(for: src)?.isEmpty ?? true)
                         group.addTask {
+                            if Task.isCancelled { return (src.normalizedID, []) }
                             let fetched = await FeaturedSmartRepoStoreManager.shared.fetchApps(for: src, forceRefresh: shouldRefreshNetwork)
                             return (src.normalizedID, fetched)
                         }
@@ -2961,7 +3104,10 @@ private extension FeaturedViewController
 
                     var lastUIRefreshTime = Date.distantPast
                     for await (normalizedID, fetchedApps) in group {
-                        if Task.isCancelled { return }
+                        if Task.isCancelled {
+                            group.cancelAll()
+                            return
+                        }
                         guard !fetchedApps.isEmpty else { continue }
 
                         let previousCount = sourceBuckets[normalizedID]?.count ?? 0
@@ -2997,6 +3143,7 @@ private extension FeaturedViewController
                 }
 
                 self.isFetchingSources = false
+                self.backgroundSyncTask = nil
                 #if !os(tvOS)
                 self.collectionView.refreshControl?.endRefreshing()
                 #endif
@@ -3008,12 +3155,21 @@ private extension FeaturedViewController
             self.allLoadedHubApps = instantApps
             self.applySearchAndPagination()
 
+            let shouldRefreshNetwork = forceRefresh || (FeaturedSmartRepoStoreManager.shared.cachedApps(for: source)?.isEmpty ?? true)
+            guard shouldRefreshNetwork else {
+                self.isFetchingSources = false
+                #if !os(tvOS)
+                self.collectionView.refreshControl?.endRefreshing()
+                #endif
+                self.refreshVisibleHeaderState()
+                return
+            }
+
             self.isFetchingSources = true
             self.refreshVisibleHeaderState()
 
             backgroundSyncTask = Task { @MainActor [weak self] in
-                guard let self else { return }
-                let shouldRefreshNetwork = forceRefresh || (FeaturedSmartRepoStoreManager.shared.cachedApps(for: source)?.isEmpty ?? true)
+                guard let self, !Task.isCancelled else { return }
                 let apps = await FeaturedSmartRepoStoreManager.shared.fetchApps(for: source, forceRefresh: shouldRefreshNetwork)
                 if Task.isCancelled { return }
 
@@ -3021,6 +3177,7 @@ private extension FeaturedViewController
                     self.allLoadedHubApps = apps
                 }
                 self.isFetchingSources = false
+                self.backgroundSyncTask = nil
                 #if !os(tvOS)
                 self.collectionView.refreshControl?.endRefreshing()
                 #endif
@@ -3057,18 +3214,22 @@ private extension FeaturedViewController
 
     @objc func handleDownloadStateChanged(_ notification: Notification)
     {
-        if let errorMsg = notification.userInfo?["error"] as? String {
+        if let errorMsg = notification.userInfo?["error"] as? String,
+           self.isViewLoaded && self.view.window != nil {
             let alert = UIAlertController(title: "Lỗi tải file IPA", message: errorMsg, preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: "Đóng", style: .cancel))
             present(alert, animated: true)
         }
         refreshVisibleHeaderState()
-        collectionView.reloadData()
+        if self.isViewLoaded && self.view.window != nil {
+            collectionView.reloadData()
+        }
     }
 
     @objc func handleDownloadProgressChanged(_ notification: Notification)
     {
-        guard let key = notification.userInfo?["key"] as? String,
+        guard self.isViewLoaded && self.view.window != nil,
+              let key = notification.userInfo?["key"] as? String,
               let progress = notification.userInfo?["progress"] as? Double else { return }
 
         for indexPath in collectionView.indexPathsForVisibleItems {

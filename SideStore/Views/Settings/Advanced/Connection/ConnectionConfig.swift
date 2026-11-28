@@ -1,3 +1,4 @@
+
 //
 //  ConnectionConfig.swift
 //  SideStore
@@ -12,8 +13,8 @@ import Combine
 final class ConnectionConfig: ObservableObject {
     static let shared = ConnectionConfig()
 
-    // yeah we dont use default coz we expect auto discovery to find it
-    private static var defaultOverrideIP: String { "" }     
+    // Ép cứng mặc định Device IP về 10.7.0.1 cho LocalDevVPN
+    private static var defaultOverrideIP: String { "10.7.0.1" }     
     private static var defaultRemoteServerIP: String { AppConstants.Connection.defaultRemoteServerIP }
     private static var defaultWireGuardServerHost: String { AppConstants.Proxy.address }
     private static var defaultWireGuardServerPort: UInt16 { AppConstants.Proxy.defaultPort }
@@ -47,7 +48,12 @@ final class ConnectionConfig: ObservableObject {
     }
 
     private static var overrideIPStorage: String {
-        get { UserDefaults.standard.tunnelOverridePeerIp ?? defaultOverrideIP }
+        get {
+            if let saved = UserDefaults.standard.tunnelOverridePeerIp?.trimmingCharacters(in: .whitespacesAndNewlines), !saved.isEmpty {
+                return saved
+            }
+            return defaultOverrideIP
+        }
         set { UserDefaults.standard.tunnelOverridePeerIp = newValue }
     }
 

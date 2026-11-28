@@ -2465,7 +2465,7 @@ private extension SettingsViewController {
         
         let titleLabel = UILabel()
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.text = "SideStore"
+        titleLabel.text = "Cài đặt"
         titleLabel.font = UIFont.systemFont(ofSize: 25, weight: .heavy)
         titleLabel.textColor = CSSTheme.white
         titleLabel.layer.shadowColor = UIColor.black.cgColor

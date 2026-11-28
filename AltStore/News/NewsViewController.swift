@@ -483,7 +483,6 @@ extension NewsViewController: UINavigationControllerDelegate, UIGestureRecognize
     }
 
     private func updateFloatingBackButton(in nav: UINavigationController, show: Bool) {
-        // Mục 6: Không tạo thừa nút Back vô hình khi đang ở màn hình gốc
         if !show && self.floatingBackButton == nil {
             return
         }
@@ -582,11 +581,17 @@ final class SystemCheckViewModel: ObservableObject {
     private var activeTabPeriodicTask: Task<Void, Never>? = nil
 
     private var isViewVisible: Bool = false
+    private var isAppActive: Bool = (UIApplication.shared.applicationState == .active)
     private var isChecking: Bool = false
     private var needsAnotherCheck: Bool = false
     private var pendingForceVerify: Bool = false
     private var lastInternalConfigWriteTime: TimeInterval = 0
     private var latestSnapshot: SystemInterfaceSnapshot? = nil
+
+    /// Chỉ hoạt động khi người dùng vừa đang đứng ở Tab này VÀ màn hình đang sáng (Active)
+    private var isEffectiveVisible: Bool {
+        isViewVisible && isAppActive
+    }
 
     private var lastVerifiedPairingSuccess: Bool = UserDefaults.standard.bool(forKey: verifiedPairingCacheKey) {
         didSet {
@@ -648,7 +653,7 @@ final class SystemCheckViewModel: ObservableObject {
             PairingBackgroundKeepAliveManager.shared.beginKeepAlive()
         } else {
             PairingBackgroundKeepAliveManager.shared.endKeepAlive()
-            if isViewVisible {
+            if isEffectiveVisible {
                 Task { await checkAllStatuses(forceVerify: true) }
             }
         }
@@ -676,11 +681,15 @@ final class SystemCheckViewModel: ObservableObject {
         wifiMonitor.cancel()
     }
 
-    /// Mục 1: Khóa 100% khi rời Tab + Kiểm tra ngay khi mở lại Tab và duy trì kiểm tra nhịp độ thưa khi vẫn đang đứng trong Tab
+    /// Khóa 100% khi rời Tab hoặc tắt màn hình + Kiểm tra ngay khi mở lại Tab
     func setViewVisible(_ visible: Bool) {
         guard isViewVisible != visible else { return }
         isViewVisible = visible
-        if visible {
+        handleVisibilityOrLifecycleChanged()
+    }
+
+    private func handleVisibilityOrLifecycleChanged() {
+        if isEffectiveVisible {
             if !isWirelessPairingActive {
                 Task { await checkAllStatuses(forceVerify: false) }
             } else {
@@ -696,10 +705,10 @@ final class SystemCheckViewModel: ObservableObject {
         activeTabPeriodicTask?.cancel()
         activeTabPeriodicTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                // Nhịp độ thưa nhẹ nhàng 8 giây/lần khi người dùng vẫn đang đứng ở trong Tab
+                // Nhịp độ thưa nhẹ nhàng 8 giây/lần khi người dùng vẫn đang mở màn hình ở trong Tab
                 try? await Task.sleep(nanoseconds: 8_000_000_000)
                 guard !Task.isCancelled, let self = self else { break }
-                guard self.isViewVisible,
+                guard self.isEffectiveVisible,
                       !self.isWirelessPairingActive,
                       !self.isChecking,
                       !self.isWithinInternalWriteCooldown else {
@@ -718,11 +727,11 @@ final class SystemCheckViewModel: ObservableObject {
     /// Quét cổng mạng hoàn toàn trên nhân tiết kiệm điện (.utility), không bao giờ làm khựng Main Thread
     private func refreshSnapshotAsyncAndApply() {
         Task { @MainActor [weak self] in
-            guard let self = self, self.isViewVisible else { return }
+            guard let self = self, self.isEffectiveVisible else { return }
             let snap = await Task.detached(priority: .utility) {
                 Self.scanSystemInterfaces()
             }.value
-            guard self.isViewVisible else { return }
+            guard self.isEffectiveVisible else { return }
             self.latestSnapshot = snap
             self.updateInstantStatus(existingSnapshot: snap)
         }
@@ -733,12 +742,12 @@ final class SystemCheckViewModel: ObservableObject {
     }
 
     private func setupRealtimeListeners() {
-        // Mục 1: Giãn thưa thời gian debounce lên 850ms để sóng mạng ổn định và không kiểm tra dồn dập
+        // Giãn thưa thời gian debounce lên 850ms để sóng mạng ổn định và không kiểm tra dồn dập
         networkChangeSubject
             .debounce(for: .milliseconds(850), scheduler: DispatchQueue.main)
             .sink { [weak self] forceVerify in
                 guard let self = self,
-                      self.isViewVisible,
+                      self.isEffectiveVisible,
                       !self.isChecking,
                       !self.isWirelessPairingActive,
                       !self.isWithinInternalWriteCooldown else { return }
@@ -762,8 +771,7 @@ final class SystemCheckViewModel: ObservableObject {
                     self.usesWifiPath = usesWifi
                     changed = true
                 }
-                // Mục 1: Khóa hoàn toàn tính toán & cập nhật nếu người dùng không mở tab này
-                guard changed, self.isViewVisible, !self.isWirelessPairingActive else { return }
+                guard changed, self.isEffectiveVisible, !self.isWirelessPairingActive else { return }
                 if let snap = self.latestSnapshot {
                     self.updateInstantStatus(existingSnapshot: snap)
                 }
@@ -780,8 +788,7 @@ final class SystemCheckViewModel: ObservableObject {
                 self.didReceiveCellularMonitorUpdate = true
                 guard firstUpdate || self.isCellularPathSatisfied != cellSatisfied else { return }
                 self.isCellularPathSatisfied = cellSatisfied
-                // Mục 1: Khóa hoàn toàn tính toán & cập nhật nếu người dùng không mở tab này
-                guard self.isViewVisible, !self.isWirelessPairingActive else { return }
+                guard self.isEffectiveVisible, !self.isWirelessPairingActive else { return }
                 if let snap = self.latestSnapshot {
                     self.updateInstantStatus(existingSnapshot: snap)
                 }
@@ -798,8 +805,7 @@ final class SystemCheckViewModel: ObservableObject {
                 self.didReceiveWifiMonitorUpdate = true
                 guard firstUpdate || self.isWifiPathSatisfied != wifiSatisfied else { return }
                 self.isWifiPathSatisfied = wifiSatisfied
-                // Mục 1: Khóa hoàn toàn tính toán & cập nhật nếu người dùng không mở tab này
-                guard self.isViewVisible, !self.isWirelessPairingActive else { return }
+                guard self.isEffectiveVisible, !self.isWirelessPairingActive else { return }
                 if let snap = self.latestSnapshot {
                     self.updateInstantStatus(existingSnapshot: snap)
                 }
@@ -808,12 +814,12 @@ final class SystemCheckViewModel: ObservableObject {
         }
         wifiMonitor.start(queue: monitorQueue)
 
-        // Mục 2: Chặn lỗi tự kích hoạt lặp 2 lần của Minimuxer lúc đang kiểm tra Pairing (!self.isChecking)
+        // Chặn lỗi tự kích hoạt lặp 2 lần của Minimuxer lúc đang kiểm tra Pairing (!self.isChecking)
         minimuxer.network.pathPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self,
-                      self.isViewVisible,
+                      self.isEffectiveVisible,
                       !self.isChecking,
                       !self.isWirelessPairingActive,
                       !self.isWithinInternalWriteCooldown else { return }
@@ -825,7 +831,7 @@ final class SystemCheckViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self,
-                      self.isViewVisible,
+                      self.isEffectiveVisible,
                       !self.isChecking,
                       !self.isWirelessPairingActive,
                       !self.isWithinInternalWriteCooldown else { return }
@@ -833,17 +839,33 @@ final class SystemCheckViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
+        // Lắng nghe sự kiện tắt màn hình / thoát ra nền để dừng hoàn toàn timer 8 giây
+        NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                guard let self = self, self.isViewVisible else { return }
-                guard !self.isWirelessPairingActive else {
-                    self.refreshSnapshotAsyncAndApply()
-                    return
-                }
-                Task { @MainActor [weak self] in
-                    await self?.checkAllStatuses(forceVerify: false)
-                }
+                guard let self = self else { return }
+                self.isAppActive = false
+                self.stopActiveTabPeriodicCheck()
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                self.isAppActive = false
+                self.stopActiveTabPeriodicCheck()
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                let wasActive = self.isAppActive
+                self.isAppActive = true
+                guard !wasActive, self.isViewVisible else { return }
+                self.handleVisibilityOrLifecycleChanged()
             }
             .store(in: &cancellables)
     }
@@ -914,8 +936,7 @@ final class SystemCheckViewModel: ObservableObject {
     }
 
     private func ensureTunnelRoutingPinned(snapshot: SystemInterfaceSnapshot) {
-        // Mục 1: Không ghi đè cấu hình chung khi người dùng không mở tab này
-        guard isViewVisible, !isWirelessPairingActive else { return }
+        guard isEffectiveVisible, !isWirelessPairingActive else { return }
         guard let utunIP = snapshot.detectedLocalDevUtunIPv4, utunIP.hasPrefix("10.7.") else { return }
 
         let config = ConnectionConfig.shared
@@ -985,7 +1006,7 @@ final class SystemCheckViewModel: ObservableObject {
     }
 
     func updateInstantStatus(existingSnapshot: SystemInterfaceSnapshot) {
-        guard isViewVisible else { return }
+        guard isEffectiveVisible else { return }
         let snapshot = existingSnapshot
         self.latestSnapshot = snapshot
         ensureTunnelRoutingPinned(snapshot: snapshot)
@@ -1170,8 +1191,8 @@ final class SystemCheckViewModel: ObservableObject {
     }
 
     func checkAllStatuses(forceVerify: Bool = false) async {
-        // Mục 1: Khóa hoàn toàn nếu Tab không hiển thị
-        guard isViewVisible else { return }
+        // Khóa hoàn toàn nếu Tab không hiển thị hoặc màn hình đang tắt
+        guard isEffectiveVisible else { return }
 
         if isWirelessPairingActive {
             if forceVerify {
@@ -1191,10 +1212,10 @@ final class SystemCheckViewModel: ObservableObject {
 
         isChecking = true
         defer {
-            // Mục 2: Làm mới mốc cooldown ngay khi kết thúc verify để chặn dư chấn sự kiện từ Minimuxer
+            // Làm mới mốc cooldown ngay khi kết thúc verify để chặn dư chấn sự kiện từ Minimuxer
             lastInternalConfigWriteTime = CFAbsoluteTimeGetCurrent()
             isChecking = false
-            if needsAnotherCheck && isViewVisible && !isWirelessPairingActive {
+            if needsAnotherCheck && isEffectiveVisible && !isWirelessPairingActive {
                 let shouldForce = pendingForceVerify
                 needsAnotherCheck = false
                 pendingForceVerify = false
@@ -1210,7 +1231,7 @@ final class SystemCheckViewModel: ObservableObject {
             Self.scanSystemInterfaces()
         }.value
 
-        guard isViewVisible else { return }
+        guard isEffectiveVisible else { return }
         updateInstantStatus(existingSnapshot: snapshot)
 
         guard hasAnyStoredPairingFile else {
@@ -1244,7 +1265,7 @@ final class SystemCheckViewModel: ObservableObject {
 
             if shouldPerformHeavyHandshake {
                 let ok = await verifyPairingOverTunnel(initialSnapshot: snapshot)
-                guard isViewVisible else { return }
+                guard isEffectiveVisible else { return }
                 self.didAttemptLiveVerifyInCurrentMode = true
                 self.lastVerifiedModeSignature = currentSignature
                 if ok {

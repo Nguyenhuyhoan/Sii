@@ -1,5 +1,4 @@
 
-
 //
 //  UserCustomizationOperation.swift
 //  SideStore
@@ -91,7 +90,7 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         self.context.useMainProfile = true
 
         // Nếu chính gói IPA đang cài là SideStore / AltStore thì cài luôn không hỏi
-        if targetAppBundle.isAltStoreApp || targetAppBundle.bundleIdentifier.isAltStoreAppID {
+        if targetAppBundle.isAltStoreApp || targetAppBundle.bundleIdentifier.isAltStoreApp || targetAppBundle.bundleIdentifier.isAltStoreAppID {
             self.setProgress(100)
             return context.customBundleIdentifier != nil ? context.targetBundleIdentifier : nil
         }
@@ -105,14 +104,15 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         let installedSnap = fetchInstalledAppSnapshots(teamID: teamID, teamType: authTeam.type)
 
         // =========================================================================
-        // THUẬT TOÁN NHẬN DIỆN THÔNG MINH:
-        // - Cùng Tên App + Cùng ID (hoặc cùng Tên App đang sống): CÀI LUÔN KHÔNG HỎI!
-        // - Khác Tên App mà chỉ vô tình trùng ID: Chặn tự động đè, hiện bảng hỏi!
+        // THUẬT TOÁN NHẬN DIỆN TỰ ĐỘNG:
+        // - Nếu IPA đang cài có CÙNG TÊN APP + CÙNG ID -> Tự động cài đè luôn, không hiện bảng hỏi.
+        // - Nếu chỉ trùng Tên App duy nhất trên máy (nhưng khác ID) hoặc chỉ trùng ID (nhưng khác Tên App)
+        //   -> Vẫn hiện bảng hỏi!
         // =========================================================================
         if !context.isStoreUpdate {
             var matchedLiveObjectID: NSManagedObjectID? = nil
 
-            // Ưu tiên 1: Tìm App đang sống có CÙNG TÊN và CÙNG ID
+            // Ưu tiên 1: Tìm App đang sống có CÙNG TÊN APP và CÙNG ID
             for nameLower in incomingNamesLower {
                 if let exactMatch = installedSnap.objectIDByExactNameAndBaseID["\(nameLower)|\(incomingOrigBaseLower)"] {
                     matchedLiveObjectID = exactMatch
@@ -120,43 +120,33 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 }
             }
 
-            // Ưu tiên 2: Nếu context.installedApp đã được bước trước gán sẵn, kiểm tra xem nó có đang sống và cùng Tên không
+            // Ưu tiên 2: Nếu context.installedApp đã được bước trước gán sẵn, kiểm tra xem nó có đang sống và CÙNG TÊN + CÙNG ID không
             if matchedLiveObjectID == nil, let preMatchedApp = context.installedApp {
-                let isValidSameApp: Bool = context.dbBackgroundContext.performAndWait {
+                let isValidExactSameApp: Bool = context.dbBackgroundContext.performAndWait {
                     guard Self.isTrulyLiveInstalledApp(preMatchedApp) else { return false }
                     let existingName = Self.normalizeAppName(preMatchedApp.name)
                     let existingBaseID = Self.stripTrailingTeamID(from: preMatchedApp.bundleIdentifier, teamID: teamID).lowercased()
                     let existingResignedBaseID = Self.stripTrailingTeamID(from: preMatchedApp.resignedBundleIdentifier, teamID: teamID).lowercased()
+                    let existingCustomBaseID = Self.stripTrailingTeamID(from: preMatchedApp.customBundleIdentifier ?? "", teamID: teamID).lowercased()
 
-                    // Khớp tên App HOẶC khớp cả tên lẫn ID
-                    if !existingName.isEmpty && incomingNamesLower.contains(existingName) {
-                        return true
-                    }
-                    if incomingNamesLower.isEmpty && (existingBaseID == incomingOrigBaseLower || existingResignedBaseID == incomingOrigBaseLower) {
-                        return true
-                    }
-                    return false
+                    let hasMatchingID = (existingBaseID == incomingOrigBaseLower) ||
+                                        (existingResignedBaseID == incomingOrigBaseLower) ||
+                                        (!existingCustomBaseID.isEmpty && existingCustomBaseID == incomingOrigBaseLower)
+                    let hasMatchingName = !existingName.isEmpty && incomingNamesLower.contains(existingName)
+
+                    // Bắt buộc phải khớp CẢ Tên App LẪN ID
+                    return hasMatchingName && hasMatchingID
                 }
-                if isValidSameApp {
+                if isValidExactSameApp {
                     matchedLiveObjectID = preMatchedApp.objectID
                 } else {
-                    debugLog("[UserCustomizationOperation] Cleared mismatched/inactive preMatchedApp for '\(targetAppBundle.name)'.")
+                    debugLog("[UserCustomizationOperation] Cleared non-exact preMatchedApp for '\(targetAppBundle.name)' so user will be prompted.")
                     context.installedApp = nil
                     context.customBundleIdentifier = nil
                 }
             }
 
-            // Ưu tiên 3: Tìm App đang sống có CÙNG TÊN APP duy nhất trên máy (dù trước đó người dùng từng đổi sang ID cũ khác)
-            if matchedLiveObjectID == nil {
-                for nameLower in incomingNamesLower {
-                    if let uniqueNameMatch = installedSnap.objectIDByUniqueAppName[nameLower] {
-                        matchedLiveObjectID = uniqueNameMatch
-                        break
-                    }
-                }
-            }
-
-            // Gán lại chính xác context.installedApp nếu tìm thấy App đang sống trùng khớp
+            // Gán lại chính xác context.installedApp chỉ khi tìm thấy App đang sống trùng CẢ Tên lẫn ID
             if let matchedLiveObjectID {
                 context.dbBackgroundContext.performAndWait {
                     if let liveApp = try? context.dbBackgroundContext.existingObject(with: matchedLiveObjectID) as? InstalledApp {
@@ -168,7 +158,7 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
             }
         }
 
-        // 2. NẾU ĐÃ KHỚP APP ĐANG SỐNG (CÙNG TÊN + CÙNG ID / CẬP NHẬT) -> CÀI ĐÈ LUÔN, KHÔNG HIỆN BẢNG HỎI!
+        // 2. NẾU ĐÃ KHỚP APP ĐANG SỐNG (CÙNG TÊN + CÙNG ID / CẬP NHẬT STORE) -> CÀI ĐÈ LUÔN, KHÔNG HIỆN BẢNG HỎI!
         if context.isStoreUpdate || context.installedApp != nil {
             let existingEffectiveID: String? = context.dbBackgroundContext.performAndWait {
                 guard let app = self.context.installedApp else { return nil }
@@ -191,12 +181,12 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 context.appendTeamID = false
             }
 
-            debugLog("[UserCustomizationOperation] Matched live app ('\(targetAppBundle.name)'); auto-installing with ID '\(context.customBundleIdentifier ?? context.targetBundleIdentifier)' without prompting.")
+            debugLog("[UserCustomizationOperation] Matched live app with same Name + ID ('\(targetAppBundle.name)'); auto-installing with ID '\(context.customBundleIdentifier ?? context.targetBundleIdentifier)' without prompting.")
             self.setProgress(100)
             return context.customBundleIdentifier != nil ? context.targetBundleIdentifier : nil
         }
 
-        // 3. NẾU LÀ APP MỚI HOÀN TOÀN (HOẶC KHÁC TÊN APP):
+        // 3. NẾU LÀ APP MỚI HOÀN TOÀN (HOẶC TRÙNG TÊN DUY NHẤT NHƯNG KHÁC ID / TRÙNG ID NHƯNG KHÁC TÊN):
         // Xóa sạch customBundleIdentifier cũ để hiện bảng hỏi với ID gốc sạch sẽ của IPA!
         context.customBundleIdentifier = nil
 
@@ -504,8 +494,6 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
         let overwritableCandidates: [OverwritableAppCandidate]
         /// Khóa kép "tên_app|base_id" -> Nhận diện chuẩn xác 100% cùng Tên và cùng ID
         let objectIDByExactNameAndBaseID: [String: NSManagedObjectID]
-        /// Chỉ lưu Tên App nếu trên máy có DUY NHẤT 1 App đang sống mang tên đó
-        let objectIDByUniqueAppName: [String: NSManagedObjectID]
         /// Bản đồ ID đang hoạt động -> ObjectID (dùng cho bước Hậu kiểm & Cài đè)
         let objectIDByActiveBundleID: [String: NSManagedObjectID]
     }
@@ -518,8 +506,6 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
             var overwritableList: [OverwritableAppCandidate] = []
             var seenOverwritableBaseIDs = Set<String>()
             var mapByNameAndBaseID: [String: NSManagedObjectID] = [:]
-            var mapByUniqueName: [String: NSManagedObjectID] = [:]
-            var duplicatedNames = Set<String>()
             var mapByActiveBundleID: [String: NSManagedObjectID] = [:]
 
             let hostMainBundleID = (Bundle.main.bundleIdentifier ?? "").lowercased()
@@ -648,13 +634,15 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                     }
                 }
 
-                // Cũng đọc thêm CFBundleDisplayName / CFBundleName từ fileURL của App đang sống (nếu có) để khớp Tên App chính xác 100%
+                // Cũng đọc thêm CFBundleDisplayName / CFBundleName từ fileURL của App đang sống (nếu có) để khớp Tên App + ID chính xác 100%
                 if let installedBundle = ALTApplication(fileURL: app.fileURL) {
                     let extraNames = Self.extractNormalizedAppNames(from: installedBundle)
                     for extraName in extraNames {
                         for idVariant in [rawID, resignedID, customID] where !idVariant.isEmpty {
+                            let lower = idVariant.lowercased()
                             let baseLower = Self.stripTrailingTeamID(from: idVariant, teamID: teamID).lowercased()
                             mapByNameAndBaseID["\(extraName)|\(baseLower)"] = app.objectID
+                            mapByNameAndBaseID["\(extraName)|\(lower)"] = app.objectID
                         }
                     }
                 }
@@ -684,18 +672,6 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                         )
                     }
                 }
-
-                // Ghi nhận Tên App duy nhất đang sống trên máy
-                if !nameKey.isEmpty {
-                    if duplicatedNames.contains(nameKey) {
-                        // Đã trùng tên -> không tự động đoán chỉ bằng tên
-                    } else if mapByUniqueName[nameKey] != nil && mapByUniqueName[nameKey] != app.objectID {
-                        mapByUniqueName.removeValue(forKey: nameKey)
-                        duplicatedNames.insert(nameKey)
-                    } else {
-                        mapByUniqueName[nameKey] = app.objectID
-                    }
-                }
             }
 
             overwritableList.sort {
@@ -706,7 +682,6 @@ final class UserCustomizationOperation: BasePipelineOperation<InstallAppOperatio
                 activeAndProtectedIDsLowercased: activeAndProtectedIDs,
                 overwritableCandidates: overwritableList,
                 objectIDByExactNameAndBaseID: mapByNameAndBaseID,
-                objectIDByUniqueAppName: mapByUniqueName,
                 objectIDByActiveBundleID: mapByActiveBundleID
             )
         }

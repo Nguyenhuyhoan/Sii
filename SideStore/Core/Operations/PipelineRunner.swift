@@ -168,7 +168,7 @@ final class PipelineRunner: Sendable
             return false
         }
         
-        let isCellularActive = CellularRefreshManager.shared.isShortcutTwoStageMode || CellularRefreshManager.shared.isCellularMode
+        let isCellularActive = CellularRefreshManager.shared.isCellularMode
         let isCellularRefreshGroup = isCellularActive && allAreRefresh
         group.isCellularRefreshGroup = isCellularRefreshGroup
         
@@ -194,7 +194,7 @@ final class PipelineRunner: Sendable
                 throw cancelError
             }
         } else if (try? await fetchUDID(forceLive: false)) == nil {
-            // Đảm bảo luôn có UDID từ Keychain hoặc Minimuxer trước khi gọi Apple API
+            // Đảm bảo luôn có UDID từ Pairing File / Keychain / Minimuxer trước khi gọi Apple API
             _ = await CellularRefreshManager.shared.waitForMinimuxerReady(timeout: 5.0)
         }
         
@@ -278,50 +278,41 @@ final class PipelineRunner: Sendable
             try await self.performOperation(for: operation, handler: handler, group: group, operationsCount: operationsCount)
         }
 
-        // Chỉ thực hiện tiêm batch profile nếu chưa từng bị lỗi / bấm tắt thông báo
+        // Luôn tiêm trực tiếp batch profile qua LocalDevVPN ngay trong 1 giai đoạn duy nhất (không chờ Shortcut Stage 2)
         if isCellularRefreshGroup && !group.sharedContext.pendingProfiles.isEmpty && !PipelineExecutor.hasPresentedAlert(for: group) {
             let orderedBatches = sortedOperations.compactMap { group.sharedContext.pendingProfiles[$0.bundleIdentifier] }
             
-            if CellularRefreshManager.shared.isShortcutTwoStageMode {
-                debugLog("[PipelineRunner] Shortcut Stage 1: Staged \(orderedBatches.count) app(s) for Stage 2 injection.")
-                CellularRefreshManager.shared.stagedBatches = orderedBatches
-                for op in sortedOperations {
-                    self.progress.progress(for: op)?.completedUnitCount = 100
-                }
-            } else {
-                debugLog("[PipelineRunner] Starting batch profile injection for \(group.sharedContext.pendingProfiles.count) app(s)...")
-                do {
-                    let injectContext = StandaloneOperationContext(steps: .injectBatchProfiles, dbBackgroundContext: group.dbContext)
-                    let injectOp = try InjectBatchProfilesOperation(
-                        batches: orderedBatches,
-                        context: injectContext,
-                        onAppCompleted: { [weak self] bundleID in
-                            if let op = sortedOperations.first(where: { $0.bundleIdentifier == bundleID }) {
-                                self?.progress.progress(for: op)?.completedUnitCount = 100
-                            }
+            debugLog("[PipelineRunner] Starting direct batch profile injection via LocalDevVPN for \(group.sharedContext.pendingProfiles.count) app(s)...")
+            do {
+                let injectContext = StandaloneOperationContext(steps: .injectBatchProfiles, dbBackgroundContext: group.dbContext)
+                let injectOp = try InjectBatchProfilesOperation(
+                    batches: orderedBatches,
+                    context: injectContext,
+                    onAppCompleted: { [weak self] bundleID in
+                        if let op = sortedOperations.first(where: { $0.bundleIdentifier == bundleID }) {
+                            self?.progress.progress(for: op)?.completedUnitCount = 100
                         }
-                    )
-                    try await injectOp.execute()
-                } catch {
-                    await PipelineExecutor.presentDiagnosticErrorAlertOnce(
-                        for: group,
-                        phase: .systemPush,
-                        stepName: "injectBatchProfiles",
-                        appName: "Làm mới (\(orderedBatches.count) ứng dụng)",
-                        error: error
-                    )
-                    group.error = OperationError.cancelled
-                    throw OperationError.cancelled
-                }
+                    }
+                )
+                try await injectOp.execute()
+            } catch {
+                await PipelineExecutor.presentDiagnosticErrorAlertOnce(
+                    for: group,
+                    phase: .systemPush,
+                    stepName: "injectBatchProfiles",
+                    appName: "Làm mới (\(orderedBatches.count) ứng dụng)",
+                    error: error
+                )
+                group.error = OperationError.cancelled
+                throw OperationError.cancelled
             }
         }
 
-        let shouldReloadWidgets = !(isCellularRefreshGroup && CellularRefreshManager.shared.isShortcutTwoStageMode)
         let hasSuccessfulOperation = group.results.values.contains {
             if case .success = $0 { return true }
             return false
         }
-        if shouldReloadWidgets && hasSuccessfulOperation {
+        if hasSuccessfulOperation {
             debugLog("[PipelineRunner] Reloading widget timelines once for completed batch...")
             await WidgetDataManager.publishCurrentInstalledApps(in: group.dbContext)
             debugLog("[PipelineRunner] Reloading COMPLETE for widget timelines.")

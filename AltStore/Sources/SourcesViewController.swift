@@ -415,6 +415,12 @@ private final class OverviewHostedVideoSectionView: UIView {
         }
     }
 
+    deinit {
+        hostingController.willMove(toParent: nil)
+        hostingController.view.removeFromSuperview()
+        hostingController.removeFromParent()
+    }
+
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
@@ -1127,9 +1133,12 @@ private final class GuidesHeroHeaderView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         heroGradient.frame = heroClipView.bounds
         heroIconGradient.frame = heroIconBadge.bounds
         countBadgeGradient.frame = countBadgeButton.bounds
+        CATransaction.commit()
     }
 }
 
@@ -1338,7 +1347,10 @@ private final class GuideTopicRowCell: UITableViewCell {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         badgeGradient.frame = badgeContainer.bounds
+        CATransaction.commit()
     }
 }
 
@@ -2066,7 +2078,10 @@ private final class GuideArticleDetailViewController: UIViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         heroGradient.frame = heroClipView.bounds
+        CATransaction.commit()
     }
 
     private func setupBackground() {
@@ -2423,12 +2438,11 @@ private final class GuideArticleDetailViewController: UIViewController {
 
         let config = UIImage.SymbolConfiguration(pointSize: 14, weight: .bold)
         btn.setImage(UIImage(systemName: "chevron.left", withConfiguration: config), for: .normal)
-        btn.setTitle(" Quay lại", for: .normal)
+        btn.setTitle("  Quay lại  ", for: .normal)
         btn.titleLabel?.font = UIFont.systemFont(ofSize: 14, weight: .bold)
         btn.tintColor = SourcesCSSTheme.blue
         btn.setTitleColor(SourcesCSSTheme.blue, for: .normal)
         btn.backgroundColor = SourcesCSSTheme.white.withAlphaComponent(0.95)
-        btn.contentEdgeInsets = UIEdgeInsets(top: 0, left: 12, bottom: 0, right: 14)
 
         btn.layer.cornerRadius = 17
         btn.layer.borderWidth = 1.0
@@ -2444,7 +2458,8 @@ private final class GuideArticleDetailViewController: UIViewController {
         NSLayoutConstraint.activate([
             btn.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
             btn.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 6),
-            btn.heightAnchor.constraint(equalToConstant: 34)
+            btn.heightAnchor.constraint(equalToConstant: 34),
+            btn.widthAnchor.constraint(greaterThanOrEqualToConstant: 102)
         ])
 
         self.floatingBackButton = btn
@@ -2490,6 +2505,10 @@ final class SourcesViewController: UICollectionViewController {
         return .darkContent
     }
     #endif
+
+    deinit {
+        fetchTask?.cancel()
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()

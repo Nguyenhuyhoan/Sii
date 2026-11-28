@@ -198,7 +198,10 @@ final class ErrorLogViewController: UITableViewController
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         if let clipView = self.heroClipView {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
             self.heroGradientLayer?.frame = clipView.bounds
+            CATransaction.commit()
         }
         self.enforceBrightGradientBackground()
         self.updateFloatingClearAllButtonState()
@@ -296,7 +299,7 @@ private extension ErrorLogViewController
                 cardBg.translatesAutoresizingMaskIntoConstraints = false
                 cardBg.backgroundColor = ErrorLogCSSTheme.white
                 cardBg.layer.cornerRadius = ErrorLogCSSTheme.cornerRadius
-                if #available(iOS 13.0, *) {
+                if #available(iOS 13.0, tvOS 13.0, *) {
                     cardBg.layer.cornerCurve = .continuous
                 }
                 cardBg.layer.borderWidth = 1.1
@@ -325,7 +328,7 @@ private extension ErrorLogViewController
         let heroCard = UIView()
         heroCard.translatesAutoresizingMaskIntoConstraints = false
         heroCard.layer.cornerRadius = ErrorLogCSSTheme.cornerRadius
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             heroCard.layer.cornerCurve = .continuous
         }
         heroCard.layer.masksToBounds = false
@@ -337,7 +340,7 @@ private extension ErrorLogViewController
         let clipView = UIView()
         clipView.translatesAutoresizingMaskIntoConstraints = false
         clipView.layer.cornerRadius = ErrorLogCSSTheme.cornerRadius
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             clipView.layer.cornerCurve = .continuous
         }
         clipView.clipsToBounds = true
@@ -723,7 +726,7 @@ private extension ErrorLogViewController
         }
         
         cardView.backgroundColor = ErrorLogCSSTheme.white
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             cardView.layer.cornerCurve = .continuous
         }
         
@@ -789,7 +792,7 @@ private extension ErrorLogViewController
         
         // Bo góc chuẩn iOS cho Icon ứng dụng bị lỗi
         cell.appIconImageView.layer.cornerRadius = 13
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             cell.appIconImageView.layer.cornerCurve = .continuous
         }
         cell.appIconImageView.layer.masksToBounds = true
@@ -940,7 +943,8 @@ private extension ErrorLogViewController
         )
         alertController.popoverPresentationController?.barButtonItem = sender
         alertController.addAction(UIAlertAction(title: "Hủy", style: .cancel, handler: nil))
-        alertController.addAction(UIAlertAction(title: "Xóa tất cả nhật ký", style: .destructive) { _ in
+        alertController.addAction(UIAlertAction(title: "Xóa tất cả nhật ký", style: .destructive) { [weak self] _ in
+            guard let self = self else { return }
             Task {
                 await self.clearLoggedErrors()
                 await MainActor.run {
@@ -1021,7 +1025,7 @@ extension ErrorLogViewController
         iconBox.translatesAutoresizingMaskIntoConstraints = false
         iconBox.backgroundColor = ErrorLogCSSTheme.blue.withAlphaComponent(0.14)
         iconBox.layer.cornerRadius = 6.5
-        if #available(iOS 13.0, *) {
+        if #available(iOS 13.0, tvOS 13.0, *) {
             iconBox.layer.cornerCurve = .continuous
         }
 

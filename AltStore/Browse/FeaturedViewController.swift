@@ -11,7 +11,7 @@
 import CoreData
 @preconcurrency import Nuke
 
-// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI SOURCES, SETTINGS & MY APPS)
+// MARK: - 🎨 BỘ GIAO DIỆN CHUẨN CSS THEME (ĐỒNG BỘ 100% VỚI NEWS, SETTINGS & MY APPS)
 private struct FeaturedCSSTheme {
     static let primary = UIColor(red: 44/255, green: 62/255, blue: 80/255, alpha: 1.0)      // #2c3e50
     static let secondary = UIColor(red: 52/255, green: 73/255, blue: 94/255, alpha: 1.0)    // #34495e
@@ -29,15 +29,77 @@ private struct FeaturedCSSTheme {
     static let infoBg = UIColor(red: 238/255, green: 245/255, blue: 255/255, alpha: 1.0)    // #eef5ff
     static let purplePillBg = UIColor(red: 243/255, green: 232/255, blue: 255/255, alpha: 1.0)
 
+    /// Màu Gradient Hồng cho Icon tiêu đề (Giống hệt 100% với NewsViewController & SourcesViewController)
+    static let pinkGradientStart = UIColor(red: 255/255, green: 90/255, blue: 165/255, alpha: 1.0).cgColor // #ff5aa5
+    static let pinkGradientEnd = UIColor(red: 236/255, green: 38/255, blue: 143/255, alpha: 1.0).cgColor   // #ec268f
+
     static let bgGradientStart = UIColor(red: 243/255, green: 224/255, blue: 255/255, alpha: 1.0).cgColor
     static let bgGradientEnd = UIColor(red: 224/255, green: 247/255, blue: 255/255, alpha: 1.0).cgColor
 
     static let heroStart = UIColor(red: 0/255, green: 123/255, blue: 255/255, alpha: 0.92).cgColor
     static let heroEnd = UIColor(red: 111/255, green: 66/255, blue: 193/255, alpha: 0.90).cgColor
+}
 
-    // Dải màu Hồng Gradient cho khung Icon tiêu đề (Đồng bộ 100% với SourcesCSSTheme)
-    static let pinkGradientStart = UIColor(red: 255/255, green: 90/255, blue: 165/255, alpha: 1.0).cgColor
-    static let pinkGradientEnd = UIColor(red: 236/255, green: 38/255, blue: 143/255, alpha: 1.0).cgColor
+// MARK: - 🌸 HUY HIỆU ICON TIÊU ĐỀ TRÒN GRADIENT HỒNG (GIỐNG HỆT NEWSVIEWCONTROLLER)
+private final class FeaturedPinkGradientIconBadgeView: UIView {
+    private let gradientLayer = CAGradientLayer()
+    private let iconImageView = UIImageView()
+    private let badgeSize: CGFloat
+
+    init(symbolName: String, badgeSize: CGFloat = 30, symbolSize: CGFloat = 14) {
+        self.badgeSize = badgeSize
+        super.init(frame: CGRect(x: 0, y: 0, width: badgeSize, height: badgeSize))
+        setupBadge(symbolName: symbolName, symbolSize: symbolSize)
+    }
+
+    required init?(coder: NSCoder) {
+        self.badgeSize = 30
+        super.init(coder: coder)
+        setupBadge(symbolName: "gamecontroller.fill", symbolSize: 14)
+    }
+
+    private func setupBadge(symbolName: String, symbolSize: CGFloat) {
+        translatesAutoresizingMaskIntoConstraints = false
+        backgroundColor = .clear
+
+        // Lớp nền Circle Gradient Hồng (#ff5aa5 -> #ec268f) từ góc trên trái xuống góc dưới phải
+        gradientLayer.colors = [FeaturedCSSTheme.pinkGradientStart, FeaturedCSSTheme.pinkGradientEnd]
+        gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+        gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+        gradientLayer.cornerRadius = badgeSize / 2.0
+        layer.insertSublayer(gradientLayer, at: 0)
+
+        // Viền trắng mờ 0.65, độ dày 1.2pt giống hệt NewsViewController
+        layer.cornerRadius = badgeSize / 2.0
+        layer.borderWidth = 1.2
+        layer.borderColor = UIColor.white.withAlphaComponent(0.65).cgColor
+        layer.masksToBounds = true
+
+        // Icon SF Symbol màu trắng độ đậm .bold ở chính giữa
+        iconImageView.translatesAutoresizingMaskIntoConstraints = false
+        let config = UIImage.SymbolConfiguration(pointSize: symbolSize, weight: .bold)
+        iconImageView.image = UIImage(systemName: symbolName, withConfiguration: config)
+        iconImageView.tintColor = .white
+        iconImageView.contentMode = .scaleAspectFit
+        addSubview(iconImageView)
+
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: badgeSize),
+            heightAnchor.constraint(equalToConstant: badgeSize),
+            iconImageView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            iconImageView.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        gradientLayer.frame = bounds
+        gradientLayer.cornerRadius = bounds.width / 2.0
+        layer.cornerRadius = bounds.width / 2.0
+        CATransaction.commit()
+    }
 }
 
 // MARK: - 🌈 LỚP NỀN GRADIENT CỐ ĐỊNH CHUẨN CSS
@@ -1004,7 +1066,7 @@ private final class FeaturedSmartRepoStoreManager {
     }
 }
 
-// MARK: - 🏷️ HEADER BANNER ĐỘC LẬP (.hero + THANH TÌM KIẾM TRONG SCROLLVIEW)
+// MARK: - 🏷️ HEADER BANNER ĐỘC LẬP (.hero + ICON HỒNG ĐỒNG BỘ NEWSVIEWCONTROLLER + THANH TÌM KIẾM)
 private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
     private let heroCard = UIView()
     private let heroGradient = CAGradientLayer()
@@ -1013,9 +1075,12 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
     private let sourcesPillButton = UIButton(type: .system)
 
     private let centerTitleStack = UIStackView()
-    private let heroIconBadge = UIView()
-    private let heroIconGradient = CAGradientLayer()
-    private let heroIconView = UIImageView()
+    /// Huy hiệu Icon tròn Gradient Hồng + Icon tay cầm chơi game màu trắng giống hệt phong cách NewsViewController
+    private let heroIconBadgeView = FeaturedPinkGradientIconBadgeView(
+        symbolName: "gamecontroller.fill",
+        badgeSize: 30,
+        symbolSize: 13.5
+    )
     private let heroTitleLabel = UILabel()
     private let loadingSpinner = UIActivityIndicatorView(style: .medium)
 
@@ -1027,9 +1092,9 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
     let searchTextField = UITextField()
 
     private let sectionRowStack = UIStackView()
-    private let sectionLeftStack = UIStackView()
+    private let sectionLeftTitleStack = UIStackView()
     private let sectionIconBox = UIView()
-    private let sectionIconView = UIImageView()
+    private let sectionIconImageView = UIImageView()
     private let sectionTitleLabel = UILabel()
     private let quickSwitchSourceButton = UIButton(type: .system)
 
@@ -1053,7 +1118,6 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         heroGradient.frame = heroCard.bounds
-        heroIconGradient.frame = heroIconBadge.bounds
         CATransaction.commit()
     }
 
@@ -1106,35 +1170,21 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
         centerTitleStack.translatesAutoresizingMaskIntoConstraints = false
         centerTitleStack.axis = .horizontal
         centerTitleStack.alignment = .center
-        centerTitleStack.spacing = 7
+        centerTitleStack.spacing = 8
         heroCard.addSubview(centerTitleStack)
 
-        // Khung tròn chứa icon bên cạnh chữ "Kho App Game" (Màu nền Gradient Hồng giống SourcesViewController)
-        heroIconBadge.translatesAutoresizingMaskIntoConstraints = false
-        heroIconBadge.layer.cornerRadius = 14
-        heroIconBadge.layer.masksToBounds = true
-        heroIconBadge.layer.borderWidth = 1.2
-        heroIconBadge.layer.borderColor = UIColor.white.withAlphaComponent(0.65).cgColor
-
-        heroIconGradient.colors = [FeaturedCSSTheme.pinkGradientStart, FeaturedCSSTheme.pinkGradientEnd]
-        heroIconGradient.startPoint = CGPoint(x: 0, y: 0)
-        heroIconGradient.endPoint = CGPoint(x: 1, y: 1)
-        heroIconBadge.layer.insertSublayer(heroIconGradient, at: 0)
-
-        heroIconView.translatesAutoresizingMaskIntoConstraints = false
-        let iconCfg = UIImage.SymbolConfiguration(pointSize: 13.5, weight: .bold)
-        heroIconView.image = UIImage(systemName: "sparkles.rectangle.stack.fill", withConfiguration: iconCfg)
-            ?? UIImage(systemName: "square.stack.3d.up.fill", withConfiguration: iconCfg)
-        heroIconView.tintColor = .white
-        heroIconView.contentMode = .scaleAspectFit
-        heroIconBadge.addSubview(heroIconView)
-        centerTitleStack.addArrangedSubview(heroIconBadge)
+        // Icon tròn nền Gradient Hồng (#ff5aa5 -> #ec268f) giống hệt NewsViewController
+        centerTitleStack.addArrangedSubview(heroIconBadgeView)
 
         heroTitleLabel.text = "Kho App Game"
         heroTitleLabel.font = UIFont.systemFont(ofSize: 17.5, weight: .heavy)
         heroTitleLabel.textColor = .white
         heroTitleLabel.adjustsFontSizeToFitWidth = true
         heroTitleLabel.minimumScaleFactor = 0.78
+        heroTitleLabel.layer.shadowColor = UIColor.black.cgColor
+        heroTitleLabel.layer.shadowOffset = CGSize(width: 0, height: 2)
+        heroTitleLabel.layer.shadowRadius = 4
+        heroTitleLabel.layer.shadowOpacity = 0.28
         centerTitleStack.addArrangedSubview(heroTitleLabel)
 
         loadingSpinner.color = .white
@@ -1190,36 +1240,44 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
         searchTextField.addTarget(self, action: #selector(handleTextFieldEditingChanged(_:)), for: .editingChanged)
         searchBoxView.addSubview(searchTextField)
 
-        // 3. Hàng tiêu đề danh sách (Đồng bộ hộp vuông sectionIconBox màu xanh dương nhạt + icon xanh dương đậm)
+        // 3. Hàng tiêu đề danh sách (Có ô Icon 24x24 bo góc 7pt nền xanh mờ 14% giống SectionHeaderView của NewsViewController)
         sectionRowStack.translatesAutoresizingMaskIntoConstraints = false
         sectionRowStack.axis = .horizontal
         sectionRowStack.alignment = .center
         sectionRowStack.distribution = .equalSpacing
         addSubview(sectionRowStack)
 
-        sectionLeftStack.translatesAutoresizingMaskIntoConstraints = false
-        sectionLeftStack.axis = .horizontal
-        sectionLeftStack.alignment = .center
-        sectionLeftStack.spacing = 7
+        sectionLeftTitleStack.axis = .horizontal
+        sectionLeftTitleStack.alignment = .center
+        sectionLeftTitleStack.spacing = 7
 
         sectionIconBox.translatesAutoresizingMaskIntoConstraints = false
         sectionIconBox.backgroundColor = FeaturedCSSTheme.blue.withAlphaComponent(0.14)
         sectionIconBox.layer.cornerRadius = 7
+        sectionIconBox.layer.cornerCurve = .continuous
 
-        sectionIconView.translatesAutoresizingMaskIntoConstraints = false
-        let secIconConfig = UIImage.SymbolConfiguration(pointSize: 12.5, weight: .heavy)
-        sectionIconView.image = UIImage(systemName: "flame.fill", withConfiguration: secIconConfig)
-        sectionIconView.tintColor = FeaturedCSSTheme.blue
-        sectionIconView.contentMode = .scaleAspectFit
-        sectionIconBox.addSubview(sectionIconView)
+        sectionIconImageView.translatesAutoresizingMaskIntoConstraints = false
+        let sectionIconCfg = UIImage.SymbolConfiguration(pointSize: 12.5, weight: .heavy)
+        sectionIconImageView.image = UIImage(systemName: "square.grid.2x2.fill", withConfiguration: sectionIconCfg)
+        sectionIconImageView.tintColor = FeaturedCSSTheme.blue
+        sectionIconImageView.contentMode = .scaleAspectFit
+        sectionIconBox.addSubview(sectionIconImageView)
 
-        sectionTitleLabel.font = UIFont.systemFont(ofSize: 13, weight: .heavy)
-        sectionTitleLabel.textColor = FeaturedCSSTheme.primary
-        sectionTitleLabel.text = "DANH SÁCH ỨNG DỤNG & TRÒ CHƠI"
+        NSLayoutConstraint.activate([
+            sectionIconBox.widthAnchor.constraint(equalToConstant: 24),
+            sectionIconBox.heightAnchor.constraint(equalToConstant: 24),
+            sectionIconImageView.centerXAnchor.constraint(equalTo: sectionIconBox.centerXAnchor),
+            sectionIconImageView.centerYAnchor.constraint(equalTo: sectionIconBox.centerYAnchor)
+        ])
 
-        sectionLeftStack.addArrangedSubview(sectionIconBox)
-        sectionLeftStack.addArrangedSubview(sectionTitleLabel)
-        sectionRowStack.addArrangedSubview(sectionLeftStack)
+        sectionLeftTitleStack.addArrangedSubview(sectionIconBox)
+
+        sectionTitleLabel.font = UIFont.systemFont(ofSize: 13.5, weight: .heavy)
+        sectionTitleLabel.textColor = FeaturedCSSTheme.blue
+        sectionTitleLabel.text = "DANH SÁCH APP & GAME"
+        sectionLeftTitleStack.addArrangedSubview(sectionTitleLabel)
+
+        sectionRowStack.addArrangedSubview(sectionLeftTitleStack)
 
         quickSwitchSourceButton.setTitle("🗂️ Chọn nguồn", for: .normal)
         quickSwitchSourceButton.setTitleColor(FeaturedCSSTheme.purple, for: .normal)
@@ -1246,11 +1304,6 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
             sourcesPillButton.centerYAnchor.constraint(equalTo: downloadedPillButton.centerYAnchor),
             sourcesPillButton.heightAnchor.constraint(equalToConstant: 30),
 
-            heroIconBadge.widthAnchor.constraint(equalToConstant: 28),
-            heroIconBadge.heightAnchor.constraint(equalToConstant: 28),
-            heroIconView.centerXAnchor.constraint(equalTo: heroIconBadge.centerXAnchor),
-            heroIconView.centerYAnchor.constraint(equalTo: heroIconBadge.centerYAnchor),
-
             centerTitleStack.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
             centerTitleStack.centerYAnchor.constraint(equalTo: downloadedPillButton.centerYAnchor),
             centerTitleStack.leadingAnchor.constraint(greaterThanOrEqualTo: downloadedPillButton.trailingAnchor, constant: 6),
@@ -1276,11 +1329,6 @@ private final class FeaturedWebScrollHeaderView: UIView, UITextFieldDelegate {
             searchTextField.trailingAnchor.constraint(equalTo: searchBoxView.trailingAnchor, constant: -8),
             searchTextField.topAnchor.constraint(equalTo: searchBoxView.topAnchor),
             searchTextField.bottomAnchor.constraint(equalTo: searchBoxView.bottomAnchor),
-
-            sectionIconBox.widthAnchor.constraint(equalToConstant: 24),
-            sectionIconBox.heightAnchor.constraint(equalToConstant: 24),
-            sectionIconView.centerXAnchor.constraint(equalTo: sectionIconBox.centerXAnchor),
-            sectionIconView.centerYAnchor.constraint(equalTo: sectionIconBox.centerYAnchor),
 
             sectionRowStack.topAnchor.constraint(equalTo: searchBoxView.bottomAnchor, constant: 8),
             sectionRowStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
@@ -2031,7 +2079,7 @@ private final class FeaturedAppFullInfoPopupViewController: UIViewController {
     }
 }
 
-// MARK: - 🗂️ MÀN HÌNH QUẢN LÝ FILE ĐÃ TẢI VỀ
+// MARK: - 🗂️ MÀN HÌNH QUẢN LÝ FILE ĐÃ TẢI VỀ (CÓ HUY HIỆU ICON HỒNG ĐỒNG BỘ)
 @MainActor
 private final class FeaturedDownloadedIPAsManagerViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
     var onSelectSignIPA: ((FeaturedDownloadedIPAEntry) -> Void)?
@@ -2040,9 +2088,7 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private let emptyLabel = UILabel()
     private let heroGradientLayer = CAGradientLayer()
-    private let heroIconGradientLayer = CAGradientLayer()
     private weak var heroCardRef: UIView?
-    private weak var heroIconBadgeRef: UIView?
     private weak var clearAllBtnRef: UIButton?
     private var entries: [FeaturedDownloadedIPAEntry] = []
 
@@ -2107,15 +2153,12 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
         if let card = heroCardRef {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
             heroGradientLayer.frame = card.bounds
+            CATransaction.commit()
         }
-        if let badge = heroIconBadgeRef {
-            heroIconGradientLayer.frame = badge.bounds
-        }
-        CATransaction.commit()
     }
 
     private func setupScrollableHeroHeader() {
@@ -2156,33 +2199,18 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
         titleStack.spacing = 7
         heroCard.addSubview(titleStack)
 
-        let iconBadge = UIView()
-        iconBadge.translatesAutoresizingMaskIntoConstraints = false
-        iconBadge.layer.cornerRadius = 13
-        iconBadge.layer.masksToBounds = true
-        iconBadge.layer.borderWidth = 1.2
-        iconBadge.layer.borderColor = UIColor.white.withAlphaComponent(0.65).cgColor
-        self.heroIconBadgeRef = iconBadge
-
-        heroIconGradientLayer.colors = [FeaturedCSSTheme.pinkGradientStart, FeaturedCSSTheme.pinkGradientEnd]
-        heroIconGradientLayer.startPoint = CGPoint(x: 0, y: 0)
-        heroIconGradientLayer.endPoint = CGPoint(x: 1, y: 1)
-        iconBadge.layer.insertSublayer(heroIconGradientLayer, at: 0)
-
-        let iconView = UIImageView()
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        let symCfg = UIImage.SymbolConfiguration(pointSize: 12.5, weight: .bold)
-        iconView.image = UIImage(systemName: "tray.and.arrow.down.fill", withConfiguration: symCfg)
-        iconView.tintColor = .white
-        iconBadge.addSubview(iconView)
+        let iconBadge = FeaturedPinkGradientIconBadgeView(
+            symbolName: "tray.and.arrow.down.fill",
+            badgeSize: 28,
+            symbolSize: 12.5
+        )
+        titleStack.addArrangedSubview(iconBadge)
 
         let titleLabel = UILabel()
         titleLabel.text = "File IPA Đã Tải"
         titleLabel.font = UIFont.systemFont(ofSize: 16.5, weight: .heavy)
         titleLabel.textColor = .white
         titleLabel.textAlignment = .center
-
-        titleStack.addArrangedSubview(iconBadge)
         titleStack.addArrangedSubview(titleLabel)
 
         let clearBtn = UIButton(type: .system)
@@ -2210,11 +2238,6 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
             clearBtn.trailingAnchor.constraint(equalTo: heroCard.trailingAnchor, constant: -12),
             clearBtn.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
             clearBtn.heightAnchor.constraint(equalToConstant: 28),
-
-            iconBadge.widthAnchor.constraint(equalToConstant: 26),
-            iconBadge.heightAnchor.constraint(equalToConstant: 26),
-            iconView.centerXAnchor.constraint(equalTo: iconBadge.centerXAnchor),
-            iconView.centerYAnchor.constraint(equalTo: iconBadge.centerYAnchor),
 
             titleStack.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
             titleStack.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
@@ -2462,7 +2485,7 @@ private final class FeaturedDownloadedIPAsManagerViewController: UIViewControlle
     }
 }
 
-// MARK: - ➕ MÀN HÌNH QUẢN LÝ & THÊM NGUỒN JSON
+// MARK: - ➕ MÀN HÌNH QUẢN LÝ & THÊM NGUỒN JSON (CÓ HUY HIỆU ICON HỒNG ĐỒNG BỘ)
 @MainActor
 private final class FeaturedSourcesHubManagerViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
     var onSourcesChanged: ((FeaturedRepoSource?) -> Void)?
@@ -2470,9 +2493,7 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
     private let backgroundView = FeaturedGradientBackgroundView(frame: .zero)
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private let heroGradientLayer = CAGradientLayer()
-    private let heroIconGradientLayer = CAGradientLayer()
     private weak var heroCardRef: UIView?
-    private weak var heroIconBadgeRef: UIView?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -2510,15 +2531,12 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
         if let card = heroCardRef {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
             heroGradientLayer.frame = card.bounds
+            CATransaction.commit()
         }
-        if let badge = heroIconBadgeRef {
-            heroIconGradientLayer.frame = badge.bounds
-        }
-        CATransaction.commit()
     }
 
     private func setupScrollableHeroHeader() {
@@ -2559,34 +2577,18 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
         titleStack.spacing = 7
         heroCard.addSubview(titleStack)
 
-        let iconBadge = UIView()
-        iconBadge.translatesAutoresizingMaskIntoConstraints = false
-        iconBadge.layer.cornerRadius = 13
-        iconBadge.layer.masksToBounds = true
-        iconBadge.layer.borderWidth = 1.2
-        iconBadge.layer.borderColor = UIColor.white.withAlphaComponent(0.65).cgColor
-        self.heroIconBadgeRef = iconBadge
-
-        heroIconGradientLayer.colors = [FeaturedCSSTheme.pinkGradientStart, FeaturedCSSTheme.pinkGradientEnd]
-        heroIconGradientLayer.startPoint = CGPoint(x: 0, y: 0)
-        heroIconGradientLayer.endPoint = CGPoint(x: 1, y: 1)
-        iconBadge.layer.insertSublayer(heroIconGradientLayer, at: 0)
-
-        let iconView = UIImageView()
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        let symCfg = UIImage.SymbolConfiguration(pointSize: 12.5, weight: .bold)
-        iconView.image = UIImage(systemName: "externaldrive.badge.plus", withConfiguration: symCfg)
-            ?? UIImage(systemName: "folder.fill.badge.plus", withConfiguration: symCfg)
-        iconView.tintColor = .white
-        iconBadge.addSubview(iconView)
+        let iconBadge = FeaturedPinkGradientIconBadgeView(
+            symbolName: "server.rack",
+            badgeSize: 28,
+            symbolSize: 12.5
+        )
+        titleStack.addArrangedSubview(iconBadge)
 
         let titleLabel = UILabel()
         titleLabel.text = "Quản Lý Nguồn App"
         titleLabel.font = UIFont.systemFont(ofSize: 16.5, weight: .heavy)
         titleLabel.textColor = .white
         titleLabel.textAlignment = .center
-
-        titleStack.addArrangedSubview(iconBadge)
         titleStack.addArrangedSubview(titleLabel)
 
         let addBtn = UIButton(type: .system)
@@ -2613,11 +2615,6 @@ private final class FeaturedSourcesHubManagerViewController: UIViewController, U
             addBtn.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),
             addBtn.widthAnchor.constraint(equalToConstant: 28),
             addBtn.heightAnchor.constraint(equalToConstant: 28),
-
-            iconBadge.widthAnchor.constraint(equalToConstant: 26),
-            iconBadge.heightAnchor.constraint(equalToConstant: 26),
-            iconView.centerXAnchor.constraint(equalTo: iconBadge.centerXAnchor),
-            iconView.centerYAnchor.constraint(equalTo: iconBadge.centerYAnchor),
 
             titleStack.centerXAnchor.constraint(equalTo: heroCard.centerXAnchor),
             titleStack.centerYAnchor.constraint(equalTo: heroCard.centerYAnchor),

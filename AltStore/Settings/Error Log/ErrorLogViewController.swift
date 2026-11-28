@@ -198,10 +198,7 @@ final class ErrorLogViewController: UITableViewController
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         if let clipView = self.heroClipView {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
             self.heroGradientLayer?.frame = clipView.bounds
-            CATransaction.commit()
         }
         self.enforceBrightGradientBackground()
         self.updateFloatingClearAllButtonState()
@@ -230,7 +227,7 @@ private extension ErrorLogViewController
         self.enforceBrightGradientBackground()
         self.tableView.separatorStyle = .none
 
-        // 2. Tạo Hero Banner kèm nút mở Nhật ký Console
+        // 2. Tạo Hero Banner gọn gàng
         self.setupCSSHeroBanner()
     }
 
@@ -299,7 +296,7 @@ private extension ErrorLogViewController
                 cardBg.translatesAutoresizingMaskIntoConstraints = false
                 cardBg.backgroundColor = ErrorLogCSSTheme.white
                 cardBg.layer.cornerRadius = ErrorLogCSSTheme.cornerRadius
-                if #available(iOS 13.0, tvOS 13.0, *) {
+                if #available(iOS 13.0, *) {
                     cardBg.layer.cornerCurve = .continuous
                 }
                 cardBg.layer.borderWidth = 1.1
@@ -322,13 +319,13 @@ private extension ErrorLogViewController
     }
 
     func setupCSSHeroBanner() {
-        let headerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 156))
+        let headerContainer = UIView(frame: CGRect(x: 0, y: 0, width: self.tableView.bounds.width, height: 118))
         headerContainer.backgroundColor = .clear
         
         let heroCard = UIView()
         heroCard.translatesAutoresizingMaskIntoConstraints = false
         heroCard.layer.cornerRadius = ErrorLogCSSTheme.cornerRadius
-        if #available(iOS 13.0, tvOS 13.0, *) {
+        if #available(iOS 13.0, *) {
             heroCard.layer.cornerCurve = .continuous
         }
         heroCard.layer.masksToBounds = false
@@ -340,7 +337,7 @@ private extension ErrorLogViewController
         let clipView = UIView()
         clipView.translatesAutoresizingMaskIntoConstraints = false
         clipView.layer.cornerRadius = ErrorLogCSSTheme.cornerRadius
-        if #available(iOS 13.0, tvOS 13.0, *) {
+        if #available(iOS 13.0, *) {
             clipView.layer.cornerCurve = .continuous
         }
         clipView.clipsToBounds = true
@@ -408,24 +405,8 @@ private extension ErrorLogViewController
         subLabel.textAlignment = .center
         subLabel.numberOfLines = 2
         
-        // Nút mở nhanh Console Log ngay trên Banner
-        let consoleBtn = UIButton(type: .system)
-        consoleBtn.translatesAutoresizingMaskIntoConstraints = false
-        let termConfig = UIImage.SymbolConfiguration(pointSize: 11.5, weight: .bold)
-        consoleBtn.setImage(UIImage(systemName: "terminal.fill", withConfiguration: termConfig), for: .normal)
-        consoleBtn.setTitle("  Xem Nhật Ký Console Chi Tiết  ", for: .normal)
-        consoleBtn.tintColor = ErrorLogCSSTheme.white
-        consoleBtn.setTitleColor(ErrorLogCSSTheme.white, for: .normal)
-        consoleBtn.titleLabel?.font = UIFont.systemFont(ofSize: 12, weight: .bold)
-        consoleBtn.backgroundColor = UIColor.black.withAlphaComponent(0.24)
-        consoleBtn.layer.cornerRadius = 14
-        consoleBtn.layer.borderWidth = 1.0
-        consoleBtn.layer.borderColor = ErrorLogCSSTheme.white.withAlphaComponent(0.45).cgColor
-        consoleBtn.addTarget(self, action: #selector(handleConsoleButtonTapped), for: .touchUpInside)
-        
         clipView.addSubview(titleStack)
         clipView.addSubview(subLabel)
-        clipView.addSubview(consoleBtn)
         heroCard.addSubview(clipView)
         headerContainer.addSubview(heroCard)
         
@@ -451,15 +432,11 @@ private extension ErrorLogViewController
             iconView.centerYAnchor.constraint(equalTo: iconBadge.centerYAnchor),
             
             titleStack.centerXAnchor.constraint(equalTo: clipView.centerXAnchor),
-            titleStack.topAnchor.constraint(equalTo: clipView.topAnchor, constant: 14),
+            titleStack.topAnchor.constraint(equalTo: clipView.topAnchor, constant: 18),
             
-            subLabel.topAnchor.constraint(equalTo: titleStack.bottomAnchor, constant: 5),
+            subLabel.topAnchor.constraint(equalTo: titleStack.bottomAnchor, constant: 6),
             subLabel.leadingAnchor.constraint(equalTo: clipView.leadingAnchor, constant: 14),
-            subLabel.trailingAnchor.constraint(equalTo: clipView.trailingAnchor, constant: -14),
-            
-            consoleBtn.topAnchor.constraint(equalTo: subLabel.bottomAnchor, constant: 10),
-            consoleBtn.centerXAnchor.constraint(equalTo: clipView.centerXAnchor),
-            consoleBtn.heightAnchor.constraint(equalToConstant: 28)
+            subLabel.trailingAnchor.constraint(equalTo: clipView.trailingAnchor, constant: -14)
         ])
         
         heroCard.alpha = 0
@@ -546,10 +523,6 @@ private extension ErrorLogViewController
             }
         })
         self.present(alertController, animated: true)
-    }
-
-    @objc func handleConsoleButtonTapped() {
-        self.showConsoleLogs(self.clearLogButton)
     }
 
     // MARK: - 🇻🇳 BỘ DỊCH THÔNG MINH CÁC LỖI CÀI IPA & REFRESH SANG TIẾNG VIỆT
@@ -726,7 +699,7 @@ private extension ErrorLogViewController
         }
         
         cardView.backgroundColor = ErrorLogCSSTheme.white
-        if #available(iOS 13.0, tvOS 13.0, *) {
+        if #available(iOS 13.0, *) {
             cardView.layer.cornerCurve = .continuous
         }
         
@@ -792,7 +765,7 @@ private extension ErrorLogViewController
         
         // Bo góc chuẩn iOS cho Icon ứng dụng bị lỗi
         cell.appIconImageView.layer.cornerRadius = 13
-        if #available(iOS 13.0, tvOS 13.0, *) {
+        if #available(iOS 13.0, *) {
             cell.appIconImageView.layer.cornerCurve = .continuous
         }
         cell.appIconImageView.layer.masksToBounds = true
@@ -918,6 +891,7 @@ private extension ErrorLogViewController
         }
     }
 
+    // Giữ lại @IBAction để đảm bảo an toàn kết nối với Storyboard nếu có
     @IBAction func showConsoleLogs(_ sender: UIBarButtonItem) {
         let consoleLogView = ConsoleLogView(logURL: (UIApplication.shared.delegate as! AppDelegate).consoleLog.logFileURL)
         let consoleLogController = UIHostingController(rootView: consoleLogView)
@@ -943,8 +917,7 @@ private extension ErrorLogViewController
         )
         alertController.popoverPresentationController?.barButtonItem = sender
         alertController.addAction(UIAlertAction(title: "Hủy", style: .cancel, handler: nil))
-        alertController.addAction(UIAlertAction(title: "Xóa tất cả nhật ký", style: .destructive) { [weak self] _ in
-            guard let self = self else { return }
+        alertController.addAction(UIAlertAction(title: "Xóa tất cả nhật ký", style: .destructive) { _ in
             Task {
                 await self.clearLoggedErrors()
                 await MainActor.run {
@@ -978,9 +951,9 @@ private extension ErrorLogViewController
     {
         #if !os(tvOS)
         let nsError = loggedError.error as NSError
-        let errorMessage = [nsError.localizedDescription, nsError.localizedRecoverySuggestion].compactMap { $0 }.joined(separator: "\n\n")
+        let rawMessage = [nsError.localizedDescription, nsError.localizedRecoverySuggestion].compactMap { $0 }.joined(separator: "\n\n")
         
-        UIPasteboard.general.string = errorMessage
+        UIPasteboard.general.string = self.translateErrorDescriptionText(rawMessage)
         #endif
     }
 
@@ -1025,7 +998,7 @@ extension ErrorLogViewController
         iconBox.translatesAutoresizingMaskIntoConstraints = false
         iconBox.backgroundColor = ErrorLogCSSTheme.blue.withAlphaComponent(0.14)
         iconBox.layer.cornerRadius = 6.5
-        if #available(iOS 13.0, tvOS 13.0, *) {
+        if #available(iOS 13.0, *) {
             iconBox.layer.cornerCurve = .continuous
         }
 

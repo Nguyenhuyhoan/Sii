@@ -36,7 +36,8 @@ final class PipelineExecutor: @unchecked Sendable {
         var didTurnOffCellularInSinglePipeline = false
         
         defer {
-            // Đảm bảo trả lại trạng thái cờ sau khi kết thúc pipeline
+            // Đảm bảo nếu luồng đơn lẻ (Refresh 1 app lẻ hoặc Cài IPA lẻ trên 4G) đã tắt 4G
+            // mà gặp lỗi dừng sớm trước khi về tới cuối PipelineRunner thì vẫn bật lại 4G an toàn.
             if didTurnOffCellularInSinglePipeline && !group.isCellularRefreshGroup {
                 Task {
                     await CellularRefreshManager.shared.turnOnDataIfNeeded()
@@ -49,7 +50,7 @@ final class PipelineExecutor: @unchecked Sendable {
             
             do {
                 if step == .sendApp || (step == .refreshApp && !group.isCellularRefreshGroup) {
-                    if CellularRefreshManager.shared.isCellularMode {
+                    if !CellularRefreshManager.shared.isShortcutTwoStageMode && CellularRefreshManager.shared.isCellularMode {
                         didTurnOffCellularInSinglePipeline = true
                     }
                 }
@@ -218,8 +219,8 @@ final class PipelineExecutor: @unchecked Sendable {
                 
             case .sendApp:
                 loggerType = SendAppOperation.self
-                // Nếu đang trên 4G, ép làm mới kết nối Minimuxer thẳng sang LocalDevVPN (10.7.0.1) trước khi đẩy IPA
-                if CellularRefreshManager.shared.isCellularMode {
+                // Nếu đang cài IPA qua 4G, tự động ngắt 4G sang VPN nội bộ trước khi đẩy IPA
+                if !CellularRefreshManager.shared.isShortcutTwoStageMode && CellularRefreshManager.shared.isCellularMode {
                     _ = await CellularRefreshManager.shared.turnOffDataIfNeeded()
                 }
                 let step = try SendAppOperation(context: context)
@@ -248,8 +249,11 @@ final class PipelineExecutor: @unchecked Sendable {
                 
             case .refreshApp:
                 loggerType = RefreshAppOperation.self
-                // Nếu đang Refresh 1 app lẻ trên 4G, ép làm mới kết nối Minimuxer sang LocalDevVPN (10.7.0.1)
-                if !group.isCellularRefreshGroup && CellularRefreshManager.shared.isCellularMode {
+                // Nếu đang Refresh 1 app lẻ trực tiếp trên 4G (không nằm trong batch isCellularRefreshGroup),
+                // tự động tắt 4G sau khi đã tải xong Provisioning Profile từ Apple để tiêm Profile qua LocalDevVPN.
+                if !group.isCellularRefreshGroup &&
+                   !CellularRefreshManager.shared.isShortcutTwoStageMode &&
+                   CellularRefreshManager.shared.isCellularMode {
                     _ = await CellularRefreshManager.shared.turnOffDataIfNeeded()
                 }
                 let step = try RefreshAppOperation(context: context)

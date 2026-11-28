@@ -1191,7 +1191,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
         } else if !canVerifyNow {
             assignIfChanged(\.isPairingOK, false)
             assignIfChanged(\.isPairingVerifiedError, false)
-            assignIfChanged(\.pairingProtocol, "Đã lưu tệp Pairing (\(protocolName)) • Bật LocalDevVPN để xác minh")
+            assignIfChanged(\.pairingProtocol, "")
         } else if self.didAttemptLiveVerifyInCurrentMode {
             if self.lastVerifiedPairingSuccess {
                 assignIfChanged(\.isPairingOK, true)
@@ -1209,7 +1209,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
         } else {
             assignIfChanged(\.isPairingOK, false)
             assignIfChanged(\.isPairingVerifiedError, false)
-            assignIfChanged(\.pairingProtocol, "Đã lưu tệp Pairing (\(protocolName)) • Đang chờ xác minh")
+            assignIfChanged(\.pairingProtocol, "")
         }
     }
 
@@ -1586,7 +1586,7 @@ private struct SettingsPairingSheetView: SwiftUI.View {
             case .verifiedOK:
                 return "Thiết Bị Đã Ghép Nối Ổn Định (Tích Xanh)"
             case .actionRequired:
-                return "Đã Lưu Pairing • Đang Chờ Xác Minh Kết Nối"
+                return "Đang Chờ Xác Minh Kết Nối"
             case .failedError:
                 return !vm.hasAnyStoredPairingFile
                     ? "Chưa Có Tệp Pairing (Tích Đỏ)"
@@ -1609,7 +1609,7 @@ private struct SettingsPairingSheetView: SwiftUI.View {
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(CSSTheme.suiPureBlack)
 
-                    if !vm.pairingProtocol.isEmpty {
+                    if state != .actionRequired && !vm.pairingProtocol.isEmpty {
                         SwiftUI.Text(vm.pairingProtocol)
                             .font(.system(size: 13.2, weight: .semibold))
                             .foregroundColor(CSSTheme.suiPureBlack.opacity(0.85))
@@ -1619,36 +1619,38 @@ private struct SettingsPairingSheetView: SwiftUI.View {
                 Spacer()
             }
 
-            Divider()
+            if state != .actionRequired {
+                Divider()
 
-            HStack(spacing: 10) {
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(vm.isVpnOK ? CSSTheme.suiGreen : CSSTheme.suiRed)
-                        .frame(width: 8, height: 8)
-                    SwiftUI.Text(vm.isVpnOK ? "LocalDevVPN: Đã bật (\(vm.tunnelIP))" : "LocalDevVPN: Chưa bật")
-                        .font(.system(size: 12.5, weight: .bold))
-                        .foregroundColor(CSSTheme.suiPureBlack)
-                }
-
-                Spacer()
-
-                SwiftUI.Button {
-                    Task { await vm.checkAllStatuses(forceVerify: true) }
-                } label: {
-                    HStack(spacing: 4) {
-                        SwiftUI.Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 11.5, weight: .heavy))
-                        SwiftUI.Text("Kiểm tra lại")
-                            .font(.system(size: 12, weight: .heavy))
+                HStack(spacing: 10) {
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(vm.isVpnOK ? CSSTheme.suiGreen : CSSTheme.suiRed)
+                            .frame(width: 8, height: 8)
+                        SwiftUI.Text(vm.isVpnOK ? "LocalDevVPN: Đã bật (\(vm.tunnelIP))" : "LocalDevVPN: Chưa bật")
+                            .font(.system(size: 12.5, weight: .bold))
+                            .foregroundColor(CSSTheme.suiPureBlack)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(CSSTheme.suiPrimary.opacity(0.14))
-                    .foregroundColor(CSSTheme.suiPrimary)
-                    .clipShape(Capsule())
+
+                    Spacer()
+
+                    SwiftUI.Button {
+                        Task { await vm.checkAllStatuses(forceVerify: true) }
+                    } label: {
+                        HStack(spacing: 4) {
+                            SwiftUI.Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 11.5, weight: .heavy))
+                            SwiftUI.Text("Kiểm tra lại")
+                                .font(.system(size: 12, weight: .heavy))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(CSSTheme.suiPrimary.opacity(0.14))
+                        .foregroundColor(CSSTheme.suiPrimary)
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(SettingsBounceButtonStyle())
                 }
-                .buttonStyle(SettingsBounceButtonStyle())
             }
         }
         .padding(14)
@@ -1704,7 +1706,7 @@ private struct SettingsPairingSheetView: SwiftUI.View {
 
     private var ios27DirectPairingCard: some SwiftUI.View {
         SettingsSkySectionCard(
-            title: "PHẦN 1: GHÉP NỐI TRỰC TIẾP TRÊN IPHONE (IOS 27)",
+            title: "PHẦN 1: GHÉP NỐI TRỰC TIẾP TRÊN IOS 27",
             icon: "iphone.radiowaves.left.and.right",
             color: CSSTheme.suiPrimary
         ) {
@@ -1864,7 +1866,7 @@ private struct SettingsPairingSheetView: SwiftUI.View {
 
     private var pcPairingGuideCard: some SwiftUI.View {
         SettingsSkySectionCard(
-            title: "PHẦN 2: GHÉP NỐI QUA MÁY TÍNH (DƯỚI IOS 27 - PC / MAC)",
+            title: "PHẦN 2: GHÉP NỐI QUA MÁY TÍNH DƯỚI IOS 27",
             icon: "laptopcomputer.and.iphone",
             color: CSSTheme.suiSecondary
         ) {

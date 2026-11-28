@@ -53,7 +53,7 @@ private struct CSSTheme {
     static let cornerRadius: CGFloat = 18.0
     static let innerCornerRadius: CGFloat = 14.0
 
-    // SwiftUI Colors (Phục vụ bảng Máy chủ Anisette & Pairing & Thiết bị ghép nối)
+    // SwiftUI Colors (Phục vụ bảng Máy chủ Anisette & Pairing)
     static let suiPrimary = SwiftUI.Color(red: 0/255, green: 123/255, blue: 255/255)
     static let suiSecondary = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)
     static let suiNeutralInspect = SwiftUI.Color(red: 111/255, green: 66/255, blue: 193/255)
@@ -149,27 +149,36 @@ private struct SettingsSkySectionCard<Content: SwiftUI.View>: SwiftUI.View {
     let title: String
     let icon: String
     let color: SwiftUI.Color
+    var statusOK: Bool? = nil
     var trailingView: AnyView? = nil
+    var footerText: String? = nil
     @ViewBuilder let content: Content
 
     var body: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        RoundedRectangle(cornerRadius: 6.5, style: .continuous)
                             .fill(color.opacity(0.14))
-                            .frame(width: 24, height: 24)
+                            .frame(width: 22, height: 22)
                         SwiftUI.Image(systemName: icon)
-                            .font(.system(size: 12.5, weight: .heavy))
+                            .font(.system(size: 11.5, weight: .heavy))
                             .foregroundColor(color)
                     }
 
                     SwiftUI.Text(title.uppercased())
-                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                        .font(.system(size: 14, weight: .heavy, design: .rounded))
                         .foregroundColor(CSSTheme.suiPrimary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
+
+                    if let statusOK = statusOK {
+                        SwiftUI.Image(systemName: statusOK ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(statusOK ? CSSTheme.suiGreen : CSSTheme.suiRed)
+                            .animation(.spring(), value: statusOK)
+                    }
 
                     Spacer(minLength: 4)
 
@@ -190,7 +199,7 @@ private struct SettingsSkySectionCard<Content: SwiftUI.View>: SwiftUI.View {
             }
             .padding(.horizontal, 4)
 
-            VStack(alignment: .leading, spacing: 11) {
+            VStack(alignment: .leading, spacing: 10) {
                 content
             }
             .padding(14)
@@ -201,8 +210,15 @@ private struct SettingsSkySectionCard<Content: SwiftUI.View>: SwiftUI.View {
                 RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
                     .stroke(CSSTheme.suiBorder, lineWidth: 1.1)
             )
-            .shadow(color: .black.opacity(0.05), radius: 12, x: 0, y: 6)
-            .shadow(color: CSSTheme.suiPrimary.opacity(0.08), radius: 16, x: 0, y: 8)
+            .shadow(color: CSSTheme.suiPrimary.opacity(0.09), radius: 14, x: 0, y: 6)
+
+            if let footerText = footerText {
+                SwiftUI.Text(footerText)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(CSSTheme.suiPureBlack)
+                    .padding(.horizontal, 6)
+                    .padding(.top, 2)
+            }
         }
     }
 }
@@ -571,7 +587,7 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                             .font(.system(size: 15, weight: .bold))
                             .foregroundColor(CSSTheme.suiPrimary)
                         SwiftUI.Text("Máy Chủ Anisette")
-                            .font(.system(size: 17, weight: .heavy, design: .rounded))
+                            .font(.system(size: 17, weight: .bold))
                             .foregroundColor(CSSTheme.suiPrimary)
                     }
                 }
@@ -580,7 +596,7 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
                         onDismiss?()
                         dismiss()
                     }
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.headline)
                     .foregroundColor(CSSTheme.suiPrimary)
                 }
             }
@@ -597,17 +613,17 @@ private struct SettingsAnisetteSheetView: SwiftUI.View {
     }
 }
 
-// MARK: - 🔗 BỘ QUẢN LÝ & GIAO DIỆN PAIRING & THIẾT BỊ GHÉP NỐI (ĐỒNG BỘ 100% TỪ MÃ 1)
+// MARK: - 🔗 BỘ QUẢN LÝ & GIAO DIỆN PAIRING & THIẾT BỊ GHÉP NỐI (ĐỒNG BỘ 100% VỚI SETTINGS)
 private enum SettingsPairingVisualState: Equatable {
-    case actionRequired // Màu Tím (Purple): Trung tính, mời nhấn vào kiểm tra (Không Xanh, Không Đỏ)
-    case verifiedOK     // Màu Xanh Lá (Green): Hoạt động tốt
-    case failedError    // Màu Đỏ (Red): Lỗi thật sự hoặc chưa có tệp
+    case actionRequired // Màu Tím: Đang chờ xác minh qua LocalDevVPN
+    case verifiedOK     // Màu Xanh Lá: Hoạt động tốt
+    case failedError    // Màu Đỏ: Lỗi hoặc chưa có tệp Pairing
 }
 
-/// Quản lý giữ tiến trình chạy nền khi người dùng chuyển sang app Cài đặt để nhập mã PIN Pairing
+/// Quản lý giữ tiến trình chạy nền khi người dùng chuyển sang app Cài đặt để nhập mã PIN Pairing 6 chữ số
 @MainActor
-private final class SettingsPairingBackgroundKeepAliveManager {
-    static let shared = SettingsPairingBackgroundKeepAliveManager()
+private final class SettingsPairingKeepAliveManager {
+    static let shared = SettingsPairingKeepAliveManager()
     private var bgTask: UIBackgroundTaskIdentifier = .invalid
     private var isKeepAliveActive: Bool = false
     private var lifecycleCancellables = Set<AnyCancellable>()
@@ -675,7 +691,6 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
 
     @Published var isCellularOK: Bool = false
     @Published var isWifiActive: Bool = false
-
     @Published var isWirelessPairingActive: Bool = false
 
     private let pathMonitor = NWPathMonitor()
@@ -695,16 +710,11 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
     private var activeSheetPeriodicTask: Task<Void, Never>? = nil
 
     private var isViewVisible: Bool = false
-    private var isAppActive: Bool = (UIApplication.shared.applicationState == .active)
     private var isChecking: Bool = false
     private var needsAnotherCheck: Bool = false
     private var pendingForceVerify: Bool = false
     private var lastInternalConfigWriteTime: TimeInterval = 0
     private var latestSnapshot: SystemInterfaceSnapshot? = nil
-
-    private var isEffectiveVisible: Bool {
-        isViewVisible && isAppActive
-    }
 
     private var lastVerifiedPairingSuccess: Bool = UserDefaults.standard.bool(forKey: verifiedPairingCacheKey) {
         didSet {
@@ -761,10 +771,10 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
         guard isWirelessPairingActive != active else { return }
         isWirelessPairingActive = active
         if active {
-            SettingsPairingBackgroundKeepAliveManager.shared.beginKeepAlive()
+            SettingsPairingKeepAliveManager.shared.beginKeepAlive()
         } else {
-            SettingsPairingBackgroundKeepAliveManager.shared.endKeepAlive()
-            if isEffectiveVisible {
+            SettingsPairingKeepAliveManager.shared.endKeepAlive()
+            if isViewVisible {
                 Task { await checkAllStatuses(forceVerify: true) }
             }
         }
@@ -794,11 +804,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
     func setViewVisible(_ visible: Bool) {
         guard isViewVisible != visible else { return }
         isViewVisible = visible
-        handleVisibilityOrLifecycleChanged()
-    }
-
-    private func handleVisibilityOrLifecycleChanged() {
-        if isEffectiveVisible {
+        if visible {
             if !isWirelessPairingActive {
                 Task { await checkAllStatuses(forceVerify: false) }
             } else {
@@ -816,7 +822,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 8_000_000_000)
                 guard !Task.isCancelled, let self = self else { break }
-                guard self.isEffectiveVisible,
+                guard self.isViewVisible,
                       !self.isWirelessPairingActive,
                       !self.isChecking,
                       !self.isWithinInternalWriteCooldown else {
@@ -834,11 +840,11 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
 
     private func refreshSnapshotAsyncAndApply() {
         Task { @MainActor [weak self] in
-            guard let self = self, self.isEffectiveVisible else { return }
+            guard let self = self, self.isViewVisible else { return }
             let snap = await Task.detached(priority: .utility) {
                 Self.scanSystemInterfaces()
             }.value
-            guard self.isEffectiveVisible else { return }
+            guard self.isViewVisible else { return }
             self.latestSnapshot = snap
             self.updateInstantStatus(existingSnapshot: snap)
         }
@@ -853,7 +859,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
             .debounce(for: .milliseconds(850), scheduler: DispatchQueue.main)
             .sink { [weak self] forceVerify in
                 guard let self = self,
-                      self.isEffectiveVisible,
+                      self.isViewVisible,
                       !self.isChecking,
                       !self.isWirelessPairingActive,
                       !self.isWithinInternalWriteCooldown else { return }
@@ -877,7 +883,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
                     self.usesWifiPath = usesWifi
                     changed = true
                 }
-                guard changed, self.isEffectiveVisible, !self.isWirelessPairingActive else { return }
+                guard changed, self.isViewVisible, !self.isWirelessPairingActive else { return }
                 if let snap = self.latestSnapshot {
                     self.updateInstantStatus(existingSnapshot: snap)
                 }
@@ -894,7 +900,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
                 self.didReceiveCellularMonitorUpdate = true
                 guard firstUpdate || self.isCellularPathSatisfied != cellSatisfied else { return }
                 self.isCellularPathSatisfied = cellSatisfied
-                guard self.isEffectiveVisible, !self.isWirelessPairingActive else { return }
+                guard self.isViewVisible, !self.isWirelessPairingActive else { return }
                 if let snap = self.latestSnapshot {
                     self.updateInstantStatus(existingSnapshot: snap)
                 }
@@ -911,7 +917,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
                 self.didReceiveWifiMonitorUpdate = true
                 guard firstUpdate || self.isWifiPathSatisfied != wifiSatisfied else { return }
                 self.isWifiPathSatisfied = wifiSatisfied
-                guard self.isEffectiveVisible, !self.isWirelessPairingActive else { return }
+                guard self.isViewVisible, !self.isWirelessPairingActive else { return }
                 if let snap = self.latestSnapshot {
                     self.updateInstantStatus(existingSnapshot: snap)
                 }
@@ -924,7 +930,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self,
-                      self.isEffectiveVisible,
+                      self.isViewVisible,
                       !self.isChecking,
                       !self.isWirelessPairingActive,
                       !self.isWithinInternalWriteCooldown else { return }
@@ -936,7 +942,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self,
-                      self.isEffectiveVisible,
+                      self.isViewVisible,
                       !self.isChecking,
                       !self.isWirelessPairingActive,
                       !self.isWithinInternalWriteCooldown else { return }
@@ -944,32 +950,17 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)
+        NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                guard let self = self else { return }
-                self.isAppActive = false
-                self.stopActiveSheetPeriodicCheck()
-            }
-            .store(in: &cancellables)
-
-        NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self = self else { return }
-                self.isAppActive = false
-                self.stopActiveSheetPeriodicCheck()
-            }
-            .store(in: &cancellables)
-
-        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self = self else { return }
-                let wasActive = self.isAppActive
-                self.isAppActive = true
-                guard !wasActive, self.isViewVisible else { return }
-                self.handleVisibilityOrLifecycleChanged()
+                guard let self = self, self.isViewVisible else { return }
+                guard !self.isWirelessPairingActive else {
+                    self.refreshSnapshotAsyncAndApply()
+                    return
+                }
+                Task { @MainActor [weak self] in
+                    await self?.checkAllStatuses(forceVerify: false)
+                }
             }
             .store(in: &cancellables)
     }
@@ -1039,7 +1030,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
     }
 
     private func ensureTunnelRoutingPinned(snapshot: SystemInterfaceSnapshot) {
-        guard isEffectiveVisible, !isWirelessPairingActive else { return }
+        guard isViewVisible, !isWirelessPairingActive else { return }
         guard let utunIP = snapshot.detectedLocalDevUtunIPv4, utunIP.hasPrefix("10.7.") else { return }
 
         let config = ConnectionConfig.shared
@@ -1097,7 +1088,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
     }
 
     func updateInstantStatus(existingSnapshot: SystemInterfaceSnapshot) {
-        guard isEffectiveVisible else { return }
+        guard isViewVisible else { return }
         let snapshot = existingSnapshot
         self.latestSnapshot = snapshot
         ensureTunnelRoutingPinned(snapshot: snapshot)
@@ -1178,13 +1169,13 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
         let protocolName: String = {
             switch activeType {
             case .rppairing:
-                return "Remote Pairing (iOS 17+ / 27)"
+                return "Remote Pairing • Chuẩn iOS 17+ / iOS 27"
             case .lockdown:
-                return "Lockdown Pairing"
+                return "Lockdown Pairing • Chuẩn PC / Mac"
             case .unknown:
                 return (hasAnyFile || coreLoaded)
-                    ? "Đã nạp Pairing File"
-                    : "Chưa có tệp Pairing"
+                    ? "Đã nạp tệp Pairing hợp lệ"
+                    : "Chưa có tệp Pairing trong ứng dụng"
             }
         }()
 
@@ -1196,11 +1187,11 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
             self.didAttemptLiveVerifyInCurrentMode = false
             assignIfChanged(\.isPairingOK, false)
             assignIfChanged(\.isPairingVerifiedError, true)
-            assignIfChanged(\.pairingProtocol, "Chưa có tệp Pairing")
+            assignIfChanged(\.pairingProtocol, "Chưa có tệp Pairing • Hãy cài trực tiếp hoặc nhập tệp")
         } else if !canVerifyNow {
             assignIfChanged(\.isPairingOK, false)
             assignIfChanged(\.isPairingVerifiedError, false)
-            assignIfChanged(\.pairingProtocol, "")
+            assignIfChanged(\.pairingProtocol, "Đã lưu tệp Pairing (\(protocolName)) • Bật LocalDevVPN để xác minh")
         } else if self.didAttemptLiveVerifyInCurrentMode {
             if self.lastVerifiedPairingSuccess {
                 assignIfChanged(\.isPairingOK, true)
@@ -1209,7 +1200,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
             } else {
                 assignIfChanged(\.isPairingOK, false)
                 assignIfChanged(\.isPairingVerifiedError, true)
-                assignIfChanged(\.pairingProtocol, "Pairing bị lỗi hoặc hết hạn • Hãy cài lại Pairing mới")
+                assignIfChanged(\.pairingProtocol, "Pairing bị lỗi hoặc hết hạn • Hãy ghép nối hoặc nạp lại tệp mới")
             }
         } else if self.lastVerifiedPairingSuccess {
             assignIfChanged(\.isPairingOK, true)
@@ -1218,7 +1209,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
         } else {
             assignIfChanged(\.isPairingOK, false)
             assignIfChanged(\.isPairingVerifiedError, false)
-            assignIfChanged(\.pairingProtocol, "")
+            assignIfChanged(\.pairingProtocol, "Đã lưu tệp Pairing (\(protocolName)) • Đang chờ xác minh")
         }
     }
 
@@ -1269,7 +1260,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
     }
 
     func checkAllStatuses(forceVerify: Bool = false) async {
-        guard isEffectiveVisible else { return }
+        guard isViewVisible else { return }
 
         if isWirelessPairingActive {
             if forceVerify {
@@ -1291,7 +1282,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
         defer {
             lastInternalConfigWriteTime = CFAbsoluteTimeGetCurrent()
             isChecking = false
-            if needsAnotherCheck && isEffectiveVisible && !isWirelessPairingActive {
+            if needsAnotherCheck && isViewVisible && !isWirelessPairingActive {
                 let shouldForce = pendingForceVerify
                 needsAnotherCheck = false
                 pendingForceVerify = false
@@ -1307,7 +1298,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
             Self.scanSystemInterfaces()
         }.value
 
-        guard isEffectiveVisible else { return }
+        guard isViewVisible else { return }
         updateInstantStatus(existingSnapshot: snapshot)
 
         guard hasAnyStoredPairingFile else {
@@ -1338,7 +1329,7 @@ private final class SettingsPairingCheckViewModel: ObservableObject {
 
             if shouldPerformHeavyHandshake {
                 let ok = await verifyPairingOverTunnel(initialSnapshot: snapshot)
-                guard isEffectiveVisible else { return }
+                guard isViewVisible else { return }
                 self.didAttemptLiveVerifyInCurrentMode = true
                 self.lastVerifiedModeSignature = currentSignature
                 if ok {
@@ -1375,7 +1366,11 @@ private struct SettingsGuideStepRow: SwiftUI.View {
                 .frame(width: 26, height: 26)
                 .background(
                     Circle().fill(
-                        LinearGradient(colors: [CSSTheme.suiPrimary, CSSTheme.suiSecondary], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        LinearGradient(
+                            colors: [CSSTheme.suiPrimary, CSSTheme.suiSecondary],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
                 )
                 .shadow(color: CSSTheme.suiPrimary.opacity(0.25), radius: 3, x: 0, y: 2)
@@ -1397,7 +1392,7 @@ private struct SettingsGuideStepRow: SwiftUI.View {
         }
         .padding(11)
         .background(CSSTheme.suiInnerRowBackground)
-        .cornerRadius(CSSTheme.innerCornerRadius)
+        .clipShape(RoundedRectangle(cornerRadius: CSSTheme.innerCornerRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: CSSTheme.innerCornerRadius, style: .continuous)
                 .stroke(CSSTheme.suiInnerBorder, lineWidth: 1)
@@ -1405,7 +1400,7 @@ private struct SettingsGuideStepRow: SwiftUI.View {
     }
 }
 
-private struct SettingsPairingGuideSheetView: SwiftUI.View {
+private struct SettingsPairingSheetView: SwiftUI.View {
     @StateObject private var vm = SettingsPairingCheckViewModel()
     @StateObject private var wirelessVM = WirelessPairViewModel()
     @StateObject private var pairingMgmtVM = PairingFileManagementViewModel()
@@ -1444,7 +1439,7 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
                         }
                         .padding(12)
                         .background((vm.isPairingOK ? CSSTheme.suiGreen : CSSTheme.suiPrimary).opacity(0.12))
-                        .cornerRadius(CSSTheme.innerCornerRadius)
+                        .clipShape(RoundedRectangle(cornerRadius: CSSTheme.innerCornerRadius, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: CSSTheme.innerCornerRadius, style: .continuous)
                                 .stroke(CSSTheme.suiBorder, lineWidth: 1)
@@ -1457,17 +1452,18 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
                 .padding(16)
             }
             .background(CSSTheme.suiPageGradient.ignoresSafeArea())
-            .navigationTitle("Pairing & Thiết bị ghép nối")
+            .navigationTitle("Pairing & Thiết Bị Ghép Nối")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 6) {
-                        SwiftUI.Image(systemName: "doc.badge.gearshape.fill")
+                        SwiftUI.Image(systemName: "iphone.radiowaves.left.and.right")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundColor(CSSTheme.suiPrimary)
-                        SwiftUI.Text("Pairing & Thiết bị ghép nối")
-                            .font(.system(size: 16.5, weight: .heavy, design: .rounded))
+                        SwiftUI.Text("Pairing & Thiết Bị Ghép Nối")
+                            .font(.system(size: 16.5, weight: .bold))
                             .foregroundColor(CSSTheme.suiPrimary)
+                            .lineLimit(1)
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -1480,7 +1476,7 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
                         onDismiss?()
                         dismiss()
                     }
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.headline)
                     .foregroundColor(CSSTheme.suiPrimary)
                 }
             }
@@ -1495,17 +1491,14 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
                 vm.setViewVisible(false)
                 onDismiss?()
             }
-            .refreshable {
-                await vm.checkAllStatuses(forceVerify: true)
-            }
             .alert("Xoá tệp Pairing?", isPresented: $showDeleteConfirmAlert) {
                 SwiftUI.Button("Xoá", role: .destructive) {
                     vm.deleteAllPairingFiles()
-                    statusBannerMessage = "Đã xoá tệp Pairing khỏi ứng dụng."
+                    statusBannerMessage = "Đã xoá toàn bộ tệp Pairing khỏi ứng dụng."
                 }
                 SwiftUI.Button("Huỷ", role: .cancel) {}
             } message: {
-                SwiftUI.Text("Tệp Pairing hiện tại sẽ bị xoá hoàn toàn khỏi ứng dụng. Bạn sẽ cần cài hoặc nhập lại tệp mới để tiếp tục sử dụng.")
+                SwiftUI.Text("Tệp Pairing hiện tại sẽ bị xoá hoàn toàn khỏi ứng dụng. Bạn sẽ cần ghép nối lại hoặc nhập tệp mới để cài đặt và gia hạn ứng dụng.")
             }
             #if !os(tvOS)
             .fileImporter(
@@ -1520,7 +1513,7 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
                     try? await minimuxerSwitchPairingProtocol(to: proto)
                     if case .success = result {
                         vm.markPairingVerifiedImmediately()
-                        statusBannerMessage = "Đã nạp tệp Pairing thành công!"
+                        statusBannerMessage = "Đã nạp và kích hoạt tệp Pairing thành công!"
                     }
                     await vm.checkAllStatuses(forceVerify: true)
                 }
@@ -1560,7 +1553,7 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
                         try? await minimuxerSwitchPairingProtocol(to: .rppairing)
                         vm.markPairingVerifiedImmediately()
                         await vm.checkAllStatuses(forceVerify: true)
-                        statusBannerMessage = "Đã cài và nạp Pairing thành công!"
+                        statusBannerMessage = "Đã ghép nối và kích hoạt tệp Pairing thành công!"
                     }
                 }
             }
@@ -1582,148 +1575,166 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
 
         let badgeIcon: String = {
             switch state {
-            case .verifiedOK: return "checkmark.circle.fill"
+            case .verifiedOK: return "checkmark.shield.fill"
             case .actionRequired: return "doc.text.magnifyingglass"
-            case .failedError: return "xmark.circle.fill"
+            case .failedError: return "xmark.shield.fill"
             }
         }()
 
         let headerTitle: String = {
             switch state {
             case .verifiedOK:
-                return "Pairing Hoạt Động Tốt (Tích Xanh)"
+                return "Thiết Bị Đã Ghép Nối Ổn Định (Tích Xanh)"
             case .actionRequired:
-                return "Đang Chờ Xác Minh Pairing"
+                return "Đã Lưu Pairing • Đang Chờ Xác Minh Kết Nối"
             case .failedError:
                 return !vm.hasAnyStoredPairingFile
                     ? "Chưa Có Tệp Pairing (Tích Đỏ)"
-                    : "Pairing Lỗi Hoặc Hết Hạn (Tích Đỏ)"
+                    : "Tệp Pairing Lỗi Hoặc Hết Hạn (Tích Đỏ)"
             }
         }()
 
-        return HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(badgeColor.opacity(0.15))
-                    .frame(width: 48, height: 48)
-                SwiftUI.Image(systemName: badgeIcon)
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundColor(badgeColor)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                SwiftUI.Text(headerTitle)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(CSSTheme.suiPureBlack)
-
-                if state != .actionRequired && !vm.pairingProtocol.isEmpty {
-                    SwiftUI.Text(vm.pairingProtocol)
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundColor(CSSTheme.suiPureBlack)
-                        .fixedSize(horizontal: false, vertical: true)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(badgeColor.opacity(0.15))
+                        .frame(width: 48, height: 48)
+                    SwiftUI.Image(systemName: badgeIcon)
+                        .font(.system(size: 23, weight: .bold))
+                        .foregroundColor(badgeColor)
                 }
+                VStack(alignment: .leading, spacing: 4) {
+                    SwiftUI.Text(headerTitle)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(CSSTheme.suiPureBlack)
+
+                    if !vm.pairingProtocol.isEmpty {
+                        SwiftUI.Text(vm.pairingProtocol)
+                            .font(.system(size: 13.2, weight: .semibold))
+                            .foregroundColor(CSSTheme.suiPureBlack.opacity(0.85))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer()
             }
-            Spacer()
+
+            Divider()
+
+            HStack(spacing: 10) {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(vm.isVpnOK ? CSSTheme.suiGreen : CSSTheme.suiRed)
+                        .frame(width: 8, height: 8)
+                    SwiftUI.Text(vm.isVpnOK ? "LocalDevVPN: Đã bật (\(vm.tunnelIP))" : "LocalDevVPN: Chưa bật")
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundColor(CSSTheme.suiPureBlack)
+                }
+
+                Spacer()
+
+                SwiftUI.Button {
+                    Task { await vm.checkAllStatuses(forceVerify: true) }
+                } label: {
+                    HStack(spacing: 4) {
+                        SwiftUI.Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11.5, weight: .heavy))
+                        SwiftUI.Text("Kiểm tra lại")
+                            .font(.system(size: 12, weight: .heavy))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(CSSTheme.suiPrimary.opacity(0.14))
+                    .foregroundColor(CSSTheme.suiPrimary)
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(SettingsBounceButtonStyle())
+            }
         }
         .padding(14)
         .background(CSSTheme.suiCardBackground)
-        .cornerRadius(CSSTheme.cornerRadius)
+        .clipShape(RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
                 .stroke(badgeColor.opacity(0.45), lineWidth: 1.5)
         )
-        .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 5)
-        .shadow(color: CSSTheme.suiPrimary.opacity(0.08), radius: 12, x: 0, y: 6)
+        .shadow(color: CSSTheme.suiPrimary.opacity(0.08), radius: 10, x: 0, y: 5)
     }
 
     private var verificationAdviceCard: some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                SwiftUI.Image(systemName: "checkmark.shield.fill")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(CSSTheme.suiPrimary)
-                SwiftUI.Text("3 Bước Kiểm Tra Pairing Chính Xác:")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(CSSTheme.suiPureBlack)
-            }
-
+        SettingsSkySectionCard(
+            title: "3 BƯỚC XÁC MINH TỆP PAIRING CHUẨN XÁC",
+            icon: "checkmark.shield.fill",
+            color: CSSTheme.suiPrimary
+        ) {
             VStack(alignment: .leading, spacing: 10) {
                 SettingsGuideStepRow(
                     num: "1",
-                    title: "Kết nối mạng trên iPhone",
-                    text: LocalizedStringKey("Đảm bảo iPhone của bạn đang có kết nối **Wi-Fi** hoặc **4G**.")
+                    title: "Đảm bảo iPhone có kết nối mạng",
+                    text: LocalizedStringKey("Bật **Wi-Fi** hoặc **Dữ liệu di động (4G/5G)** trên iPhone của bạn.")
                 )
 
                 SettingsGuideStepRow(
                     num: "2",
-                    title: "Bật LocalDevVPN",
-                    text: LocalizedStringKey("Mở ứng dụng **LocalDevVPN** và bật kết nối VPN lên.")
+                    title: "Kích hoạt LocalDevVPN",
+                    text: LocalizedStringKey("Mở ứng dụng **LocalDevVPN** và gạt bật kết nối VPN lên.")
                 )
 
                 SettingsGuideStepRow(
                     num: "3",
-                    title: "Tắt cả Wi-Fi và 4G (Chỉ bật LocalDevVPN)",
-                    text: LocalizedStringKey("Tắt cả **Wi-Fi** và **4G**, chỉ để lại mỗi **LocalDevVPN** đang bật.")
+                    title: "Kiểm tra độc lập (Tắt cả Wi-Fi & 4G, chỉ để LocalDevVPN)",
+                    text: LocalizedStringKey("Để kiểm tra chính xác tuyệt đối, hãy tạm tắt cả **Wi-Fi** và **4G**, chỉ để lại **LocalDevVPN** đang bật rồi nhấn **Kiểm tra lại**.")
                 )
             }
 
-            SwiftUI.Text("Xong 3 bước trên, nhìn lên mục Đang Chờ Xác Minh Pairing ở phía trên sẽ tự động hiện Tích Xanh báo đang hoạt động tốt hoặc Tích Đỏ đã bị lỗi / cần cài lại.")
-                .font(.system(size: 13.5, weight: .semibold))
+            SwiftUI.Text("💡 Ngay sau khi thực hiện, khung trạng thái phía trên sẽ tự động báo Tích Xanh (Pairing hoạt động tốt) hoặc Tích Đỏ (Pairing bị lỗi / cần ghép nối lại).")
+                .font(.system(size: 13.2, weight: .semibold))
                 .foregroundColor(CSSTheme.suiPureBlack)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(CSSTheme.suiNeutralInspect.opacity(0.11))
-                .cornerRadius(13)
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 13, style: .continuous)
                         .stroke(CSSTheme.suiNeutralInspect.opacity(0.38), lineWidth: 1.2)
                 )
-                .padding(.top, 4)
         }
-        .padding(16)
-        .background(CSSTheme.suiCardBackground)
-        .cornerRadius(CSSTheme.cornerRadius)
-        .overlay(
-            RoundedRectangle(cornerRadius: CSSTheme.cornerRadius, style: .continuous)
-                .stroke(CSSTheme.suiBorder, lineWidth: 1.1)
-        )
-        .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 5)
-        .shadow(color: CSSTheme.suiPrimary.opacity(0.08), radius: 12, x: 0, y: 6)
     }
 
     private var ios27DirectPairingCard: some SwiftUI.View {
         SettingsSkySectionCard(
-            title: "PHẦN 1: DÀNH CHO IOS 27",
+            title: "PHẦN 1: GHÉP NỐI TRỰC TIẾP TRÊN IPHONE (IOS 27)",
             icon: "iphone.radiowaves.left.and.right",
             color: CSSTheme.suiPrimary
         ) {
-            SwiftUI.Text("Ghép nối trực tiếp trên iPhone")
-                .font(.system(size: 16, weight: .bold))
+            SwiftUI.Text("Tự tạo & kích hoạt Pairing trực tiếp không cần máy tính")
+                .font(.system(size: 15.5, weight: .bold))
                 .foregroundColor(CSSTheme.suiSecondary)
 
             VStack(alignment: .leading, spacing: 10) {
                 SettingsGuideStepRow(
                     num: "1",
-                    title: "Bắt đầu phát tín hiệu Pairing",
-                    text: LocalizedStringKey("Nhấn vào nút **\"Cài Pairing lên iPhone\"** ở bên dưới để ứng dụng phát tín hiệu ghép đôi.")
+                    title: "Bắt đầu phát tín hiệu ghép nối",
+                    text: LocalizedStringKey("Nhấn vào nút **\"Bắt đầu ghép nối trên iPhone\"** ở bên dưới để ứng dụng phát tín hiệu.")
                 )
 
                 SettingsGuideStepRow(
                     num: "2",
-                    title: "Mở Cài đặt Nhà phát triển",
-                    text: LocalizedStringKey("Thoát ra màn hình chính (không vuốt tắt ứng dụng này), mở **Cài đặt (Settings)** ➔ **Quyền riêng tư & Bảo mật (Privacy & Security)** ➔ kéo xuống cuối chọn **Chế độ nhà phát triển (Developer Mode)**.")
+                    title: "Mở Chế độ nhà phát triển trong Cài đặt",
+                    text: LocalizedStringKey("Thoát ra màn hình chính (không vuốt tắt ứng dụng), mở **Cài đặt (Settings)** ➔ **Quyền riêng tư & Bảo mật** ➔ kéo xuống cuối chọn **Chế độ nhà phát triển (Developer Mode)**.")
                 )
 
                 SettingsGuideStepRow(
                     num: "3",
-                    title: "Nhập mã PIN 6 chữ số (Tự động kích hoạt)",
-                    text: LocalizedStringKey("Trong mục Chế độ nhà phát triển, nếu có “Thiết bị đã ghép đôi” cũ thì xoá đi, sau đó nhấn vào dòng **Pair with SideStore** và nhập mật khẩu iPhone. Quay lại app này xem **mã 6 chữ số**, rồi sang **Cài đặt** nhập vào và nhấn **Ghép đôi**. Ngay sau khi ghép đôi xong, ứng dụng sẽ **tự động nạp và kích hoạt Pairing luôn**!")
+                    title: "Nhập mã PIN 6 chữ số (Tự động nạp & kích hoạt)",
+                    text: LocalizedStringKey("Trong Chế độ nhà phát triển, xoá thiết bị ghép đôi cũ (nếu có), sau đó chạm vào **Pair with SideStore** và nhập mật khẩu màn hình. Xem **mã 6 chữ số** hiện từ ứng dụng này, nhập vào Cài đặt và nhấn **Ghép đôi**. Ứng dụng sẽ **tự động nạp và kích hoạt Pairing ngay lập tức**!")
                 )
 
                 SettingsGuideStepRow(
                     num: "4",
-                    title: "Lưu tệp Pairing dự phòng (Khuyên dùng)",
-                    text: LocalizedStringKey("Sau khi ghép nối xong, bạn **không cần nhập lại tệp nữa**. Tuy nhiên, hãy nhấn nút **“Xuất tệp Pairing (Lưu dự phòng)”** (màu xanh lá) ➔ chọn **Lưu vào Tệp (Save to Files)** để cất giữ dự phòng cho những lần cài lại app sau này.")
+                    title: "Xuất tệp Pairing lưu dự phòng (Khuyên dùng)",
+                    text: LocalizedStringKey("Sau khi ghép nối xong, hãy nhấn nút **“Xuất tệp Pairing (Lưu dự phòng)”** (màu xanh lá) ➔ chọn **Lưu vào Tệp (Save to Files)** để cất giữ dự phòng khi cài lại ứng dụng.")
                 )
             }
 
@@ -1732,7 +1743,7 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
             VStack(spacing: 10) {
                 if let pin = wirelessVM.pinCode {
                     VStack(spacing: 6) {
-                        SwiftUI.Text("MÃ GHÉP NỐI 6 CHỮ SỐ")
+                        SwiftUI.Text("MÃ PIN GHÉP NỐI 6 CHỮ SỐ")
                             .font(.system(size: 12, weight: .bold))
                             .foregroundColor(CSSTheme.suiPrimary)
                         SwiftUI.Text(pin)
@@ -1763,15 +1774,15 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
                         SwiftUI.Image(systemName: wirelessVM.isAdvertising ? "stop.circle.fill" : "antenna.radiowaves.left.and.right")
                             .font(.system(size: 17, weight: .bold))
                         SwiftUI.Text(wirelessVM.isAdvertising
-                                     ? "Dừng Cài Pairing (Đang phát sóng...)"
-                                     : "Cài Pairing lên iPhone")
-                            .font(.system(size: 16, weight: .bold))
+                                     ? "Dừng ghép nối (Đang phát tín hiệu...)"
+                                     : "Bắt đầu ghép nối trên iPhone")
+                            .font(.system(size: 15.5, weight: .bold))
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 48)
                     .background(wirelessVM.isAdvertising ? CSSTheme.suiRed : CSSTheme.suiPrimary)
-                    .cornerRadius(13)
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                     .shadow(color: (wirelessVM.isAdvertising ? CSSTheme.suiRed : CSSTheme.suiPrimary).opacity(0.35), radius: 6, x: 0, y: 4)
                 }
                 .buttonStyle(SettingsBounceButtonStyle())
@@ -1785,20 +1796,20 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
                                 isExportSheetPresented = true
                             }
                         } else {
-                            statusBannerMessage = "Vui lòng thực hiện Bước 2 & Bước 3 (nhập xong 6 chữ số trong Cài đặt ➔ Chế độ nhà phát triển) trước khi lưu tệp dự phòng."
+                            statusBannerMessage = "Vui lòng hoàn tất Bước 2 & Bước 3 (nhập mã 6 chữ số trong Cài đặt ➔ Chế độ nhà phát triển) trước khi xuất tệp dự phòng."
                         }
                     } label: {
                         HStack(spacing: 8) {
                             SwiftUI.Image(systemName: "square.and.arrow.up.fill")
                                 .font(.system(size: 17, weight: .bold))
                             SwiftUI.Text("Xuất tệp Pairing (Lưu dự phòng)")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(.system(size: 15.5, weight: .bold))
                         }
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 48)
                         .background(installedPairingURLForExport != nil ? CSSTheme.suiGreen : CSSTheme.suiGreen.opacity(0.65))
-                        .cornerRadius(13)
+                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                         .shadow(color: CSSTheme.suiGreen.opacity(0.35), radius: 6, x: 0, y: 4)
                     }
                     .buttonStyle(SettingsBounceButtonStyle())
@@ -1811,14 +1822,14 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
                     HStack(spacing: 8) {
                         SwiftUI.Image(systemName: "square.and.arrow.down.fill")
                             .font(.system(size: 17, weight: .bold))
-                        SwiftUI.Text("Nhập tệp Pairing có sẵn")
-                            .font(.system(size: 16, weight: .bold))
+                        SwiftUI.Text("Nhập tệp Pairing có sẵn (Từ Tệp)")
+                            .font(.system(size: 15.5, weight: .bold))
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 48)
                     .background(CSSTheme.suiSecondary)
-                    .cornerRadius(13)
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                     .shadow(color: CSSTheme.suiSecondary.opacity(0.35), radius: 6, x: 0, y: 4)
                 }
                 .buttonStyle(SettingsBounceButtonStyle())
@@ -1829,21 +1840,21 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
                     HStack(spacing: 8) {
                         SwiftUI.Image(systemName: "trash.fill")
                             .font(.system(size: 17, weight: .bold))
-                        SwiftUI.Text("Xoá tệp Pairing")
-                            .font(.system(size: 16, weight: .bold))
+                        SwiftUI.Text("Xoá tệp Pairing hiện tại")
+                            .font(.system(size: 15.5, weight: .bold))
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 48)
                     .background(CSSTheme.suiRed)
-                    .cornerRadius(13)
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                     .shadow(color: CSSTheme.suiRed.opacity(0.35), radius: 6, x: 0, y: 4)
                 }
                 .buttonStyle(SettingsBounceButtonStyle())
             }
             .padding(12)
             .background(CSSTheme.suiInnerRowBackground)
-            .cornerRadius(CSSTheme.innerCornerRadius)
+            .clipShape(RoundedRectangle(cornerRadius: CSSTheme.innerCornerRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: CSSTheme.innerCornerRadius, style: .continuous)
                     .stroke(CSSTheme.suiInnerBorder, lineWidth: 1)
@@ -1853,12 +1864,12 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
 
     private var pcPairingGuideCard: some SwiftUI.View {
         SettingsSkySectionCard(
-            title: "PHẦN 2: DƯỚI IOS 27 (PC / MAC)",
+            title: "PHẦN 2: GHÉP NỐI QUA MÁY TÍNH (DƯỚI IOS 27 - PC / MAC)",
             icon: "laptopcomputer.and.iphone",
             color: CSSTheme.suiSecondary
         ) {
-            SwiftUI.Text("Tạo / Cài tệp Pairing qua Máy tính (Windows / Mac)")
-                .font(.system(size: 16, weight: .bold))
+            SwiftUI.Text("Tạo hoặc nạp tệp Pairing từ Windows / macOS / Linux")
+                .font(.system(size: 15.5, weight: .bold))
                 .foregroundColor(CSSTheme.suiSecondary)
 
             HStack(alignment: .top, spacing: 8) {
@@ -1866,14 +1877,14 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
                     .foregroundColor(CSSTheme.suiPrimary)
                     .font(.system(size: 16, weight: .bold))
                     .padding(.top, 1)
-                SwiftUI.Text(LocalizedStringKey("**Chuẩn bị chung:** Trên Windows cần cài đặt **iTunes** & **iCloud** bản chính chủ từ Apple (không tải bản Microsoft Store). Cắm cáp kết nối iPhone vào máy tính, mở khóa màn hình iPhone và nhấn **Tin cậy (Trust)** + nhập mật khẩu màn hình. Hãy chọn **1 trong 3 công cụ** dưới đây:"))
+                SwiftUI.Text(LocalizedStringKey("**Chuẩn bị chung:** Trên Windows cần cài đặt **iTunes** & **iCloud** bản chính chủ từ Apple (không dùng bản Microsoft Store). Cắm cáp kết nối iPhone với máy tính, mở khóa màn hình iPhone và nhấn **Tin cậy (Trust)** + nhập mật khẩu. Chọn **1 trong 3 công cụ** dưới đây:"))
                     .font(.system(size: 13.5, weight: .regular))
                     .foregroundColor(CSSTheme.suiPureBlack)
                     .lineSpacing(2)
             }
             .padding(12)
             .background(CSSTheme.suiPrimary.opacity(0.10))
-            .cornerRadius(12)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(CSSTheme.suiPrimary.opacity(0.28), lineWidth: 1)
@@ -1882,20 +1893,20 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
             VStack(alignment: .leading, spacing: 10) {
                 SettingsGuideStepRow(
                     num: "1",
-                    title: "Cách 1: Dùng idevice_pair (Khuyên dùng - Hỗ trợ cả nạp thẳng & xuất tệp)",
-                    text: LocalizedStringKey("• Mở phần mềm **idevice_pair** trên máy tính và chọn iPhone của bạn.\n• **Cách nạp thẳng vào ứng dụng:** Trong mục ứng dụng trên **idevice_pair**, chọn **SideStore** hoặc **LiveContainer** rồi nhấn nút **Load** (hoặc **Install Pairing File**). Phần mềm sẽ tự động chép thẳng tệp Pairing vào trong ứng dụng trên iPhone mà không cần làm thủ công.\n• **Cách xuất ra tệp `.mobiledevicepairing` dự phòng:** Nhấn nút **Generate** rồi chọn **Export / Save** để lưu tệp có đuôi **`.mobiledevicepairing`** ra máy tính. Gửi tệp này sang iPhone (qua Zalo, AirDrop, iCloud Drive), chọn **Lưu vào Tệp** rồi nhấn nút **“Nhập tệp Pairing”** ở dưới.")
+                    title: "Cách 1: Dùng idevice_pair (Khuyên dùng - Hỗ trợ nạp thẳng & xuất tệp)",
+                    text: LocalizedStringKey("• Mở **idevice_pair** trên máy tính và chọn thiết bị iPhone của bạn.\n• **Nạp thẳng vào ứng dụng:** Chọn **SideStore** hoặc **LiveContainer** trong danh sách rồi nhấn **Load / Install Pairing File** để chép thẳng vào ứng dụng.\n• **Xuất tệp `.mobiledevicepairing` dự phòng:** Nhấn **Generate** ➔ **Export / Save** để lưu tệp ra máy tính, gửi sang iPhone (qua AirDrop, Zalo, iCloud Drive), chọn **Lưu vào Tệp** rồi nhấn nút **“Nhập tệp Pairing”** bên dưới.")
                 )
 
                 SettingsGuideStepRow(
                     num: "2",
-                    title: "Cách 2: Dùng jitterbugpair (Công cụ xuất tệp `.mobiledevicepairing` ra máy tính)",
-                    text: LocalizedStringKey("• Tải và giải nén **jitterbugpair** (trên Windows/macOS/Linux).\n• Giữ màn hình iPhone luôn sáng và mở khóa, sau đó chạy file **`jitterbugpair.exe`** (trên Windows) hoặc chạy **`./jitterbugpair`** trong Terminal (trên Mac).\n• Công cụ sẽ tự động xuất ra một tệp có tên dạng **`<UDID>.mobiledevicepairing`** nằm ngay trong cùng thư mục chứa **jitterbugpair** (công cụ này chỉ xuất ra tệp chứ không tự chép vào app).\n• Gửi tệp **`.mobiledevicepairing`** đó sang iPhone ➔ chọn **Lưu vào Tệp (Save to Files)** ➔ nhấn nút **“Nhập tệp Pairing”** bên dưới để nạp vào ứng dụng.")
+                    title: "Cách 2: Dùng jitterbugpair (Xuất tệp `.mobiledevicepairing` ra máy tính)",
+                    text: LocalizedStringKey("• Tải và giải nén **jitterbugpair** (trên Windows/macOS/Linux).\n• Giữ màn hình iPhone luôn sáng và mở khóa, sau đó chạy **`jitterbugpair.exe`** (Windows) hoặc **`./jitterbugpair`** trong Terminal (Mac).\n• Công cụ sẽ tạo ra tệp **`<UDID>.mobiledevicepairing`** nằm cùng thư mục. Hãy gửi tệp đó sang iPhone ➔ **Lưu vào Tệp (Save to Files)** ➔ nhấn nút **“Nhập tệp Pairing”** bên dưới.")
                 )
 
                 SettingsGuideStepRow(
                     num: "3",
-                    title: "Cách 3: Dùng iLoader (Cài đặt tự động vào ứng dụng trên iPhone)",
-                    text: LocalizedStringKey("• Mở phần mềm **iLoader** trên máy tính, đăng nhập hoặc kết nối với iPhone đã nhấn Tin cậy.\n• **iLoader** chủ yếu hỗ trợ tính năng **Tự động tạo và nạp trực tiếp (Inject) Pairing File** vào **SideStore / LiveContainer** thông qua tùy chọn **Generate / Place Pairing File** ngay trong giao diện quản lý thiết bị.\n• Sau khi iLoader báo hoàn tất trên máy tính, hãy mở lại ứng dụng này trên iPhone để hệ thống tự nhận diện.")
+                    title: "Cách 3: Dùng iLoader (Tự động nạp trực tiếp vào ứng dụng)",
+                    text: LocalizedStringKey("• Mở **iLoader** trên máy tính và kết nối với iPhone đã nhấn Tin cậy.\n• Chọn tính năng **Generate / Place Pairing File** để tự động tạo và nạp trực tiếp (Inject) tệp Pairing vào **SideStore / LiveContainer**.\n• Sau khi hoàn tất trên máy tính, hãy mở lại mục này để ứng dụng tự động nhận diện.")
                 )
             }
 
@@ -1913,7 +1924,7 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 46)
                     .background(CSSTheme.suiPrimary)
-                    .cornerRadius(13)
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                     .shadow(color: CSSTheme.suiPrimary.opacity(0.35), radius: 6, x: 0, y: 4)
                 }
                 .buttonStyle(SettingsBounceButtonStyle())
@@ -1924,14 +1935,14 @@ private struct SettingsPairingGuideSheetView: SwiftUI.View {
                     HStack(spacing: 8) {
                         SwiftUI.Image(systemName: "trash.fill")
                             .font(.system(size: 17, weight: .bold))
-                        SwiftUI.Text("Xoá tệp Pairing")
+                        SwiftUI.Text("Xoá tệp Pairing hiện tại")
                             .font(.system(size: 15, weight: .bold))
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 46)
                     .background(CSSTheme.suiRed)
-                    .cornerRadius(13)
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                     .shadow(color: CSSTheme.suiRed.opacity(0.35), radius: 6, x: 0, y: 4)
                 }
                 .buttonStyle(SettingsBounceButtonStyle())
@@ -2067,7 +2078,7 @@ extension SettingsViewController
             case .anisetteServers:
                 return ("server.rack", CSSTheme.blue, true)
             case .pairingAndDevices:
-                return ("doc.badge.gearshape.fill", CSSTheme.purple, true)
+                return ("iphone.radiowaves.left.and.right", CSSTheme.purple, true)
             case .refreshAttempts:
                 return ("clock.arrow.circlepath", CSSTheme.green, true)
             case .refreshSideJITServer:
@@ -2299,6 +2310,10 @@ extension SettingsViewController: UINavigationControllerDelegate {
     }
 
     private func updateFloatingBackButton(in nav: UINavigationController, show: Bool) {
+        if !show && self.floatingBackButton == nil {
+            return
+        }
+
         if self.floatingBackButton == nil {
             let btn = UIButton(type: .system)
             btn.translatesAutoresizingMaskIntoConstraints = false
@@ -3547,7 +3562,7 @@ private extension SettingsViewController
     }
 
     private func presentPairingSheet() {
-        let sheetView = SettingsPairingGuideSheetView(onDismiss: { [weak self] in
+        let sheetView = SettingsPairingSheetView(onDismiss: { [weak self] in
             DispatchQueue.main.async {
                 self?.restoreVisibleCellsWhiteBackground()
             }
@@ -3722,4 +3737,241 @@ extension SettingsViewController
                 insetCell.style = .bottom
             }
             let targetCardView = self.resolveTargetCardView(for: insetCell)
-            targetCardView.<end_of_image><end_of_image><end_of_image><end_of_image><end_of_image><end_of_image>
+            targetCardView.backgroundColor = CSSTheme.white
+        }
+        
+        if section == .advancedSettings,
+           let insetCell = cell as? InsetGroupTableViewCell {
+            let total = self.tableView(tableView, numberOfRowsInSection: indexPath.section)
+            if total == 1 {
+                insetCell.style = .single
+            } else if indexPath.row == 0 {
+                insetCell.style = .top
+            } else if indexPath.row == total - 1 {
+                insetCell.style = .bottom
+            } else {
+                insetCell.style = .middle
+            }
+            let targetCardView = self.resolveTargetCardView(for: insetCell)
+            targetCardView.backgroundColor = CSSTheme.white
+        }
+        
+        return cell
+    }
+
+    override func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView?
+    {
+        let section = Section.allCases[section]
+        switch section
+        {
+        case _ where isSectionHidden(section): return nil
+        case .signIn where self.activeTeam != nil: return nil
+        case .account where self.activeTeam == nil: return nil
+        case .signIn, .account, .advancedSettings:
+            let headerView = tableView.dequeueReusableHeaderFooterView(withIdentifier: "HeaderFooterView") as! SettingsHeaderFooterView
+            self.prepare(headerView, for: section, isHeader: true)
+            return headerView
+            
+        case .patreon, .display, .appRefresh, .instructions, .techyThings, .credits, .betaTesting, .diagnostics:
+            return nil
+        }
+    }
+
+    override func tableView(_ tableView: UITableView, viewForFooterInSection section: Int) -> UIView?
+    {
+        let section = Section.allCases[section]
+        switch section
+        {
+        case _ where isSectionHidden(section): return nil
+        case .signIn where self.activeTeam != nil: return nil
+        case .signIn, .advancedSettings:
+            let footerView = tableView.dequeueReusableHeaderFooterView(withIdentifier: "HeaderFooterView") as! SettingsHeaderFooterView
+            self.prepare(footerView, for: section, isHeader: false)
+            return footerView
+            
+        case .account, .patreon, .display, .appRefresh, .credits, .techyThings, .instructions, .betaTesting, .diagnostics:
+            return nil
+        }
+    }
+
+    override func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat
+    {
+        let section = Section.allCases[section]
+        switch section
+        {
+        case _ where isSectionHidden(section): return 0.01
+        case .signIn where self.activeTeam != nil: return 0.01
+        case .account where self.activeTeam == nil: return 0.01
+        case .signIn, .account, .advancedSettings:
+            return self.preferredHeight(for: self.prototypeHeaderFooterView, in: section, isHeader: true)
+        case .patreon, .display, .appRefresh, .instructions, .techyThings, .credits, .betaTesting, .diagnostics:
+            return 0.01
+        }
+    }
+
+    override func tableView(_ tableView: UITableView, heightForFooterInSection section: Int) -> CGFloat
+    {
+        let section = Section.allCases[section]
+        switch section
+        {
+        case _ where isSectionHidden(section): return 0.01
+        case .signIn where self.activeTeam != nil: return 0.01
+        case .account where self.activeTeam == nil: return 0.01
+        case .signIn, .advancedSettings:
+            return self.preferredHeight(for: self.prototypeHeaderFooterView, in: section, isHeader: false)
+        case .account, .patreon, .display, .appRefresh, .credits, .techyThings, .instructions, .betaTesting, .diagnostics:
+            return 0.01
+        }
+    }
+}
+
+extension SettingsViewController
+{
+    override func tableView(_ tableView: UITableView, didHighlightRowAt indexPath: IndexPath)
+    {
+        if let cell = tableView.cellForRow(at: indexPath) {
+            let section = Section.allCases[indexPath.section]
+            if !(section == .account && indexPath.row == 3) {
+                let totalRows = self.tableView(tableView, numberOfRowsInSection: indexPath.section)
+                self.styleInnerCardOfCell(cell, at: indexPath, totalRows: totalRows)
+            }
+        }
+    }
+
+    override func tableView(_ tableView: UITableView, didUnhighlightRowAt indexPath: IndexPath)
+    {
+        if let cell = tableView.cellForRow(at: indexPath) {
+            let section = Section.allCases[indexPath.section]
+            if !(section == .account && indexPath.row == 3) {
+                let totalRows = self.tableView(tableView, numberOfRowsInSection: indexPath.section)
+                DispatchQueue.main.async { [weak self] in
+                    self?.styleInnerCardOfCell(cell, at: indexPath, totalRows: totalRows)
+                }
+            }
+        }
+    }
+
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath)
+    {
+        tableView.deselectRow(at: indexPath, animated: false)
+        self.restoreVisibleCellsWhiteBackground()
+
+        if let cell = tableView.cellForRow(at: indexPath) {
+            UIView.animate(withDuration: 0.12, animations: {
+                cell.transform = CGAffineTransform(translationX: 5, y: -2).scaledBy(x: 0.98, y: 0.98)
+            }) { [weak self] _ in
+                self?.restoreVisibleCellsWhiteBackground()
+                UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.5, initialSpringVelocity: 0.5, options: .curveEaseOut, animations: {
+                    cell.transform = .identity
+                }, completion: { [weak self] _ in
+                    self?.restoreVisibleCellsWhiteBackground()
+                })
+            }
+        }
+
+        let section = Section.allCases[indexPath.section]
+        verboseLog("[SettingsVC] didSelectRowAt: section \(section) (index \(indexPath.section)), row \(indexPath.row)")
+        switch section
+        {
+        case .signIn:
+            self.signIn()
+            
+        case .account:
+            if indexPath.row == 3 {
+                self.resolvePendingAccountActions()
+            }
+            
+        case .advancedSettings:
+            let activeItems = UnifiedSettingsItem.activeItems
+            guard activeItems.indices.contains(indexPath.row) else { break }
+            let item = activeItems[indexPath.row]
+            
+            switch item {
+            case .anisetteServers:
+                self.presentAnisetteSheet()
+                
+            case .pairingAndDevices:
+                self.presentPairingSheet()
+                
+            case .refreshAttempts, .errorLog:
+                break
+                
+            case .refreshSideJITServer:
+                let vc = UIHostingController(rootView: SideJITServerConfigView())
+                vc.title = nil
+                self.navigationController?.pushViewController(vc, animated: true)
+                
+            case .certificateManagement:
+                let vc = UIHostingController(rootView: CertificatesView(presentingViewController: self))
+                vc.title = nil
+                self.prepare(for: UIStoryboardSegue(identifier: "certificateManagement", source: self, destination: vc), sender: nil)
+                
+            case .userCustomizations:
+                let vc = UIHostingController(rootView: UserCustomizationsView())
+                vc.title = nil
+                self.prepare(for: UIStoryboardSegue(identifier: "diagnostics", source: self, destination: vc), sender: nil)
+                
+            case .clearCache:
+                self.clearCache()
+            }
+            
+        case .patreon, .display, .appRefresh, .instructions, .techyThings, .credits, .betaTesting, .diagnostics:
+            break
+        }
+    }
+}
+
+#if !os(tvOS)
+extension SettingsViewController: MFMailComposeViewControllerDelegate
+{
+    func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?)
+    {
+        if let error = error {
+            let toastView = ToastView(error: error)
+            toastView.show(in: self)
+        }
+        controller.dismiss(animated: true, completion: nil)
+    }
+}
+#endif
+
+extension SettingsViewController: UIGestureRecognizerDelegate
+{
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        #if !os(tvOS)
+        if gestureRecognizer === self.navigationController?.interactivePopGestureRecognizer {
+            return (self.navigationController?.viewControllers.count ?? 0) > 1
+        }
+        #endif
+        return true
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool
+    {
+        return true
+    }
+}
+
+#if !os(tvOS)
+extension SettingsViewController: INUIAddVoiceShortcutViewControllerDelegate
+{
+    func addVoiceShortcutViewController(_ controller: INUIAddVoiceShortcutViewController, didFinishWith voiceShortcut: INVoiceShortcut?, error: Error?)
+    {
+        if let indexPath = self.tableView.indexPathForSelectedRow {
+            self.tableView.deselectRow(at: indexPath, animated: true)
+        }
+        controller.dismiss(animated: true, completion: nil)
+        guard let error = error else { return }
+        let toastView = ToastView(error: error)
+        toastView.show(in: self)
+    }
+
+    func addVoiceShortcutViewControllerDidCancel(_ controller: INUIAddVoiceShortcutViewController)
+    {
+        if let indexPath = self.tableView.indexPathForSelectedRow {
+            self.tableView.deselectRow(at: indexPath, animated: true)
+        }
+        controller.dismiss(animated: true, completion: nil)
+    }
+}
+#endif
